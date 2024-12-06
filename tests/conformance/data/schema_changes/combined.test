@@ -69,6 +69,54 @@ CREATE TABLE Users (
 --
 ERROR:.* Duplicate column name Users.UserName.
 ==
+# PRIMARY KEY on a column
+CREATE TABLE Users (
+  UserId INT64 NOT NULL PRIMARY KEY,
+  Name STRING(MAX)
+);
+--
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  Name STRING(MAX),
+) PRIMARY KEY(UserId);
+==
+# PRIMARY KEY on two columns is a parse error.
+# --regex
+CREATE TABLE Users (
+  UserId INT64 NOT NULL PRIMARY KEY,
+  Name STRING(MAX) PRIMARY KEY
+);
+--
+ERROR:.* Multiple columns declared as PRIMARY KEY
+==
+# PRIMARY KEY on ALTER TABLE ADD COLUMN is a parse error
+# --regex
+CREATE TABLE Users (
+  Name STRING(MAX) PRIMARY KEY
+);
+ALTER TABLE Users ADD COLUMN UserId INT64 NOT NULL PRIMARY KEY;
+--
+ERROR:.* Unexpected PRIMARY KEY clause
+==
+# PRIMARY KEY on ALTER TABLE ALTER COLUMN is a parse error
+# --regex
+CREATE TABLE Users (
+  UserId INT64 NOT NULL,
+  Name STRING(MAX) PRIMARY KEY
+);
+ALTER TABLE Users ALTER COLUMN UserId INT64 NOT NULL PRIMARY KEY;
+--
+ERROR:.* Expecting 'EOF' but found 'PRIMARY'
+==
+# PRIMARY KEY on a column and the table is a parse error.
+# --regex
+CREATE TABLE Users (
+  UserId INT64 NOT NULL PRIMARY KEY,
+  Name STRING(MAX)
+) PRIMARY KEY(UserId);
+--
+ERROR:.* Cannot specify both table and column PRIMARY KEY
+==
 # Primary key references a nonexistent column.
 # --regex
 CREATE TABLE Users (

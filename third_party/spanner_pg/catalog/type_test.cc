@@ -37,6 +37,7 @@
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
+#include "zetasql/public/uuid_value.h"
 #include "zetasql/public/value.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "gmock/gmock.h"
@@ -44,10 +45,13 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
+#include "third_party/spanner_pg/src/backend/catalog/pg_type_d.h"
 #include "third_party/spanner_pg/util/postgres.h"
+#include "third_party/spanner_pg/util/uuid_conversion.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
 #include "zetasql/base/status_macros.h"
 
@@ -57,6 +61,21 @@ namespace {
 using TypeTest = ::postgres_translator::test::ValidMemoryContext;
 using ::zetasql_base::testing::IsOkAndHolds;
 using ::zetasql_base::testing::StatusIs;
+
+// Helper function to make a PG Array Datum for creating a Const node.
+// array_vals isn't const because PG doesn't understand the word, and it isn't
+// an lvalue reference because the Datums *might* be moved into the output.
+Datum MakePgArray(const Oid element_type, std::vector<Datum> array_vals) {
+  // Lookup type properties from bootstrap.
+  int16_t elmlen;
+  bool elmbyval;
+  char elmalign;
+  get_typlenbyvalalign(element_type, &elmlen, &elmbyval, &elmalign);
+
+  return PointerGetDatum(construct_array(array_vals.data(), array_vals.size(),
+                                         element_type, elmlen, elmbyval,
+                                         elmalign));
+}
 
 // Supported Scalar Types.
 TEST_F(TypeTest, PgBoolMapping) {
@@ -483,6 +502,7 @@ TEST_F(TypeTest, PgIntervalMapping) {
 }
 
 // Supported Array Types.
+
 TEST_F(TypeTest, PgBoolArrayMapping) {
   const PostgresTypeMapping* pg_bool_array_mapping =
       types::PgBoolArrayMapping();
@@ -736,21 +756,6 @@ TEST_F(TypeTest, PgDateArrayMapping) {
   EXPECT_THAT(pg_date_array_mapping->MakeGsqlValueFromStringConst(
                   "'{1970-01-01,1970-01-01}'"),
               StatusIs(absl::StatusCode::kUnimplemented));
-}
-
-// Helper function to make a PG Array Datum for creating a Const node.
-// array_vals isn't const because PG doesn't understand the word, and it isn't
-// an lvalue reference because the Datums *might* be moved into the output.
-Datum MakePgArray(const Oid element_type, std::vector<Datum> array_vals) {
-  // Lookup type properties from bootstrap.
-  int16_t elmlen;
-  bool elmbyval;
-  char elmalign;
-  get_typlenbyvalalign(element_type, &elmlen, &elmbyval, &elmalign);
-
-  return PointerGetDatum(construct_array(array_vals.data(), array_vals.size(),
-                                         element_type, elmlen, elmbyval,
-                                         elmalign));
 }
 
 // Test array constant conversions (PG Const -> GSQL Value). The per-element

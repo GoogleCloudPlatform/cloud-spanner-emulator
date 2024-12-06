@@ -184,6 +184,7 @@ cc_test(
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "//third_party/spanner_pg/test_catalog",
         "//third_party/spanner_pg/util:postgres",
+        "//third_party/spanner_pg/util:uuid_conversion",
         "//third_party/spanner_pg/util:valid_memory_context_fixture",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/flags:flag",

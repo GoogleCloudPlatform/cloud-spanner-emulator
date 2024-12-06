@@ -272,15 +272,81 @@ TEST(ParseCreateTable, CannotParseCreateTableWithoutName) {
 }
 
 TEST(ParseCreateTable, CannotParseCreateTableWithoutPrimaryKey) {
-  EXPECT_THAT(ParseDDLStatement(
-                  R"sql(
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL,
                       Name STRING(MAX)
                     )
                     )sql"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Must specify either table or column PRIMARY KEY")));
+}
+
+TEST(ParseCreateTable, CanParseCreateTableWithPrimaryKeyOnAColumn) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
+                    CREATE TABLE Users (
+                      UserId INT64 NOT NULL PRIMARY KEY,
+                      Name STRING(MAX)
+                    )
+                  )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Users"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              column { column_name: "Name" type: STRING }
+              primary_key { key_name: "UserId" }
+            }
+          )pb")));
+}
+
+TEST(ParseCreateTable, CannotParseCreateTablePrimaryKeyOnTwoColumns) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE TABLE Users (
+                      UserId INT64 NOT NULL PRIMARY KEY,
+                      Name STRING(MAX) PRIMARY KEY
+                    )
+                    )sql"),
               StatusIs(StatusCode::kInvalidArgument,
-                       HasSubstr("Expecting 'PRIMARY' but found 'EOF'")));
+                       HasSubstr("Multiple columns declared as PRIMARY KEY")));
+}
+
+TEST(ParseCreateTable, CannotParseCreateTablePrimaryKeyInColumnAndInTable) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
+                    CREATE TABLE Users (
+                      UserId INT64 NOT NULL PRIMARY KEY,
+                      Name STRING(MAX)
+                    ) PRIMARY KEY (UserId)
+                    )sql"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Cannot specify both table and column PRIMARY KEY")));
+}
+
+TEST(ParseCreateTable, CannotParseAlterTableWithPrimaryKeyInAddColumn) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    ALTER TABLE Users
+                    ADD COLUMN UserId INT64 NOT NULL PRIMARY KEY
+                    )sql"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Unexpected PRIMARY KEY clause")));
+}
+
+TEST(ParseCreateTable, CannotParseAlterTableWithPrimaryKeyInAlterColumn) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    ALTER TABLE Users
+                    ALTER COLUMN UserId INT64 NOT NULL PRIMARY KEY
+                    )sql"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Expecting 'EOF' but found 'PRIMARY'")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithOnlyAKeyColumn) {
@@ -5176,6 +5242,36 @@ TEST(ParseCreateModel, ParseCreateModel) {
       )sql"),
       StatusIs(StatusCode::kInvalidArgument,
                HasSubstr("Encountered ',' while parsing: column_type")));
+
+  // Model has an unexpected PRIMARY KEY in input column
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE MODEL m
+      INPUT (
+        f1 INT64,
+        f2 STRING(MAX) PRIMARY KEY
+      )
+      OUTPUT (
+        l1 BOOL,
+        l2 ARRAY<FLOAT64>
+      )
+      )sql"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Unexpected PRIMARY KEY clause")));
+
+  // Model has an unexpected PRIMARY KEY in output column
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE MODEL m
+      INPUT (
+        f1 INT64,
+        f2 STRING(MAX)
+      )
+      OUTPUT (
+        l1 BOOL PRIMARY KEY,
+        l2 ARRAY<FLOAT64>
+      )
+      )sql"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Unexpected PRIMARY KEY clause")));
 }
 
 TEST(ParseAlterModel, ParseAlterModel) {

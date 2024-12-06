@@ -5838,50 +5838,18 @@ check_GUC_name_for_parameter_acl(const char *name)
  * processed command-line switches.
  */
 void
-InitializeGUCOptions_UNUSED_SPANGRES(void)
+InitializeGUCOptions(void)
 {
-	int			i;
-
-	/*
-	 * Before log_line_prefix could possibly receive a nonempty setting, make
-	 * sure that timezone processing is minimally alive (see elog.c).
-	 */
-	pg_timezone_initialize();
-
-	/*
-	 * Build sorted array of all GUC variables.
-	 */
-	build_guc_variables();
-
-	/*
-	 * Load all variables with their compiled-in defaults, and initialize
-	 * status fields as needed.
-	 */
-	for (i = 0; i < num_guc_variables; i++)
-	{
-		InitializeOneGUCOption(guc_variables[i]);
-	}
-
-	guc_dirty = false;
-
-	reporting_enabled = false;
-
-	/*
-	 * Prevent any attempt to override the transaction modes from
-	 * non-interactive sources.
-	 */
-	SetConfigOption("transaction_isolation", "default",
-					PGC_POSTMASTER, PGC_S_OVERRIDE);
-	SetConfigOption("transaction_read_only", "no",
-					PGC_POSTMASTER, PGC_S_OVERRIDE);
-	SetConfigOption("transaction_deferrable", "no",
-					PGC_POSTMASTER, PGC_S_OVERRIDE);
-
-	/*
-	 * For historical reasons, some GUC parameters can receive defaults from
-	 * environment variables.  Process those settings.
-	 */
-	InitializeGUCOptionsFromEnvironment();
+	// SPANGRES BEGIN
+	// Codepath should never be supported in Spangres, so we throw a safe error.
+	// Guarantee that `guc_variables` is not built so that we can treat
+	// GUC-controlled variables as simple globals for evaluating their access
+	// patterns and thread safety.
+	ereport(
+		ERROR,
+		(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+		 errmsg("PostgreSQL's configuration system (GUC) is not supported.")));
+  // SPANGRES END
 }
 
 /*

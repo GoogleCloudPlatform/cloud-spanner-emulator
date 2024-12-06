@@ -14,9 +14,12 @@
 // limitations under the License.
 //
 
-#include <cstddef>
 #include <cstdint>
 
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
 
@@ -28,228 +31,273 @@ namespace {
 
 using zetasql_base::testing::StatusIs;
 
-class CheckConstraintTest : public DatabaseTest {
+class CheckConstraintTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
  protected:
   absl::Status SetUpDatabase() override {
-    return SetSchema({
-        "CREATE TABLE T("
-        " K INT64,"
-        " V INT64,"
-        " V_STR STRING(MAX),"
-        " CONSTRAINT v_gt_zero CHECK (V > 0),"
-        " CONSTRAINT v_left_shift_gt_zero CHECK ((V << 1) > 0),"
-        " CONSTRAINT v_str_gt_zero CHECK(V_STR > '0'),"
-        " ) PRIMARY KEY (K)",
-        "CREATE TABLE T_GC("
-        " K INT64,"
-        " V INT64,"
-        " G1 INT64 AS (V) STORED,"
-        " G2 INT64 AS (G1) STORED,"
-        " G3 INT64 AS (V + 5) STORED,"
-        " CONSTRAINT g1_gt_zero CHECK (G1 > 0),"
-        " CONSTRAINT g2_gt_zero CHECK(G2 > 0),"
-        " CONSTRAINT g3_gt_ten CHECK(G3 > 10),"
-        " ) PRIMARY KEY (K)",
-    });
+    return SetSchemaFromFile("check_constraint.test");
+  }
+
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
   }
 };
 
-TEST_F(CheckConstraintTest, Insert) {
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V"}, {1, 10}));
-  EXPECT_THAT(Read("T", {"K", "V"}, Key(1)), IsOkAndHoldsRow({1, 10}));
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectCheckConstraintTests, CheckConstraintTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<CheckConstraintTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
 
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V_STR"}, {2, "10"}));
-  EXPECT_THAT(Read("T", {"K", "V_STR"}, Key(2)), IsOkAndHoldsRow({2, "10"}));
+TEST_P(CheckConstraintTest, Insert) {
+  ZETASQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, 10}));
+  EXPECT_THAT(Read("t", {"k", "v"}, Key(1)), IsOkAndHoldsRow({1, 10}));
 
-  ZETASQL_ASSERT_OK(Insert("T_GC", {"K", "V"}, {1, 10}));
-  EXPECT_THAT(Read("T_GC", {"K", "V", "G1", "G2", "G3"}, Key(1)),
-              IsOkAndHoldsRow({1, 10, 10, 10, 15}));
+  ZETASQL_ASSERT_OK(Insert("t", {"k", "v_str"}, {2, "10"}));
+  EXPECT_THAT(Read("t", {"k", "v_str"}, Key(2)), IsOkAndHoldsRow({2, "10"}));
+
+  ZETASQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, 10}));
+
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // g2 is not defined in PG as generated columns cannot reference other
+    // generated columns.
+    EXPECT_THAT(Read("t_gc", {"k", "v", "g1", "g3"}, Key(1)),
+                IsOkAndHoldsRow({1, 10, 10, 15}));
+  } else {
+    EXPECT_THAT(Read("t_gc", {"k", "v", "g1", "g2", "g3"}, Key(1)),
+                IsOkAndHoldsRow({1, 10, 10, 10, 15}));
+  }
 }
 
-TEST_F(CheckConstraintTest, InsertNull) {
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V"}, {1, Null<std::int64_t>()}));
-  EXPECT_THAT(Read("T", {"K", "V"}, Key(1)),
+TEST_P(CheckConstraintTest, InsertNull) {
+  ZETASQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, Null<std::int64_t>()}));
+  EXPECT_THAT(Read("t", {"k", "v"}, Key(1)),
               IsOkAndHoldsRow({1, Null<std::int64_t>()}));
 
-  ZETASQL_ASSERT_OK(Insert("T_GC", {"K", "V"}, {1, Null<std::int64_t>()}));
-  EXPECT_THAT(Read("T_GC", {"K", "V", "G1", "G2", "G3"}, Key(1)),
-              IsOkAndHoldsRow({1, Null<std::int64_t>(), Null<std::int64_t>(),
-                               Null<std::int64_t>(), Null<std::int64_t>()}));
+  ZETASQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, Null<std::int64_t>()}));
+
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // g2 is not defined in PG as generated columns cannot reference other
+    // generated columns.
+    EXPECT_THAT(Read("t_gc", {"k", "v", "g1", "g3"}, Key(1)),
+                IsOkAndHoldsRow({1, Null<std::int64_t>(), Null<std::int64_t>(),
+                                 Null<std::int64_t>()}));
+  } else {
+    EXPECT_THAT(Read("t_gc", {"k", "v", "g1", "g2", "g3"}, Key(1)),
+                IsOkAndHoldsRow({1, Null<std::int64_t>(), Null<std::int64_t>(),
+                                 Null<std::int64_t>(), Null<std::int64_t>()}));
+  }
 }
 
-TEST_F(CheckConstraintTest, InsertWithCoercion) {
-  // v_left_shift_gt_zero ZETASQL_VLOG ((V << 1) > 0) is OK.
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V"}, {1, (int32_t)1073741824}));
-  EXPECT_THAT(Read("T", {"K", "V"}, Key(1)),
+TEST_P(CheckConstraintTest, InsertWithCoercion) {
+  // v_left_shift_gt_zero ZETASQL_VLOG ((v << 1) > 0) is OK.
+  ZETASQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, (int32_t)1073741824}));
+  EXPECT_THAT(Read("t", {"k", "v"}, Key(1)),
               IsOkAndHoldsRow({1, (int64_t)1073741824}));
 }
 
-TEST_F(CheckConstraintTest, InsertViolation) {
-  EXPECT_THAT(Insert("T", {"K", "V"}, {1, -1}),
+TEST_P(CheckConstraintTest, InsertViolation) {
+  EXPECT_THAT(Insert("t", {"k", "v"}, {1, -1}),
               StatusIs(absl::StatusCode::kOutOfRange,
                        testing::HasSubstr(
-                           "Check constraint `T`.`v_gt_zero` is violated")));
+                           "Check constraint `t`.`v_gt_zero` is violated")));
   EXPECT_THAT(
-      Insert("T", {"K", "V_STR"}, {1, "-1"}),
+      Insert("t", {"k", "v_str"}, {1, "-1"}),
       StatusIs(absl::StatusCode::kOutOfRange,
                testing::HasSubstr(
-                   "Check constraint `T`.`v_str_gt_zero` is violated")));
+                   "Check constraint `t`.`v_str_gt_zero` is violated")));
 
-  EXPECT_THAT(Insert("T_GC", {"K", "V"}, {1, 1}),
+  EXPECT_THAT(Insert("t_gc", {"k", "v"}, {1, 1}),
               StatusIs(absl::StatusCode::kOutOfRange,
                        testing::HasSubstr(
-                           "Check constraint `T_GC`.`g3_gt_ten` is violated")));
+                           "Check constraint `t_gc`.`g3_gt_ten` is violated")));
 }
 
-TEST_F(CheckConstraintTest, Update) {
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V"}, {1, 10}));
-  ZETASQL_ASSERT_OK(Update("T", {"K", "V"}, {1, 5}));
-  EXPECT_THAT(Read("T", {"K", "V"}, Key(1)), IsOkAndHoldsRow({1, 5}));
+TEST_P(CheckConstraintTest, Update) {
+  ZETASQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, 10}));
+  ZETASQL_ASSERT_OK(Update("t", {"k", "v"}, {1, 5}));
+  EXPECT_THAT(Read("t", {"k", "v"}, Key(1)), IsOkAndHoldsRow({1, 5}));
 
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V_STR"}, {2, "10"}));
-  ZETASQL_ASSERT_OK(Update("T", {"K", "V_STR"}, {2, "5"}));
-  EXPECT_THAT(Read("T", {"K", "V_STR"}, Key(2)), IsOkAndHoldsRow({2, "5"}));
+  ZETASQL_ASSERT_OK(Insert("t", {"k", "v_str"}, {2, "10"}));
+  ZETASQL_ASSERT_OK(Update("t", {"k", "v_str"}, {2, "5"}));
+  EXPECT_THAT(Read("t", {"k", "v_str"}, Key(2)), IsOkAndHoldsRow({2, "5"}));
 
-  ZETASQL_ASSERT_OK(Insert("T_GC", {"K", "V"}, {1, 10}));
-  ZETASQL_ASSERT_OK(Update("T_GC", {"K", "V"}, {1, 15}));
-  EXPECT_THAT(Read("T_GC", {"K", "V", "G1", "G2", "G3"}, Key(1)),
-              IsOkAndHoldsRow({1, 15, 15, 15, 20}));
+  ZETASQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, 10}));
+  ZETASQL_ASSERT_OK(Update("t_gc", {"k", "v"}, {1, 15}));
+
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // g2 is not defined in PG as generated columns cannot reference other
+    // generated columns.
+    EXPECT_THAT(Read("t_gc", {"k", "v", "g1", "g3"}, Key(1)),
+                IsOkAndHoldsRow({1, 15, 15, 20}));
+  } else {
+    EXPECT_THAT(Read("t_gc", {"k", "v", "g1", "g2", "g3"}, Key(1)),
+                IsOkAndHoldsRow({1, 15, 15, 15, 20}));
+  }
 }
 
-TEST_F(CheckConstraintTest, UpdateNull) {
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V"}, {1, 10}));
-  ZETASQL_ASSERT_OK(Update("T", {"K", "V"}, {1, Null<std::int64_t>()}));
-  EXPECT_THAT(Read("T", {"K", "V"}, Key(1)),
+TEST_P(CheckConstraintTest, UpdateNull) {
+  ZETASQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, 10}));
+  ZETASQL_ASSERT_OK(Update("t", {"k", "v"}, {1, Null<std::int64_t>()}));
+  EXPECT_THAT(Read("t", {"k", "v"}, Key(1)),
               IsOkAndHoldsRow({1, Null<std::int64_t>()}));
 
-  ZETASQL_ASSERT_OK(Insert("T_GC", {"K", "V"}, {1, 10}));
-  ZETASQL_ASSERT_OK(Update("T_GC", {"K", "V"}, {1, Null<std::int64_t>()}));
-  EXPECT_THAT(Read("T_GC", {"K", "V", "G1", "G2", "G3"}, Key(1)),
-              IsOkAndHoldsRow({1, Null<std::int64_t>(), Null<std::int64_t>(),
-                               Null<std::int64_t>(), Null<std::int64_t>()}));
+  ZETASQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, 10}));
+  ZETASQL_ASSERT_OK(Update("t_gc", {"k", "v"}, {1, Null<std::int64_t>()}));
 
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V_STR"}, {2, "10"}));
-  ZETASQL_ASSERT_OK(Update("T", {"K", "V_STR"}, {2, Null<std::string>()}));
-  EXPECT_THAT(Read("T", {"K", "V_STR"}, Key(2)),
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // g2 is not defined in PG as generated columns cannot reference other
+    // generated columns.
+    EXPECT_THAT(Read("t_gc", {"k", "v", "g1", "g3"}, Key(1)),
+                IsOkAndHoldsRow({1, Null<std::int64_t>(), Null<std::int64_t>(),
+                                 Null<std::int64_t>()}));
+  } else {
+    EXPECT_THAT(Read("t_gc", {"k", "v", "g1", "g2", "g3"}, Key(1)),
+                IsOkAndHoldsRow({1, Null<std::int64_t>(), Null<std::int64_t>(),
+                                 Null<std::int64_t>(), Null<std::int64_t>()}));
+  }
+
+  ZETASQL_ASSERT_OK(Insert("t", {"k", "v_str"}, {2, "10"}));
+  ZETASQL_ASSERT_OK(Update("t", {"k", "v_str"}, {2, Null<std::string>()}));
+  EXPECT_THAT(Read("t", {"k", "v_str"}, Key(2)),
               IsOkAndHoldsRow({2, Null<std::string>()}));
 }
 
-TEST_F(CheckConstraintTest, UpdateViolation) {
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V"}, {1, 10}));
-  EXPECT_THAT(Update("T", {"K", "V"}, {1, -1}),
+TEST_P(CheckConstraintTest, UpdateViolation) {
+  ZETASQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, 10}));
+  EXPECT_THAT(Update("t", {"k", "v"}, {1, -1}),
               StatusIs(absl::StatusCode::kOutOfRange,
                        testing::HasSubstr(
-                           "Check constraint `T`.`v_gt_zero` is violated")));
+                           "Check constraint `t`.`v_gt_zero` is violated")));
 
-  ZETASQL_ASSERT_OK(Insert("T_GC", {"K", "V"}, {1, 10}));
-  EXPECT_THAT(Update("T_GC", {"K", "V"}, {1, 1}),
+  ZETASQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, 10}));
+  EXPECT_THAT(Update("t_gc", {"k", "v"}, {1, 1}),
               StatusIs(absl::StatusCode::kOutOfRange,
                        testing::HasSubstr(
-                           "Check constraint `T_GC`.`g3_gt_ten` is violated")));
+                           "Check constraint `t_gc`.`g3_gt_ten` is violated")));
 
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V_STR"}, {2, "10"}));
+  ZETASQL_ASSERT_OK(Insert("t", {"k", "v_str"}, {2, "10"}));
   EXPECT_THAT(
-      Update("T", {"K", "V_STR"}, {2, "-1"}),
+      Update("t", {"k", "v_str"}, {2, "-1"}),
       StatusIs(absl::StatusCode::kOutOfRange,
                testing::HasSubstr(
-                   "Check constraint `T`.`v_str_gt_zero` is violated")));
+                   "Check constraint `t`.`v_str_gt_zero` is violated")));
 }
 
-TEST_F(CheckConstraintTest, UpdateNonExistingKey) {
-  EXPECT_THAT(Update("T", {"K", "V"}, {1, 10}),
+TEST_P(CheckConstraintTest, UpdateNonExistingKey) {
+  EXPECT_THAT(Update("t", {"k", "v"}, {1, 10}),
               StatusIs(absl::StatusCode::kNotFound));
 }
 
-TEST_F(CheckConstraintTest, InsertOrUpdate) {
-  ZETASQL_ASSERT_OK(InsertOrUpdate("T", {"K", "V", "V_STR"}, {1, 10, "10"}));
-  EXPECT_THAT(Read("T", {"K", "V", "V_STR"}, Key(1)),
+TEST_P(CheckConstraintTest, InsertOrUpdate) {
+  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k", "v", "v_str"}, {1, 10, "10"}));
+  EXPECT_THAT(Read("t", {"k", "v", "v_str"}, Key(1)),
               IsOkAndHoldsRow({1, 10, "10"}));
 
-  ZETASQL_ASSERT_OK(InsertOrUpdate("T", {"K", "V", "V_STR"}, {1, 5, "5"}));
-  EXPECT_THAT(Read("T", {"K", "V", "V_STR"}, Key(1)),
+  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k", "v", "v_str"}, {1, 5, "5"}));
+  EXPECT_THAT(Read("t", {"k", "v", "v_str"}, Key(1)),
               IsOkAndHoldsRow({1, 5, "5"}));
 }
 
-TEST_F(CheckConstraintTest, InsertOrUpdateViolation) {
-  EXPECT_THAT(InsertOrUpdate("T", {"K", "V", "V_STR"}, {1, -1, "10"}),
+TEST_P(CheckConstraintTest, InsertOrUpdateViolation) {
+  EXPECT_THAT(InsertOrUpdate("t", {"k", "v", "v_str"}, {1, -1, "10"}),
               StatusIs(absl::StatusCode::kOutOfRange,
                        testing::HasSubstr(
-                           "Check constraint `T`.`v_gt_zero` is violated")));
+                           "Check constraint `t`.`v_gt_zero` is violated")));
 
   EXPECT_THAT(
-      InsertOrUpdate("T", {"K", "V", "V_STR"}, {1, 10, "-1"}),
+      InsertOrUpdate("t", {"k", "v", "v_str"}, {1, 10, "-1"}),
       StatusIs(absl::StatusCode::kOutOfRange,
                testing::HasSubstr(
-                   "Check constraint `T`.`v_str_gt_zero` is violated")));
+                   "Check constraint `t`.`v_str_gt_zero` is violated")));
 }
 
-TEST_F(CheckConstraintTest, Replace) {
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V", "V_STR"}, {1, 10, "10"}));
-  ZETASQL_ASSERT_OK(Replace("T", {"K", "V", "V_STR"}, {1, 5, "5"}));
-  EXPECT_THAT(Read("T", {"K", "V", "V_STR"}, Key(1)),
+TEST_P(CheckConstraintTest, Replace) {
+  ZETASQL_ASSERT_OK(Insert("t", {"k", "v", "v_str"}, {1, 10, "10"}));
+  ZETASQL_ASSERT_OK(Replace("t", {"k", "v", "v_str"}, {1, 5, "5"}));
+  EXPECT_THAT(Read("t", {"k", "v", "v_str"}, Key(1)),
               IsOkAndHoldsRow({1, 5, "5"}));
 }
 
-TEST_F(CheckConstraintTest, ReplaceViolation) {
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V", "V_STR"}, {1, 10, "10"}));
-  EXPECT_THAT(Replace("T", {"K", "V", "V_STR"}, {1, -1, "10"}),
+TEST_P(CheckConstraintTest, ReplaceViolation) {
+  ZETASQL_ASSERT_OK(Insert("t", {"k", "v", "v_str"}, {1, 10, "10"}));
+  EXPECT_THAT(Replace("t", {"k", "v", "v_str"}, {1, -1, "10"}),
               StatusIs(absl::StatusCode::kOutOfRange,
                        testing::HasSubstr(
-                           "Check constraint `T`.`v_gt_zero` is violated")));
+                           "Check constraint `t`.`v_gt_zero` is violated")));
   EXPECT_THAT(
-      Replace("T", {"K", "V", "V_STR"}, {1, 10, "-1"}),
+      Replace("t", {"k", "v", "v_str"}, {1, 10, "-1"}),
       StatusIs(absl::StatusCode::kOutOfRange,
                testing::HasSubstr(
-                   "Check constraint `T`.`v_str_gt_zero` is violated")));
+                   "Check constraint `t`.`v_str_gt_zero` is violated")));
 }
 
-TEST_F(CheckConstraintTest, DML) {
+TEST_P(CheckConstraintTest, DML) {
   ZETASQL_ASSERT_OK(
-      CommitDml({SqlStatement("INSERT T(K, V, V_STR) VALUES (1, 1, '1')"),
-                 SqlStatement("UPDATE T SET V = 2, V_STR = '2' WHERE K = 1")}));
-  EXPECT_THAT(Query("SELECT K, V, V_STR FROM T"),
+      CommitDml({SqlStatement("INSERT INTO t(k, v, v_str) VALUES (1, 1, '1')"),
+                 SqlStatement("UPDATE t SET v = 2, v_str = '2' WHERE k = 1")}));
+  EXPECT_THAT(Query("SELECT k, v, v_str FROM t"),
               IsOkAndHoldsRows({{1, 2, "2"}}));
 
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("INSERT T_GC(K, V) VALUES (1, 10)"),
-                       SqlStatement("UPDATE T_GC SET V = 20 WHERE K = 1")}));
-  EXPECT_THAT(Query("SELECT K, V, G1, G2, G3 FROM T_GC"),
-              IsOkAndHoldsRows({{1, 20, 20, 20, 25}}));
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("INSERT INTO t_gc(k, v) VALUES (1, 10)"),
+                       SqlStatement("UPDATE t_gc SET v = 20 WHERE k = 1")}));
+
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // g2 is not defined in PG as generated columns cannot reference other
+    // generated columns.
+    EXPECT_THAT(Query("SELECT k, v, g1, g3 FROM t_gc"),
+                IsOkAndHoldsRows({{1, 20, 20, 25}}));
+  } else {
+    EXPECT_THAT(Query("SELECT k, v, g1, g2, g3 FROM t_gc"),
+                IsOkAndHoldsRows({{1, 20, 20, 20, 25}}));
+  }
 }
 
-TEST_F(CheckConstraintTest, DMLViolation) {
-  EXPECT_THAT(CommitDml({SqlStatement("INSERT T(K, V) VALUES (1, -1)")}),
+TEST_P(CheckConstraintTest, DMLViolation) {
+  EXPECT_THAT(CommitDml({SqlStatement("INSERT INTO t(k, v) VALUES (1, -1)")}),
               StatusIs(absl::StatusCode::kOutOfRange,
                        testing::HasSubstr(
-                           "Check constraint `T`.`v_gt_zero` is violated")));
-  EXPECT_THAT(CommitDml({SqlStatement("INSERT T_GC(K, V) VALUES (1, 1)")}),
+                           "Check constraint `t`.`v_gt_zero` is violated")));
+  EXPECT_THAT(CommitDml({SqlStatement("INSERT INTO t_gc(k, v) VALUES (1, 1)")}),
               StatusIs(absl::StatusCode::kOutOfRange,
                        testing::HasSubstr(
-                           "Check constraint `T_GC`.`g3_gt_ten` is violated")));
+                           "Check constraint `t_gc`.`g3_gt_ten` is violated")));
 }
 
-TEST_F(CheckConstraintTest, MultipleMutationPerRow) {
+TEST_P(CheckConstraintTest, MultipleMutationPerRow) {
   ZETASQL_ASSERT_OK(Commit({
-      MakeInsert("T", {"K", "V", "V_STR"}, 1, -1, "1"),
-      MakeUpdate("T", {"K", "V", "V_STR"}, 1, 1, "-2"),
-      MakeUpdate("T", {"K", "V", "V_STR"}, 1, 2, "2"),
-      MakeInsert("T", {"K", "V", "V_STR"}, 2, 1, "1"),
-      MakeDelete("T", Singleton(2)),
+      MakeInsert("t", {"k", "v", "v_str"}, 1, -1, "1"),
+      MakeUpdate("t", {"k", "v", "v_str"}, 1, 1, "-2"),
+      MakeUpdate("t", {"k", "v", "v_str"}, 1, 2, "2"),
+      MakeInsert("t", {"k", "v", "v_str"}, 2, 1, "1"),
+      MakeDelete("t", Singleton(2)),
   }));
-  EXPECT_THAT(ReadAll("T",
+  EXPECT_THAT(ReadAll("t",
                       {
-                          "K",
-                          "V",
-                          "V_STR",
+                          "k",
+                          "v",
+                          "v_str",
                       }),
               IsOkAndHoldsRows({{1, 2, "2"}}));
 
   ZETASQL_ASSERT_OK(Commit({
-      MakeInsert("T_GC", {"K", "V"}, 1, 0),
-      MakeUpdate("T_GC", {"K", "V"}, 1, 10),
+      MakeInsert("t_gc", {"k", "v"}, 1, 0),
+      MakeUpdate("t_gc", {"k", "v"}, 1, 10),
   }));
 
-  EXPECT_THAT(ReadAll("T_GC", {"K", "V", "G1", "G2", "G3"}),
-              IsOkAndHoldsRows({{1, 10, 10, 10, 15}}));
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    // g2 is not defined in PG as generated columns cannot reference other
+    // generated columns.
+    EXPECT_THAT(ReadAll("t_gc", {"k", "v", "g1", "g3"}),
+                IsOkAndHoldsRows({{1, 10, 10, 15}}));
+  } else {
+    EXPECT_THAT(ReadAll("t_gc", {"k", "v", "g1", "g2", "g3"}),
+                IsOkAndHoldsRows({{1, 10, 10, 10, 15}}));
+  }
 }
 
 }  // namespace

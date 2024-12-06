@@ -224,7 +224,10 @@ genrule(
 cc_library(
     name = "bootstrap_catalog_accessor_impl",
     srcs = ["bootstrap_catalog_accessor.cc"],
-    visibility = ["//third_party/spanner_pg/interface:__subpackages__"],
+    visibility = [
+        "//third_party/spanner_pg/catalog:__subpackages__",
+        "//third_party/spanner_pg/interface:__subpackages__",
+    ],
     deps = [
         ":bootstrap_catalog",
         "//third_party/spanner_pg/interface:bootstrap_catalog_accessor",

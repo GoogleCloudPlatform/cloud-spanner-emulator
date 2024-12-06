@@ -1094,6 +1094,13 @@ void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
                        /*mode=*/zetasql::Function::SCALAR,
                        /*postgres_namespace=*/"spanner"});
 
+    functions.push_back(
+        {"get_table_column_identity_state",
+         "get_table_column_identity_state",
+         {{{gsql_int64, {gsql_string}, /*context_ptr=*/nullptr}}},
+         /*mode=*/zetasql::Function::SCALAR,
+         /*postgres_namespace=*/"spanner"});
+
   functions.push_back({"generate_uuid",
                        "generate_uuid",
                        {{{gsql_string, {}, /*context_ptr=*/nullptr}}},

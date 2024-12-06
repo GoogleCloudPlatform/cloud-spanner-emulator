@@ -815,8 +815,14 @@ void VisitColumnDefaultClauseNode(const SimpleNode* node,
       absl::StrCat(ExtractTextForNode(child, ddl_text)));
 }
 
-void VisitColumnNode(const SimpleNode* node, ColumnDefinition* column,
-                     absl::string_view ddl_text,
+// If containing_table is not null, then we support parsing a PRIMARY KEY clause
+// attached to this column; if present, this column's name will be set as the
+// sole primary key component in the containing table, or a syntax error will be
+// generated if the table's primary key has already been set by a previous
+// column. It is expected that higher-level parsing code using this feature will
+// also check that there is no table-level PRIMARY KEY clause in that case.
+void VisitColumnNode(const SimpleNode* node, absl::string_view ddl_text,
+                     ColumnDefinition* column, CreateTable* containing_table,
                      std::vector<std::string>* errors) {
   CheckNode(node, JJTCOLUMN_DEF);
   column->set_column_name(GetChildNode(node, 0, JJTNAME)->image());
@@ -832,6 +838,18 @@ void VisitColumnNode(const SimpleNode* node, ColumnDefinition* column,
         break;
       case JJTNOT_NULL:
         column->set_not_null(true);
+        break;
+      case JJTPRIMARY_KEY:
+        if (containing_table != nullptr) {
+          if (containing_table->primary_key().empty()) {
+            containing_table->add_primary_key()->set_key_name(
+                column->column_name());
+          } else {
+            errors->push_back("Multiple columns declared as PRIMARY KEY");
+          }
+        } else {
+          errors->push_back("Unexpected PRIMARY KEY clause");
+        }
         break;
       case JJTGENERATION_CLAUSE:
         VisitGenerationClauseNode(child, column, ddl_text);
@@ -1138,11 +1156,13 @@ void VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
       GetQualifiedIdentifier(GetChildNode(node, offset, JJTNAME)));
   offset++;
 
+  bool has_primary_key = false;
+
   for (int i = offset; i < node->jjtGetNumChildren(); i++) {
     SimpleNode* child = GetChildNode(node, i);
     switch (child->getId()) {
       case JJTCOLUMN_DEF:
-        VisitColumnNode(child, table->add_column(), ddl_text, errors);
+        VisitColumnNode(child, ddl_text, table->add_column(), table, errors);
         break;
       case JJTFOREIGN_KEY:
         VisitForeignKeyNode(child, table->add_foreign_key(), errors);
@@ -1152,7 +1172,12 @@ void VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
                                  errors);
         break;
       case JJTPRIMARY_KEY:
-        VisitKeyNode(child, table->mutable_primary_key(), errors);
+        if (table->primary_key().empty()) {
+          VisitKeyNode(child, table->mutable_primary_key(), errors);
+        } else {
+          errors->push_back("Cannot specify both table and column PRIMARY KEY");
+        }
+        has_primary_key = true;
         break;
       case JJTSYNONYM_CLAUSE:
         table->set_synonym(GetChildNode(child, 0)->image());
@@ -1167,6 +1192,11 @@ void VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
       default:
         ABSL_LOG(FATAL) << "Unexpected table info: " << child->toString();
     }
+  }
+
+  if (table->primary_key().empty() && !has_primary_key) {
+    // Even for singleton tables, a table-level PRIMARY KEY() must be specified.
+    errors->push_back("Must specify either table or column PRIMARY KEY");
   }
 }
 
@@ -2140,9 +2170,9 @@ void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
           alter_table->mutable_add_column()->set_existence_modifier(
               IF_NOT_EXISTS);
         }
-        VisitColumnNode(GetChildNode(node, offset, JJTCOLUMN_DEF),
+        VisitColumnNode(GetChildNode(node, offset, JJTCOLUMN_DEF), ddl_text,
                         alter_table->mutable_add_column()->mutable_column(),
-                        ddl_text, errors);
+                        /*containing_table=*/nullptr, errors);
       } break;
       case JJTDROP_COLUMN: {
         SimpleNode* column = GetChildNode(node, 2, JJTCOLUMN_NAME);
@@ -2417,7 +2447,8 @@ void VisitModelColumnList(const SimpleNode* node,
   for (int i = 0; i < node->jjtGetNumChildren(); i++) {
     SimpleNode* child = GetChildNode(node, i);
     CheckNode(child, JJTCOLUMN_DEF);
-    VisitColumnNode(child, columns->Add(), ddl_text, errors);
+    VisitColumnNode(child, ddl_text, columns->Add(),
+                    /*containing_table=*/nullptr, errors);
   }
 }
 

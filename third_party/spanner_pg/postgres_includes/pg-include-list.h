@@ -121,6 +121,7 @@
 #include "third_party/spanner_pg/src/include/utils/syscache.h"
 #include "third_party/spanner_pg/src/include/utils/timestamp.h"
 #include "third_party/spanner_pg/src/include/utils/typcache.h"
+#include "third_party/spanner_pg/src/include/utils/uuid.h"
 #include "third_party/spanner_pg/src/include/mb/pg_wchar.h"
 // clang-format on
 

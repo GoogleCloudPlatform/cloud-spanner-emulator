@@ -321,6 +321,12 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       TableContext& context, google::spanner::emulator::backend::ddl::ColumnDefinition& out) const;
   absl::Status TranslateCreateDatabase(const CreatedbStmt& create_statement,
                                        google::spanner::emulator::backend::ddl::CreateDatabase& out) const;
+
+  absl::Status TranslateAlterDatabase(
+      const AlterDatabaseSetStmt& alter_statement,
+      const TranslationOptions& options,
+      google::spanner::emulator::backend::ddl::AlterDatabase& out) const;
+
   absl::StatusOr<internal::PGAlterOption> TranslateOption(
       absl::string_view option_name, const TranslationOptions& options) const;
 
@@ -2394,6 +2400,78 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSchema(
   return absl::OkStatus();
 }
 
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterDatabase(
+    const AlterDatabaseSetStmt& alter_statement,
+    const TranslationOptions& options, google::spanner::emulator::backend::ddl::AlterDatabase& out) const {
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_statement));
+
+  const VariableSetStmt* set_statement = alter_statement.setstmt;
+
+  out.set_db_name(alter_statement.dbname);
+  google::spanner::emulator::backend::ddl::SetOption* opt{out.mutable_set_options()->add_options()};
+
+  switch (set_statement->kind) {
+    case VAR_SET_VALUE: {
+      ZETASQL_ASSIGN_OR_RETURN(internal::PGAlterOption option,
+                       TranslateOption(set_statement->name, options));
+
+      opt->set_option_name(option.SpannerName());
+
+      ZETASQL_RET_CHECK(!IsListEmpty(set_statement->args))
+          << "Option value is missing.";
+
+      ZETASQL_ASSIGN_OR_RETURN(
+          const A_Const* arg,
+          (SingleItemListAsNode<A_Const, T_A_Const>)(set_statement->args));
+
+        if (arg->val.node.type != option.PGType()) {
+            return UnsupportedTranslationError(
+                "Incorrect datatype specified for option.");
+        }
+
+        switch (arg->val.node.type) {
+          case T_Integer: {
+            opt->set_int64_value(arg->val.ival.ival);
+            break;
+          }
+
+          case T_String: {
+            opt->set_string_value(arg->val.sval.sval);
+            break;
+          }
+
+          default: {
+            return UnsupportedTranslationError(
+                "Option type is not supported by <ALTER DATABASE> statement.");
+          }
+        }
+
+      break;
+    }
+
+    case VAR_SET_DEFAULT:
+    case VAR_RESET: {
+      ZETASQL_ASSIGN_OR_RETURN(internal::PGAlterOption option,
+                       TranslateOption(set_statement->name, options));
+
+      opt->set_option_name(option.SpannerName());
+
+      opt->set_null_value(true);
+      ZETASQL_RET_CHECK(IsListEmpty(set_statement->args));
+      break;
+    }
+
+    case VAR_SET_CURRENT:
+    case VAR_SET_MULTI:
+    case VAR_RESET_ALL: {
+      return UnsupportedTranslationError(
+          "Operation is not supported by <ALTER DATABASE> statement.");
+    }
+  }
+
+  return absl::OkStatus();
+}
+
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateVacuum(
     const VacuumStmt& vacuum_statement, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::Analyze& out) const {
@@ -2800,6 +2878,17 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
           (DowncastNode<DropStmt, T_DropStmt>(raw_statement.stmt)));
       ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateDropStatement(
           *statement, options_, result_statement));
+
+      break;
+    }
+
+    case T_AlterDatabaseSetStmt: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          const AlterDatabaseSetStmt* statement,
+          (DowncastNode<AlterDatabaseSetStmt, T_AlterDatabaseSetStmt>(
+              raw_statement.stmt)));
+      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterDatabase(
+          *statement, options_, *result_statement.mutable_alter_database()));
 
       break;
     }

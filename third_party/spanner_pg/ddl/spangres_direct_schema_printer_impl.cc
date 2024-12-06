@@ -132,6 +132,8 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
   // corresponding PostgreSQL DDL representation
   absl::StatusOr<std::vector<std::string>> PrintCreateDatabase(
       const google::spanner::emulator::backend::ddl::CreateDatabase& statement) const;
+  absl::StatusOr<std::vector<std::string>> PrintAlterDatabase(
+      const google::spanner::emulator::backend::ddl::AlterDatabase& statement) const;
   absl::StatusOr<std::string> PrintAlterTable(
       const google::spanner::emulator::backend::ddl::AlterTable& statement) const;
   absl::StatusOr<std::string> PrintCreateTable(
@@ -178,6 +180,9 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
   absl::StatusOr<std::string> PrintCheckConstraint(
       const CheckConstraint& check_constraint) const;
   absl::StatusOr<std::string> PrintSortOrder(KeyPartClause::Order order) const;
+  absl::StatusOr<std::vector<std::string>> PrintAlterDatabaseSetOptions(
+      absl::string_view quoted_db_name,
+      const google::protobuf::RepeatedPtrField<google::spanner::emulator::backend::ddl::SetOption>& options) const;
   std::string PrintCreateChangeStream(
       const google::spanner::emulator::backend::ddl::CreateChangeStream& statement) const;
   std::string PrintChangeStreamForClause(
@@ -234,6 +239,8 @@ SpangresSchemaPrinterImpl::PrintDDLStatement(
   switch (statement.statement_case()) {
     case google::spanner::emulator::backend::ddl::DDLStatement::kCreateDatabase:
       return PrintCreateDatabase(statement.create_database());
+    case google::spanner::emulator::backend::ddl::DDLStatement::kAlterDatabase:
+      return PrintAlterDatabase(statement.alter_database());
     case google::spanner::emulator::backend::ddl::DDLStatement::kAlterTable:
       return WrapOutput(PrintAlterTable(statement.alter_table()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kCreateTable:
@@ -309,6 +316,16 @@ SpangresSchemaPrinterImpl::PrintCreateDatabase(
   std::vector<std::string> output;
     output.push_back(absl::StrCat("CREATE DATABASE ", quoted_db_name));
   return output;
+}
+
+absl::StatusOr<std::vector<std::string>>
+SpangresSchemaPrinterImpl::PrintAlterDatabase(
+    const google::spanner::emulator::backend::ddl::AlterDatabase& statement) const {
+  ZETASQL_RET_CHECK_EQ(statement.alter_type_case(),
+               google::spanner::emulator::backend::ddl::AlterDatabase::kSetOptions);
+
+  return PrintAlterDatabaseSetOptions(QuoteIdentifier(statement.db_name()),
+                                      statement.set_options().options());
 }
 
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
@@ -1315,6 +1332,42 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintPrimaryKey(
   StrAppend(&output, ")");
   return output;
 }
+
+absl::StatusOr<std::vector<std::string>>
+SpangresSchemaPrinterImpl::PrintAlterDatabaseSetOptions(
+    absl::string_view quoted_db_name,
+    const google::protobuf::RepeatedPtrField<google::spanner::emulator::backend::ddl::SetOption>& options) const {
+  std::vector<std::string> output;
+  std::string base = StrCat("ALTER DATABASE ", quoted_db_name);
+  std::vector<std::string> printed_options;
+
+  for (const google::spanner::emulator::backend::ddl::SetOption& option : options) {
+    absl::optional<absl::string_view> pg_option_name =
+        internal::GetSpangresOptionName(option.option_name());
+    // Options not whitelisted for customer use are not printed
+    if (!pg_option_name) {
+      continue;
+    }
+    if (option.has_null_value()) {
+      output.push_back(
+          StrCat(base, " RESET ", QuoteIdentifier(*pg_option_name)));
+      continue;
+    } else {
+      std::string value;
+      if (option.has_string_value()) {
+        value = QuoteStringLiteral(option.string_value());
+      } else if (option.has_int64_value()) {
+        value = std::to_string(option.int64_value());
+      } else {
+        ZETASQL_RET_CHECK_FAIL();
+      }
+      output.push_back(StrCat(base, " SET ", QuoteIdentifier(*pg_option_name),
+                              " = ", value));
+    }
+  }
+  return output;
+}
+
 }  // namespace
 
 absl::StatusOr<std::unique_ptr<SpangresSchemaPrinter>>

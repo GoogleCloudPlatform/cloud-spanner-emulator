@@ -31,6 +31,7 @@
 
 #include "third_party/spanner_pg/catalog/type.h"
 
+#include <algorithm>
 #include <string>
 
 #include "zetasql/base/logging.h"
@@ -40,6 +41,7 @@
 #include "zetasql/public/types/extended_type.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
+#include "zetasql/public/uuid_value.h"
 #include "zetasql/base/no_destructor.h"
 #include "absl/hash/hash.h"
 #include "absl/status/status.h"
@@ -55,6 +57,7 @@
 #include "third_party/spanner_pg/util/datetime_conversion.h"
 #include "third_party/spanner_pg/util/oid_to_string.h"
 #include "third_party/spanner_pg/util/postgres.h"
+#include "third_party/spanner_pg/util/uuid_conversion.h"
 #include "re2/re2.h"
 #include "zetasql/base/status_macros.h"
 
@@ -976,6 +979,7 @@ const PostgresTypeMapping* PgIntervalArrayMapping() {
           /*requires_nan_handling=*/false);
   return s_pg_interval_array_mapping.get();
 }
+
 }  // namespace types
 
 }  // namespace postgres_translator

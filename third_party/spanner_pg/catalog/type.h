@@ -196,7 +196,6 @@ const PostgresTypeMapping* PgByteaArrayMapping();
 const PostgresTypeMapping* PgTimestamptzArrayMapping();
 const PostgresTypeMapping* PgDateArrayMapping();
 const PostgresTypeMapping* PgIntervalArrayMapping();
-
 }  // namespace types
 
 }  // namespace postgres_translator

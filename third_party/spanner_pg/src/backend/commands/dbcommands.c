@@ -2979,41 +2979,20 @@ errdetail_busy_db(int notherbackends, int npreparedxacts)
  * true, just return InvalidOid.
  */
 Oid
-get_database_oid_UNUSED_SPANGRES(const char *dbname, bool missing_ok)
+get_database_oid(const char *dbname, bool missing_ok)
 {
-	Relation	pg_database;
-	ScanKeyData entry[1];
-	SysScanDesc scan;
-	HeapTuple	dbtuple;
-	Oid			oid;
-	/*
-	 * There's no syscache for pg_database indexed by name, so we must look
-	 * the hard way.
-	 */
-	pg_database = table_open(DatabaseRelationId, AccessShareLock);
-	ScanKeyInit(&entry[0],
-				Anum_pg_database_datname,
-				BTEqualStrategyNumber, F_NAMEEQ,
-				CStringGetDatum(dbname));
-	scan = systable_beginscan(pg_database, DatabaseNameIndexId, true,
-							  NULL, 1, entry);
-	dbtuple = systable_getnext(scan);
-	/* We assume that there can be at most one matching tuple */
-	if (HeapTupleIsValid(dbtuple))
-		oid = ((Form_pg_database) GETSTRUCT(dbtuple))->oid;
-	else
-		oid = InvalidOid;
-
-	systable_endscan(scan);
-	table_close(pg_database, AccessShareLock);
-
-	if (!OidIsValid(oid) && !missing_ok)
+	// SPANGRES BEGIN
+	// TODO: Add support for namespace Oids.
+	if (missing_ok) {
+		return InvalidOid;
+	} else {
 		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_DATABASE),
-				 errmsg("database \"%s\" does not exist",
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("Tried to lookup Oid for database %s, but "
+						"using databases as queryable namespaces is not supported",
 						dbname)));
-
-	return oid;
+	}
+	// SPANGRES END
 }
 
 /*

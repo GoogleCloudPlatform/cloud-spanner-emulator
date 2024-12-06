@@ -1108,17 +1108,6 @@ TypeCacheEntry* lookup_type_cache(Oid type_id, int flags);
 void assign_record_type_typmod(TupleDesc tupDesc);
 
 /*---------------------------------------------------------------------------*/
-/* Shimmed functions from utils/fmgr/fmgr.c */
-
-// Populates FmgrInfo with function call information (based on Oid lookup).
-// Spangres version is exactly the same for built-in functions, but doesn't
-// support non-built-in functions at all. The PostgreSQL version falls back to a
-// lookup in the pg_proc table. Since we don't have a pg_proc table (just
-// bootstrap catalog), this doesn't miss anything.
-void fmgr_info_cxt_security(Oid functionId, FmgrInfo* finfo, MemoryContext mcxt,
-                            bool ignore_security);
-
-/*---------------------------------------------------------------------------*/
 /* Shimmed functions from utils/fmgr/funcapi.c */
 
 // internal_get_result_type -- workhorse code implementing various
