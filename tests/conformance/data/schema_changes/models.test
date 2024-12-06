@@ -1051,3 +1051,35 @@ ALTER MODEL m1 SET OPTIONS (unknown = true);
 ERROR: Error parsing Spanner DDL statement: ALTER MODEL m1 SET OPTIONS (unknown = true) : Option: unknown is unknown.
 ==
 
+# Create model: invalid primary key in input
+CREATE MODEL m
+INPUT (
+  f1 INT64,
+  f2 STRING(MAX) PRIMARY KEY
+)
+OUTPUT (
+  l1 BOOL,
+  l2 ARRAY<FLOAT64>
+);
+--
+ERROR: Error in non-idempotent operation: Error parsing Spanner DDL statement:
+CREATE MODEL m INPUT ( f1 INT64, f2 STRING(MAX) PRIMARY KEY ) OUTPUT ( l1 BOOL,
+l2 ARRAY<FLOAT64> ) : Unexpected PRIMARY KEY clause
+==
+
+# Create model: invalid primary key in output
+CREATE MODEL m
+INPUT (
+  f1 INT64,
+  f2 STRING(MAX)
+)
+OUTPUT (
+  l1 BOOL PRIMARY KEY,
+  l2 ARRAY<FLOAT64>
+);
+--
+ERROR: Error in non-idempotent operation: Error parsing Spanner DDL statement:
+CREATE MODEL m INPUT ( f1 INT64, f2 STRING(MAX) ) OUTPUT ( l1 BOOL PRIMARY KEY,
+l2 ARRAY<FLOAT64> ) : Unexpected PRIMARY KEY clause
+==
+

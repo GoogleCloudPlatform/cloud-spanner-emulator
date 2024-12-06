@@ -142,6 +142,12 @@
   proargnames => '{tokens}',
   prosrc => 'spangres_fts_func' },
 
+# TOKENIZE_JSONB
+{ oid => 50060, proname => 'tokenize_jsonb', pronamespace => 'spanner',
+  prorettype => 'tokenlist', proargtypes => 'jsonb',
+  proargnames => '{value}',
+  prosrc => 'spangres_fts_func' },
+
 #############################
 # FTS SEARCH FUNCTIONS
 #############################

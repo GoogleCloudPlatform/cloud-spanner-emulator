@@ -109,7 +109,7 @@ anytime_typmodout(bool istz, int32 typmod)
  * Given date text string, convert to internal date format.
  */
 Datum
-date_in_UNUSED_SPANGRES(PG_FUNCTION_ARGS)
+date_in(PG_FUNCTION_ARGS)
 {
 	char	   *str = PG_GETARG_CSTRING(0);
 	DateADT		date;
@@ -136,17 +136,20 @@ date_in_UNUSED_SPANGRES(PG_FUNCTION_ARGS)
 		case DTK_DATE:
 			break;
 
+		// SPANGRES BEGIN
 		case DTK_EPOCH:
-			GetEpochTime(tm);
-			break;
+			/* SPANGRES: remove support for epoch */
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("epoch is not supported")));
 
 		case DTK_LATE:
-			DATE_NOEND(date);
-			PG_RETURN_DATEADT(date);
-
 		case DTK_EARLY:
-			DATE_NOBEGIN(date);
-			PG_RETURN_DATEADT(date);
+			/* SPANGRES: remove support for infinity and -infinity */
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("infinity and -infinity are not supported")));
+		// SPANGRES END
 
 		default:
 			DateTimeParseError(DTERR_BAD_FORMAT, str, "date");

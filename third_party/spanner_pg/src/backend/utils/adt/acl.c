@@ -5169,25 +5169,27 @@ select_best_grantor(Oid roleId, AclMode privileges,
 	}
 }
 
+// SPANGRES BEGIN
 /*
  * get_role_oid - Given a role name, look up the role's OID.
  *
  * If missing_ok is false, throw an error if role name not found.  If
  * true, just return InvalidOid.
+ *
+ * SPANGRES: Currently, we do not support roles so we always return either
+ * InvalidOid or throw an error. This will need to be updated when we add
+ * support for roles.
  */
 Oid
-get_role_oid_UNUSED_SPANGRES(const char *rolname, bool missing_ok)
+get_role_oid(const char *rolname, bool missing_ok)
 {
-	Oid			oid;
-
-	oid = GetSysCacheOid1(AUTHNAME, Anum_pg_authid_oid,
-						  CStringGetDatum(rolname));
-	if (!OidIsValid(oid) && !missing_ok)
+	if (!missing_ok)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("role \"%s\" does not exist", rolname)));
-	return oid;
+	return InvalidOid;
 }
+// SPANGRES END
 
 /*
  * get_role_oid_or_public - As above, but return ACL_ID_PUBLIC if the

@@ -407,7 +407,7 @@ AdjustTimestampForTypmod(Timestamp *time, int32 typmod)
  * Convert a string to internal form.
  */
 Datum
-timestamptz_in_UNUSED_SPANGRES(PG_FUNCTION_ARGS)
+timestamptz_in(PG_FUNCTION_ARGS)
 {
 	char	   *str = PG_GETARG_CSTRING(0);
 
@@ -443,17 +443,20 @@ timestamptz_in_UNUSED_SPANGRES(PG_FUNCTION_ARGS)
 						 errmsg("timestamp out of range: \"%s\"", str)));
 			break;
 
+		// SPANGRES BEGIN
 		case DTK_EPOCH:
-			result = SetEpochTimestamp();
-			break;
+			/* SPANGRES: remove support for epoch */
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("epoch is not supported")));
 
 		case DTK_LATE:
-			TIMESTAMP_NOEND(result);
-			break;
-
 		case DTK_EARLY:
-			TIMESTAMP_NOBEGIN(result);
-			break;
+			/* SPANGRES: remove support for infinity and -infinity */
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("infinity and -infinity are not supported")));
+		// SPANGRES END
 
 		default:
 			elog(ERROR, "unexpected dtype %d while parsing timestamptz \"%s\"",

@@ -80,7 +80,6 @@ cc_library(
     licenses = ["unencumbered"],
     visibility = ["//:__subpackages__"],
     deps = [
-        ":bootstrap_catalog_accessor_stub",
         ":bootstrap_catalog_data_cc_proto",
         ":memory_reservation_manager",
         ":parser_interface",
@@ -456,18 +455,6 @@ cc_library(
 )
 
 cc_library(
-    name = "bootstrap_catalog_accessor_stub",
-    srcs = ["stub_bootstrap_catalog_accessor.cc"],
-    visibility = ["//visibility:private"],
-    deps = [
-        ":bootstrap_catalog_accessor",
-        ":bootstrap_catalog_data_cc_proto",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-    ],
-)
-
-cc_library(
     name = "emulator_builtin_function_catalog",
     hdrs = [
         "emulator_builtin_function_catalog.h",
@@ -493,6 +480,7 @@ cc_library(
         ":interfaces_with_stub_implementations",
         ":parser_interface",
         "//backend/query:function_catalog",
+        "//third_party/spanner_pg/bootstrap_catalog:bootstrap_catalog_accessor_impl",
         "//third_party/spanner_pg/shims:error_shim",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "@com_google_absl//absl/status",

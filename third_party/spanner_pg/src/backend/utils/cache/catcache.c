@@ -1459,25 +1459,11 @@ SearchCatCacheMiss(CatCache *cache,
  *	to catch references to already-released catcache entries.
  */
 void
-ReleaseCatCache_UNUSED_SPANGRES(HeapTuple tuple)
+ReleaseCatCache(HeapTuple tuple)
 {
-	CatCTup    *ct = (CatCTup *) (((char *) tuple) -
-								  offsetof(CatCTup, tuple));
-
-	/* Safety checks to ensure we were handed a cache entry */
-	Assert(ct->ct_magic == CT_MAGIC);
-	Assert(ct->refcount > 0);
-
-	ct->refcount--;
-	ResourceOwnerForgetCatCacheRef(CurrentResourceOwner, &ct->tuple);
-
-	if (
-#ifndef CATCACHE_FORCE_RELEASE
-		ct->dead &&
-#endif
-		ct->refcount == 0 &&
-		(ct->c_list == NULL || ct->c_list->refcount == 0))
-		CatCacheRemoveCTup(ct->my_cache, ct);
+	// SPANGRES BEGIN
+	// Do nothing
+	// SPANGRES END
 }
 
 

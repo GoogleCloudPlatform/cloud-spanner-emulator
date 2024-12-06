@@ -29,43 +29,34 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include "third_party/spanner_pg/interface/bootstrap_catalog_accessor.h"
+#include "third_party/spanner_pg/util/uuid_conversion.h"
 
-#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
+#include "third_party/spanner_pg/postgres_includes/all.h"
+#include "third_party/spanner_pg/shims/error_shim.h"
+#include "zetasql/base/status_macros.h"
 
-namespace postgres_translator {
+absl::StatusOr<Const*> UuidStringToPgConst(absl::string_view uuid_string) {
+  ZETASQL_ASSIGN_OR_RETURN(Datum uuid_datum,
+                   postgres_translator::CheckedDirectFunctionCall1(
+                       /*func=*/uuid_in,
+                       /*arg1=*/CStringGetDatum(uuid_string.data())));
 
-const PgBootstrapCatalog* GetPgBootstrapCatalog() {
-  return nullptr;
+  return postgres_translator::CheckedPgMakeConst(
+      /*consttype=*/UUIDOID,
+      /*consttypmod=*/-1,
+      /*constcollid=*/InvalidOid,
+      /*constlen=*/sizeof(pg_uuid_t),
+      /*constvalue=*/uuid_datum,
+      /*constisnull=*/false,
+      /*constbyval=*/false);
 }
 
-absl::StatusOr<PgCollationData> GetPgCollationDataFromBootstrap(
-    const PgBootstrapCatalog* catalog, absl::string_view collation_name) {
-  return absl::UnimplementedError(
-      "invoked stub GetPgCollationDataFromBootstrap");
+absl::StatusOr<absl::string_view> PgConstToUuidString(Const* pg_const) {
+  ZETASQL_ASSIGN_OR_RETURN(Datum datum, postgres_translator::CheckedDirectFunctionCall1(
+                                    /*func=*/uuid_out,
+                                    /*arg1=*/pg_const->constvalue));
+
+  return DatumGetCString(datum);
 }
-
-absl::StatusOr<PgNamespaceData> GetPgNamespaceDataFromBootstrap(
-    const PgBootstrapCatalog* catalog, absl::string_view namespace_name) {
-  return absl::UnimplementedError(
-      "invoked stub GetPgNamespaceDataFromBootstrap");
-}
-
-absl::StatusOr<PgProcData> GetPgProcDataFromBootstrap(
-    const PgBootstrapCatalog* catalog, int64_t proc_oid) {
-  return absl::UnimplementedError("invoked stub GetPgProcDataFromBootstrap");
-}
-
-absl::StatusOr<PgTypeData> GetPgTypeDataFromBootstrap(
-    const PgBootstrapCatalog* catalog, absl::string_view type_name) {
-  return absl::UnimplementedError("invoked stub GetPgTypeDataFromBootstrap");
-}
-
-absl::StatusOr<PgTypeData> GetPgTypeDataFromBootstrap(
-    const PgBootstrapCatalog* catalog, int64_t type_oid) {
-  return absl::UnimplementedError("invoked stub GetPgTypeDataFromBootstrap");
-}
-
-
-}  // namespace postgres_translator

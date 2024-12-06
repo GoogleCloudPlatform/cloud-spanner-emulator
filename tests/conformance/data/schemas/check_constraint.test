@@ -1,0 +1,43 @@
+# Note that PG databases by default have lower case table and column names. To
+# use uppercase names, you have to quote them. But the GSQL and PG quoting
+# syntax is incompatible so we use lower-case names in both schemas to avoid
+# having to maintain two copies of each query.
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE t(
+  k INT64,
+  v INT64,
+  v_str STRING(MAX),
+  CONSTRAINT v_gt_zero CHECK (v > 0),
+  CONSTRAINT v_left_shift_gt_zero CHECK ((v << 1) > 0),
+  CONSTRAINT v_str_gt_zero CHECK(v_str > '0'),
+) PRIMARY KEY (k);
+CREATE TABLE t_gc(
+  k INT64,
+  v INT64,
+  g1 INT64 AS (v) STORED,
+  g2 INT64 AS (g1) STORED,
+  g3 INT64 AS (v + 5) STORED,
+  CONSTRAINT g1_gt_zero CHECK (g1 > 0),
+  CONSTRAINT g2_gt_zero CHECK(g2 > 0),
+  CONSTRAINT g3_gt_ten CHECK(g3 > 10),
+) PRIMARY KEY (k);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE t(
+  k bigint,
+  v bigint,
+  v_str varchar,
+  CONSTRAINT v_gt_zero CHECK (v > 0),
+  CONSTRAINT v_left_shift_gt_zero CHECK ((v << 1) > 0),
+  CONSTRAINT v_str_gt_zero CHECK(v_str > '0'),
+  PRIMARY KEY (k)
+);
+CREATE TABLE t_gc(
+  k bigint,
+  v bigint,
+  g1 bigint GENERATED ALWAYS AS (v) STORED,
+  g3 bigint GENERATED ALWAYS AS (v + 5) STORED,
+  CONSTRAINT g1_gt_zero CHECK (g1 > 0),
+  CONSTRAINT g3_gt_ten CHECK(g3 > 10),
+  PRIMARY KEY (k)
+);

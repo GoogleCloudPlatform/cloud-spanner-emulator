@@ -84,20 +84,12 @@ bool can_coerce_type(int nargs, const Oid* input_typeids,
   abort();
 }
 
-Oid get_role_oid(const char *rolname, bool missing_ok) {
-  abort();
-}
-
 char* format_type_extended(Oid type_oid, int32_t typemod, bits16 flags)
 {
   abort();
 }
 
 bool TypeIsVisible(Oid typid) {
-  abort();
-}
-
-void ReleaseCatCache(HeapTuple tuple) {
   abort();
 }
 
@@ -141,11 +133,6 @@ bool NamedCallMatchFound(Oid proc_oid, int nargs, List *argnames,
   abort();
 }
 
-void fmgr_info_cxt_security(Oid functionId, FmgrInfo* finfo,
-                            MemoryContext mcxt, bool ignore_security) {
-  abort();
-}
-
 void get_type_category_preferred(Oid typid, char* typcategory,
                                  bool* typispreferred) {
   abort();
@@ -159,11 +146,6 @@ void get_type_io_data(Oid typid,
 					  char* typdelim,
 					  Oid* typioparam,
 					  Oid* func) {
-  abort();
-}
-
-void AcquireRewriteLocks(Query* parsetree, bool forExecute,
-                         bool forUpdatePushedDown) {
   abort();
 }
 
@@ -376,18 +358,6 @@ RegProcedure get_opcode(Oid opno) {
   abort();
 }
 
-LockAcquireResult LockAcquireExtended(const LOCKTAG* locktag,
-                                      LOCKMODE lockmode,
-                                      bool sessionLock, bool dontWait,
-                                      bool reportMemoryError,
-                                      LOCALLOCK** locallockp) {
-  abort();
-}
-
-void InitializeGUCOptions(void) {
-  abort();
-}
-
 Oid get_range_subtype(Oid rangeOid) {
   abort();
 }
@@ -404,11 +374,6 @@ Const* make_const(ParseState* pstate, A_Const* aconst) {
   abort();
 }
 
-Bitmapset* get_primary_key_attnos(Oid relid, bool deferrableOk,
-                                  Oid* constraintOid) {
-  abort();
-}
-
 Oid RelnameGetRelid(const char* relname) {
   abort();
 }
@@ -422,10 +387,6 @@ Oid get_rel_type_id(Oid relid) {
 }
 
 Oid get_namespace_oid(const char* nspname, bool missing_ok) {
-  abort();
-}
-
-Oid get_database_oid(const char* dbname, bool missing_ok) {
   abort();
 }
 
@@ -517,31 +478,11 @@ Oid get_collation_oid(List *name, bool missing_ok) {
   abort();
 }
 
-Datum date_in(PG_FUNCTION_ARGS) {
-  abort();
-}
-
-Datum timestamptz_in(PG_FUNCTION_ARGS) {
-  abort();
-}
-
 RegProcedure get_typsubscript(Oid typid, Oid *typelemp) {
   abort();
 }
 
 Oid get_multirange_range(Oid multirangeOid) {
-  abort();
-}
-
-int
-DecodeDateTime(char **field, int *ftype, int nf,
-               int *dtype, struct pg_tm *tm, fsec_t *fsec, int *tzp) {
-  abort();
-}
-
-int
-DecodeTimezoneAbbrev(int field, char *lowtoken,
-					 int *offset, pg_tz **tz) {
   abort();
 }
 

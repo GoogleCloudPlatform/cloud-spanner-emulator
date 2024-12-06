@@ -155,6 +155,23 @@ void StripTargetEntry(TargetEntry* entry) {
   entry->resorigcol = InvalidOid;
 }
 
+// The has_explicit_type boolean field on a ZetaSQL literal is not used during
+// query execution and is not possible for the Spangres transformer to match
+// exactly. This method strips the has_explicit_type field from a resolved AST
+// debug string so that we can compare debug strings between Spangres and
+// ZetaSQL.
+std::string StripHasExplicitType(
+    const std::string& original_debug_string) {
+  const std::string kHasExplicitType = ", has_explicit_type=TRUE";
+  std::vector<std::string> lines = absl::StrSplit(original_debug_string, '\n');
+  std::vector<std::string> stripped_lines;
+  for (auto& line : lines) {
+    RE2::GlobalReplace(&line, kHasExplicitType, "");
+    stripped_lines.push_back(std::string(line));
+  }
+  return absl::StrJoin(stripped_lines, "\n");
+}
+
 // Remove actual values of certain fields in a PostgreSQL Query object produced
 // by the PostgreSQL parser and analyzer. It is the expected input argument of
 // this function, pg_query.
@@ -566,7 +583,8 @@ TEST_P(QueryTransformationTest, TestTransform) {
 
     // Check that the ASTs match.
     ASSERT_EQ(StripParseLocations(transformed_statement->DebugString()),
-              StripParseLocations(gsql_statement->DebugString()));
+              StripHasExplicitType(
+                  StripParseLocations(gsql_statement->DebugString())));
   }
 }
 

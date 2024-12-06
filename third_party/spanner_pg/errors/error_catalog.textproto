@@ -35,6 +35,11 @@ group {
     name: "InvalidLimitSyntax"
     pg_message_id: "LIMIT #,# syntax is not supported"
   }
+
+  message {
+    name: "InvalidDefaultSyntax"
+    pg_message_id: "DEFAULT is not allowed in this context"
+  }
 }
 
 group {

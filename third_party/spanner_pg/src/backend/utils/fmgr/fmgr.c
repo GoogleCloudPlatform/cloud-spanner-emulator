@@ -55,7 +55,7 @@ typedef struct
 
 static HTAB *CFuncHash = NULL;
 
-static void fmgr_info_cxt_security_UNUSED_SPANGRES(Oid functionId, FmgrInfo *finfo,
+static void fmgr_info_cxt_security(Oid functionId, FmgrInfo *finfo,
 												   MemoryContext mcxt, bool ignore_security);
 static void fmgr_info_C_lang(Oid functionId, FmgrInfo *finfo, HeapTuple procedureTuple);
 static void fmgr_info_other_lang(Oid functionId, FmgrInfo *finfo, HeapTuple procedureTuple);
@@ -142,20 +142,21 @@ fmgr_info_cxt(Oid functionId, FmgrInfo *finfo, MemoryContext mcxt)
 	fmgr_info_cxt_security(functionId, finfo, mcxt, false);
 }
 
+// SPANGRES BEGIN
+// Populates FmgrInfo with function call information (based on Oid lookup).
+// Spangres version is exactly the same for built-in functions, but doesn't
+// support non-built-in functions at all. The PostgreSQL version falls back to a
+// lookup in the pg_proc table. Since we don't have a pg_proc table (just
+// bootstrap catalog), this doesn't miss anything.
 /*
  * This one does the actual work.  ignore_security is ordinarily false
  * but is set to true when we need to avoid recursion.
  */
 static void
-fmgr_info_cxt_security_UNUSED_SPANGRES(Oid functionId, FmgrInfo *finfo, MemoryContext mcxt,
+fmgr_info_cxt_security(Oid functionId, FmgrInfo *finfo, MemoryContext mcxt,
 					   bool ignore_security)
 {
-	const FmgrBuiltin *fbp;
-	HeapTuple	procedureTuple;
-	Form_pg_proc procedureStruct;
-	Datum		prosrcdatum;
-	bool		isnull;
-	char	   *prosrc;
+	const FmgrBuiltin* fbp;
 
 	/*
 	 * fn_oid *must* be filled in last.  Some code assumes that if fn_oid is
@@ -165,108 +166,26 @@ fmgr_info_cxt_security_UNUSED_SPANGRES(Oid functionId, FmgrInfo *finfo, MemoryCo
 	finfo->fn_oid = InvalidOid;
 	finfo->fn_extra = NULL;
 	finfo->fn_mcxt = mcxt;
-	finfo->fn_expr = NULL;		/* caller may set this later */
+	finfo->fn_expr = NULL;	// caller may set this later
 
-	if ((fbp = fmgr_isbuiltin(functionId)) != NULL)
-	{
+	if ((fbp = fmgr_isbuiltin(functionId)) != NULL) {
 		/*
 		 * Fast path for builtin functions: don't bother consulting pg_proc
 		 */
 		finfo->fn_nargs = fbp->nargs;
 		finfo->fn_strict = fbp->strict;
 		finfo->fn_retset = fbp->retset;
-		finfo->fn_stats = TRACK_FUNC_ALL;	/* ie, never track */
+		finfo->fn_stats = TRACK_FUNC_ALL; /* ie, never track */
 		finfo->fn_addr = fbp->func;
 		finfo->fn_oid = functionId;
 		return;
 	}
 
-	/* Otherwise we need the pg_proc entry */
-	procedureTuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(functionId));
-	if (!HeapTupleIsValid(procedureTuple))
-		elog(ERROR, "cache lookup failed for function %u", functionId);
-	procedureStruct = (Form_pg_proc) GETSTRUCT(procedureTuple);
-
-	finfo->fn_nargs = procedureStruct->pronargs;
-	finfo->fn_strict = procedureStruct->proisstrict;
-	finfo->fn_retset = procedureStruct->proretset;
-
-	/*
-	 * If it has prosecdef set, non-null proconfig, or if a plugin wants to
-	 * hook function entry/exit, use fmgr_security_definer call handler ---
-	 * unless we are being called again by fmgr_security_definer or
-	 * fmgr_info_other_lang.
-	 *
-	 * When using fmgr_security_definer, function stats tracking is always
-	 * disabled at the outer level, and instead we set the flag properly in
-	 * fmgr_security_definer's private flinfo and implement the tracking
-	 * inside fmgr_security_definer.  This loses the ability to charge the
-	 * overhead of fmgr_security_definer to the function, but gains the
-	 * ability to set the track_functions GUC as a local GUC parameter of an
-	 * interesting function and have the right things happen.
-	 */
-	if (!ignore_security &&
-		(procedureStruct->prosecdef ||
-		 !heap_attisnull(procedureTuple, Anum_pg_proc_proconfig, NULL) ||
-		 FmgrHookIsNeeded(functionId)))
-	{
-		finfo->fn_addr = fmgr_security_definer;
-		finfo->fn_stats = TRACK_FUNC_ALL;	/* ie, never track */
-		finfo->fn_oid = functionId;
-		ReleaseSysCache(procedureTuple);
-		return;
-	}
-
-	switch (procedureStruct->prolang)
-	{
-		case INTERNALlanguageId:
-
-			/*
-			 * For an ordinary builtin function, we should never get here
-			 * because the fmgr_isbuiltin() search above will have succeeded.
-			 * However, if the user has done a CREATE FUNCTION to create an
-			 * alias for a builtin function, we can end up here.  In that case
-			 * we have to look up the function by name.  The name of the
-			 * internal function is stored in prosrc (it doesn't have to be
-			 * the same as the name of the alias!)
-			 */
-			prosrcdatum = SysCacheGetAttr(PROCOID, procedureTuple,
-										  Anum_pg_proc_prosrc, &isnull);
-			if (isnull)
-				elog(ERROR, "null prosrc");
-			prosrc = TextDatumGetCString(prosrcdatum);
-			fbp = fmgr_lookupByName(prosrc);
-			if (fbp == NULL)
-				ereport(ERROR,
-						(errcode(ERRCODE_UNDEFINED_FUNCTION),
-						 errmsg("internal function \"%s\" is not in internal lookup table",
-								prosrc)));
-			pfree(prosrc);
-			/* Should we check that nargs, strict, retset match the table? */
-			finfo->fn_addr = fbp->func;
-			/* note this policy is also assumed in fast path above */
-			finfo->fn_stats = TRACK_FUNC_ALL;	/* ie, never track */
-			break;
-
-		case ClanguageId:
-			fmgr_info_C_lang(functionId, finfo, procedureTuple);
-			finfo->fn_stats = TRACK_FUNC_PL;	/* ie, track if ALL */
-			break;
-
-		case SQLlanguageId:
-			finfo->fn_addr = fmgr_sql;
-			finfo->fn_stats = TRACK_FUNC_PL;	/* ie, track if ALL */
-			break;
-
-		default:
-			fmgr_info_other_lang(functionId, finfo, procedureTuple);
-			finfo->fn_stats = TRACK_FUNC_OFF;	/* ie, track if not OFF */
-			break;
-	}
-
-	finfo->fn_oid = functionId;
-	ReleaseSysCache(procedureTuple);
+	ereport(ERROR, (errcode(ERRCODE_UNDEFINED_FUNCTION),
+									errmsg("Unknown function or function is not a built-in: %u",
+												 functionId)));
 }
+// SPANGRES END
 
 /*
  * Return module and C function name providing implementation of functionId.

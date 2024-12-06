@@ -220,6 +220,31 @@ cc_test(
 )
 
 cc_library(
+    name = "uuid_conversion",
+    srcs = ["uuid_conversion.cc"],
+    hdrs = ["uuid_conversion.h"],
+    deps = [
+        "//third_party/spanner_pg/postgres_includes",
+        "//third_party/spanner_pg/shims:error_shim",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "uuid_conversion_test",
+    srcs = ["uuid_conversion_test.cc"],
+    deps = [
+        ":uuid_conversion",
+        ":valid_memory_context_fixture",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_library(
     name = "unittest_utils",
     testonly = True,
     srcs = ["unittest_utils.cc"],

@@ -79,26 +79,6 @@
 // There is an expected_errors_test suite to exercise these code paths and
 // ensure they don't lead to crashes.
 
-LockAcquireResult LockAcquireExtended(const LOCKTAG* locktag,
-									  LOCKMODE lockmode,
-									  bool sessionLock, bool dontWait,
-									  bool reportMemoryError,
-									  LOCALLOCK** locallockp) {
-	ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					errmsg("Attempted an unsupported operation in the PostgreSQL "
-						   "locking subsystem")));
-}
-
-// Guarantee that `guc_variables` is not built so that we can treat
-// GUC-controlled variables as simple globals for evaluating their access
-// patterns and thread safety.
-void InitializeGUCOptions(void) {
-	ereport(
-		ERROR,
-		(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-		 errmsg("PostgreSQL's configuration system (GUC) is not supported.")));
-}
-
 // We don't maintain a pg_class entry for user tables, so we can't provide a
 // pg_type to describe the row. We can at least give as clear an error as
 // possible.

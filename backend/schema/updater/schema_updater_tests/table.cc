@@ -67,6 +67,27 @@ TEST_P(SchemaUpdaterTest, CreateTable_SingleKey) {
   EXPECT_THAT(col2, testing::Not(IsKeyColumnOf(t, "ASC")));
 }
 
+TEST_P(SchemaUpdaterTest, CreateTable_SingleKeyInline) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+    CREATE TABLE T(
+      col1 INT64 PRIMARY KEY,
+      col2 STRING(MAX)
+    ))"}));
+
+  auto t = schema->FindTable("T");
+  EXPECT_NE(t, nullptr);
+  EXPECT_EQ(t->columns().size(), 2);
+  EXPECT_EQ(t->primary_key().size(), 1);
+
+  auto col1 = t->columns()[0];
+  EXPECT_THAT(col1, ColumnIs("col1", types::Int64Type()));
+  EXPECT_THAT(col1, IsKeyColumnOf(t, "ASC"));
+
+  auto col2 = t->columns()[1];
+  EXPECT_THAT(col2, ColumnIs("col2", types::StringType()));
+  EXPECT_THAT(col2, testing::Not(IsKeyColumnOf(t, "ASC")));
+}
+
 TEST_P(SchemaUpdaterTest, CreateTable_MultiKey) {
   std::unique_ptr<const Schema> schema;
   // Changing the ordering for key columns is unsupported in PG.

@@ -1304,12 +1304,20 @@ ForwardTransformer::BuildGsqlResolvedArrayScan(
       internal::PostgresCastToNode(list_nth(rte.eref->colnames, 0));
   ZETASQL_RET_CHECK(IsA(column_name, String));
   std::string column_name_str(strVal(column_name));
+  const zetasql::Type* element_type =
+      resolved_array_expr_argument->type()->AsArray()->element_type();
+  const zetasql::AnnotationMap* element_annotation_map =
+      resolved_array_expr_argument->type_annotation_map() != nullptr &&
+              resolved_array_expr_argument->type_annotation_map()->IsArrayMap()
+          ? resolved_array_expr_argument->type_annotation_map()
+                ->AsArrayMap()
+                ->element()
+          : resolved_array_expr_argument->type_annotation_map();
   ZETASQL_ASSIGN_OR_RETURN(
       const zetasql::ResolvedColumn array_element_column,
       BuildNewGsqlResolvedColumn(
           rte.eref->aliasname, column_name_str,
-          resolved_array_expr_argument->type()->AsArray()->element_type(),
-          resolved_array_expr_argument->type_annotation_map()));
+          element_type, element_annotation_map));
   // We register one output Var under the assumption that UNNEST always produces
   // exactly one output column from this RTE. This is true as long as we are
   // unnesting only a single array (checked above) and not supporting WITH

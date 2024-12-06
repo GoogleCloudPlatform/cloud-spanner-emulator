@@ -1003,7 +1003,7 @@ ParseDateTime(const char *timestr, char *workbuf, size_t buflen,
  * 1997-05-27
  */
 int
-DecodeDateTime_UNUSED_SPANGRES(char **field, int *ftype, int nf,
+DecodeDateTime(char **field, int *ftype, int nf,
 			   int *dtype, struct pg_tm *tm, fsec_t *fsec, int *tzp)
 {
 	int			fmask = 0,
@@ -1022,7 +1022,10 @@ DecodeDateTime_UNUSED_SPANGRES(char **field, int *ftype, int nf,
 	pg_tz	   *abbrevTz = NULL;
 	pg_tz	   *valtz;
 	char	   *abbrev = NULL;
-	struct pg_tm cur_tm;
+	// SPANGRES BEGIN
+	// Removes unused variable
+	// struct pg_tm cur_tm;
+	// SPANGRES END
 
 	/*
 	 * We'll insist on at least all of the date fields, but initialize the
@@ -1312,9 +1315,13 @@ DecodeDateTime_UNUSED_SPANGRES(char **field, int *ftype, int nf,
 							{
 								double		time;
 
-								dterr = ParseFraction(cp, &time);
-								if (dterr)
-									return dterr;
+								// SPANGRES BEGIN
+								// Fixes *SAN violation
+								errno = 0;
+								time = strtod(cp, &cp);
+								if (*cp != '\0' || errno != 0)
+									return DTERR_BAD_FORMAT;
+								// SPANGRES END
 								time *= USECS_PER_DAY;
 								dt2time(time,
 										&tm->tm_hour, &tm->tm_min,
@@ -1414,42 +1421,32 @@ DecodeDateTime_UNUSED_SPANGRES(char **field, int *ftype, int nf,
 				if (type == IGNORE_DTF)
 					continue;
 
-				tmask = DTK_M(type);
+				// SPANGRES BEGIN
+				// SPANGRES: do not call DTK_M(UNKNOWN_FIELD), which is 1 << 31
+				// and undefined behavior. For b/300504021.
+				// If the type is UNKNOWN_FIELD, the code below will either
+				// return an error or set tmask to DTK_M(TZ). It does not rely
+				// on tmask being set here.
+				if (type != UNKNOWN_FIELD)
+				{
+					tmask = DTK_M(type);
+				}
+				// SPANGRES END
 				switch (type)
 				{
 					case RESERV:
 						switch (val)
 						{
+							// SPANGRES BEGIN
 							case DTK_NOW:
-								tmask = (DTK_DATE_M | DTK_TIME_M | DTK_M(TZ));
-								*dtype = DTK_DATE;
-								GetCurrentTimeUsec(tm, fsec, tzp);
-								break;
-
 							case DTK_YESTERDAY:
-								tmask = DTK_DATE_M;
-								*dtype = DTK_DATE;
-								GetCurrentDateTime(&cur_tm);
-								j2date(date2j(cur_tm.tm_year, cur_tm.tm_mon, cur_tm.tm_mday) - 1,
-									   &tm->tm_year, &tm->tm_mon, &tm->tm_mday);
-								break;
-
 							case DTK_TODAY:
-								tmask = DTK_DATE_M;
-								*dtype = DTK_DATE;
-								GetCurrentDateTime(&cur_tm);
-								tm->tm_year = cur_tm.tm_year;
-								tm->tm_mon = cur_tm.tm_mon;
-								tm->tm_mday = cur_tm.tm_mday;
-								break;
-
 							case DTK_TOMORROW:
-								tmask = DTK_DATE_M;
-								*dtype = DTK_DATE;
-								GetCurrentDateTime(&cur_tm);
-								j2date(date2j(cur_tm.tm_year, cur_tm.tm_mon, cur_tm.tm_mday) + 1,
-									   &tm->tm_year, &tm->tm_mon, &tm->tm_mday);
-								break;
+								/* SPANGRES: return an error for relative timestamps */
+								ereport(ERROR,
+									(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+									 errmsg("current/relative datetimes are not supported")));
+							// SPANGRES END
 
 							case DTK_ZULU:
 								tmask = (DTK_TIME_M | DTK_M(TZ));
@@ -3273,22 +3270,24 @@ DecodeTimezone(char *str, int *tzp)
  *	will be related in format.
  */
 int
-DecodeTimezoneAbbrev_UNUSED_SPANGRES(int field, char *lowtoken,
+DecodeTimezoneAbbrev(int field, char *lowtoken,
 					 int *offset, pg_tz **tz)
 {
 	int			type;
 	const datetkn *tp;
 
 	tp = abbrevcache[field];
+	// SPANGRES BEGIN
 	/* use strncmp so that we match truncated tokens */
+	/*
+	 * SPANGRES: use the hardcoded SpangresTimezoneAbbrevTable instead of a zoneabbrevtbl
+	 * loaded from a file
+	 */
 	if (tp == NULL || strncmp(lowtoken, tp->token, TOKMAXLEN) != 0)
 	{
-		if (zoneabbrevtbl)
-			tp = datebsearch(lowtoken, zoneabbrevtbl->abbrevs,
-							 zoneabbrevtbl->numabbrevs);
-		else
-			tp = NULL;
+		tp = datebsearch(lowtoken, SpangresTimezoneAbbrevTable, SpangresTimezoneAbbrevTableSize);
 	}
+	// SPANGRES END
 	if (tp == NULL)
 	{
 		type = UNKNOWN_FIELD;
@@ -3299,16 +3298,12 @@ DecodeTimezoneAbbrev_UNUSED_SPANGRES(int field, char *lowtoken,
 	{
 		abbrevcache[field] = tp;
 		type = tp->type;
-		if (type == DYNTZ)
-		{
-			*offset = 0;
-			*tz = FetchDynamicTimeZone(zoneabbrevtbl, tp);
-		}
-		else
-		{
-			*offset = tp->value;
-			*tz = NULL;
-		}
+		// SPANGRES BEGIN
+		/* SPANGRES: dynamic timezone abbreviations are not supported*/
+		Assert(type != DYNTZ);
+		*offset = tp->value;
+		*tz = NULL;
+		// SPANGRES END
 	}
 
 	return type;

@@ -59,6 +59,7 @@
 #include "third_party/spanner_pg/transformer/forward_transformer.h"
 #include "third_party/spanner_pg/transformer/transformer_test.h"
 #include "third_party/spanner_pg/util/postgres.h"
+#include "third_party/spanner_pg/util/uuid_conversion.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
 #include "zetasql/base/status_macros.h"
 
