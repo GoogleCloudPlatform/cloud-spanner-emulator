@@ -434,6 +434,14 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
     return std::nullopt;
   }
 
+  // Runs the ZetaSQL Function Signature matcher to see if the input arguments
+  // are compatible with the signature.
+  bool SignatureMatches(
+      const std::vector<zetasql::InputArgumentType>& input_arguments,
+      const zetasql::FunctionSignature& googlesql_signature,
+      std::unique_ptr<zetasql::FunctionSignature>* result_signature,
+      const zetasql::LanguageOptions& language_options);
+
  protected:
   // The EngineSystemCatalog should never be instantiated.
   explicit EngineSystemCatalog(
@@ -509,14 +517,6 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   absl::StatusOr<const zetasql::Function*> GetBuiltinFunction(
       const std::string& name) const;
 
-  // Runs the ZetaSQL Function Signature matcher to see if the input arguments
-  // are compatible with the signature.
-  bool SignatureMatches(
-      const std::vector<zetasql::InputArgumentType>& input_arguments,
-      const zetasql::FunctionSignature& googlesql_signature,
-      std::unique_ptr<zetasql::FunctionSignature>* result_signature,
-      const zetasql::LanguageOptions& language_options);
-
  private:
   // Transforms a PostgreSQL type oid into a ZetaSQL FunctionArgumentType.
   // The PostgreSQL ANYOID type is transformed into a ZetaSQL ARG_TYPE_ANY_1
@@ -530,7 +530,7 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // PostgreSQL proc, return the corresponding ZetaSQL FunctionSignature.
   absl::StatusOr<zetasql::FunctionSignature> BuildGsqlFunctionSignature(
       const oidvector& postgres_input_types, Oid postgres_output_type,
-      Oid postgres_variadic_type);
+      Oid postgres_variadic_type, bool postgres_retset);
 
   // Transform the PostgreSQL input type oids into ZetaSQL InputArgumentTypes.
   absl::StatusOr<std::vector<zetasql::InputArgumentType>>

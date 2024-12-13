@@ -39,6 +39,7 @@
 #include "utils/xml.h"
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 
 /* GUC parameters */
@@ -46,7 +47,7 @@ bool		Transform_null_equals = false;
 
 
 static Node *transformExprRecurse(ParseState *pstate, Node *expr);
-static Node *transformParamRef_UNUSED_SPANGRES(ParseState *pstate, ParamRef *pref);
+static Node *transformParamRef(ParseState *pstate, ParamRef *pref);
 static Node *transformAExprOp(ParseState *pstate, A_Expr *a);
 static Node *transformAExprOpAny(ParseState *pstate, A_Expr *a);
 static Node *transformAExprOpAll(ParseState *pstate, A_Expr *a);
@@ -847,9 +848,21 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 }
 
 static Node *
-transformParamRef_UNUSED_SPANGRES(ParseState *pstate, ParamRef *pref)
+transformParamRef(ParseState *pstate, ParamRef *pref)
 {
 	Node	   *result;
+
+	// SPANGRES BEGIN
+	/*
+	 * Ensure a parameter number is at most 65535 (PQ_QUERY_PARAM_MAX_LIMIT) to
+	 * avoid creating a large parameter list when analyzing a query.
+	 */
+	if (pref->number < 1 || pref->number > USHRT_MAX)
+			ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR_OR_ACCESS_RULE_VIOLATION),
+				 errmsg("parameter number must be between '$1', ..., '$%d'", USHRT_MAX),
+				 parser_errposition(pstate, pref->location)));
+	// SPANGRES END
 
 	/*
 	 * The core parser knows nothing about Params.  If a hook is supplied,

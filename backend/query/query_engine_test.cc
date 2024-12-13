@@ -737,6 +737,52 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectGetInternalSequenceStateInvalidArg) {
           testing::HasSubstr("No matching signature for function")));
 }
 
+TEST_P(QueryEngineTest, ExecuteSqlSelectGetTableColumnIdentityState) {
+  test::ScopedEmulatorFeatureFlagsSetter setter(
+      {.enable_identity_columns = true});
+
+  // When using the postgres dialect, GET_TABLE_COLUMN_IDENTITY_STATE() is
+  // exposed only via the 'spanner' namespace.
+  std::string function_call =
+      "GET_TABLE_COLUMN_IDENTITY_STATE('test_id_table.int64_col')";
+  if (GetParam() == POSTGRESQL) {
+    function_call = absl::StrCat("SPANNER.", function_call);
+  }
+
+  // Success case.
+  std::string sql = absl::StrFormat("SELECT %s AS state", function_call);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{sql},
+                                QueryContext{sequence_schema(), reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("state"));
+  EXPECT_THAT(GetColumnTypes(*result.rows), ElementsAre(Int64Type()));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre(ElementsAre(NullInt64()))));
+
+  // Error case.
+  std::string invalid_sql =
+      "SELECT "
+      "INVALID_SCHEMA.GET_TABLE_COLUMN_IDENTITY_STATE('test_id_"
+      "table.int64_col') AS state";
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(Query{invalid_sql},
+                                  QueryContext{sequence_schema(), reader()}),
+        StatusIs(StatusCode::kNotFound,
+                 HasSubstr("function "
+                           "invalid_schema.get_table_column_identity_state("
+                           "unknown) does not exist")));
+  } else {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(Query{invalid_sql},
+                                  QueryContext{sequence_schema(), reader()}),
+        StatusIs(StatusCode::kInvalidArgument,
+                 HasSubstr("Function not found")));
+  }
+}
+
 TEST_P(QueryEngineTest, ExecuteSqlSelectsOneColumnFromTable) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       QueryResult result,

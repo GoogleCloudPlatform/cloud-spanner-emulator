@@ -47,7 +47,7 @@ $gnat->init;
 # exercise a different scenario than it usually does.)
 my $gnat_dir_stat = stat($gnat->data_dir);
 defined($gnat_dir_stat) or die('unable to stat ' . $gnat->data_dir);
-my $gnat_inode = $gnat_dir_stat->ino;
+my $gnat_inode = unpack("l<", pack("q<", $gnat_dir_stat->ino));
 note "gnat's datadir inode = $gnat_inode";
 
 # Note: must reference IPC::SysV's constants as functions, or this file

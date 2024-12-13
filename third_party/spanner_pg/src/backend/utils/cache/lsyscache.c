@@ -48,6 +48,7 @@
 #include "utils/typcache.h"
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 /* Hook for plugins to get control in get_attavgwidth() */
 get_attavgwidth_hook_type get_attavgwidth_hook = NULL;
@@ -161,26 +162,25 @@ get_op_opfamily_properties(Oid opno, Oid opfamily, bool ordering_op,
  *		with the specified datatypes for the specified opfamily.
  *
  * Returns InvalidOid if there is no pg_amop entry for the given keys.
+ *
+ * SPANGRES: Use bootstrap catalog instead of syscache.
  */
 Oid
-get_opfamily_member_UNUSED_SPANGRES(Oid opfamily, Oid lefttype, Oid righttype,
+get_opfamily_member(Oid opfamily, Oid lefttype, Oid righttype,
 					int16 strategy)
 {
-	HeapTuple	tp;
-	Form_pg_amop amop_tup;
-	Oid			result;
+	// SPANGRES BEGIN
+	const FormData_pg_amop* amop_tup;
+	Oid result;
 
-	tp = SearchSysCache4(AMOPSTRATEGY,
-						 ObjectIdGetDatum(opfamily),
-						 ObjectIdGetDatum(lefttype),
-						 ObjectIdGetDatum(righttype),
-						 Int16GetDatum(strategy));
-	if (!HeapTupleIsValid(tp))
+	amop_tup = GetAmopByFamilyFromBootstrapCatalog(opfamily, lefttype, righttype,
+												   strategy);
+	if (amop_tup == NULL)
 		return InvalidOid;
-	amop_tup = (Form_pg_amop) GETSTRUCT(tp);
+
 	result = amop_tup->amopopr;
-	ReleaseSysCache(tp);
 	return result;
+	// SPANGRES END
 }
 
 /*
@@ -204,12 +204,15 @@ get_opfamily_member_UNUSED_SPANGRES(Oid opfamily, Oid lefttype, Oid righttype,
  * additional effort on ensuring consistency.
  */
 bool
-get_ordering_op_properties_UNUSED_SPANGRES(Oid opno,
+get_ordering_op_properties(Oid opno,
 						   Oid *opfamily, Oid *opcintype, int16 *strategy)
 {
 	bool		result = false;
-	CatCList   *catlist;
-	int			i;
+	// SPANGRES BEGIN
+	// Unused variables
+	// CatCList   *catlist;
+	// int			i;
+	// SPANGRES END
 
 	/* ensure outputs are initialized on failure */
 	*opfamily = InvalidOid;
@@ -220,12 +223,15 @@ get_ordering_op_properties_UNUSED_SPANGRES(Oid opno,
 	 * Search pg_amop to see if the target operator is registered as the "<"
 	 * or ">" operator of any btree opfamily.
 	 */
-	catlist = SearchSysCacheList1(AMOPOPID, ObjectIdGetDatum(opno));
+	// SPANGRES BEGIN
+	const FormData_pg_amop* const* amop_list;
+	size_t amop_count;
+	GetAmopsByAmopOpIdFromBootstrapCatalog(opno, &amop_list, &amop_count);
+	// SPANGRES END
 
-	for (i = 0; i < catlist->n_members; i++)
+	for (int amop_index = 0; amop_index < amop_count; ++amop_index)
 	{
-		HeapTuple	tuple = &catlist->members[i]->tuple;
-		Form_pg_amop aform = (Form_pg_amop) GETSTRUCT(tuple);
+		const FormData_pg_amop* aform = amop_list[amop_index];
 
 		/* must be btree */
 		if (aform->amopmethod != BTREE_AM_OID)
@@ -247,7 +253,9 @@ get_ordering_op_properties_UNUSED_SPANGRES(Oid opno,
 		}
 	}
 
-	ReleaseSysCacheList(catlist);
+	// SPANGRES BEGIN
+	// ReleaseSysCacheList(catlist);
+	// SPANGRES END
 
 	return result;
 }
@@ -598,22 +606,27 @@ get_op_hash_functions(Oid opno,
  * opfamily.  ROWCOMPARE_NE is returned as the strategy number for this case.
  */
 List *
-get_op_btree_interpretation_UNUSED_SPANGRES(Oid opno)
+get_op_btree_interpretation(Oid opno)
 {
 	List	   *result = NIL;
 	OpBtreeInterpretation *thisresult;
-	CatCList   *catlist;
-	int			i;
+	// SPANGRES BEGIN
+	// Unused variables
+	// CatCList   *catlist;
+	// int			i;
+	// SPANGRES END
 
 	/*
 	 * Find all the pg_amop entries containing the operator.
 	 */
-	catlist = SearchSysCacheList1(AMOPOPID, ObjectIdGetDatum(opno));
+	// SPANGRES BEGIN
+	const FormData_pg_amop* const* amop_list;
+	size_t amop_count;
+	GetAmopsByAmopOpIdFromBootstrapCatalog(opno, &amop_list, &amop_count);
+	// SPANGRES END
 
-	for (i = 0; i < catlist->n_members; i++)
-	{
-		HeapTuple	op_tuple = &catlist->members[i]->tuple;
-		Form_pg_amop op_form = (Form_pg_amop) GETSTRUCT(op_tuple);
+	for (int amop_index = 0; amop_index < amop_count; ++amop_index) {
+		const FormData_pg_amop* op_form = amop_list[amop_index];
 		StrategyNumber op_strategy;
 
 		/* must be btree */
@@ -633,7 +646,9 @@ get_op_btree_interpretation_UNUSED_SPANGRES(Oid opno)
 		result = lappend(result, thisresult);
 	}
 
-	ReleaseSysCacheList(catlist);
+	// SPANGRES BEGIN
+	// ReleaseSysCacheList(catlist);
+	// SPANGRES END
 
 	/*
 	 * If we didn't find any btree opfamily containing the operator, perhaps
@@ -645,13 +660,13 @@ get_op_btree_interpretation_UNUSED_SPANGRES(Oid opno)
 
 		if (OidIsValid(op_negator))
 		{
-			catlist = SearchSysCacheList1(AMOPOPID,
-										  ObjectIdGetDatum(op_negator));
+			// SPANGRES BEGIN
+			GetAmopsByAmopOpIdFromBootstrapCatalog(op_negator, &amop_list,
+																						 &amop_count);
+			// SPANGRES END
 
-			for (i = 0; i < catlist->n_members; i++)
-			{
-				HeapTuple	op_tuple = &catlist->members[i]->tuple;
-				Form_pg_amop op_form = (Form_pg_amop) GETSTRUCT(op_tuple);
+			for (int amop_index = 0; amop_index < amop_count; ++amop_index) {
+				const FormData_pg_amop* op_form = amop_list[amop_index];
 				StrategyNumber op_strategy;
 
 				/* must be btree */
@@ -676,7 +691,9 @@ get_op_btree_interpretation_UNUSED_SPANGRES(Oid opno)
 				result = lappend(result, thisresult);
 			}
 
-			ReleaseSysCacheList(catlist);
+			// SPANGRES BEGIN
+			// ReleaseSysCacheList(catlist);
+			// SPANGRES END
 		}
 	}
 
@@ -791,25 +808,23 @@ comparison_ops_are_compatible(Oid opno1, Oid opno2)
  *		for the specified opfamily and datatypes.
  *
  * Returns InvalidOid if there is no pg_amproc entry for the given keys.
+ *
+ * SPANGRES: Use an index on bootstrap's pg_amproc table to look this up.
  */
 Oid
-get_opfamily_proc_UNUSED_SPANGRES(Oid opfamily, Oid lefttype, Oid righttype, int16 procnum)
+get_opfamily_proc(Oid opfamily, Oid lefttype, Oid righttype, int16 procnum)
 {
-	HeapTuple	tp;
-	Form_pg_amproc amproc_tup;
+	// SPANGRES BEGIN
+	const FormData_pg_amproc* amproc_tup;
 	RegProcedure result;
 
-	tp = SearchSysCache4(AMPROCNUM,
-						 ObjectIdGetDatum(opfamily),
-						 ObjectIdGetDatum(lefttype),
-						 ObjectIdGetDatum(righttype),
-						 Int16GetDatum(procnum));
-	if (!HeapTupleIsValid(tp))
+	amproc_tup = GetAmprocByFamilyFromBootstrapCatalog(opfamily, lefttype,
+													   righttype, procnum);
+	if (amproc_tup == NULL)
 		return InvalidOid;
-	amproc_tup = (Form_pg_amproc) GETSTRUCT(tp);
 	result = amproc_tup->amproc;
-	ReleaseSysCache(tp);
 	return result;
+	// SPANGRES END
 }
 
 
@@ -822,28 +837,20 @@ get_opfamily_proc_UNUSED_SPANGRES(Oid opfamily, Oid lefttype, Oid righttype, int
  *
  * If no such attribute exists and missing_ok is true, NULL is returned;
  * otherwise a not-intended-for-user-consumption error is thrown.
+ *
+ * SPANGRES: Look up the table name from the catalog adapter and then get column
+ * information from the thread-local googlesql catalog.
+ * REQUIRES: This table has already been translated and is known to the catalog
+ * adapter.
+ * RETURNS a palloc'd copy of the name string in the thread-local
+ * CurrentMemoryContext or NULL if not found.
  */
 char *
-get_attname_UNUSED_SPANGRES(Oid relid, AttrNumber attnum, bool missing_ok)
+get_attname(Oid relid, AttrNumber attnum, bool missing_ok)
 {
-	HeapTuple	tp;
-
-	tp = SearchSysCache2(ATTNUM,
-						 ObjectIdGetDatum(relid), Int16GetDatum(attnum));
-	if (HeapTupleIsValid(tp))
-	{
-		Form_pg_attribute att_tup = (Form_pg_attribute) GETSTRUCT(tp);
-		char	   *result;
-
-		result = pstrdup(NameStr(att_tup->attname));
-		ReleaseSysCache(tp);
-		return result;
-	}
-
-	if (!missing_ok)
-		elog(ERROR, "cache lookup failed for attribute %d of relation %u",
-			 attnum, relid);
-	return NULL;
+	// SPANGRES BEGIN
+	return GetAttributeNameC(relid, attnum, missing_ok);
+	// SPANGRES END
 }
 
 /*
@@ -1190,44 +1197,46 @@ get_language_name(Oid langoid, bool missing_ok)
  * get_opclass_family_spangres
  *
  *		Returns the OID of the operator family the opclass belongs to.
+ *
+ * SPANGRES: Uses bootstrap catalog instead of syscache.
  */
 Oid
-get_opclass_family_UNUSED_SPANGRES(Oid opclass)
+get_opclass_family(Oid opclass)
 {
-	HeapTuple	tp;
-	Form_pg_opclass cla_tup;
-	Oid			result;
+	// SPANGRES BEGIN
+  const FormData_pg_opclass* cla_tup;
+  Oid result;
 
-	tp = SearchSysCache1(CLAOID, ObjectIdGetDatum(opclass));
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for opclass %u", opclass);
-	cla_tup = (Form_pg_opclass) GETSTRUCT(tp);
+  cla_tup = GetOpclassFromBootstrapCatalog(opclass);
+  if (cla_tup == NULL)
+    elog(ERROR, "bootstrap catalog lookup failed for opclass %u", opclass);
 
-	result = cla_tup->opcfamily;
-	ReleaseSysCache(tp);
-	return result;
+  result = cla_tup->opcfamily;
+  return result;
+	// SPANGRES END
 }
 
 /*
  * get_opclass_input_type
  *
  *		Returns the OID of the datatype the opclass indexes.
+ *
+ * SPANGRES: Uses bootstrap catalog instead of syscache.
  */
 Oid
-get_opclass_input_type_UNUSED_SPANGRES(Oid opclass)
+get_opclass_input_type(Oid opclass)
 {
-	HeapTuple	tp;
-	Form_pg_opclass cla_tup;
-	Oid			result;
+	// SPANGRES BEGIN
+	const FormData_pg_opclass* cla_tup;
+	Oid result;
 
-	tp = SearchSysCache1(CLAOID, ObjectIdGetDatum(opclass));
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for opclass %u", opclass);
-	cla_tup = (Form_pg_opclass) GETSTRUCT(tp);
+	cla_tup = GetOpclassFromBootstrapCatalog(opclass);
+	if (cla_tup == NULL)
+		elog(ERROR, "bootstrap catalog lookup failed for opclass %u", opclass);
 
 	result = cla_tup->opcintype;
-	ReleaseSysCache(tp);
 	return result;
+	// SPANGRES END
 }
 
 /*
@@ -1263,24 +1272,19 @@ get_opclass_opfamily_and_input_type(Oid opclass, Oid *opfamily, Oid *opcintype)
  *
  *		Returns the regproc id of the routine used to implement an
  *		operator given the operator oid.
+ *
+ * SPANGRES: Use bootstrap catalog for pg_operator lookup.
  */
 RegProcedure
-get_opcode_UNUSED_SPANGRES(Oid opno)
+get_opcode(Oid opno)
 {
-	HeapTuple	tp;
-
-	tp = SearchSysCache1(OPEROID, ObjectIdGetDatum(opno));
-	if (HeapTupleIsValid(tp))
-	{
-		Form_pg_operator optup = (Form_pg_operator) GETSTRUCT(tp);
-		RegProcedure result;
-
-		result = optup->oprcode;
-		ReleaseSysCache(tp);
-		return result;
-	}
+	// SPANGRES BEGIN
+	const FormData_pg_operator* optup = GetOperatorFromBootstrapCatalog(opno);
+	if (optup != NULL)
+		return optup->oprcode;
 	else
-		return (RegProcedure) InvalidOid;
+		return InvalidOid;
+	// SPANGRES END
 }
 
 /*
@@ -1487,48 +1491,40 @@ op_volatile(Oid opno)
  * get_commutator
  *
  *		Returns the corresponding commutator of an operator.
+ *
+ * SPANGRES: Use bootstrap catalog for pg_operator lookup.
  */
 Oid
-get_commutator_UNUSED_SPANGRES(Oid opno)
+get_commutator(Oid opno)
 {
-	HeapTuple	tp;
-
-	tp = SearchSysCache1(OPEROID, ObjectIdGetDatum(opno));
-	if (HeapTupleIsValid(tp))
-	{
-		Form_pg_operator optup = (Form_pg_operator) GETSTRUCT(tp);
-		Oid			result;
-
-		result = optup->oprcom;
-		ReleaseSysCache(tp);
-		return result;
-	}
-	else
+	// SPANGRES BEGIN
+	const FormData_pg_operator* optup = GetOperatorFromBootstrapCatalog(opno);
+	if (optup != NULL) {
+		return optup->oprcom;
+	} else {
 		return InvalidOid;
+	}
+	// SPANGRES END
 }
 
 /*
  * get_negator
  *
  *		Returns the corresponding negator of an operator.
+ *
+ * SPANGRES: Use bootstrap catalog to look up the pg_operator struct.
  */
 Oid
-get_negator_UNUSED_SPANGRES(Oid opno)
+get_negator(Oid opno)
 {
-	HeapTuple	tp;
-
-	tp = SearchSysCache1(OPEROID, ObjectIdGetDatum(opno));
-	if (HeapTupleIsValid(tp))
-	{
-		Form_pg_operator optup = (Form_pg_operator) GETSTRUCT(tp);
-		Oid			result;
-
-		result = optup->oprnegate;
-		ReleaseSysCache(tp);
-		return result;
-	}
-	else
+	// SPANGRES BEGIN
+	const FormData_pg_operator* optup = GetOperatorFromBootstrapCatalog(opno);
+	if (optup != NULL) {
+		return optup->oprnegate;
+	} else {
 		return InvalidOid;
+	}
+	// SPANGRES END
 }
 
 /*
@@ -1703,18 +1699,16 @@ get_func_signature(Oid funcid, Oid **argtypes, int *nargs)
  *		Given procedure id, return the function's provariadic field.
  */
 Oid
-get_func_variadictype_UNUSED_SPANGRES(Oid funcid)
+get_func_variadictype(Oid funcid)
 {
-	HeapTuple	tp;
-	Oid			result;
-
-	tp = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
-	if (!HeapTupleIsValid(tp))
+	// SPANGRES BEGIN
+	const FormData_pg_proc* proc_data = GetProcByOid(funcid);
+	if (proc_data == NULL) {
 		elog(ERROR, "cache lookup failed for function %u", funcid);
-
-	result = ((Form_pg_proc) GETSTRUCT(tp))->provariadic;
-	ReleaseSysCache(tp);
-	return result;
+  } else {
+    return proc_data->provariadic;
+  }
+	// SPANGRES END
 }
 
 /*
@@ -1722,18 +1716,16 @@ get_func_variadictype_UNUSED_SPANGRES(Oid funcid)
  *		Given procedure id, return the function's proretset flag.
  */
 bool
-get_func_retset_UNUSED_SPANGRES(Oid funcid)
+get_func_retset(Oid funcid)
 {
-	HeapTuple	tp;
-	bool		result;
-
-	tp = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for function %u", funcid);
-
-	result = ((Form_pg_proc) GETSTRUCT(tp))->proretset;
-	ReleaseSysCache(tp);
-	return result;
+	// SPANGRES BEGIN
+	const FormData_pg_proc* proc_data = GetProcByOid(funcid);
+	if (proc_data == NULL) {
+		elog(ERROR, "catalog lookup failed for function %u", funcid);
+	} else {
+		return proc_data->proretset;
+	}
+	// SPANGRES END
 }
 
 /*
@@ -1865,11 +1857,11 @@ get_func_support(Oid funcid)
  * Returns InvalidOid if there is no such relation.
  */
 Oid
-get_relname_relid_UNUSED_SPANGRES(const char *relname, Oid relnamespace)
-{
-	return GetSysCacheOid2(RELNAMENSP, Anum_pg_class_oid,
-						   PointerGetDatum(relname),
-						   ObjectIdGetDatum(relnamespace));
+get_relname_relid(const char *relname, Oid relnamespace) {
+	// SPANGRES BEGIN
+  return GetOrGenerateOidFromNamespaceOidAndRelationNameC(relnamespace,
+																													relname);
+	// SPANGRES END
 }
 
 #ifdef NOT_USED
@@ -1899,31 +1891,28 @@ get_relnatts(Oid relid)
 #endif
 
 /*
- * get_rel_name_spangres
+ * get_rel_name
  *		Returns the name of a given relation.
  *
  * Returns a palloc'd copy of the string, or NULL if no such relation.
  *
  * NOTE: since relation name is not unique, be wary of code that uses this
  * for anything except preparing error messages.
+ *
+ * SPANGRES: Uses the catalog adapter instead of syscache.
+ * Functionally the same as the PostgreSQL version, but only supports tables for
+ * which the analyzer has built an RTE. These tables will have their oids and
+ * names stored in the catalog adapter.
+ *
+ * Note: it returns a palloc'd copy of the string, or NULL if no table is found
+ * from the input relid.
  */
 char *
-get_rel_name_UNUSED_SPANGRES(Oid relid)
+get_rel_name(Oid relid)
 {
-	HeapTuple	tp;
-
-	tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-	if (HeapTupleIsValid(tp))
-	{
-		Form_pg_class reltup = (Form_pg_class) GETSTRUCT(tp);
-		char	   *result;
-
-		result = pstrdup(NameStr(reltup->relname));
-		ReleaseSysCache(tp);
-		return result;
-	}
-	else
-		return NULL;
+	// SPANGRES BEGIN
+	return GetTableNameC(relid);
+	// SPANGRES END
 }
 
 /*
@@ -2227,20 +2216,37 @@ get_typlenbyval(Oid typid, int16 *typlen, bool *typbyval)
  *		A three-fer: given the type OID, return typlen, typbyval, typalign.
  */
 void
-get_typlenbyvalalign_UNUSED_SPANGRES(Oid typid, int16 *typlen, bool *typbyval,
-					 char *typalign)
+get_typlenbyvalalign(Oid typid, int16 *typlen, bool *typbyval, char *typalign)
 {
-	HeapTuple	tp;
-	Form_pg_type typtup;
+	// SPANGRES BEGIN
+	const FormData_pg_type* typtup = GetTypeFromBootstrapCatalog(typid);
 
-	tp = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typid));
-	if (!HeapTupleIsValid(tp))
+	if (typtup == NULL)
 		elog(ERROR, "cache lookup failed for type %u", typid);
-	typtup = (Form_pg_type) GETSTRUCT(tp);
 	*typlen = typtup->typlen;
 	*typbyval = typtup->typbyval;
 	*typalign = typtup->typalign;
-	ReleaseSysCache(tp);
+	// SPANGRES END
+}
+
+/*
+ * Get the type OID to pass to I/O functions.
+ * Has a different signature than the PG getTypeIOParam, which takes in a
+ * HeapTuple.
+ * This is a special case where the original function is still supported and
+ * used inside of the PG source code, but an alternate version is used by the
+ * shimmed PG functions.
+*/
+static Oid getTypeIOParamSpangres(Oid typid, const FormData_pg_type* typeStruct)
+{
+	/*
+	 * Array types get their typelem as parameter; everybody else gets their
+	 * own type OID as parameter.
+	 */
+	if (OidIsValid(typeStruct->typelem))
+		return typeStruct->typelem;
+	else
+		return typid;
 }
 
 /*
@@ -2279,9 +2285,11 @@ getTypeIOParam(HeapTuple typeTuple)
  *		A six-fer:	given the type OID, return typlen, typbyval, typalign,
  *					typdelim, typioparam, and IO function OID. The IO function
  *					returned is controlled by IOFuncSelector
+ *
+ * SPANGRES: Use bootstrap catalog instead of syscache.
  */
 void
-get_type_io_data_UNUSED_SPANGRES(Oid typid,
+get_type_io_data(Oid typid,
 				 IOFuncSelector which_func,
 				 int16 *typlen,
 				 bool *typbyval,
@@ -2290,51 +2298,23 @@ get_type_io_data_UNUSED_SPANGRES(Oid typid,
 				 Oid *typioparam,
 				 Oid *func)
 {
-	HeapTuple	typeTuple;
-	Form_pg_type typeStruct;
-
-	/*
-	 * In bootstrap mode, pass it off to bootstrap.c.  This hack allows us to
-	 * use array_in and array_out during bootstrap.
-	 */
-	if (IsBootstrapProcessingMode())
-	{
-		Oid			typinput;
-		Oid			typoutput;
-
-		boot_get_type_io_data(typid,
-							  typlen,
-							  typbyval,
-							  typalign,
-							  typdelim,
-							  typioparam,
-							  &typinput,
-							  &typoutput);
-		switch (which_func)
-		{
-			case IOFunc_input:
-				*func = typinput;
-				break;
-			case IOFunc_output:
-				*func = typoutput;
-				break;
-			default:
-				elog(ERROR, "binary I/O not supported during bootstrap");
-				break;
-		}
-		return;
+	// SPANGRES BEGIN
+	// Skip bootstrap processing mode. Use the bootstrap catalog to
+	// get the type data instead of the syscache.
+	const FormData_pg_type* typeStruct = GetTypeFromBootstrapCatalog(typid);
+	if (typeStruct == NULL) {
+		elog(ERROR, "bootstrap catalog lookup failed for type %u", typid);
 	}
-
-	typeTuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typid));
-	if (!HeapTupleIsValid(typeTuple))
-		elog(ERROR, "cache lookup failed for type %u", typid);
-	typeStruct = (Form_pg_type) GETSTRUCT(typeTuple);
+	// SPANGRES END
 
 	*typlen = typeStruct->typlen;
 	*typbyval = typeStruct->typbyval;
 	*typalign = typeStruct->typalign;
 	*typdelim = typeStruct->typdelim;
-	*typioparam = getTypeIOParam(typeTuple);
+	// SPANGRES BEGIN
+	// Use Spangres version of getTypeIOParam.
+	*typioparam = getTypeIOParamSpangres(typid, typeStruct);
+	// SPANGRES END
 	switch (which_func)
 	{
 		case IOFunc_input:
@@ -2350,7 +2330,9 @@ get_type_io_data_UNUSED_SPANGRES(Oid typid,
 			*func = typeStruct->typsend;
 			break;
 	}
-	ReleaseSysCache(typeTuple);
+	// SPANGRES BEGIN
+	// ReleaseSysCache(typeTuple);
+	// SPANGRES END
 }
 
 #ifdef NOT_USED
@@ -2492,37 +2474,16 @@ getBaseType(Oid typid)
  * Note that the "applied typmod" should be -1 for every domain level
  * above the bottommost; therefore, if the passed-in typid is indeed
  * a domain, *typmod should be -1.
+ *
+ * SPANGRES: Shim version of this function skips the domain lookup. Just returns
+ * the passed typid and ignores typmod.
  */
 Oid
-getBaseTypeAndTypmod_UNUSED_SPANGRES(Oid typid, int32 *typmod)
+getBaseTypeAndTypmod(Oid typid, int32 *typmod)
 {
-	/*
-	 * We loop to find the bottom base type in a stack of domains.
-	 */
-	for (;;)
-	{
-		HeapTuple	tup;
-		Form_pg_type typTup;
-
-		tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typid));
-		if (!HeapTupleIsValid(tup))
-			elog(ERROR, "cache lookup failed for type %u", typid);
-		typTup = (Form_pg_type) GETSTRUCT(tup);
-		if (typTup->typtype != TYPTYPE_DOMAIN)
-		{
-			/* Not a domain, so done */
-			ReleaseSysCache(tup);
-			break;
-		}
-
-		Assert(*typmod == -1);
-		typid = typTup->typbasetype;
-		*typmod = typTup->typtypmod;
-
-		ReleaseSysCache(tup);
-	}
-
+	// SPANGRES BEGIN
 	return typid;
+	// SPANGRES END
 }
 
 /*
@@ -2583,24 +2544,20 @@ get_typavgwidth(Oid typid, int32 typmod)
  *
  *		Given the type OID, find if it is a basic type, a complex type, etc.
  *		It returns the null char if the cache lookup fails...
+ *
+ * SPANGRES: Uses the boostrap catalog instead of syscache.
  */
 char
-get_typtype_UNUSED_SPANGRES(Oid typid)
+get_typtype(Oid typid)
 {
-	HeapTuple	tp;
-
-	tp = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typid));
-	if (HeapTupleIsValid(tp))
-	{
-		Form_pg_type typtup = (Form_pg_type) GETSTRUCT(tp);
-		char		result;
-
-		result = typtup->typtype;
-		ReleaseSysCache(tp);
-		return result;
-	}
-	else
+	// SPANGRES BEGIN
+	const FormData_pg_type* type_data = GetTypeFromBootstrapCatalog(typid);
+	if (type_data == NULL) {
 		return '\0';
+	} else {
+		return type_data->typtype;
+	}
+	// SPANGRES END
 }
 
 /*
@@ -2664,20 +2621,22 @@ type_is_multirange(Oid typid)
  *
  *		Given the type OID, fetch its category and preferred-type status.
  *		Throws error on failure.
+ *
+ * SPANGRES: uses bootstrap_catalog instead of syscache.
  */
 void
-get_type_category_preferred_UNUSED_SPANGRES(Oid typid, char *typcategory, bool *typispreferred)
+get_type_category_preferred(Oid typid, char *typcategory, bool *typispreferred)
 {
-	HeapTuple	tp;
-	Form_pg_type typtup;
+	// SPANGRES BEGIN
+	const FormData_pg_type* type_data;
 
-	tp = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typid));
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for type %u", typid);
-	typtup = (Form_pg_type) GETSTRUCT(tp);
-	*typcategory = typtup->typcategory;
-	*typispreferred = typtup->typispreferred;
-	ReleaseSysCache(tp);
+	type_data = GetTypeFromBootstrapCatalog(typid);
+	if (type_data == NULL) {
+		elog(ERROR, "bootstrap catalog lookup failed for type %u", typid);
+	}
+	*typcategory = type_data->typcategory;
+	*typispreferred = type_data->typispreferred;
+	// SPANGRES END
 }
 
 /*
@@ -2715,25 +2674,18 @@ get_typ_typrelid(Oid typid)
  * of whether they have typelem or typsubscript set.
  */
 Oid
-get_element_type_UNUSED_SPANGRES(Oid typid)
+get_element_type(Oid typid)
 {
-	HeapTuple	tp;
+	// SPANGRES BEGIN
+	const FormData_pg_type* type_data = GetTypeFromBootstrapCatalog(typid);
 
-	tp = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typid));
-	if (HeapTupleIsValid(tp))
+	if (type_data != NULL && type_data->typlen == -1)
 	{
-		Form_pg_type typtup = (Form_pg_type) GETSTRUCT(tp);
-		Oid			result;
-
-		if (IsTrueArrayType(typtup))
-			result = typtup->typelem;
-		else
-			result = InvalidOid;
-		ReleaseSysCache(tp);
-		return result;
+		return type_data->typelem;
 	}
-	else
-		return InvalidOid;
+
+	return InvalidOid;
+	// SPANGRES END
 }
 
 /*
@@ -2743,18 +2695,19 @@ get_element_type_UNUSED_SPANGRES(Oid typid)
  *		Returns InvalidOid if no array type can be found.
  */
 Oid
-get_array_type_UNUSED_SPANGRES(Oid typid)
+get_array_type(Oid typid)
 {
-	HeapTuple	tp;
-	Oid			result = InvalidOid;
+	// SPANGRES BEGIN
+	const FormData_pg_type* type_data = GetTypeFromBootstrapCatalog(typid);
 
-	tp = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typid));
-	if (HeapTupleIsValid(tp))
+	Oid      result = InvalidOid;
+
+	if (type_data != NULL)
 	{
-		result = ((Form_pg_type) GETSTRUCT(tp))->typarray;
-		ReleaseSysCache(tp);
+		result = type_data->typarray;
 	}
 	return result;
+	// SPANGRES END
 }
 
 /*
@@ -2786,108 +2739,86 @@ get_promoted_array_type(Oid typid)
  * This is equivalent to get_element_type(getBaseType(typid)), but avoids
  * an extra cache lookup.  Note that it fails to provide any information
  * about the typmod of the array.
+ *
+ * SPANGRES: We lean on that equivalency and just make the equivalent call since
+ * our bootstrap_catalog lookups are cheap and currently we don't even do the
+ * lookup for domain base types.
  */
 Oid
-get_base_element_type_UNUSED_SPANGRES(Oid typid)
+get_base_element_type(Oid typid)
 {
-	/*
-	 * We loop to find the bottom base type in a stack of domains.
-	 */
-	for (;;)
-	{
-		HeapTuple	tup;
-		Form_pg_type typTup;
-
-		tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typid));
-		if (!HeapTupleIsValid(tup))
-			break;
-		typTup = (Form_pg_type) GETSTRUCT(tup);
-		if (typTup->typtype != TYPTYPE_DOMAIN)
-		{
-			/* Not a domain, so stop descending */
-			Oid			result;
-
-			/* This test must match get_element_type */
-			if (IsTrueArrayType(typTup))
-				result = typTup->typelem;
-			else
-				result = InvalidOid;
-			ReleaseSysCache(tup);
-			return result;
-		}
-
-		typid = typTup->typbasetype;
-		ReleaseSysCache(tup);
-	}
-
-	/* Like get_element_type, silently return InvalidOid for bogus input */
-	return InvalidOid;
+	// SPANGRES BEGIN
+	return get_element_type(getBaseType(typid));
+	// SPANGRES END
 }
 
 /*
  * getTypeInputInfo
  *
  *		Get info needed for converting values of a type to internal form
+ *
+ * SPANGRES: Uses bootstrap catalog instead of syscache.
  */
 void
-getTypeInputInfo_UNUSED_SPANGRES(Oid type, Oid *typInput, Oid *typIOParam)
+getTypeInputInfo(Oid type, Oid *typInput, Oid *typIOParam)
 {
-	HeapTuple	typeTuple;
-	Form_pg_type pt;
-
-	typeTuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type));
-	if (!HeapTupleIsValid(typeTuple))
-		elog(ERROR, "cache lookup failed for type %u", type);
-	pt = (Form_pg_type) GETSTRUCT(typeTuple);
-
-	if (!pt->typisdefined)
+	// SPANGRES BEGIN
+	const FormData_pg_type* type_data = GetTypeFromBootstrapCatalog(type);
+	if (type_data == NULL) {
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("type %s is only a shell",
-						format_type_be(type))));
-	if (!OidIsValid(pt->typinput))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_FUNCTION),
-				 errmsg("no input function available for type %s",
-						format_type_be(type))));
+				 errmsg("type id %u is unsupported", type)));
+	}
 
-	*typInput = pt->typinput;
-	*typIOParam = getTypeIOParam(typeTuple);
+	if (!type_data->typisdefined) {
+		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT),
+										errmsg("type %s is only a shell", format_type_be(type))));
+	}
+	if (!OidIsValid(type_data->typinput)) {
+		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_FUNCTION),
+										errmsg("no input function available for type %s",
+													 format_type_be(type))));
+	}
 
-	ReleaseSysCache(typeTuple);
+	*typInput = type_data->typinput;
+	if (OidIsValid(type_data->typelem)) {
+		*typIOParam = type_data->typelem;
+	} else {
+		*typIOParam = type;
+	}
+	// SPANGRES END
 }
 
 /*
- * getTypeOutputInfoSpangres
+ * getTypeOutputInfo
  *
  *		Get info needed for printing values of a type
+ *
+ * SPANGRES: Uses the bootstrap catalog instead of syscache.
  */
 void
-getTypeOutputInfo_UNUSED_SPANGRES(Oid type, Oid *typOutput, bool *typIsVarlena)
+getTypeOutputInfo(Oid type, Oid *typOutput, bool *typIsVarlena)
 {
-	HeapTuple	typeTuple;
-	Form_pg_type pt;
+	// SPANGRES BEGIN
+	const FormData_pg_type* type_data = GetTypeFromBootstrapCatalog(type);
 
-	typeTuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type));
-	if (!HeapTupleIsValid(typeTuple))
-		elog(ERROR, "cache lookup failed for type %u", type);
-	pt = (Form_pg_type) GETSTRUCT(typeTuple);
-
-	if (!pt->typisdefined)
+	if (type_data == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("type %s is only a shell",
-						format_type_be(type))));
-	if (!OidIsValid(pt->typoutput))
+				 errmsg("type id %s is unsupported", type)));
+	if (!type_data->typisdefined)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("type %s is only a shell", format_type_be(type))));
+	if (!OidIsValid(type_data->typoutput))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_FUNCTION),
 				 errmsg("no output function available for type %s",
 						format_type_be(type))));
 
-	*typOutput = pt->typoutput;
-	*typIsVarlena = (!pt->typbyval) && (pt->typlen == -1);
-
-	ReleaseSysCache(typeTuple);
+	*typOutput = type_data->typoutput;
+	*typIsVarlena = (!type_data->typbyval) && (type_data->typlen == -1);
+	// SPANGRES END
 }
 
 /*
@@ -3010,26 +2941,22 @@ get_typmodout(Oid typid)
  * get_typcollation
  *
  *		Given the type OID, return the type's typcollation attribute.
+ *
+ * SPANGRES: This version is identical to the PostgreSQL version except that it
+ * uses bootstrap_catalog instead of the system cache.
  */
 Oid
-get_typcollation_UNUSED_SPANGRES(Oid typid)
+get_typcollation(Oid typid)
 {
-	HeapTuple	tp;
-
-	tp = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typid));
-	if (HeapTupleIsValid(tp))
-	{
-		Form_pg_type typtup = (Form_pg_type) GETSTRUCT(tp);
-		Oid			result;
-
-		result = typtup->typcollation;
-		ReleaseSysCache(tp);
-		return result;
-	}
-	else
+	// SPANGRES BEGIN
+	const FormData_pg_type* typtup = GetTypeFromBootstrapCatalog(typid);
+	if (typtup == NULL) {
 		return InvalidOid;
+	} else {
+		return typtup->typcollation;
+	}
+	// SPANGRES END
 }
-
 
 /*
  * type_is_collatable
@@ -3053,27 +2980,28 @@ type_is_collatable(Oid typid)
  * This saves some callers an extra catalog lookup.
  */
 RegProcedure
-get_typsubscript_UNUSED_SPANGRES(Oid typid, Oid *typelemp)
+get_typsubscript(Oid typid, Oid *typelemp)
 {
-	HeapTuple	tp;
-
-	tp = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typid));
-	if (HeapTupleIsValid(tp))
-	{
-		Form_pg_type typform = (Form_pg_type) GETSTRUCT(tp);
-		RegProcedure handler = typform->typsubscript;
-
-		if (typelemp)
-			*typelemp = typform->typelem;
-		ReleaseSysCache(tp);
-		return handler;
+	// SPANGRES BEGIN
+	const FormData_pg_type* typform = GetTypeFromBootstrapCatalog(typid);
+	if (typform == NULL) {
+		elog(ERROR, "catalog lookup failed for type %u", typid);
 	}
-	else
-	{
-		if (typelemp)
-			*typelemp = InvalidOid;
-		return InvalidOid;
+
+	if (typform->typelem == InvalidOid) {
+		ereport(ERROR,
+				(errcode(ERRCODE_DATATYPE_MISMATCH),
+				 errmsg("cannot subscript type %s because it is not an array",
+						format_type_be(typid))));
 	}
+
+	RegProcedure handler = typform->typsubscript;
+	if (typelemp) {
+		*typelemp = typform->typelem;
+	}
+
+	return handler;
+	// SPANGRES END
 }
 
 /*
@@ -3364,24 +3292,15 @@ get_namespace_name_or_temp(Oid nspid)
  *		Returns the subtype of a given range type
  *
  * Returns InvalidOid if the type is not a range type.
+ *
+ * SPANGRES: doesn't yet support ranges and so always returns InvalidOid.
  */
 Oid
-get_range_subtype_UNUSED_SPANGRES(Oid rangeOid)
-{
-	HeapTuple	tp;
-
-	tp = SearchSysCache1(RANGETYPE, ObjectIdGetDatum(rangeOid));
-	if (HeapTupleIsValid(tp))
-	{
-		Form_pg_range rngtup = (Form_pg_range) GETSTRUCT(tp);
-		Oid			result;
-
-		result = rngtup->rngsubtype;
-		ReleaseSysCache(tp);
-		return result;
-	}
-	else
-		return InvalidOid;
+get_range_subtype(Oid rangeOid) {
+	// SPANGRES BEGIN
+	// TODO: Support Range types.
+	return InvalidOid;
+	// SPANGRES END
 }
 
 /*
@@ -3442,22 +3361,16 @@ get_range_multirange(Oid rangeOid)
  * Returns InvalidOid if the type is not a multirange.
  */
 Oid
-get_multirange_range_UNUSED_SPANGRES(Oid multirangeOid)
+get_multirange_range(Oid multirangeOid)
 {
-	HeapTuple	tp;
-
-	tp = SearchSysCache1(RANGEMULTIRANGE, ObjectIdGetDatum(multirangeOid));
-	if (HeapTupleIsValid(tp))
-	{
-		Form_pg_range rngtup = (Form_pg_range) GETSTRUCT(tp);
-		Oid			result;
-
-		result = rngtup->rngtypid;
-		ReleaseSysCache(tp);
-		return result;
-	}
-	else
+	// SPANGRES BEGIN
+	const FormData_pg_type* typform = GetTypeFromBootstrapCatalog(multirangeOid);
+	if (typform == NULL) {
 		return InvalidOid;
+	}
+
+	return typform->oid;
+	// SPANGRES END
 }
 
 /*				---------- PG_INDEX CACHE ----------				 */

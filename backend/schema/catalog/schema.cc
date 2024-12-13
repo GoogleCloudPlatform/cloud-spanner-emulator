@@ -25,6 +25,7 @@
 #include "zetasql/public/types/type.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
+#include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
@@ -287,7 +288,28 @@ void DumpColumn(const Column* column, ddl::ColumnDefinition& column_def) {
     set_option->set_option_name(ddl::kPGCommitTimestampOptionName);
     set_option->set_bool_value(true);
   }
-  if (column->has_default_value()) {
+  if (column->is_identity_column()) {
+    ddl::ColumnDefinition::IdentityColumnDefinition* identity_column =
+        column_def.mutable_identity_column();
+    ABSL_CHECK_EQ(column->sequences_used().size(), 1);  // Crash OK
+    const Sequence* sequence =
+        static_cast<const Sequence*>(column->sequences_used().at(0));
+    if (!sequence->use_default_sequence_kind_option()) {
+      if (sequence->sequence_kind() == Sequence::BIT_REVERSED_POSITIVE) {
+        identity_column->set_type(
+            ddl::ColumnDefinition::IdentityColumnDefinition::
+                BIT_REVERSED_POSITIVE);
+      }
+    }
+    if (sequence->start_with_counter().has_value()) {
+      identity_column->set_start_with_counter(
+          sequence->start_with_counter().value());
+    }
+    if (sequence->skip_range_min().has_value()) {
+      identity_column->set_skip_range_min(sequence->skip_range_min().value());
+      identity_column->set_skip_range_max(sequence->skip_range_max().value());
+    }
+  } else if (column->has_default_value()) {
     SetColumnExpression(column, *column_def.mutable_column_default());
   }
   if (column->is_generated()) {
@@ -483,6 +505,10 @@ ddl::DDLStatementList Schema::Dump() const {
 
   // Print sequences next, since other schema objects may use them.
   for (const Sequence* sequence : sequences_) {
+    if (sequence->is_internal_use()) {
+      // Do not print internal sequences.
+      continue;
+    }
     DumpSequence(sequence,
                  *ddl_statements.add_statement()->mutable_create_sequence());
   }

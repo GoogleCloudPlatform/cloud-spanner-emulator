@@ -32,6 +32,7 @@
 #include "utils/typcache.h"
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 
 typedef struct polymorphic_actuals
@@ -43,11 +44,6 @@ typedef struct polymorphic_actuals
 } polymorphic_actuals;
 
 static void shutdown_MultiFuncCall(Datum arg);
-static TypeFuncClass internal_get_result_type_UNUSED_SPANGRES(Oid funcid,
- 						 Node *call_expr,
- 						 ReturnSetInfo *rsinfo,
- 						 Oid *resultTypeId,
-						 TupleDesc *resultTupleDesc);
 static void resolve_anyelement_from_others(polymorphic_actuals *actuals);
 static void resolve_anyarray_from_others(polymorphic_actuals *actuals);
 static void resolve_anyrange_from_others(polymorphic_actuals *actuals);
@@ -56,10 +52,7 @@ static bool resolve_polymorphic_tupdesc(TupleDesc tupdesc,
 										oidvector *declared_args,
 										Node *call_expr);
 
-/* SPANGRES BEGIN */
-// Make this non-static to call from catalog shim.
-TypeFuncClass get_type_func_class(Oid typid, Oid *base_typeid);
-/* SPANGRES END */
+static TypeFuncClass get_type_func_class(Oid typid, Oid *base_typeid);
 
 
 /*
@@ -434,62 +427,35 @@ get_func_result_type(Oid functionId,
  * *resultTupleDesc, if we cannot deduce the complete result rowtype from
  * the available information.
  */
-static TypeFuncClass
-internal_get_result_type_UNUSED_SPANGRES(Oid funcid,
+TypeFuncClass
+internal_get_result_type(Oid funcid,
 						 Node *call_expr,
 						 ReturnSetInfo *rsinfo,
 						 Oid *resultTypeId,
 						 TupleDesc *resultTupleDesc)
 {
-	TypeFuncClass result;
-	HeapTuple	tp;
-	Form_pg_proc procform;
+	// SPANGRES BEGIN
+	const FormData_pg_proc* procform;
 	Oid			rettype;
 	Oid			base_rettype;
-	TupleDesc	tupdesc;
 
 	/* First fetch the function's pg_proc row to inspect its rettype */
-	tp = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
-	if (!HeapTupleIsValid(tp))
+	procform = GetProcByOid(funcid);
+	if (procform == NULL) {
 		elog(ERROR, "cache lookup failed for function %u", funcid);
-	procform = (Form_pg_proc) GETSTRUCT(tp);
-
+	}
 	rettype = procform->prorettype;
 
-	/* Check for OUT parameters defining a RECORD result */
-	tupdesc = build_function_result_tupdesc_t(tp);
-	if (tupdesc)
-	{
-		/*
-		 * It has OUT parameters, so it's basically like a regular composite
-		 * type, except we have to be able to resolve any polymorphic OUT
-		 * parameters.
-		 */
-		if (resultTypeId)
-			*resultTypeId = rettype;
-
-		if (resolve_polymorphic_tupdesc(tupdesc,
-										&procform->proargtypes,
-										call_expr))
-		{
-			if (tupdesc->tdtypeid == RECORDOID &&
-				tupdesc->tdtypmod < 0)
-				assign_record_type_typmod(tupdesc);
-			if (resultTupleDesc)
-				*resultTupleDesc = tupdesc;
-			result = TYPEFUNC_COMPOSITE;
-		}
-		else
-		{
-			if (resultTupleDesc)
-				*resultTupleDesc = NULL;
-			result = TYPEFUNC_RECORD;
-		}
-
-		ReleaseSysCache(tp);
-
-		return result;
+	/*
+	 * Spangres does not support RECORD return types. Verify this function doesn't
+	 * return RECORD.
+	 * TODO: Add support for complex types.
+	 */
+	if (procform->prorettype == RECORDOID) {
+		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+										errmsg("Cannot get result type for function %u", funcid)));
 	}
+	// SPANGRES END
 
 	/*
 	 * If scalar polymorphic result, try to resolve it.
@@ -512,35 +478,16 @@ internal_get_result_type_UNUSED_SPANGRES(Oid funcid,
 	if (resultTupleDesc)
 		*resultTupleDesc = NULL;	/* default result */
 
+	// SPANGRES BEGIN
 	/* Classify the result type */
-	result = get_type_func_class(rettype, &base_rettype);
-	switch (result)
-	{
-		case TYPEFUNC_COMPOSITE:
-		case TYPEFUNC_COMPOSITE_DOMAIN:
-			if (resultTupleDesc)
-				*resultTupleDesc = lookup_rowtype_tupdesc_copy(base_rettype, -1);
-			/* Named composite types can't have any polymorphic columns */
-			break;
-		case TYPEFUNC_SCALAR:
-			break;
-		case TYPEFUNC_RECORD:
-			/* We must get the tupledesc from call context */
-			if (rsinfo && IsA(rsinfo, ReturnSetInfo) &&
-				rsinfo->expectedDesc != NULL)
-			{
-				result = TYPEFUNC_COMPOSITE;
-				if (resultTupleDesc)
-					*resultTupleDesc = rsinfo->expectedDesc;
-				/* Assume no polymorphic columns here, either */
-			}
-			break;
-		default:
-			break;
+	TypeFuncClass result = get_type_func_class(rettype, &base_rettype);
+	/* TODO: Add support for complex types */
+	if (result == TYPEFUNC_COMPOSITE || result == TYPEFUNC_RECORD) {
+		/* Should not happen since we checked this above */
+		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						errmsg("Cannot get result type for function %u", funcid)));
 	}
-
-	ReleaseSysCache(tp);
-
+	// SPANGRES END
 	return result;
 }
 
@@ -1331,9 +1278,7 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
  * classifying types.  The categories used here are useful for deciding
  * how to handle functions returning the datatype.
  */
-/* SPANGRES BEGIN */
-// Make this non-static to call from catalog shim.
-TypeFuncClass
+static TypeFuncClass
 get_type_func_class(Oid typid, Oid *base_typeid)
 {
 	switch (get_typtype(typid))
@@ -1611,99 +1556,16 @@ get_func_input_arg_names(Datum proargnames, Datum proargmodes,
  *
  * This is used to determine the default output column name for functions
  * returning scalar types.
+ *
+ * SPANGRES: We don't yet support named parameters, so this always returns NULL.
  */
 char *
-get_func_result_name_UNUSED_SPANGRES(Oid functionId)
+get_func_result_name(Oid functionId)
 {
-	char	   *result;
-	HeapTuple	procTuple;
-	Datum		proargmodes;
-	Datum		proargnames;
-	bool		isnull;
-	ArrayType  *arr;
-	int			numargs;
-	char	   *argmodes;
-	Datum	   *argnames;
-	int			numoutargs;
-	int			nargnames;
-	int			i;
-
-	/* First fetch the function's pg_proc row */
-	procTuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(functionId));
-	if (!HeapTupleIsValid(procTuple))
-		elog(ERROR, "cache lookup failed for function %u", functionId);
-
-	/* If there are no named OUT parameters, return NULL */
-	if (heap_attisnull(procTuple, Anum_pg_proc_proargmodes, NULL) ||
-		heap_attisnull(procTuple, Anum_pg_proc_proargnames, NULL))
-		result = NULL;
-	else
-	{
-		/* Get the data out of the tuple */
-		proargmodes = SysCacheGetAttr(PROCOID, procTuple,
-									  Anum_pg_proc_proargmodes,
-									  &isnull);
-		Assert(!isnull);
-		proargnames = SysCacheGetAttr(PROCOID, procTuple,
-									  Anum_pg_proc_proargnames,
-									  &isnull);
-		Assert(!isnull);
-
-		/*
-		 * We expect the arrays to be 1-D arrays of the right types; verify
-		 * that.  For the char array, we don't need to use deconstruct_array()
-		 * since the array data is just going to look like a C array of
-		 * values.
-		 */
-		arr = DatumGetArrayTypeP(proargmodes);	/* ensure not toasted */
-		numargs = ARR_DIMS(arr)[0];
-		if (ARR_NDIM(arr) != 1 ||
-			numargs < 0 ||
-			ARR_HASNULL(arr) ||
-			ARR_ELEMTYPE(arr) != CHAROID)
-			elog(ERROR, "proargmodes is not a 1-D char array or it contains nulls");
-		argmodes = (char *) ARR_DATA_PTR(arr);
-		arr = DatumGetArrayTypeP(proargnames);	/* ensure not toasted */
-		if (ARR_NDIM(arr) != 1 ||
-			ARR_DIMS(arr)[0] != numargs ||
-			ARR_HASNULL(arr) ||
-			ARR_ELEMTYPE(arr) != TEXTOID)
-			elog(ERROR, "proargnames is not a 1-D text array of length %d or it contains nulls",
-				 numargs);
-		deconstruct_array(arr, TEXTOID, -1, false, TYPALIGN_INT,
-						  &argnames, NULL, &nargnames);
-		Assert(nargnames == numargs);
-
-		/* scan for output argument(s) */
-		result = NULL;
-		numoutargs = 0;
-		for (i = 0; i < numargs; i++)
-		{
-			if (argmodes[i] == PROARGMODE_IN ||
-				argmodes[i] == PROARGMODE_VARIADIC)
-				continue;
-			Assert(argmodes[i] == PROARGMODE_OUT ||
-				   argmodes[i] == PROARGMODE_INOUT ||
-				   argmodes[i] == PROARGMODE_TABLE);
-			if (++numoutargs > 1)
-			{
-				/* multiple out args, so forget it */
-				result = NULL;
-				break;
-			}
-			result = TextDatumGetCString(argnames[i]);
-			if (result == NULL || result[0] == '\0')
-			{
-				/* Parameter is not named, so forget it */
-				result = NULL;
-				break;
-			}
-		}
-	}
-
-	ReleaseSysCache(procTuple);
-
-	return result;
+	// SPANGRES BEGIN
+	// TODO: Add support for this when we support named parameters.
+	return NULL;
+	// SPANGRES END
 }
 
 

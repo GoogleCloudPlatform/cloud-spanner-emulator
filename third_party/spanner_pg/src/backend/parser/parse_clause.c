@@ -52,6 +52,7 @@
 #include "utils/syscache.h"
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 
 static int	extractRemainingColumns(ParseNamespaceColumn *src_nscolumns,
@@ -94,12 +95,13 @@ static TargetEntry *findTargetlistEntrySQL99(ParseState *pstate, Node *node,
 											 List **tlist, ParseExprKind exprKind);
 static int	get_matching_location(int sortgroupref,
 								  List *sortgrouprefs, List *exprs);
-static List *resolve_unique_index_expr_UNUSED_SPANGRES(ParseState *pstate, InferClause *infer,
-									   Relation heapRel);
+// SPANGRES BEGIN
+static List *resolve_unique_index_expr(ParseState *pstate, InferClause *infer);
+// SPANGRES END
 static List *addTargetToGroupList(ParseState *pstate, TargetEntry *tle,
 								  List *grouplist, List *targetlist, int location);
 static WindowClause *findWindowClause(List *wclist, const char *name);
-static Node *transformFrameOffset_UNUSED_SPANGRES(ParseState *pstate, int frameOptions,
+static Node *transformFrameOffset(ParseState *pstate, int frameOptions,
 								  Oid rangeopfamily, Oid rangeopcintype, Oid *inRangeFunc,
 								  Node *clause);
 
@@ -180,12 +182,14 @@ transformFromClause(ParseState *pstate, List *frmList)
  *
  *	  Returns the rangetable index of the target relation.
  */
-#ifdef UNUSED_SPANGRES_CARVEOUT
 int
-setTargetTable_UNUSED_SPANGRES(ParseState *pstate, RangeVar *relation,
+setTargetTable(ParseState *pstate, RangeVar *relation,
 			   bool inh, bool alsoSource, AclMode requiredPerms)
 {
-	ParseNamespaceItem *nsitem;
+	// SPANGRES BEGIN
+	// Unused variable.
+	// ParseNamespaceItem *nsitem;
+	// SPANGRES END
 
 	/*
 	 * ENRs hide tables of the same name, so we need to check for them first.
@@ -198,33 +202,22 @@ setTargetTable_UNUSED_SPANGRES(ParseState *pstate, RangeVar *relation,
 				 errmsg("relation \"%s\" cannot be the target of a modifying statement",
 						relation->relname)));
 
-	/* Close old target; this could only happen for multi-action rules */
-	/* BEGIN SPANGRES */
-	/* if (pstate->p_target_relation_oid != NULL) */
-	/* 	table_close(pstate->p_target_relation_oid, NoLock); */
-	/* END SPANGRES */
-	
-	/*
-	 * Open target rel and grab suitable lock (which we will hold till end of
-	 * transaction).
-	 *
-	 * free_parsestate() will eventually do the corresponding table_close(),
-	 * but *not* release the lock.
-	 */
-	/* BEGIN SPANGRES */
-	/* pstate->p_target_relation_oid = parserOpenTable(pstate, relation, */
-	/* 											RowExclusiveLock); */
-	/* END SPANGRES */
-	
+	// SPANGRES BEGIN
 	/*
 	 * Now build an RTE and a ParseNamespaceItem.
+	 *
+	 * SPANGRES: use the RangeVar relation to construct the RangeTableEntry
+	 * instead of the Relation pstate->p_target_relation.
 	 */
-	nsitem = addRangeTableEntryForRelation(pstate, pstate->p_target_relation_oid,
-										   RowExclusiveLock,
-										   relation->alias, inh, false);
+	ParseNamespaceItem* nsitem =
+		addRangeTableEntry(pstate, relation, relation->alias, inh, false);
 
 	/* remember the RTE/nsitem as being the query target */
 	pstate->p_target_nsitem = nsitem;
+
+	/* SPANGRES: set the new ParseState p_target_relation_oid field */
+	pstate->p_target_relation_oid = nsitem->p_rte->relid;
+	// SPANGRES END
 
 	/*
 	 * Override addRangeTableEntry's default ACL_SELECT permissions check, and
@@ -245,7 +238,7 @@ setTargetTable_UNUSED_SPANGRES(ParseState *pstate, RangeVar *relation,
 
 	return nsitem->p_rtindex;
 }
-#endif  // UNUSED_SPANGRES_CARVEOUT
+
 
 /*
  * Extract all not-in-common columns from column lists of a source table
@@ -3113,10 +3106,15 @@ get_matching_location(int sortgroupref, List *sortgrouprefs, List *exprs)
  * Perform parse analysis of expressions and columns appearing within ON
  * CONFLICT clause.  During planning, the returned list of expressions is used
  * to infer which unique index to use.
+ *
+ * SPANGRES: Exact same implementation as resolve_unique_index_expr, but the signature
+ * is missing the last parameter (Relation heapRel) because it is not used in
+ * the implementation.
  */
+// SPANGRES BEGIN
 static List *
-resolve_unique_index_expr_UNUSED_SPANGRES(ParseState *pstate, InferClause *infer,
-						  Relation heapRel)
+resolve_unique_index_expr(ParseState *pstate, InferClause *infer)
+// SPANGRES END
 {
 	List	   *result = NIL;
 	ListCell   *l;
@@ -3202,6 +3200,7 @@ resolve_unique_index_expr_UNUSED_SPANGRES(ParseState *pstate, InferClause *infer
 	return result;
 }
 
+
 /*
  * transformOnConflictArbiter -
  *		transform arbiter expressions in an ON CONFLICT clause.
@@ -3210,9 +3209,8 @@ resolve_unique_index_expr_UNUSED_SPANGRES(ParseState *pstate, InferClause *infer
  * an ON CONFLICT arbiter.  Partial unique indexes may be inferred using WHERE
  * clause from inference specification clause.
  */
-#ifdef UNUSED_SPANGRES_CARVEOUT
 void
-transformOnConflictArbiter_UNUSED_SPANGRES(ParseState *pstate,
+transformOnConflictArbiter(ParseState *pstate,
 						   OnConflictClause *onConflictClause,
 						   List **arbiterExpr, Node **arbiterWhere,
 						   Oid *constraint)
@@ -3231,25 +3229,14 @@ transformOnConflictArbiter_UNUSED_SPANGRES(ParseState *pstate,
 				 parser_errposition(pstate,
 									exprLocation((Node *) onConflictClause))));
 
+	// SPANGRES BEGIN
 	/*
-	 * To simplify certain aspects of its design, speculative insertion into
-	 * system catalogs is disallowed
+	 * Spangres does not support system catalog tables. Remove check and ereport
+	 * if INSERT/UPDATE/DELETE are attempted on a system catalog table.
+	 * TODO : Add check for INSERT/UPDATE/DELETE on a system catalog
+	 * table.
 	 */
-	if (IsCatalogRelation(pstate->p_target_relation_oid))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("ON CONFLICT is not supported with system catalog tables"),
-				 parser_errposition(pstate,
-									exprLocation((Node *) onConflictClause))));
-
-	/* Same applies to table used by logical decoding as catalog table */
-	if (RelationIsUsedAsCatalogTable(pstate->p_target_relation_oid))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("ON CONFLICT is not supported on table \"%s\" used as a catalog table",
-						RelationGetRelationName(pstate->p_target_relation_oid)),
-				 parser_errposition(pstate,
-									exprLocation((Node *) onConflictClause))));
+	// SPANGRES END
 
 	/* ON CONFLICT DO NOTHING does not require an inference clause */
 	if (infer)
@@ -3273,7 +3260,7 @@ transformOnConflictArbiter_UNUSED_SPANGRES(ParseState *pstate,
 		 */
 		if (infer->conname)
 		{
-			Oid			relid = RelationGetRelid(pstate->p_target_relation);
+			Oid			relid = pstate->p_target_relation_oid;
 			RangeTblEntry *rte = pstate->p_target_nsitem->p_rte;
 			Bitmapset  *conattnos;
 
@@ -3296,7 +3283,7 @@ transformOnConflictArbiter_UNUSED_SPANGRES(ParseState *pstate,
 	 * post parse analysis query tree inference clause representation.
 	 */
 }
-#endif  // UNUSED_SPANGRES_CARVEOUT
+
 
 /*
  * addTargetToSortList
@@ -3600,7 +3587,7 @@ findWindowClause(List *wclist, const char *name)
  * We'll return the OID of the in_range function to *inRangeFunc.
  */
 static Node *
-transformFrameOffset_UNUSED_SPANGRES(ParseState *pstate, int frameOptions,
+transformFrameOffset(ParseState *pstate, int frameOptions,
 					 Oid rangeopfamily, Oid rangeopcintype, Oid *inRangeFunc,
 					 Node *clause)
 {
@@ -3637,8 +3624,11 @@ transformFrameOffset_UNUSED_SPANGRES(ParseState *pstate, int frameOptions,
 		int			nmatches = 0;
 		Oid			selectedType = InvalidOid;
 		Oid			selectedFunc = InvalidOid;
-		CatCList   *proclist;
-		int			i;
+		// SPANGRES BEGIN
+		// Unused variables.
+		// CatCList   *proclist;
+		// int			i;
+		// SPANGRES END
 
 		/* Transform the raw expression tree */
 		node = transformExpr(pstate, clause, EXPR_KIND_WINDOW_FRAME_RANGE);
@@ -3652,14 +3642,16 @@ transformFrameOffset_UNUSED_SPANGRES(ParseState *pstate, int frameOptions,
 		 */
 		preferredType = (nodeType != UNKNOWNOID) ? nodeType : rangeopcintype;
 
+		// SPANGRES BEGIN
 		/* Find the in_range support functions applicable to this case */
-		proclist = SearchSysCacheList2(AMPROCNUM,
-									   ObjectIdGetDatum(rangeopfamily),
-									   ObjectIdGetDatum(rangeopcintype));
-		for (i = 0; i < proclist->n_members; i++)
+		const FormData_pg_amproc* const* amproc_list;
+		size_t amproc_count;
+		GetAmprocsByFamilyFromBootstrapCatalog(rangeopfamily, rangeopcintype,
+																					 &amproc_list, &amproc_count);
+		for (int amproc_index = 0; amproc_index < amproc_count; ++amproc_index)
 		{
-			HeapTuple	proctup = &proclist->members[i]->tuple;
-			Form_pg_amproc procform = (Form_pg_amproc) GETSTRUCT(proctup);
+			const FormData_pg_amproc* procform = amproc_list[amproc_index];
+			// SPANGRES END
 
 			/* The search will find all support proc types; ignore others */
 			if (procform->amprocnum != BTINRANGE_PROC)
@@ -3679,7 +3671,9 @@ transformFrameOffset_UNUSED_SPANGRES(ParseState *pstate, int frameOptions,
 				selectedFunc = procform->amproc;
 			}
 		}
-		ReleaseCatCacheList(proclist);
+		// SPANGRES BEGIN
+		// ReleaseCatCacheList(proclist);
+		// SPANGRES END
 
 		/*
 		 * Throw error if needed.  It seems worth taking the trouble to

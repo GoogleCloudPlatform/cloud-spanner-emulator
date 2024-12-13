@@ -21,7 +21,7 @@ typedef HeapTuple Type;
 
 extern Type LookupTypeName(ParseState *pstate, const TypeName *typeName,
 			   int32 *typmod_p, bool missing_ok);
-extern Type LookupTypeNameExtended_UNUSED_SPANGRES(ParseState *pstate,
+extern Type LookupTypeNameExtended(ParseState *pstate,
  								   const TypeName *typeName, int32 *typmod_p,
  								   bool temp_ok, bool missing_ok);
 
@@ -38,7 +38,7 @@ extern char *TypeNameListToString(List *typenames);
 extern Oid	LookupCollation(ParseState *pstate, List *collnames, int location);
 extern Oid	GetColumnDefCollation(ParseState *pstate, ColumnDef *coldef, Oid typeOid);
 
-extern Type typeidType_UNUSED_SPANGRES(Oid id);
+extern Type typeidType(Oid id);
 
 extern Oid	typeTypeId(Type tp);
 extern int16 typeLen(Type t);
@@ -48,8 +48,8 @@ extern Oid	typeTypeRelid(Type typ);
 extern Oid	typeTypeCollation(Type typ);
 extern Datum stringTypeDatum(Type tp, char *string, int32 atttypmod);
 
-extern Oid	typeidTypeRelid_UNUSED_SPANGRES(Oid type_id);
-extern Oid	typeOrDomainTypeRelid_UNUSED_SPANGRES(Oid type_id);
+extern Oid	typeidTypeRelid(Oid type_id);
+extern Oid	typeOrDomainTypeRelid(Oid type_id);
 
 extern TypeName *typeStringToTypeName(const char *str);
 extern void parseTypeString(const char *str, Oid *typeid_p, int32 *typmod_p, bool missing_ok);

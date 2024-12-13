@@ -73,9 +73,9 @@ extern void get_op_opfamily_properties(Oid opno, Oid opfamily, bool ordering_op,
 						   int *strategy,
 						   Oid *lefttype,
 						   Oid *righttype);
-extern Oid get_opfamily_member_UNUSED_SPANGRES(Oid opfamily, Oid lefttype, Oid righttype,
+extern Oid get_opfamily_member(Oid opfamily, Oid lefttype, Oid righttype,
  					int16 strategy);
-extern bool get_ordering_op_properties_UNUSED_SPANGRES(Oid opno,
+extern bool get_ordering_op_properties(Oid opno,
 						   Oid *opfamily, Oid *opcintype, int16 *strategy);
 extern Oid	get_equality_op_for_ordering_op(Oid opno, bool *reverse);
 extern Oid	get_ordering_op_for_equality_op(Oid opno, bool use_lhs_type);
@@ -84,7 +84,7 @@ extern bool get_compatible_hash_operators(Oid opno,
 										  Oid *lhs_opno, Oid *rhs_opno);
 extern bool get_op_hash_functions(Oid opno,
 								  RegProcedure *lhs_procno, RegProcedure *rhs_procno);
-extern List *get_op_btree_interpretation_UNUSED_SPANGRES(Oid opno);
+extern List *get_op_btree_interpretation(Oid opno);
 extern bool equality_ops_are_compatible(Oid opno1, Oid opno2);
 extern bool comparison_ops_are_compatible(Oid opno1, Oid opno2);
 extern AttrNumber get_attnum(Oid relid, const char *attname);
@@ -104,9 +104,8 @@ extern bool get_opclass_opfamily_and_input_type(Oid opclass,
 												Oid *opfamily, Oid *opcintype);
 extern char *get_opname(Oid opno);
 extern Oid	get_op_rettype(Oid opno);
-extern Oid get_opfamily_proc_UNUSED_SPANGRES(Oid opfamily, Oid lefttype, Oid righttype,
- 				  int16 procnum);
-extern char *get_attname_UNUSED_SPANGRES(Oid relid, AttrNumber attnum, bool missing_ok);
+extern Oid get_opfamily_proc(Oid opfamily, Oid lefttype, Oid righttype, int16 procnum);
+extern char *get_attname(Oid relid, AttrNumber attnum, bool missing_ok);
 extern AttrNumber get_attnum(Oid relid, const char *attname);
 extern char get_attidentity(Oid relid, AttrNumber attnum);
 extern Oid	get_atttype(Oid relid, AttrNumber attnum);
@@ -116,9 +115,9 @@ extern void get_atttypetypmodcoll(Oid relid, AttrNumber attnum,
 extern char *get_collation_name(Oid colloid);
 extern char *get_constraint_name(Oid conoid);
 extern char *get_language_name(Oid langoid, bool missing_ok);
-extern Oid	get_opclass_family_UNUSED_SPANGRES(Oid opclass);
-extern Oid	get_opclass_input_type_UNUSED_SPANGRES(Oid opclass);
-extern RegProcedure get_opcode_UNUSED_SPANGRES(Oid opno);
+extern Oid	get_opclass_family(Oid opclass);
+extern Oid	get_opclass_input_type(Oid opclass);
+extern RegProcedure get_opcode(Oid opno);
 extern char *get_opname(Oid opno);
 extern Oid	get_op_rettype(Oid opno);
 extern void op_input_types(Oid opno, Oid *lefttype, Oid *righttype);
@@ -126,8 +125,8 @@ extern bool op_mergejoinable(Oid opno, Oid inputtype);
 extern bool op_hashjoinable(Oid opno, Oid inputtype);
 extern bool op_strict(Oid opno);
 extern char op_volatile(Oid opno);
-extern Oid	get_commutator_UNUSED_SPANGRES(Oid opno);
-extern Oid	get_negator_UNUSED_SPANGRES(Oid opno);
+extern Oid	get_commutator(Oid opno);
+extern Oid	get_negator(Oid opno);
 extern RegProcedure get_oprrest(Oid opno);
 extern RegProcedure get_oprjoin(Oid opno);
 extern char *get_func_name(Oid funcid);
@@ -135,8 +134,8 @@ extern Oid	get_func_namespace(Oid funcid);
 extern Oid	get_func_rettype(Oid funcid);
 extern int	get_func_nargs(Oid funcid);
 extern Oid	get_func_signature(Oid funcid, Oid **argtypes, int *nargs);
-extern Oid	get_func_variadictype_UNUSED_SPANGRES(Oid funcid);
-extern bool get_func_retset_UNUSED_SPANGRES(Oid funcid);
+extern Oid	get_func_variadictype(Oid funcid);
+extern bool get_func_retset(Oid funcid);
 extern bool func_strict(Oid funcid);
 extern char func_volatile(Oid funcid);
 extern char func_parallel(Oid funcid);
@@ -145,10 +144,10 @@ extern bool get_func_leakproof(Oid funcid);
 extern RegProcedure get_func_support(Oid funcid);
 extern float4 get_func_cost(Oid funcid);
 extern float4 get_func_rows(Oid funcid);
-extern Oid	get_relname_relid_UNUSED_SPANGRES(const char *relname, Oid relnamespace);
-extern char *get_rel_name_UNUSED_SPANGRES(Oid relid);
+extern Oid	get_relname_relid(const char *relname, Oid relnamespace);
+extern char *get_rel_name(Oid relid);
 extern Oid	get_rel_namespace(Oid relid);
-extern Oid	get_rel_type_id_UNUSED_SPANGRES(Oid relid);
+extern Oid	get_rel_type_id(Oid relid);
 extern char get_rel_relkind(Oid relid);
 extern bool get_rel_relispartition(Oid relid);
 extern Oid	get_rel_tablespace(Oid relid);
@@ -162,7 +161,7 @@ extern void get_typlenbyval(Oid typid, int16 *typlen, bool *typbyval);
 extern void get_typlenbyvalalign(Oid typid, int16 *typlen, bool *typbyval,
 								 char *typalign);
 extern Oid	getTypeIOParam(HeapTuple typeTuple);
-extern void get_type_io_data_UNUSED_SPANGRES(Oid typid,
+extern void get_type_io_data(Oid typid,
 				 IOFuncSelector which_func,
 				 int16 *typlen,
 				 bool *typbyval,
@@ -172,35 +171,31 @@ extern void get_type_io_data_UNUSED_SPANGRES(Oid typid,
 				 Oid *func);
 extern char get_typstorage(Oid typid);
 extern Node *get_typdefault(Oid typid);
-extern char get_typtype_UNUSED_SPANGRES(Oid typid);
+extern char get_typtype(Oid typid);
 extern bool type_is_rowtype(Oid typid);
 extern bool type_is_enum(Oid typid);
 extern bool type_is_range(Oid typid);
 extern bool type_is_multirange(Oid typid);
-extern void get_type_category_preferred_UNUSED_SPANGRES(Oid typid,
-                                                        char *typcategory,
-                                                        bool *typispreferred);
+extern void get_type_category_preferred(Oid typid,
+																				char *typcategory,
+																				bool *typispreferred);
 extern Oid	get_typ_typrelid(Oid typid);
-extern Oid	get_element_type_UNUSED_SPANGRES(Oid typid);
+extern Oid	get_element_type(Oid typid);
 extern Oid	get_array_type(Oid typid);
 extern Oid	get_promoted_array_type(Oid typid);
-extern Oid	get_base_element_type_UNUSED_SPANGRES(Oid typid);
-extern void getTypeInputInfo_UNUSED_SPANGRES(Oid type, Oid *typInput, Oid *typIOParam);
-extern void getTypeOutputInfo_UNUSED_SPANGRES(Oid type, Oid *typOutput, bool *typIsVarlena);
+extern Oid	get_base_element_type(Oid typid);
+extern void getTypeInputInfo(Oid type, Oid *typInput, Oid *typIOParam);
+extern void getTypeOutputInfo(Oid type, Oid *typOutput, bool *typIsVarlena);
 extern void getTypeBinaryInputInfo(Oid type, Oid *typReceive, Oid *typIOParam);
 extern void getTypeBinaryOutputInfo(Oid type, Oid *typSend, bool *typIsVarlena);
 extern Oid	get_typmodin(Oid typid);
-/* SPANGRES BEGIN */
-// We're leaving this here and commented out so that we get a merge conflict if
-// pulling an update to PostgreSQL tries to re-add it.
-// extern Oid	get_typcollation(Oid typid);
-/* SPANGRES END */
+extern Oid	get_typcollation(Oid typid);
 extern bool type_is_collatable(Oid typid);
 extern RegProcedure get_typsubscript(Oid typid, Oid *typelemp);
 extern const struct SubscriptRoutines *getSubscriptingRoutines(Oid typid,
 															   Oid *typelemp);
 extern Oid	getBaseType(Oid typid);
-extern Oid	getBaseTypeAndTypmod_UNUSED_SPANGRES(Oid typid, int32 *typmod);
+extern Oid	getBaseTypeAndTypmod(Oid typid, int32 *typmod);
 extern int32 get_typavgwidth(Oid typid, int32 typmod);
 extern int32 get_attavgwidth(Oid relid, AttrNumber attnum);
 extern bool get_attstatsslot(AttStatsSlot *sslot, HeapTuple statstuple,
@@ -208,7 +203,7 @@ extern bool get_attstatsslot(AttStatsSlot *sslot, HeapTuple statstuple,
 extern void free_attstatsslot(AttStatsSlot *sslot);
 extern char *get_namespace_name(Oid nspid);
 extern char *get_namespace_name_or_temp(Oid nspid);
-extern Oid	get_range_subtype_UNUSED_SPANGRES(Oid rangeOid);
+extern Oid	get_range_subtype(Oid rangeOid);
 extern Oid	get_range_collation(Oid rangeOid);
 extern Oid	get_range_multirange(Oid rangeOid);
 extern Oid	get_multirange_range(Oid multirangeOid);

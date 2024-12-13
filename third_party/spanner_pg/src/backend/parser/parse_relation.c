@@ -38,6 +38,7 @@
 #include "utils/varlena.h"
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 
 /*
@@ -66,17 +67,13 @@ static ParseNamespaceItem *scanNameSpaceForRelid(ParseState *pstate, Oid relid,
 												 int location);
 static void check_lateral_ref_ok(ParseState *pstate, ParseNamespaceItem *nsitem,
 								 int location);
-static int	scanRTEForColumn_UNUSED_SPANGRES(ParseState *pstate, RangeTblEntry *rte,
+static int	scanRTEForColumn(ParseState *pstate, RangeTblEntry *rte,
 							 Alias *eref,
 							 const char *colname, int location,
 							 int fuzzy_rte_penalty,
 							 FuzzyAttrMatchState *fuzzystate);
 static void markRTEForSelectPriv(ParseState *pstate,
 								 int rtindex, AttrNumber col);
-static void expandRelation_UNUSED_POSTGRES(Oid relid, Alias *eref,
-						   int rtindex, int sublevels_up,
-						   int location, bool include_dropped,
-						   List **colnames, List **colvars);
 static void expandTupleDesc(TupleDesc tupdesc, Alias *eref,
 							int count, int offset,
 							int rtindex, int sublevels_up,
@@ -802,7 +799,7 @@ scanNSItemForColumn(ParseState *pstate, ParseNamespaceItem *nsitem,
  * working to complain about an invalid name, we've already eliminated that.
  */
 static int
-scanRTEForColumn_UNUSED_SPANGRES(ParseState *pstate, RangeTblEntry *rte,
+scanRTEForColumn(ParseState *pstate, RangeTblEntry *rte,
 				 Alias *eref,
 				 const char *colname, int location,
 				 int fuzzy_rte_penalty,
@@ -854,28 +851,13 @@ scanRTEForColumn_UNUSED_SPANGRES(ParseState *pstate, RangeTblEntry *rte,
 	if (result)
 		return result;
 
-	/*
-	 * If the RTE represents a real relation, consider system column names.
-	 * Composites are only used for pseudo-relations like ON CONFLICT's
-	 * excluded.
-	 */
-	if (rte->rtekind == RTE_RELATION &&
-		rte->relkind != RELKIND_COMPOSITE_TYPE)
-	{
-		/* quick check to see if name could be a system column */
-		attnum = specialAttNum(colname);
-		if (attnum != InvalidAttrNumber)
-		{
-			/* now check to see if column actually is defined */
-			if (SearchSysCacheExists2(ATTNUM,
-									  ObjectIdGetDatum(rte->relid),
-									  Int16GetDatum(attnum)))
-				result = attnum;
-		}
-	}
-
-	return result;
+	// SPANGRES BEGIN
+  // System column look-ups are currently unsupported.
+  // TODO: Add support for system column look-ups.
+	return InvalidAttrNumber;
+	// SPANGRES END
 }
+
 
 /*
  * colNameToVar
@@ -3014,21 +2996,24 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 
 /*
  * expandRelation -- expandRTE subroutine
+ *
+ * SPANGRES: Look up function by Oid in catalog adapter and return its column
+ * information. This requires that the catalog adapter has already seen this
+ * table when the query's FROM clause was first processed by the analyzer.
+ * To utilize ZetaSQL's Table class, we do this in C++ with a wrapper.
  */
-static void
-expandRelation_UNUSED_SPANGRES(Oid relid, Alias *eref, int rtindex, int sublevels_up,
+// SPANGRES BEGIN
+// Visible for testing (non-static)
+void
+expandRelation(Oid relid, Alias *eref, int rtindex, int sublevels_up,
 			   int location, bool include_dropped,
 			   List **colnames, List **colvars)
+// SPANGRES END
 {
-	Relation	rel;
-
-	/* Get the tupledesc and turn it over to expandTupleDesc */
-	rel = relation_open(relid, AccessShareLock);
-	expandTupleDesc(rel->rd_att, eref, rel->rd_att->natts, 0,
-					rtindex, sublevels_up,
-					location, include_dropped,
-					colnames, colvars);
-	relation_close(rel, AccessShareLock);
+	// SPANGRES BEGIN
+  ExpandRelationC(relid, eref, rtindex, sublevels_up, location,
+                  colnames, colvars);
+	// SPANGRES END
 }
 
 /*
@@ -3120,11 +3105,12 @@ expandTupleDesc(TupleDesc tupdesc, Alias *eref, int count, int offset,
  * If colnames isn't NULL, a list of String items for the columns is stored
  * there; note that it's just a subset of the RTE's eref list, and hence
  * the list elements mustn't be modified.
+ *
+ * SPANGRES: Signature differs from PG by including the ParseState.
  */
-List *
-expandNSItemVars_UNUSED_SPANGRES(ParseNamespaceItem *nsitem,
-				 int sublevels_up, int location,
-				 List **colnames)
+List*
+expandNSItemVars(ParseState* pstate, ParseNamespaceItem* nsitem,
+								 int sublevels_up, int location, List** colnames)
 {
 	List	   *result = NIL;
 	int			colindex;
@@ -3132,18 +3118,43 @@ expandNSItemVars_UNUSED_SPANGRES(ParseNamespaceItem *nsitem,
 
 	if (colnames)
 		*colnames = NIL;
+
+	// SPANGRES BEGIN
+	// Use expandRelation for tables, which will exclude
+	// pseudo columns. This is not safe for expanding tables before they are
+	// joined together.
+	if (nsitem->p_rte->rtekind == RTE_RELATION) {
+		RangeTblEntry *rte = nsitem->p_rte;
+		expandRelation(
+			rte->relid, rte->eref, nsitem->p_rtindex, sublevels_up, location,
+			/*include_dropped=*/false, colnames, &result);
+		return result;
+	}
+
+	// SPANGRES: Use expandNSItemVarsForJoinC which will exclude pseudo columns
+	// from the post-join results.
+	if (nsitem->p_rte->rtekind == RTE_JOIN) {
+		bool error;
+		result = ExpandNSItemVarsForJoinC(pstate->p_rtable, nsitem, sublevels_up,
+										  location, colnames, &error);
+		if (error) {
+			ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR),
+							errmsg("Failed to expand join vars")));
+		}
+		return result;
+	}
+	// SPANGRES END
+
+	// SPANGRES BEGIN
 	colindex = 0;
-	foreach(lc, nsitem->p_names->colnames)
+	foreach(lc, nsitem->p_rte->eref->colnames)
 	{
-		String	   *colnameval = lfirst(lc);
+		void	   *colnameval = (void *) lfirst(lc);
 		const char *colname = strVal(colnameval);
 		ParseNamespaceColumn *nscol = nsitem->p_nscolumns + colindex;
 
-		if (nscol->p_dontexpand)
-		{
-			/* skip */
-		}
-		else if (colname[0])
+		if (colname[0])
+		// SPANGRES END
 		{
 			Var		   *var;
 
@@ -3279,144 +3290,19 @@ get_rte_attribute_name(RangeTblEntry *rte, AttrNumber attnum)
 }
 
 /*
- * get_rte_attribute_is_dropped_UNUSED_SPANGRES
+ * get_rte_attribute_is_dropped
  *		Check whether attempted attribute ref is to a dropped column
  */
 bool
-get_rte_attribute_is_dropped_UNUSED_SPANGRES(RangeTblEntry *rte,
+get_rte_attribute_is_dropped(RangeTblEntry *rte,
 											 AttrNumber attnum)
 {
-	bool		result;
-
-	switch (rte->rtekind)
-	{
-		case RTE_RELATION:
-			{
-				/*
-				 * Plain relation RTE --- get the attribute's catalog entry
-				 */
-				HeapTuple	tp;
-				Form_pg_attribute att_tup;
-
-				tp = SearchSysCache2(ATTNUM,
-									 ObjectIdGetDatum(rte->relid),
-									 Int16GetDatum(attnum));
-				if (!HeapTupleIsValid(tp))	/* shouldn't happen */
-					elog(ERROR, "cache lookup failed for attribute %d of relation %u",
-						 attnum, rte->relid);
-				att_tup = (Form_pg_attribute) GETSTRUCT(tp);
-				result = att_tup->attisdropped;
-				ReleaseSysCache(tp);
-			}
-			break;
-		case RTE_SUBQUERY:
-		case RTE_TABLEFUNC:
-		case RTE_VALUES:
-		case RTE_CTE:
-
-			/*
-			 * Subselect, Table Functions, Values, CTE RTEs never have dropped
-			 * columns
-			 */
-			result = false;
-			break;
-		case RTE_NAMEDTUPLESTORE:
-			{
-				/* Check dropped-ness by testing for valid coltype */
-				if (attnum <= 0 ||
-					attnum > list_length(rte->coltypes))
-					elog(ERROR, "invalid varattno %d", attnum);
-				result = !OidIsValid((list_nth_oid(rte->coltypes, attnum - 1)));
-			}
-			break;
-		case RTE_JOIN:
-			{
-				/*
-				 * A join RTE would not have dropped columns when constructed,
-				 * but one in a stored rule might contain columns that were
-				 * dropped from the underlying tables, if said columns are
-				 * nowhere explicitly referenced in the rule.  This will be
-				 * signaled to us by a null pointer in the joinaliasvars list.
-				 */
-				Var		   *aliasvar;
-
-				if (attnum <= 0 ||
-					attnum > list_length(rte->joinaliasvars))
-					elog(ERROR, "invalid varattno %d", attnum);
-				aliasvar = (Var *) list_nth(rte->joinaliasvars, attnum - 1);
-
-				result = (aliasvar == NULL);
-			}
-			break;
-		case RTE_FUNCTION:
-			{
-				/* Function RTE */
-				ListCell   *lc;
-				int			atts_done = 0;
-
-				/*
-				 * Dropped attributes are only possible with functions that
-				 * return named composite types.  In such a case we have to
-				 * look up the result type to see if it currently has this
-				 * column dropped.  So first, loop over the funcs until we
-				 * find the one that covers the requested column.
-				 */
-				foreach(lc, rte->functions)
-				{
-					RangeTblFunction *rtfunc = (RangeTblFunction *) lfirst(lc);
-
-					if (attnum > atts_done &&
-						attnum <= atts_done + rtfunc->funccolcount)
-					{
-						TupleDesc	tupdesc;
-
-						tupdesc = get_expr_result_tupdesc(rtfunc->funcexpr,
-														  true);
-						if (tupdesc)
-						{
-							/* Composite data type, e.g. a table's row type */
-							Form_pg_attribute att_tup;
-
-							Assert(tupdesc);
-							Assert(attnum - atts_done <= tupdesc->natts);
-							att_tup = TupleDescAttr(tupdesc,
-													attnum - atts_done - 1);
-							return att_tup->attisdropped;
-						}
-						/* Otherwise, it can't have any dropped columns */
-						return false;
-					}
-					atts_done += rtfunc->funccolcount;
-				}
-
-				/* If we get here, must be looking for the ordinality column */
-				if (rte->funcordinality && attnum == atts_done + 1)
-					return false;
-
-				/* this probably can't happen ... */
-				ereport(ERROR,
-						(errcode(ERRCODE_UNDEFINED_COLUMN),
-						 errmsg("column %d of relation \"%s\" does not exist",
-								attnum,
-								rte->eref->aliasname)));
-				result = false; /* keep compiler quiet */
-			}
-			break;
-		case RTE_RESULT:
-			/* this probably can't happen ... */
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_COLUMN),
-					 errmsg("column %d of relation \"%s\" does not exist",
-							attnum,
-							rte->eref->aliasname)));
-			result = false;		/* keep compiler quiet */
-			break;
-		default:
-			elog(ERROR, "unrecognized RTE kind: %d", (int) rte->rtekind);
-			result = false;		/* keep compiler quiet */
-	}
-
-	return result;
+	// SPANGRES BEGIN
+	// It's not possible to get a table from googlesql with dropped columns.
+	// Unless we someday support PostgreSQL-style rules that can store table
+	// definitions which may become stale, this is always false in spangres.
+	return false;
+	// SPANGRES END
 }
 
 /*

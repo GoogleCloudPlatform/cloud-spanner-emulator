@@ -153,6 +153,11 @@ class Table::Editor {
 
   const Table* get() const { return instance_; }
 
+  Editor& set_name(const std::string& name) {
+    instance_->name_ = name;
+    return *this;
+  }
+
   Editor& add_column(const Column* column) {
     instance_->columns_.push_back(column);
     instance_->columns_map_[column->Name()] = column;

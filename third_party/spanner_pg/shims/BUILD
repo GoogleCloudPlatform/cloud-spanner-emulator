@@ -389,6 +389,25 @@ cc_test(
 )
 
 cc_library(
+    name = "catalog_shim_cc_wrappers_header",
+    hdrs = [
+        "catalog_shim_cc_wrappers.h",
+    ],
+    copts = [
+        # The ereport_shim module reimplements PostgreSQL's ereport() in terms of
+        # C++ exceptions, on "lesser of two evils" grounds.
+        # See docstrings in `ereport_shim.h` for details.
+        # This means that all of the shims (which may have exceptions pass through them)
+        # need to be compiled with -fexceptions or risk missing destructors (and causing
+        # TSAN OOMs).
+        "-fexceptions",
+    ],
+    deps = [
+        "//third_party/spanner_pg/postgres_includes",
+    ],
+)
+
+cc_library(
     name = "catalog_shim_cc_wrappers",
     srcs = [
         "catalog_shim_cc_wrappers.cc",
@@ -487,26 +506,10 @@ cc_library(
     name = "catalog_shim",
     srcs = [
         "catalog_shim.c",
-        "catalog_shim_analyze.c",
         "catalog_shim_deparser.c",
         "catalog_shim_expected_errors.c",
-        "catalog_shim_format_type.c",
-        "catalog_shim_funcapi.c",
-        "catalog_shim_indexcmds.c",
-        "catalog_shim_lsyscache.c",
-        "catalog_shim_namespace.c",
-        "catalog_shim_parse_clause.c",
-        "catalog_shim_parse_coerce.c",
-        "catalog_shim_parse_expr.c",
-        "catalog_shim_parse_func.c",
-        "catalog_shim_parse_node.c",
-        "catalog_shim_parse_oper.c",
-        "catalog_shim_parse_relation.c",
-        "catalog_shim_parse_target.c",
-        "catalog_shim_parse_type.c",
         "catalog_shim_ruleutils.c",
         "catalog_shim_tokenlist.c",
-        "catalog_shim_tupdesc.c",
         "catalog_shim_typcache.c",
     ],
     hdrs = [
@@ -702,24 +705,6 @@ cc_test(
         "//third_party/spanner_pg/src/backend:backend_with_stub_shims",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
-    ],
-)
-
-cc_library(
-    name = "syscache_shim",
-    srcs = ["syscache_shim.c"],
-    copts = [
-        # The ereport_shim module reimplements PostgreSQL's ereport() in terms of
-        # C++ exceptions, on "lesser of two evils" grounds.
-        # See docstrings in `ereport_shim.h` for details.
-        # This means that all of the shims (which may have exceptions pass through them)
-        # need to be compiled with -fexceptions or risk missing destructors (and causing
-        # TSAN OOMs).
-        "-fexceptions",
-    ],
-    deps = [
-        ":catalog_shim_header",
-        "//third_party/spanner_pg/postgres_includes",
     ],
 )
 

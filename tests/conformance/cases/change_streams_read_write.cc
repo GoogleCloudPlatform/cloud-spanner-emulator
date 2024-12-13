@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -152,11 +153,13 @@ class ChangeStreamTest : public DatabaseTest {
         GetActiveTokenFromInitialQuery(start, change_stream_name,
                                        test_session_uri_, raw_client()));
     std::vector<DataChangeRecord> merged_data_change_records;
+    // Ensure that end time is no less than start time.
+    absl::Time end = std::max(Clock().Now(), start);
     for (const auto& partition_token : active_tokens) {
       std::string sql = absl::Substitute(
           "SELECT * FROM "
           "READ_$0 ('$1','$2', '$3', 300000 )",
-          change_stream_name, start, Clock().Now(), partition_token);
+          change_stream_name, start, end, partition_token);
       ZETASQL_ASSIGN_OR_RETURN(
           test::ChangeStreamRecords change_records,
           ExecuteChangeStreamQuery(sql, test_session_uri_, raw_client()));

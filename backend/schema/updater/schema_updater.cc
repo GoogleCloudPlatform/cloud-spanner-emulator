@@ -557,8 +557,9 @@ class SchemaUpdaterImpl {
                              const Table* table);
   absl::Status DropConstraint(const std::string& constraint_name,
                               const Table* table);
-  absl::Status AddSynonym(const ddl::AlterTable::AddSynonym& add_synonym,
-                          const Table* table);
+  absl::Status RenameTo(const ddl::AlterTable::RenameTo& rename_to,
+                        const Table* table);
+  absl::Status AddSynonym(const std::string& synonym, const Table* table);
   absl::Status DropSynonym(const ddl::AlterTable::DropSynonym& drop_synonym,
                            const Table* table);
 
@@ -4071,19 +4072,38 @@ absl::Status SchemaUpdaterImpl::ValidateAlterDatabaseOptions(
   return absl::OkStatus();
 }
 
-absl::Status SchemaUpdaterImpl::AddSynonym(
-    const ddl::AlterTable::AddSynonym& add_synonym, const Table* table) {
-  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", add_synonym.synonym()));
+absl::Status SchemaUpdaterImpl::RenameTo(
+    const ddl::AlterTable::RenameTo& rename_to, const Table* table) {
+  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", rename_to.name()));
+  global_names_.RemoveName(table->Name());
+
   const Table* updated_table = nullptr;
   ZETASQL_RETURN_IF_ERROR(AlterNode(table, [&](Table::Editor* editor) {
-    editor->set_synonym(add_synonym.synonym());
+    editor->set_name(rename_to.name());
     updated_table = editor->get();
     return absl::OkStatus();
   }));
-  if (SDLObjectName::IsFullyQualifiedName(add_synonym.synonym())) {
+
+  // Handle synonyms.
+  if (!rename_to.synonym().empty()) {
+    ZETASQL_RETURN_IF_ERROR(AddSynonym(rename_to.synonym(), updated_table));
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::AddSynonym(const std::string& synonym,
+                                           const Table* table) {
+  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", synonym));
+  const Table* updated_table = nullptr;
+  ZETASQL_RETURN_IF_ERROR(AlterNode(table, [&](Table::Editor* editor) {
+    editor->set_synonym(synonym);
+    updated_table = editor->get();
+    return absl::OkStatus();
+  }));
+  if (SDLObjectName::IsFullyQualifiedName(synonym)) {
     ZETASQL_RETURN_IF_ERROR(AlterInNamedSchema(
-        add_synonym.synonym(),
-        [&updated_table](NamedSchema::Editor* editor) -> absl::Status {
+        synonym, [&updated_table](NamedSchema::Editor* editor) -> absl::Status {
           editor->add_synonym(updated_table);
           return absl::OkStatus();
         }));
@@ -4495,10 +4515,14 @@ absl::Status SchemaUpdaterImpl::AlterTable(
         return error::RowDeletionPolicyDoesNotExist(table->Name());
       }
     }
+    case ddl::AlterTable::kRenameTo: {
+      const auto& rename_to = alter_table.rename_to();
+      return RenameTo(rename_to, table);
+    }
     case ddl::AlterTable::kAddSynonym: {
       const auto& add_synonym = alter_table.add_synonym();
       if (table->synonym().empty()) {
-        return AddSynonym(add_synonym, table);
+        return AddSynonym(add_synonym.synonym(), table);
       } else {
         return error::SynonymAlreadyExists(table->synonym(), table->Name());
       }
@@ -5178,6 +5202,10 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
         .enable_nulls_ordering = true,
         .enable_generated_column = true,
         .enable_column_default = true,
+        .enable_identity_column =
+            EmulatorFeatureFlags::instance().flags().enable_identity_columns,
+        .enable_default_sequence_kind =
+            EmulatorFeatureFlags::instance().flags().enable_identity_columns,
         .enable_jsonb_type = true,
         .enable_array_jsonb_type = true,
         .enable_create_view = true,

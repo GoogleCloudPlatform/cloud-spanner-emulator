@@ -17,7 +17,7 @@
 #include "parser/parse_node.h"
 
 extern void transformFromClause(ParseState *pstate, List *frmList);
-extern int setTargetTable_UNUSED_SPANGRES(ParseState *pstate, RangeVar *relation,
+extern int setTargetTable(ParseState *pstate, RangeVar *relation,
 			   bool inh, bool alsoSource, AclMode requiredPerms);
 extern bool interpretOidsOption(List *defList, bool allowOids);
 
@@ -42,7 +42,7 @@ extern List *transformDistinctClause(ParseState *pstate,
 						List **targetlist, List *sortClause, bool is_agg);
 extern List *transformDistinctOnClause(ParseState *pstate, List *distinctlist,
 						  List **targetlist, List *sortClause);
-extern void transformOnConflictArbiter_UNUSED_SPANGRES(ParseState *pstate,
+extern void transformOnConflictArbiter(ParseState *pstate,
 						   OnConflictClause *onConflictClause,
 						   List **arbiterExpr, Node **arbiterWhere,
 						   Oid *constraint);

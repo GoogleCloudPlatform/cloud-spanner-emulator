@@ -89,14 +89,14 @@ extern Oid	RangeVarGetAndCheckCreationNamespace(RangeVar *newRelation,
 												 LOCKMODE lockmode,
 												 Oid *existing_relation_id);
 extern void RangeVarAdjustRelationPersistence(RangeVar *newRelation, Oid nspid);
-extern Oid	RelnameGetRelid_UNUSED_SPANGRES(const char *relname);
+extern Oid	RelnameGetRelid(const char *relname);
 extern bool RelationIsVisible(Oid relid);
 
 extern Oid	TypenameGetTypid(const char *typname);
 extern Oid	TypenameGetTypidExtended(const char *typname, bool temp_ok);
-extern bool TypeIsVisible_UNUSED_SPANGRES(Oid typid);
+extern bool TypeIsVisible(Oid typid);
 
-extern FuncCandidateList FuncnameGetCandidates_UNUSED_SPANGRES(List *names,
+extern FuncCandidateList FuncnameGetCandidates(List *names,
 					  int nargs, List *argnames,
 					  bool expand_variadic,
 					  bool expand_defaults,
@@ -104,8 +104,8 @@ extern FuncCandidateList FuncnameGetCandidates_UNUSED_SPANGRES(List *names,
 					  bool missing_ok);
 extern bool FunctionIsVisible(Oid funcid);
 
-extern Oid	OpernameGetOprid_UNUSED_SPANGRES(List *names, Oid oprleft, Oid oprright);
-extern FuncCandidateList OpernameGetCandidates_UNUSED_SPANGRES(List *names, char oprkind,
+extern Oid	OpernameGetOprid(List *names, Oid oprleft, Oid oprright);
+extern FuncCandidateList OpernameGetCandidates(List *names, char oprkind,
  					  bool missing_schema_ok);
 extern bool OperatorIsVisible(Oid oprid);
 
@@ -141,7 +141,7 @@ extern void DeconstructQualifiedName(List *names,
 									 char **objname_p);
 extern Oid	LookupNamespaceNoError(const char *nspname);
 extern Oid	LookupExplicitNamespace(const char *nspname, bool missing_ok);
-extern Oid	get_namespace_oid_UNUSED_SPANGRES(const char *nspname, bool missing_ok);
+extern Oid	get_namespace_oid(const char *nspname, bool missing_ok);
 
 extern Oid	LookupCreationNamespace(const char *nspname);
 extern void CheckSetNamespace(Oid oldNspOid, Oid nspOid);
@@ -186,5 +186,10 @@ extern PGDLLIMPORT char *namespace_search_path;
 
 extern List *fetch_search_path(bool includeImplicit);
 extern int	fetch_search_path_array(Oid *sarray, int sarray_len);
+
+// SPANGRES BEGIN
+// Visible for testing
+Oid lookup_collation(const char *collname, Oid collnamespace, int32 encoding);
+// SPANGRES END
 
 #endif							/* NAMESPACE_H */

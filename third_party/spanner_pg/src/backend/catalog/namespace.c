@@ -60,6 +60,7 @@
 #include "utils/varlena.h"
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 
 /*
@@ -700,28 +701,17 @@ RangeVarAdjustRelationPersistence(RangeVar *newRelation, Oid nspid)
  * RelnameGetRelid
  *		Try to resolve an unqualified relation name.
  *		Returns OID if relation found in search path, else InvalidOid.
+ *
+ * SPANGRES: Attempts to resolve an unqualified relation name. PostgreSQL uses
+ * the active search path for this. We can supply some of that information by
+ * checking CatalogAdapter to see if it knows this table. This is often used in
+ * error reporting.
  */
 Oid
-RelnameGetRelid_UNUSED_SPANGRES(const char *relname)
+RelnameGetRelid(const char *relname)
 {
-	Oid			relid;
-	ListCell   *l;
-
-	recomputeNamespacePath();
-
-	foreach(l, activeSearchPath)
-	{
-		Oid			namespaceId = lfirst_oid(l);
-
-		relid = get_relname_relid(relname, namespaceId);
-		if (OidIsValid(relid))
-			return relid;
-	}
-
-	/* Not found in path */
-	return InvalidOid;
+	return GetOrGenerateOidFromTableNameC(relname);
 }
-
 
 /*
  * RelationIsVisible
@@ -836,67 +826,139 @@ TypenameGetTypidExtended(const char *typname, bool temp_ok)
  *		Determine whether a type (identified by OID) is visible in the
  *		current search path.  Visible means "would be found by searching
  *		for the unqualified type name".
+ *
+ * SPANGRES: Instead of checking namespaces and search path, just returns
+ * whether bootstrap_catalog knows about the type.
  */
 bool
-TypeIsVisible_UNUSED_SPANGRES(Oid typid)
+TypeIsVisible(Oid typid)
 {
-	HeapTuple	typtup;
-	Form_pg_type typform;
-	Oid			typnamespace;
-	bool		visible;
+	return GetTypeFromBootstrapCatalog(typid) != NULL;
+}
 
-	typtup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typid));
-	if (!HeapTupleIsValid(typtup))
-		elog(ERROR, "cache lookup failed for type %u", typid);
-	typform = (Form_pg_type) GETSTRUCT(typtup);
+/*
+ * SPANGRES: NamedCallMatchFound (modified version of MatchNamedCall)
+ *		Given a pg_proc oid and a call's list of argument names,
+ *		check whether the function could match the call.
+ *
+ * The call could match if all supplied argument names are accepted by
+ * the function, in positions after the last positional argument, and there
+ * are defaults for all unsupplied arguments.
+ *
+ * If include_out_arguments is true, we are treating OUT arguments as
+ * included in the argument list.  pronargs is the number of arguments
+ * we're considering (the length of either proargtypes or proallargtypes).
+ *
+ * The number of positional arguments is nargs - list_length(argnames).
+ * Note caller has already done basic checks on argument count.
+ *
+ * On match, return true and fill *argnumbers with a palloc'd array showing
+ * the mapping from call argument positions to actual function argument
+ * numbers.  Defaulted arguments are included in this map, at positions
+ * after the last supplied argument.
+ */
+bool
+NamedCallMatchFound(Oid proc_oid, int nargs, List *argnames,
+			   						bool include_out_arguments, int pronargs,
+			   						int **argnumbers)
+{
+	const FormData_pg_proc *procform = GetProcByOid(proc_oid);
+	int			numposargs = nargs - list_length(argnames);
+	int			pronallargs;
+	Oid		   *p_argtypes = NULL;
+	char	  **p_argnames = NULL;
+	char	   *p_argmodes = NULL;
+	bool		arggiven[FUNC_MAX_ARGS];
+	int			ap;				/* call args position */
+	int			pp;				/* proargs position */
+	ListCell   *lc;
 
-	recomputeNamespacePath();
+	Assert(argnames != NIL);
+	Assert(numposargs >= 0);
+	Assert(nargs <= pronargs);
 
-	/*
-	 * Quick check: if it ain't in the path at all, it ain't visible. Items in
-	 * the system namespace are surely in the path and so we needn't even do
-	 * list_member_oid() for them.
-	 */
-	typnamespace = typform->typnamespace;
-	if (typnamespace != PG_CATALOG_NAMESPACE &&
-		!list_member_oid(activeSearchPath, typnamespace))
-		visible = false;
-	else
+	/* OK, let's extract the argument names and types */
+	pronallargs = GetFunctionArgInfo(
+		proc_oid, &p_argtypes, &p_argnames, &p_argmodes);
+
+	/* Ignore this function if its proargnames is null */
+	if (p_argnames == NULL)
+		return false;
+
+	Assert(p_argnames != NULL);
+
+	Assert(include_out_arguments ? (pronargs == pronallargs) : (pronargs <= pronallargs));
+
+	/* initialize state for matching */
+	*argnumbers = (int *) palloc(pronargs * sizeof(int));
+	memset(arggiven, false, pronargs * sizeof(bool));
+
+	/* there are numposargs positional args before the named args */
+	for (ap = 0; ap < numposargs; ap++)
 	{
-		/*
-		 * If it is in the path, it might still not be visible; it could be
-		 * hidden by another type of the same name earlier in the path. So we
-		 * must do a slow check for conflicting types.
-		 */
-		char	   *typname = NameStr(typform->typname);
-		ListCell   *l;
+		(*argnumbers)[ap] = ap;
+		arggiven[ap] = true;
+	}
 
-		visible = false;
-		foreach(l, activeSearchPath)
+	/* now examine the named args */
+	foreach(lc, argnames)
+	{
+		char	   *argname = (char *) lfirst(lc);
+		bool		found;
+		int			i;
+
+		pp = 0;
+		found = false;
+		for (i = 0; i < pronallargs; i++)
 		{
-			Oid			namespaceId = lfirst_oid(l);
+			/* consider only input params, except with include_out_arguments */
+			if (!include_out_arguments &&
+				p_argmodes &&
+				(p_argmodes[i] != FUNC_PARAM_IN &&
+				 p_argmodes[i] != FUNC_PARAM_INOUT &&
+				 p_argmodes[i] != FUNC_PARAM_VARIADIC))
+				continue;
+			if (p_argnames[i] && strcmp(p_argnames[i], argname) == 0)
+			{
+				/* fail if argname matches a positional argument */
+				if (arggiven[pp])
+					return false;
+				arggiven[pp] = true;
+				(*argnumbers)[ap] = pp;
+				found = true;
+				break;
+			}
+			/* increase pp only for considered parameters */
+			pp++;
+		}
+		/* if name isn't in proargnames, fail */
+		if (!found)
+			return false;
+		ap++;
+	}
 
-			if (namespaceId == typnamespace)
-			{
-				/* Found it first in path */
-				visible = true;
-				break;
-			}
-			if (SearchSysCacheExists2(TYPENAMENSP,
-									  PointerGetDatum(typname),
-									  ObjectIdGetDatum(namespaceId)))
-			{
-				/* Found something else first in path */
-				break;
-			}
+	Assert(ap == nargs);		/* processed all actual parameters */
+
+	/* Check for default arguments */
+	if (nargs < pronargs)
+	{
+		int			first_arg_with_default = pronargs - procform->pronargdefaults;
+
+		for (pp = numposargs; pp < pronargs; pp++)
+		{
+			if (arggiven[pp])
+				continue;
+			/* fail if arg not given and no default available */
+			if (pp < first_arg_with_default)
+				return false;
+			(*argnumbers)[ap++] = pp;
 		}
 	}
 
-	ReleaseSysCache(typtup);
+	Assert(ap == pronargs);		/* processed all function parameters */
 
-	return visible;
+	return true;
 }
-
 
 /*
  * FuncnameGetCandidates
@@ -971,17 +1033,17 @@ TypeIsVisible_UNUSED_SPANGRES(Oid typid)
  * candidate is found for other reasons.
  */
 FuncCandidateList
-FuncnameGetCandidates_UNUSED_SPANGRES(List *names, int nargs, List *argnames,
+FuncnameGetCandidates(List *names, int nargs, List *argnames,
 					  bool expand_variadic, bool expand_defaults,
 					  bool include_out_arguments, bool missing_ok)
 {
 	FuncCandidateList resultList = NULL;
 	bool		any_special = false;
-	char	   *schemaname;
-	char	   *funcname;
-	Oid			namespaceId;
-	CatCList   *catlist;
-	int			i;
+	// SPANGRES BEGIN
+	char	   *schemaname = NULL;
+	char	   *funcname = NULL;
+	Oid			namespaceId = InvalidOid;
+	// SPANGRES END
 
 	/* check for caller error */
 	Assert(nargs >= 0 || !(expand_variadic | expand_defaults));
@@ -989,61 +1051,47 @@ FuncnameGetCandidates_UNUSED_SPANGRES(List *names, int nargs, List *argnames,
 	/* deconstruct the name list */
 	DeconstructQualifiedName(names, &schemaname, &funcname);
 
-	if (schemaname)
-	{
-		/* use exact schema given */
-		namespaceId = LookupExplicitNamespace(schemaname, missing_ok);
+	if (schemaname) {
+		// SPANGRES BEGIN
+		namespaceId = GetNamespaceByNameFromBootstrapCatalog(schemaname);
+		// SPANGRES END
 		if (!OidIsValid(namespaceId))
 			return NULL;
+	} else {
+		// SPANGRES BEGIN
+		/*
+		 * Spangres does not support search path. If a schemaname is not
+		 * provided, use pg_catalog by default.
+		 * TODO: Add support for search path.
+		 */
+		namespaceId = GetNamespaceByNameFromBootstrapCatalog("pg_catalog");
+		// SPANGRES END
 	}
-	else
-	{
-		/* flag to indicate we need namespace search */
-		namespaceId = InvalidOid;
-		recomputeNamespacePath();
-	}
 
-	/* Search syscache by name only */
-	catlist = SearchSysCacheList1(PROCNAMEARGSNSP, CStringGetDatum(funcname));
+	// SPANGRES BEGIN
+	/* Search bootstrap and user catalogs by proc name only */
+	const FormData_pg_proc** proc_list;
+	size_t proc_count;
+	GetProcsByName(funcname, &proc_list, &proc_count);
 
-	for (i = 0; i < catlist->n_members; i++)
-	{
-		HeapTuple	proctup = &catlist->members[i]->tuple;
-		Form_pg_proc procform = (Form_pg_proc) GETSTRUCT(proctup);
-		Oid		   *proargtypes = procform->proargtypes.values;
-		int			pronargs = procform->pronargs;
-		int			effective_nargs;
-		int			pathpos = 0;
-		bool		variadic;
-		bool		use_defaults;
-		Oid			va_elem_type;
-		int		   *argnumbers = NULL;
-		FuncCandidateList newResult;
+	for (int proc_index = 0; proc_index < proc_count; ++proc_index) {
+		const FormData_pg_proc* procform = proc_list[proc_index];
 
-		if (OidIsValid(namespaceId))
-		{
-			/* Consider only procs in specified namespace */
-			if (procform->pronamespace != namespaceId)
-				continue;
-		}
-		else
-		{
-			/*
-			 * Consider only procs that are in the search path and are not in
-			 * the temp namespace.
-			 */
-			ListCell   *nsp;
+		int pronargs = procform->pronargs;
+		bool variadic = false;
+		bool use_defaults = false;
+		Oid va_elem_type = InvalidOid;
+		int	*argnumbers = NULL;
 
-			foreach(nsp, activeSearchPath)
-			{
-				if (procform->pronamespace == lfirst_oid(nsp) &&
-					procform->pronamespace != myTempNamespace)
-					break;
-				pathpos++;
-			}
-			if (nsp == NULL)
-				continue;		/* proc is not in search path */
-		}
+		/* 
+		 * Here PostgreSQL would check search path if a namespace was not
+		 * provided. Spangres assumes that a namespace is provided or defaults
+		 * to pg_catalog.
+		 * TODO: Add support for search path.
+		 */
+		if (procform->pronamespace != namespaceId)
+			continue;
+		// SPANGRES END
 
 		/*
 		 * If we are asked to match to OUT arguments, then use the
@@ -1053,25 +1101,16 @@ FuncnameGetCandidates_UNUSED_SPANGRES(List *names, int nargs, List *argnames,
 		 */
 		if (include_out_arguments)
 		{
-			Datum		proallargtypes;
-			bool		isNull;
-
-			proallargtypes = SysCacheGetAttr(PROCNAMEARGSNSP, proctup,
-											 Anum_pg_proc_proallargtypes,
-											 &isNull);
-			if (!isNull)
-			{
-				ArrayType  *arr = DatumGetArrayTypeP(proallargtypes);
-
-				pronargs = ARR_DIMS(arr)[0];
-				if (ARR_NDIM(arr) != 1 ||
-					pronargs < 0 ||
-					ARR_HASNULL(arr) ||
-					ARR_ELEMTYPE(arr) != OIDOID)
-					elog(ERROR, "proallargtypes is not a 1-D Oid array or it contains nulls");
-				Assert(pronargs >= procform->pronargs);
-				proargtypes = (Oid *) ARR_DATA_PTR(arr);
+			// SPANGRES BEGIN
+			/*
+			 * SPANGRES does not have support for OUT arguments.
+			 * TODO: b/329162323 - add back support for OUT arguments
+			 */
+			if (procform->prorettype != VOIDOID) {
+				ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								errmsg("Procedures with output arguments are not supported")));
 			}
+			// SPANGRES END
 		}
 
 		if (argnames != NIL)
@@ -1108,10 +1147,13 @@ FuncnameGetCandidates_UNUSED_SPANGRES(List *names, int nargs, List *argnames,
 				continue;
 
 			/* Check for argument name match, generate positional mapping */
-			if (!MatchNamedCall(proctup, nargs, argnames,
-								include_out_arguments, pronargs,
-								&argnumbers))
+			// SPANGRES BEGIN
+			// Replace MatchNamedCall with NamedCallMatchFound which is a shim with a
+			// different signature to avoid using HeapTuple.
+			if (!NamedCallMatchFound(procform->oid, nargs, argnames,
+															 include_out_arguments, pronargs, &argnumbers))
 				continue;
+			// SPANGRES END
 
 			/* Named argument matching is always "special" */
 			any_special = true;
@@ -1162,11 +1204,13 @@ FuncnameGetCandidates_UNUSED_SPANGRES(List *names, int nargs, List *argnames,
 		 * masked by an earlier result, but really that's a pretty infrequent
 		 * case so it's not worth worrying about.
 		 */
-		effective_nargs = Max(pronargs, nargs);
-		newResult = (FuncCandidateList)
+		// SPANGRES BEGIN
+		int effective_nargs = Max(pronargs, nargs);
+		FuncCandidateList newResult = (FuncCandidateList)
 			palloc(offsetof(struct _FuncCandidateList, args) +
 				   effective_nargs * sizeof(Oid));
-		newResult->pathpos = pathpos;
+		newResult->pathpos = 0;	// Search path is not supported.
+		// SPANGRES END
 		newResult->oid = procform->oid;
 		newResult->nominalnargs = pronargs;
 		newResult->nargs = effective_nargs;
@@ -1177,21 +1221,27 @@ FuncnameGetCandidates_UNUSED_SPANGRES(List *names, int nargs, List *argnames,
 			int			i;
 
 			for (i = 0; i < pronargs; i++)
-				newResult->args[i] = proargtypes[argnumbers[i]];
+				// SPANGRES BEGIN
+				newResult->args[i] = procform->proargtypes.values[argnumbers[i]];
+				// SPANGRES END
 		}
 		else
 		{
-			/* Simple positional case, just copy proargtypes as-is */
-			memcpy(newResult->args, proargtypes, pronargs * sizeof(Oid));
+			// SPANGRES BEGIN
+			memcpy(newResult->args, procform->proargtypes.values,
+						pronargs * sizeof(Oid));
+			// SPANGRES END
 		}
 		if (variadic)
 		{
-			int			i;
-
 			newResult->nvargs = effective_nargs - pronargs + 1;
 			/* Expand variadic argument into N copies of element type */
-			for (i = pronargs - 1; i < effective_nargs; i++)
-				newResult->args[i] = va_elem_type;
+			// SPANGRES BEGIN
+			for (int arg_index = pronargs - 1; arg_index < effective_nargs;
+					 ++arg_index) {
+				newResult->args[arg_index] = va_elem_type;
+			}
+			// SPANGRES END
 		}
 		else
 			newResult->nvargs = 0;
@@ -1217,36 +1267,24 @@ FuncnameGetCandidates_UNUSED_SPANGRES(List *names, int nargs, List *argnames,
 			 * previous candidate is a special match, we can't assume that
 			 * conflicts are adjacent.
 			 *
+			 * SPANGRES: Does not have this ordering guarantee, so we must always
+			 * scan the list.
+			 *
 			 * We ignore defaulted arguments in deciding what is a match.
 			 */
 			FuncCandidateList prevResult;
 
-			if (catlist->ordered && !any_special)
-			{
-				/* ndargs must be 0 if !any_special */
-				if (effective_nargs == resultList->nargs &&
-					memcmp(newResult->args,
-						   resultList->args,
-						   effective_nargs * sizeof(Oid)) == 0)
-					prevResult = resultList;
-				else
-					prevResult = NULL;
-			}
-			else
-			{
-				int			cmp_nargs = newResult->nargs - newResult->ndargs;
+			// SPANGRES BEGIN
+			int cmp_nargs = newResult->nargs - newResult->ndargs;
 
-				for (prevResult = resultList;
-					 prevResult;
-					 prevResult = prevResult->next)
-				{
-					if (cmp_nargs == prevResult->nargs - prevResult->ndargs &&
-						memcmp(newResult->args,
-							   prevResult->args,
-							   cmp_nargs * sizeof(Oid)) == 0)
-						break;
+			for (prevResult = resultList; prevResult; prevResult = prevResult->next) {
+				if (cmp_nargs == prevResult->nargs - prevResult->ndargs &&
+						memcmp(newResult->args, prevResult->args,
+									 cmp_nargs * sizeof(Oid)) == 0) {
+					break;
 				}
 			}
+			// SPANGRES END
 
 			if (prevResult)
 			{
@@ -1259,14 +1297,14 @@ FuncnameGetCandidates_UNUSED_SPANGRES(List *names, int nargs, List *argnames,
 				 */
 				int			preference;
 
-				if (pathpos != prevResult->pathpos)
-				{
-					/*
-					 * Prefer the one that's earlier in the search path.
-					 */
-					preference = pathpos - prevResult->pathpos;
-				}
-				else if (variadic && prevResult->nvargs == 0)
+				// SPANGRES BEGIN
+				/*
+				 * Spangres note: here PostgreSQL considers search path order first,
+				 * which we don't support.
+				 * TODO: Add support for qualified names and search path.
+				 */
+				if (variadic && prevResult->nvargs == 0)
+				// SPANGRES END
 				{
 					/*
 					 * With variadic functions we could have, for example,
@@ -1309,12 +1347,11 @@ FuncnameGetCandidates_UNUSED_SPANGRES(List *names, int nargs, List *argnames,
 					{
 						FuncCandidateList prevPrevResult;
 
-						for (prevPrevResult = resultList;
-							 prevPrevResult;
-							 prevPrevResult = prevPrevResult->next)
-						{
-							if (prevResult == prevPrevResult->next)
-							{
+						// SPANGRES BEGIN
+						for (prevPrevResult = resultList; prevPrevResult;
+								 prevPrevResult = prevPrevResult->next) {
+							if (prevResult == prevPrevResult->next) {
+						// SPANGRES END
 								prevPrevResult->next = prevResult->next;
 								break;
 							}
@@ -1341,7 +1378,9 @@ FuncnameGetCandidates_UNUSED_SPANGRES(List *names, int nargs, List *argnames,
 		resultList = newResult;
 	}
 
-	ReleaseSysCacheList(catlist);
+	// SPANGRES BEGIN
+	// ReleaseSysCacheList(catlist);
+	// SPANGRES END
 
 	return resultList;
 }
@@ -1547,90 +1586,67 @@ FunctionIsVisible(Oid funcid)
  * If the operator name is not schema-qualified, it is sought in the current
  * namespace search path.  If the name is schema-qualified and the given
  * schema does not exist, InvalidOid is returned.
+ *
+ * SPANGRES: Use bootstrap catalog to look up the operator and ignores
+ * namespacing.
  */
 Oid
-OpernameGetOprid_UNUSED_SPANGRES(List *names, Oid oprleft, Oid oprright)
+OpernameGetOprid(List *names, Oid oprleft, Oid oprright)
 {
+	// SPANGRES BEGIN
 	char	   *schemaname;
 	char	   *opername;
-	CatCList   *catlist;
-	ListCell   *l;
+  Oid			 namespaceId;
 
 	/* deconstruct the name list */
 	DeconstructQualifiedName(names, &schemaname, &opername);
 
-	if (schemaname)
-	{
-		/* search only in exact schema given */
-		Oid			namespaceId;
-
-		namespaceId = LookupExplicitNamespace(schemaname, true);
-		if (OidIsValid(namespaceId))
-		{
-			HeapTuple	opertup;
-
-			opertup = SearchSysCache4(OPERNAMENSP,
-									  CStringGetDatum(opername),
-									  ObjectIdGetDatum(oprleft),
-									  ObjectIdGetDatum(oprright),
-									  ObjectIdGetDatum(namespaceId));
-			if (HeapTupleIsValid(opertup))
-			{
-				Form_pg_operator operclass = (Form_pg_operator) GETSTRUCT(opertup);
-				Oid			result = operclass->oid;
-
-				ReleaseSysCache(opertup);
-				return result;
-			}
-		}
-
-		return InvalidOid;
-	}
-
-	/* Search syscache by name and argument types */
-	catlist = SearchSysCacheList3(OPERNAMENSP,
-								  CStringGetDatum(opername),
-								  ObjectIdGetDatum(oprleft),
-								  ObjectIdGetDatum(oprright));
-
-	if (catlist->n_members == 0)
-	{
-		/* no hope, fall out early */
-		ReleaseSysCacheList(catlist);
-		return InvalidOid;
-	}
+  if (schemaname) {
+    namespaceId = GetNamespaceByNameFromBootstrapCatalog(schemaname);
+    if (!OidIsValid(namespaceId))
+      return InvalidOid;
+  } else {
+    /*
+     * Spangres does not support search path. If a schemaname is not
+     * provided, use pg_catalog by default.
+     * TODO: Add support for search path.
+     */
+    namespaceId = GetNamespaceByNameFromBootstrapCatalog("pg_catalog");
+  }
 
 	/*
-	 * We have to find the list member that is first in the search path, if
-	 * there's more than one.  This doubly-nested loop looks ugly, but in
-	 * practice there should usually be few catlist members.
+	 * Get the list of Operator Oids with this name from bootstrap catalog and
+	 * iterate through it to find one with exact operator matches.
 	 */
-	recomputeNamespacePath();
+	const Oid* oid_list = NULL;
+	size_t oid_list_size = 0;
+	GetOperatorsByNameFromBootstrapCatalog(opername, &oid_list, &oid_list_size);
 
-	foreach(l, activeSearchPath)
-	{
-		Oid			namespaceId = lfirst_oid(l);
-		int			i;
+	if (oid_list_size == 0) {
+		/* no hope, fall out early */
+		return InvalidOid;
+	}
 
-		if (namespaceId == myTempNamespace)
-			continue;			/* do not look in temp namespace */
+	/* Look through the list and see if any operator matches our args exactly */
+	for (int i = 0; i < oid_list_size; i++) {
+		const FormData_pg_operator* operform =
+				GetOperatorFromBootstrapCatalog(oid_list[i]);
 
-		for (i = 0; i < catlist->n_members; i++)
-		{
-			HeapTuple	opertup = &catlist->members[i]->tuple;
-			Form_pg_operator operform = (Form_pg_operator) GETSTRUCT(opertup);
+    /*
+		 * Ignore operators with a mismatched namespace. Here Spangres ignores
+		 * search path in considering which operators to return. This would be
+		 * relevant if search path determined which of multiple matching operators
+		 * to return.
+		 * TODO: Add support for search path.
+		 */
+    if (operform->oprnamespace != namespaceId) continue;
 
-			if (operform->oprnamespace == namespaceId)
-			{
-				Oid			result = operform->oid;
-
-				ReleaseSysCacheList(catlist);
-				return result;
-			}
+		if (operform->oprleft == oprleft && operform->oprright == oprright) {
+			return oid_list[i];
 		}
 	}
 
-	ReleaseSysCacheList(catlist);
+	// SPANGRES END
 	return InvalidOid;
 }
 
@@ -1652,7 +1668,7 @@ OpernameGetOprid_UNUSED_SPANGRES(List *names, Oid oprleft, Oid oprright)
  * InvalidOid for a prefix oprkind.  nargs is always 2, too.
  */
 FuncCandidateList
-OpernameGetCandidates_UNUSED_SPANGRES(List *names, char oprkind, bool missing_schema_ok)
+OpernameGetCandidates(List *names, char oprkind, bool missing_schema_ok)
 {
 	FuncCandidateList resultList = NULL;
 	char	   *resultSpace = NULL;
@@ -1660,28 +1676,34 @@ OpernameGetCandidates_UNUSED_SPANGRES(List *names, char oprkind, bool missing_sc
 	char	   *schemaname;
 	char	   *opername;
 	Oid			namespaceId;
-	CatCList   *catlist;
-	int			i;
+	// SPANGRES BEGIN
+	// Unused variables
+	// CatCList   *catlist;
+	// int			i;
+	// SPANGRES END
 
 	/* deconstruct the name list */
 	DeconstructQualifiedName(names, &schemaname, &opername);
 
-	if (schemaname)
-	{
-		/* use exact schema given */
-		namespaceId = LookupExplicitNamespace(schemaname, missing_schema_ok);
-		if (missing_schema_ok && !OidIsValid(namespaceId))
-			return NULL;
-	}
-	else
-	{
-		/* flag to indicate we need namespace search */
-		namespaceId = InvalidOid;
-		recomputeNamespacePath();
-	}
+	// SPANGRES BEGIN
+  if (schemaname) {
+    namespaceId = GetNamespaceByNameFromBootstrapCatalog(schemaname);
+    if (!OidIsValid(namespaceId))
+      return NULL;
+  } else {
+    /*
+     * Spangres does not support search path. If a schemaname is not
+     * provided, use pg_catalog by default.
+     * TODO: Add support for search path.
+     */
+    namespaceId = GetNamespaceByNameFromBootstrapCatalog("pg_catalog");
+  }
 
-	/* Search syscache by name only */
-	catlist = SearchSysCacheList1(OPERNAMENSP, CStringGetDatum(opername));
+	/* Get the Oids of Operators with this name */
+	const Oid* oid_list = NULL;
+	size_t oid_list_size = 0;
+	GetOperatorsByNameFromBootstrapCatalog(opername, &oid_list, &oid_list_size);
+	// SPANGRES END
 
 	/*
 	 * In typical scenarios, most if not all of the operators found by the
@@ -1695,92 +1717,33 @@ OpernameGetCandidates_UNUSED_SPANGRES(List *names, char oprkind, bool missing_sc
 #define SPACE_PER_OP MAXALIGN(offsetof(struct _FuncCandidateList, args) + \
 							  2 * sizeof(Oid))
 
-	if (catlist->n_members > 0)
-		resultSpace = palloc(catlist->n_members * SPACE_PER_OP);
+	// SPANGRES BEGIN
+	if (oid_list_size > 0) {
+		resultSpace = palloc(oid_list_size * SPACE_PER_OP);
+	}
 
-	for (i = 0; i < catlist->n_members; i++)
-	{
-		HeapTuple	opertup = &catlist->members[i]->tuple;
-		Form_pg_operator operform = (Form_pg_operator) GETSTRUCT(opertup);
-		int			pathpos = 0;
+	for (int i = 0; i < oid_list_size; i++) {
+		const FormData_pg_operator* operform =
+				GetOperatorFromBootstrapCatalog(oid_list[i]);
+		int pathpos = 0;
 		FuncCandidateList newResult;
 
 		/* Ignore operators of wrong kind, if specific kind requested */
-		if (oprkind && operform->oprkind != oprkind)
-			continue;
+		if (oprkind && operform->oprkind != oprkind) continue;
 
-		if (OidIsValid(namespaceId))
-		{
-			/* Consider only opers in specified namespace */
-			if (operform->oprnamespace != namespaceId)
-				continue;
-			/* No need to check args, they must all be different */
-		}
-		else
-		{
-			/*
-			 * Consider only opers that are in the search path and are not in
-			 * the temp namespace.
-			 */
-			ListCell   *nsp;
+    /*
+		 * Ignore operators with a mismatched namespace. Here Spangres ignores
+		 * search path in considering which operators to return.
+		 * TODO: Add support for search path.
+		 */
+    if (operform->oprnamespace != namespaceId) continue;
 
-			foreach(nsp, activeSearchPath)
-			{
-				if (operform->oprnamespace == lfirst_oid(nsp) &&
-					operform->oprnamespace != myTempNamespace)
-					break;
-				pathpos++;
-			}
-			if (nsp == NULL)
-				continue;		/* oper is not in search path */
-
-			/*
-			 * Okay, it's in the search path, but does it have the same
-			 * arguments as something we already accepted?	If so, keep only
-			 * the one that appears earlier in the search path.
-			 *
-			 * If we have an ordered list from SearchSysCacheList (the normal
-			 * case), then any conflicting oper must immediately adjoin this
-			 * one in the list, so we only need to look at the newest result
-			 * item.  If we have an unordered list, we have to scan the whole
-			 * result list.
-			 */
-			if (resultList)
-			{
-				FuncCandidateList prevResult;
-
-				if (catlist->ordered)
-				{
-					if (operform->oprleft == resultList->args[0] &&
-						operform->oprright == resultList->args[1])
-						prevResult = resultList;
-					else
-						prevResult = NULL;
-				}
-				else
-				{
-					for (prevResult = resultList;
-						 prevResult;
-						 prevResult = prevResult->next)
-					{
-						if (operform->oprleft == prevResult->args[0] &&
-							operform->oprright == prevResult->args[1])
-							break;
-					}
-				}
-				if (prevResult)
-				{
-					/* We have a match with a previous result */
-					Assert(pathpos != prevResult->pathpos);
-					if (pathpos > prevResult->pathpos)
-						continue;	/* keep previous result */
-					/* replace previous result */
-					prevResult->pathpos = pathpos;
-					prevResult->oid = operform->oid;
-					continue;	/* args are same, of course */
-				}
-			}
-		}
+		/*
+		 * Here Spangres ignores a check for operators with the same signatures. We
+		 * will need a check here if we later support user-defined that can overload
+		 * system operators.
+		 */
+	// SPANGRES END
 
 		/*
 		 * Okay to add it to result list
@@ -1789,8 +1752,9 @@ OpernameGetCandidates_UNUSED_SPANGRES(List *names, char oprkind, bool missing_sc
 		nextResult += SPACE_PER_OP;
 
 		newResult->pathpos = pathpos;
-		newResult->oid = operform->oid;
-		newResult->nominalnargs = 2;
+		// SPANGRES BEGIN
+		newResult->oid = oid_list[i];
+		// SPANGRES END
 		newResult->nargs = 2;
 		newResult->nvargs = 0;
 		newResult->ndargs = 0;
@@ -1801,7 +1765,9 @@ OpernameGetCandidates_UNUSED_SPANGRES(List *names, char oprkind, bool missing_sc
 		resultList = newResult;
 	}
 
-	ReleaseSysCacheList(catlist);
+	// SPANGRES BEGIN
+	// ReleaseSysCacheList(catlist);
+	// SPANGRES END
 
 	return resultList;
 }
@@ -2027,48 +1993,22 @@ OpfamilyIsVisible(Oid opfid)
  * lookup_collation
  *		If there's a collation of the given name/namespace, and it works
  *		with the given encoding, return its OID.  Else return InvalidOid.
+ *
+ * SPANGRES: The spangres version enforces that the collation
+ * namespace is pg_catalog and throws an error if it is not. If the collation
+ * namespace is pg_catalog but the collation itself is not found spangres will
+ * return InvalidOid.
  */
-static Oid
-lookup_collation_UNUSED_SPANGRES(const char *collname, Oid collnamespace, int32 encoding)
+Oid
+lookup_collation(const char *collname, Oid collnamespace, int32 encoding)
 {
-	Oid			collid;
-	HeapTuple	colltup;
-	Form_pg_collation collform;
-
-	/* Check for encoding-specific entry (exact match) */
-	collid = GetSysCacheOid3(COLLNAMEENCNSP, Anum_pg_collation_oid,
-							 PointerGetDatum(collname),
-							 Int32GetDatum(encoding),
-							 ObjectIdGetDatum(collnamespace));
-	if (OidIsValid(collid))
-		return collid;
-
-	/*
-	 * Check for any-encoding entry.  This takes a bit more work: while libc
-	 * collations with collencoding = -1 do work with all encodings, ICU
-	 * collations only work with certain encodings, so we have to check that
-	 * aspect before deciding it's a match.
-	 */
-	colltup = SearchSysCache3(COLLNAMEENCNSP,
-							  PointerGetDatum(collname),
-							  Int32GetDatum(-1),
-							  ObjectIdGetDatum(collnamespace));
-	if (!HeapTupleIsValid(colltup))
-		return InvalidOid;
-	collform = (Form_pg_collation) GETSTRUCT(colltup);
-	if (collform->collprovider == COLLPROVIDER_ICU)
-	{
-		if (is_encoding_supported_by_icu(encoding))
-			collid = collform->oid;
-		else
-			collid = InvalidOid;
+	// SPANGRES BEGIN
+	if(collnamespace != PG_CATALOG_NAMESPACE) {
+		ereport(ERROR, errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("Collations outside of pg_catalog are not supported"));
 	}
-	else
-	{
-		collid = collform->oid;
-	}
-	ReleaseSysCache(colltup);
-	return collid;
+	return GetCollationOidByNameFromBootstrapCatalog(collname);
+	// SPANGRES END
 }
 
 /*
@@ -2964,36 +2904,31 @@ LookupNamespaceNoError(const char *nspname)
  *		and verify we have USAGE (lookup) rights in it.
  *
  * Returns the namespace OID
+ *
+ * SPANGRES: Skips ACL checks and does not support pg_temp.
  */
 Oid
-LookupExplicitNamespace_UNUSED_SPANGRES(const char *nspname, bool missing_ok)
+LookupExplicitNamespace(const char *nspname, bool missing_ok)
 {
 	Oid			namespaceId;
-	AclResult	aclresult;
+	// SPANGRES BEGIN
+	// AclResult	aclresult;
+	// SPANGRES END
 
 	/* check for pg_temp alias */
 	if (strcmp(nspname, "pg_temp") == 0)
 	{
-		if (OidIsValid(myTempNamespace))
-			return myTempNamespace;
-
-		/*
-		 * Since this is used only for looking up existing objects, there is
-		 * no point in trying to initialize the temp namespace here; and doing
-		 * so might create problems for some callers --- just fall through.
-		 */
+		// SPANGRES BEGIN
+		ereport(ERROR, errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("pg_temp namespace is not supported"));
+		// SPANGRES END
 	}
 
 	namespaceId = get_namespace_oid(nspname, missing_ok);
 	if (missing_ok && !OidIsValid(namespaceId))
 		return InvalidOid;
-
-	aclresult = pg_namespace_aclcheck(namespaceId, GetUserId(), ACL_USAGE);
-	if (aclresult != ACLCHECK_OK)
-		aclcheck_error(aclresult, OBJECT_SCHEMA,
-					   nspname);
-	/* Schema search hook for this lookup */
-	InvokeNamespaceSearchHook(namespaceId, true);
+	
+	// SPANGRES: Skip ACL checks.
 
 	return namespaceId;
 }
@@ -3114,20 +3049,23 @@ QualifiedNameGetCreationNamespace(List *names, char **objname_p)
  *
  * If missing_ok is false, throw an error if namespace name not found.  If
  * true, just return InvalidOid.
+ *
+ * SPANGRES: CatalogAdapter must have been already initialized on this thread.
  */
 Oid
-get_namespace_oid_UNUSED_SPANGRES(const char *nspname, bool missing_ok)
+get_namespace_oid(const char *nspname, bool missing_ok)
 {
-	Oid			oid;
-
-	oid = GetSysCacheOid1(NAMESPACENAME, Anum_pg_namespace_oid,
-						  CStringGetDatum(nspname));
-	if (!OidIsValid(oid) && !missing_ok)
+	// SPANGRES BEGIN
+	Oid oid = GetOidFromNamespaceNameC(nspname);
+	if (oid != InvalidOid) return oid;
+	if (missing_ok) {
+		return InvalidOid;
+	} else {
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_SCHEMA),
 				 errmsg("schema \"%s\" does not exist", nspname)));
-
-	return oid;
+	}
+	// SPANGRES END
 }
 
 /*
@@ -3676,16 +3614,18 @@ PopOverrideSearchPath(void)
  *
  * Note that this will only find collations that work with the current
  * database's encoding.
+ *
+ * SPANGRES: In case no schema name is provided, Spangres will assume that the
+ * schema is pg_catalog.
  */
 Oid
-get_collation_oid_UNUSED_SPANGRES(List *name, bool missing_ok)
+get_collation_oid(List *name, bool missing_ok)
 {
-	char	   *schemaname;
-	char	   *collation_name;
-	int32		dbencoding = GetDatabaseEncoding();
-	Oid			namespaceId;
-	Oid			colloid;
-	ListCell   *l;
+	char *schemaname;
+	char *collation_name;
+	int32 dbencoding = GetDatabaseEncoding();
+	Oid namespaceId;
+	Oid colloid;
 
 	/* deconstruct the name list */
 	DeconstructQualifiedName(name, &schemaname, &collation_name);
@@ -3700,31 +3640,22 @@ get_collation_oid_UNUSED_SPANGRES(List *name, bool missing_ok)
 		colloid = lookup_collation(collation_name, namespaceId, dbencoding);
 		if (OidIsValid(colloid))
 			return colloid;
-	}
-	else
-	{
-		/* search for it in search path */
-		recomputeNamespacePath();
-
-		foreach(l, activeSearchPath)
-		{
-			namespaceId = lfirst_oid(l);
-
-			if (namespaceId == myTempNamespace)
-				continue;		/* do not look in temp namespace */
-
-			colloid = lookup_collation(collation_name, namespaceId, dbencoding);
-			if (OidIsValid(colloid))
-				return colloid;
-		}
-	}
+	} else {
+		// SPANGRES BEGIN
+		namespaceId = LookupExplicitNamespace("pg_catalog", missing_ok);
+		colloid = lookup_collation(collation_name, namespaceId, dbencoding);
+		if (OidIsValid(colloid))
+			return colloid;
+	 }
+		// SPANGRES END
 
 	/* Not found in path */
 	if (!missing_ok)
+		// SPANGRES BEGIN
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("collation \"%s\" for encoding \"%s\" does not exist",
-						NameListToString(name), GetDatabaseEncodingName())));
+				 errmsg("Collations are not supported")));
+		// SPANGRES END
 	return InvalidOid;
 }
 

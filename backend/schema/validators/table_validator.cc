@@ -439,8 +439,7 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
     return absl::OkStatus();
   }
 
-  // Name and ID should not change during cloning.
-  ZETASQL_RET_CHECK_EQ(table->Name(), old_table->Name());
+  // ID should not change during cloning, but the name can.
   ZETASQL_RET_CHECK_EQ(table->id(), old_table->id());
 
   if (table->is_public() && context->is_postgresql_dialect()) {

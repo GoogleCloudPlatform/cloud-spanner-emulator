@@ -1,0 +1,35 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE test_table(
+  id               INT64 NOT NULL,
+  string_array     ARRAY<STRING(30)>,
+  bytes_array      ARRAY<BYTES(MAX)>,
+  num_array        ARRAY<INT64>,
+  max_string_array ARRAY<STRING(MAX)>,
+  timestamp_array  ARRAY<TIMESTAMP>,
+  numeric_array    ARRAY<NUMERIC>,
+  json_array       ARRAY<JSON>,
+  date_array       ARRAY<DATE>,
+) PRIMARY KEY (id);
+CREATE TABLE vector_length_limits_table(
+  pk INT64 NOT NULL,
+  arr_double ARRAY<FLOAT64>(vector_length=>2),
+  arr_float ARRAY<FLOAT32>(vector_length=>2),
+) PRIMARY KEY (pk);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE test_table(
+  id               int8 NOT NULL PRIMARY KEY,
+  string_array     varchar(30)[],
+  bytes_array      bytea[],
+  num_array        int8[],
+  max_string_array text[],
+  timestamp_array  timestamptz[],
+  numeric_array    numeric[],
+  json_array       jsonb[],
+  date_array       date[]
+);
+CREATE TABLE vector_length_limits_table(
+  pk int8 NOT NULL PRIMARY KEY,
+  arr_double float8[] VECTOR LENGTH 2,
+  arr_float float4[] VECTOR LENGTH 2
+);

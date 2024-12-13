@@ -87,7 +87,6 @@ cc_library(
     ],
     deps = [
         "//third_party/spanner_pg/shims:catalog_shim_header",
-        "//third_party/spanner_pg/shims:syscache_shim",
         "//third_party/spanner_pg/src/backend/access/brin",
         "//third_party/spanner_pg/src/backend/access/common",
         "//third_party/spanner_pg/src/backend/access/gin",

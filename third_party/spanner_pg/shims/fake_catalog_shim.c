@@ -52,148 +52,7 @@ int scanRTEForColumn(ParseState* pstate, RangeTblEntry* rte, Alias* eref,
   abort();
 }
 
-bool get_rte_attribute_is_dropped(RangeTblEntry* rte,
-                                  AttrNumber attnum) {
-  abort();
-}
-
-Oid getBaseTypeAndTypmod(Oid typid, int32_t *typmod) {
-  abort();
-}
-
-void setup_parser_errposition_callback(ParseCallbackState* pcbstate,
-                                       ParseState* pstate,
-                                       int location) {
-  abort();
-}
-
-void cancel_parser_errposition_callback(ParseCallbackState* pcbstate) {
-  abort();
-}
-
-CoercionPathType find_coercion_pathway(Oid targetTypeId,
-                                       Oid sourceTypeId,
-                                       CoercionContext ccontext,
-                                       Oid* funcid) {
-  abort();
-}
-
-bool can_coerce_type(int nargs, const Oid* input_typeids,
-                     const Oid* target_typeids,
-                     CoercionContext ccontext) {
-  abort();
-}
-
-char* format_type_extended(Oid type_oid, int32_t typemod, bits16 flags)
-{
-  abort();
-}
-
-bool TypeIsVisible(Oid typid) {
-  abort();
-}
-
-Type typeidType(Oid id) {
-  abort();
-}
-
-Type LookupTypeNameExtended(ParseState* pstate,
-                            const TypeName* typeName, int32_t* typmod_p,
-                            bool temp_ok, bool missing_ok) {
-  abort();
-}
-
-Node* build_coercion_expression(Node* node, CoercionPathType pathtype,
-                                Oid funcId, Oid targetTypeId,
-                                int32_t targetTypMod,
-                                CoercionContext ccontext,
-                                CoercionForm cformat, int location) {
-  abort();
-}
-
-Oid get_typcollation(Oid typid) {
-  abort();
-}
-
-char* get_attname(Oid relid, AttrNumber attnum, bool missing_ok) {
-  abort();
-}
-
-FuncCandidateList FuncnameGetCandidates(List* names, int nargs, List* argnames,
-                                        bool expand_variadic,
-                                        bool expand_defaults,
-                                        bool include_out_arguments,
-                                        bool missing_ok) {
-  abort();
-}
-
-bool NamedCallMatchFound(Oid proc_oid, int nargs, List *argnames,
-                         bool include_out_arguments, int pronargs,
-                         int **argnumbers) {
-  abort();
-}
-
-void get_type_category_preferred(Oid typid, char* typcategory,
-                                 bool* typispreferred) {
-  abort();
-}
-
-void get_type_io_data(Oid typid,
-					  IOFuncSelector which_func,
-					  int16_t* typlen,
-					  bool* typbyval,
-					  char* typalign,
-					  char* typdelim,
-					  Oid* typioparam,
-					  Oid* func) {
-  abort();
-}
-
-FuncCandidateList OpernameGetCandidates(List* names, char oprkind,
-                                        bool missing_schema_ok) {
-  abort();
-}
-
-Oid OpernameGetOprid(List* names, Oid oprleft, Oid oprright) {
-  abort();
-}
-
-Operator oper(ParseState* pstate, List* opname, Oid ltypeId,
-              Oid rtypeId, bool noError, int location) {
-  abort();
-}
-
-Operator left_oper(ParseState* pstate, List* op, Oid arg, bool noError,
-                   int location) {
-  abort();
-}
-
 void get_oper_expr(OpExpr* expr, deparse_context* context) {
-  abort();
-}
-
-Oid get_func_variadictype(Oid funcid) {
-  abort();
-}
-
-bool get_func_retset(Oid funcid) {
-  abort();
-}
-
-char* get_rel_name(Oid relid) {
-  abort();
-}
-
-Oid typeidTypeRelid(Oid type_id)
-{
-  abort();
-}
-
-Oid typeOrDomainTypeRelid(Oid type_id) {
-  abort();
-}
-
-char get_typtype(Oid typid) {
   abort();
 }
 
@@ -204,32 +63,6 @@ void set_relation_column_names(deparse_namespace* dpns,
 }
 
 char* generate_relation_name(Oid relid, List* namespaces) {
-  abort();
-}
-
-void getTypeOutputInfo(Oid typid, Oid* typOutput, bool* typIsVarlena) {
-  abort();
-}
-
-Oid get_element_type(Oid typid) {
-  abort();
-}
-
-void getTypeInputInfo(Oid type, Oid* typInput, Oid* typIOParam) {
-  abort();
-}
-
-FuncDetailCode func_get_detail(List* funcname, List* fargs, List* fargnames,
-                               int nargs, Oid* argtypes, bool expand_variadic,
-                               bool expand_defaults, bool include_out_arguments,
-                               Oid* funcid, Oid* rettype, bool* retset,
-                               int* nvargs, Oid* vatype, Oid** true_typeids,
-                               List** argdefaults) {
-  abort();
-}
-
-Node* ParseFuncOrColumn(ParseState* pstate, List* funcname, List* fargs,
-                        Node* last_srf, FuncCall* fn, bool proc_call, int location) {
   abort();
 }
 
@@ -245,51 +78,8 @@ generate_function_name(Oid funcid, int nargs, List* argnames,
   abort();
 }
 
-int setTargetTable(ParseState* pstate, RangeVar* relation,
-                   bool inh, bool alsoSource, AclMode requiredPerms) {
-  abort();
-}
-
-void
-transformOnConflictArbiter(ParseState* pstate,
-                           OnConflictClause* onConflictClause,
-                           List** arbiterExpr, Node** arbiterWhere,
-                           Oid* constraint) {
-  abort();
-}
-
-List* resolve_unique_index_expr(
-    ParseState* pstate, InferClause* infer) {
-  abort();
-}
-
-Node *transformFrameOffset(ParseState *pstate, int frameOptions,
-                           Oid rangeopfamily, Oid rangeopcintype,
-                           Oid *inRangeFunc, Node *clause) {
-  abort();
-}
-
-void free_parsestate(ParseState* pstate) {
-  abort();
-}
-
-List* transformUpdateTargetList(ParseState* pstate, List* origTlist) {
-  abort();
-}
-
 OnConflictExpr* transformOnConflictClause(
     ParseState* pstate, OnConflictClause* onConflictClause) {
-  abort();
-}
-
-Expr* transformAssignedExpr(ParseState* pstate, Expr* expr,
-                            ParseExprKind exprKind, char* colname,
-                            int attrno, List* indirection,
-                            int location) {
-  abort();
-}
-
-List* checkInsertTargets(ParseState* pstate, List* cols, List** attrnos) {
   abort();
 }
 
@@ -301,105 +91,11 @@ void assign_record_type_typmod(TupleDesc tupDesc) {
   abort();
 }
 
-Oid get_array_type(Oid typid) {
-  abort();
-}
-
-void expandRelation(Oid relid, Alias* eref,
-                    int rtindex, int sublevels_up,
-                    int location, bool include_dropped,
-                    List** colnames, List** colvars) {
-  abort();
-}
-
-TypeFuncClass internal_get_result_type(Oid funcid, Node* call_expr,
-                                       ReturnSetInfo* rsinfo,
-                                       Oid* resultTypeId,
-                                       TupleDesc* resultTupleDesc) {
-  abort();
-}
-
-bool IsBinaryCoercible(Oid srctype, Oid targettype) {
-  abort();
-}
-
-Oid GetDefaultOpClass(Oid type_id, Oid am_id) {
-  abort();
-}
-
-List* get_op_btree_interpretation(Oid opno) {
-  abort();
-}
-
-Oid get_opclass_family(Oid opclass) {
-  abort();
-}
-
-Oid get_opclass_input_type(Oid opclass) {
-  abort();
-}
-
-Oid get_opfamily_member(Oid opfamily, Oid lefttype, Oid righttype,
-                        int16_t strategy) {
-  abort();
-}
-
-bool get_ordering_op_properties(Oid opno, Oid *opfamily, Oid *opcintype,
-                                int16_t *strategy) {
-  abort();
-}
-
-Oid get_opfamily_proc(Oid opfamily, Oid lefttype, Oid righttype, int16_t procnum)
-{
-  abort();
-}
-
-RegProcedure get_opcode(Oid opno) {
-  abort();
-}
-
-Oid get_range_subtype(Oid rangeOid) {
-  abort();
-}
-
-Oid get_base_element_type(Oid typid) {
-  abort();
-}
-
 void get_utility_query_def(Query *query, deparse_context *context) {
   abort();
 }
 
-Const* make_const(ParseState* pstate, A_Const* aconst) {
-  abort();
-}
-
-Oid RelnameGetRelid(const char* relname) {
-  abort();
-}
-
-Oid get_relname_relid(const char* relname, Oid namespace_oid) {
-  abort();
-}
-
 Oid get_rel_type_id(Oid relid) {
-  abort();
-}
-
-Oid get_namespace_oid(const char* nspname, bool missing_ok) {
-  abort();
-}
-
-Oid get_commutator(Oid opno) {
-  abort();
-}
-
-Oid get_negator(Oid opno) {
-  abort();
-}
-
-CoercionPathType find_typmod_coercion_function(Oid typeId, Oid* funcid)
-{
   abort();
 }
 
@@ -423,45 +119,7 @@ Node* transformSpangresHint(ParseState* pstate, DefElem* elem) {
   abort();
 }
 
-List* expandNSItemVars(ParseState* pstate, ParseNamespaceItem* nsitem,
-                       int sublevels_up, int location, List** colnames) {
-  abort();
-}
-
 void get_hint_list_def(List* hints, deparse_context* context, bool statement) {
-  abort();
-}
-
-void get_typlenbyvalalign(Oid typid, int16_t* typlen, bool* typbyval,
-                          char* typalign) {
-  abort();
-}
-
-void transformContainerType(Oid *containerType, int32_t *containerTypmod) {
-  abort();
-}
-
-SubscriptingRef* transformContainerSubscripts(
-    ParseState* pstate, Node* containerBase, Oid containerType,
-    int32_t containerTypMod, List* indirection, bool isAssignment) {
-  abort();
-}
-
-char* get_func_result_name(Oid functionId) {
-  abort();
-}
-
-void TupleDescInitEntry(TupleDesc desc, AttrNumber attributeNumber,
-                        const char* attributeName, Oid oidtypeid, int32_t typmod,
-                        int attdim) {
-  abort();
-}
-
-Oid LookupExplicitNamespace(const char *nspname, bool missing_ok) {
-  abort();
-}
-
-Node* transformParamRef(ParseState *pstate, ParamRef *pref) {
   abort();
 }
 
@@ -470,22 +128,155 @@ void get_setop_query(Node *setOp, Query *query, deparse_context *context,
   abort();
 }
 
-Oid lookup_collation(const char *collname, Oid collnamespace, int32_t encoding) {
+const FormData_pg_type* GetTypeFromBootstrapCatalog(Oid type_id) {
   abort();
 }
 
-Oid get_collation_oid(List *name, bool missing_ok) {
+const FormData_pg_cast* GetCastFromBootstrapCatalog(Oid source_type_id,
+                                                    Oid target_type_id) {
   abort();
 }
 
-RegProcedure get_typsubscript(Oid typid, Oid *typelemp) {
+const FormData_pg_proc* GetProcByOid(Oid oid) {
   abort();
 }
 
-Oid get_multirange_range(Oid multirangeOid) {
+void GetAmprocsByFamilyFromBootstrapCatalog(
+    Oid opfamily, Oid lefttype, const FormData_pg_amproc* const** outlist,
+    size_t* outcount) {
   abort();
 }
 
-Query *transformCallStmt(ParseState *pstate, CallStmt *stmt) {
+void GetOpclassesByAccessMethodFromBootstrapCatalog(Oid am_id,
+                                                    const Oid** opclasses,
+                                                    size_t* opclass_count) {
+  abort();
+}
+
+const FormData_pg_opclass* GetOpclassFromBootstrapCatalog(Oid opclass_id) {
+  abort();
+}
+
+Oid GetNamespaceByNameFromBootstrapCatalog(const char* name) {
+  abort();
+}
+
+void GetTypesByNameFromBootstrapCatalog(const char* name,
+                                        const FormData_pg_type* const** outlist,
+                                        size_t* outcount) {
+  abort();
+}
+
+void GetAttributeTypeC(Oid relid, AttrNumber attnum, Oid* vartype,
+                       int32_t* vartypmod, Oid* varcollid) {
+  abort();
+}
+
+int GetColumnAttrNumber(Oid relid, const char* column_name) {
+  abort();
+}
+
+void GetColumnNamesC(Oid relid, char*** real_colnames, int* ncolumns) {
+  abort();
+}
+
+bool IsAttributePseudoColumnC(Oid relid, AttrNumber attnum) {
+  abort();
+}
+
+char* GetTableNameC(Oid relid) {
+  abort();
+}
+
+const FormData_pg_aggregate* GetAggregateFromBootstrapCatalog(Oid agg_id) {
+  abort();
+}
+
+bool ShouldCoerceUnknownLiterals() {
+  abort();
+}
+
+int GetFunctionArgInfo(Oid proc_oid, Oid** p_argtypes, char*** p_argnames,
+                       char** p_argmodes) {
+  abort();
+}
+
+void ExpandRelationC(Oid relid, Alias* eref, int rtindex, int sublevels_up,
+                     int location, List** colnames, List** colvars) {
+  abort();
+}
+
+List* ExpandNSItemVarsForJoinC(const List* rtable, ParseNamespaceItem* nsitem,
+                               int sublevels_up, int location, List** colnames,
+                               bool* error) {
+  abort();
+}
+
+Type PgTypeFormHeapTuple(Oid type_id) {
+  abort();
+}
+
+Operator PgOperatorFormHeapTuple(Oid operator_id) {
+  abort();
+}
+
+ParseNamespaceItem* addRangeTableEntryByOid(struct ParseState* pstate,
+                                            Oid relation_oid, Alias* alias,
+                                            bool inh, bool inFromCl) {
+  abort();
+}
+
+const FormData_pg_amop* GetAmopByFamilyFromBootstrapCatalog(Oid opfamily,
+                                                            Oid lefttype,
+                                                            Oid righttype,
+                                                            int16_t strategy) {
+  abort();
+}
+
+void GetAmopsByAmopOpIdFromBootstrapCatalog(
+    Oid opid, const FormData_pg_amop* const** outlist, size_t* outcount) {
+  abort();
+}
+
+const FormData_pg_amproc* GetAmprocByFamilyFromBootstrapCatalog(Oid opfamily,
+                                                                Oid lefttype,
+                                                                Oid righttype,
+                                                                int16_t index) {
+  abort();
+}
+
+const FormData_pg_operator* GetOperatorFromBootstrapCatalog(Oid operator_id) {
+  abort();
+}
+
+char* GetAttributeNameC(Oid relid, AttrNumber attnum, bool missing_ok) {
+  abort();
+}
+
+Oid GetOrGenerateOidFromNamespaceOidAndRelationNameC(
+    Oid namespace_oid, const char* unqualified_table_name) {
+  abort();
+}
+
+Oid GetOrGenerateOidFromTableNameC(const char* unqualified_table_name) {
+  abort();
+}
+
+Oid GetOidFromNamespaceNameC(const char* unqualified_namespace_name) {
+  abort();
+}
+
+void GetProcsByName(const char* name, const FormData_pg_proc*** outlist,
+                    size_t* outcount) {
+  abort();
+}
+
+void GetOperatorsByNameFromBootstrapCatalog(const char* name,
+                                            const Oid** outlist,
+                                            size_t* outcount) {
+  abort();
+}
+
+Oid GetCollationOidByNameFromBootstrapCatalog(const char* name) {
   abort();
 }
