@@ -31,10 +31,10 @@ typedef enum
 } FuncDetailCode;
 
 
-extern Node *ParseFuncOrColumn_UNUSED_SPANGRES(ParseState *pstate, List *funcname, List *fargs,
+extern Node *ParseFuncOrColumn(ParseState *pstate, List *funcname, List *fargs,
 							   Node *last_srf, FuncCall *fn, bool proc_call, int location);
 
-extern FuncDetailCode func_get_detail_UNUSED_SPANGRES(List *funcname,
+extern FuncDetailCode func_get_detail(List *funcname,
 									  List *fargs, List *fargnames,
 									  int nargs, Oid *argtypes,
 									  bool expand_variadic, bool expand_defaults,

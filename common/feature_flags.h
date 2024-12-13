@@ -43,7 +43,7 @@ class EmulatorFeatureFlags {
     bool enable_upsert_queries = true;
     bool enable_batch_query_with_no_table_scan = true;
     bool enable_upsert_queries_with_returning = true;
-    bool enable_identity_columns = false;
+    bool enable_identity_columns = true;
     bool enable_user_defined_functions = false;
     bool enable_fk_enforcement_option = false;
   };

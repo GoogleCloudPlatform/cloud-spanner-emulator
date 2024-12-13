@@ -575,8 +575,8 @@ absl::Status QueryValidator::ValidateSequenceFunction(
     const std::string sequence_name =
         node->generic_argument_list(0)->sequence()->sequence()->FullName();
     const Sequence* current_sequence =
-        schema()->FindSequence(sequence_name
-        );
+        schema()->FindSequence(sequence_name,
+                               /*exclude_internal=*/true);
     if (current_sequence == nullptr) {
       return error::SequenceNotFound(sequence_name);
     }
@@ -591,8 +591,8 @@ absl::Status QueryValidator::ValidateSequenceFunction(
         node->argument_list(0)->GetAs<zetasql::ResolvedLiteral>()->value();
     if (value.type()->IsString()) {
       const Sequence* current_sequence =
-          schema()->FindSequence(value.string_value()
-          );
+          schema()->FindSequence(value.string_value(),
+                                 /*exclude_internal=*/true);
       if (current_sequence == nullptr) {
         return error::SequenceNotFound(value.string_value());
       }

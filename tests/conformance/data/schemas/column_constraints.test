@@ -1,0 +1,19 @@
+# Note that PG databases by default have lower case table and column names. To
+# use uppercase names, you have to quote them. But the GSQL and PG quoting
+# syntax is incompatible so we use lower-case names in both schemas to avoid
+# having to maintain two copies of each query.
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE testtable(
+  id1         INT64 NOT NULL,
+  stringcol   STRING(5) NOT NULL,
+  bytescol    BYTES(30),
+) PRIMARY KEY (id1);
+===
+# Note that PG bytea does not support a type modifier for length.
+@Dialect=POSTGRESQL
+CREATE TABLE testtable(
+  id1         bigint NOT NULL,
+  stringcol   varchar(5) NOT NULL,
+  bytescol    bytea,
+  PRIMARY KEY (id1)
+);

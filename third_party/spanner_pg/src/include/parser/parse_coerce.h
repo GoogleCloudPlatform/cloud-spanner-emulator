@@ -30,9 +30,17 @@ typedef enum CoercionPathType
 	COERCION_PATH_COERCEVIAIO	/* need a CoerceViaIO node */
 } CoercionPathType;
 
-extern bool IsBinaryCoercible_UNUSED_SPANGRES(Oid srctype, Oid targettype);
+extern bool IsBinaryCoercible(Oid srctype, Oid targettype);
 extern bool IsPreferredType(TYPCATEGORY category, Oid type);
 extern TYPCATEGORY TypeCategory(Oid type);
+
+// SPANGRES BEGIN
+// Visible for testing
+Node *build_coercion_expression(Node *node, CoercionPathType pathtype,
+                                Oid funcId, Oid targetTypeId,
+                                int32 targetTypMod, CoercionContext ccontext,
+                                CoercionForm cformat, int location);
+// SPANGRES END
 
 extern Node *coerce_to_target_type(ParseState *pstate,
 								   Node *expr, Oid exprtype,
@@ -40,6 +48,8 @@ extern Node *coerce_to_target_type(ParseState *pstate,
 								   CoercionContext ccontext,
 								   CoercionForm cformat,
 								   int location);
+extern bool can_coerce_type(int nargs, const Oid *input_typeids, const Oid *target_typeids,
+							CoercionContext ccontext);
 extern Node *coerce_type(ParseState *pstate, Node *node,
 						 Oid inputTypeId, Oid targetTypeId,
 						 int32 targetTypeMod,
@@ -89,5 +99,11 @@ extern char *check_valid_internal_signature(Oid ret_type,
 											const Oid *declared_arg_types,
 											int nargs);
 
+extern CoercionPathType find_coercion_pathway(Oid targetTypeId,
+											  Oid sourceTypeId,
+											  CoercionContext ccontext,
+											  Oid *funcid);
+extern CoercionPathType find_typmod_coercion_function(Oid typeId,
+													  Oid *funcid);
 
 #endif							/* PARSE_COERCE_H */

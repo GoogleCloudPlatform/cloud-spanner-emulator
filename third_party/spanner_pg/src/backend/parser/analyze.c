@@ -55,6 +55,7 @@
 #include "utils/syscache.h"
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 
 /* Hook for plugins to get control at end of parse analysis */
@@ -63,7 +64,7 @@ post_parse_analyze_hook_type post_parse_analyze_hook = NULL;
 static Query *transformOptionalSelectInto(ParseState *pstate, Node *parseTree);
 static Query *transformDeleteStmt(ParseState *pstate, DeleteStmt *stmt);
 static Query *transformInsertStmt(ParseState *pstate, InsertStmt *stmt);
-static OnConflictExpr *transformOnConflictClause_UNUSED_SPANGRES(ParseState *pstate,
+static OnConflictExpr *transformOnConflictClause(ParseState *pstate,
 												 OnConflictClause *onConflictClause);
 static int	count_rowexpr_columns(ParseState *pstate, Node *expr);
 static Query *transformSelectStmt(ParseState *pstate, SelectStmt *stmt);
@@ -84,7 +85,7 @@ static Query *transformExplainStmt(ParseState *pstate,
 								   ExplainStmt *stmt);
 static Query *transformCreateTableAsStmt(ParseState *pstate,
 										 CreateTableAsStmt *stmt);
-Query *transformCallStmt(ParseState *pstate,
+static Query *transformCallStmt(ParseState *pstate,
 								CallStmt *stmt);
 static void transformLockingClause(ParseState *pstate, Query *qry,
 								   LockingClause *lc, bool pushedDown);
@@ -1115,10 +1116,14 @@ transformInsertRow(ParseState *pstate, List *exprlist,
 /*
  * transformOnConflictClause -
  *	  transforms an OnConflictClause in an INSERT
+ *
+ * SPANGRES: The updated version uses the p_target_relation_oid to create a
+ * RangeTblEntry instead of the p_target_relation. It temporarily removes
+ * support for exclRelTlist, which is used by EXPLAIN to describe the targetlist
+ * of the excluded relation.
  */
-#ifdef UNUSED_SPANGRES_CARVEOUT
 static OnConflictExpr *
-transformOnConflictClause_UNUSED_SPANGRES(ParseState *pstate,
+transformOnConflictClause(ParseState *pstate,
 						  OnConflictClause *onConflictClause)
 {
 	ParseNamespaceItem *exclNSItem = NULL;
@@ -1128,7 +1133,10 @@ transformOnConflictClause_UNUSED_SPANGRES(ParseState *pstate,
 	List	   *onConflictSet = NIL;
 	Node	   *onConflictWhere = NULL;
 	int			exclRelIndex = 0;
-	List	   *exclRelTlist = NIL;
+	// SPANGRES BEGIN
+	// Unused variable
+	// List	   *exclRelTlist = NIL;
+	// SPANGRES END
 	OnConflictExpr *result;
 
 	/*
@@ -1139,14 +1147,18 @@ transformOnConflictClause_UNUSED_SPANGRES(ParseState *pstate,
 	 */
 	if (onConflictClause->action == ONCONFLICT_UPDATE)
 	{
-		Relation	targetrel = pstate->p_target_relation;
+		// SPANGRES BEGIN
+		// Unused variable
+		// Relation	targetrel = pstate->p_target_relation;
+		// SPANGRES END
 		RangeTblEntry *exclRte;
 
-		exclNSItem = addRangeTableEntryForRelation(pstate,
-												   targetrel,
-												   RowExclusiveLock,
-												   makeAlias("excluded", NIL),
-												   false, false);
+		// SPANGRES BEGIN
+		exclNSItem = addRangeTableEntryByOid(pstate,
+											 pstate->p_target_relation_oid,
+											 makeAlias("excluded", NIL),
+											 false, false);
+		// SPANGRES END
 		exclRte = exclNSItem->p_rte;
 		exclRelIndex = exclNSItem->p_rtindex;
 
@@ -1159,9 +1171,12 @@ transformOnConflictClause_UNUSED_SPANGRES(ParseState *pstate,
 		exclRte->requiredPerms = 0;
 		/* other permissions fields in exclRte are already empty */
 
-		/* Create EXCLUDED rel's targetlist for use by EXPLAIN */
-		exclRelTlist = BuildOnConflictExcludedTargetlist(targetrel,
-														 exclRelIndex);
+		// SPANGRES BEGIN
+		// TODO : Add back call to BuildOnConflictExcludedTargetlist,
+		// which creates the EXCLUDED rel's targetlist for use by EXPLAIN.
+		// exclRelTlist = BuildOnConflictExcludedTargetlist(targetrel,
+		// 												 exclRelIndex);
+		// SPANGRES END
 	}
 
 	/* Process the arbiter clause, ON CONFLICT ON (...) */
@@ -1213,11 +1228,14 @@ transformOnConflictClause_UNUSED_SPANGRES(ParseState *pstate,
 	result->onConflictSet = onConflictSet;
 	result->onConflictWhere = onConflictWhere;
 	result->exclRelIndex = exclRelIndex;
-	result->exclRelTlist = exclRelTlist;
+	// SPANGRES BEGIN
+	// TODO : Add back assignment of exclRelTlist, which is the
+	// EXCLUDED rel's targetlist for use by EXPLAIN.
+	// result->exclRelTlist = exclRelTlist;
+	// SPANGRES END
 
 	return result;
 }
-#endif  // UNUSED_SPANGRES_CARVEOUT
 
 /*
  * BuildOnConflictExcludedTargetlist
@@ -2478,10 +2496,13 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 /*
  * transformUpdateTargetList -
  *	handle SET clause in UPDATE/MERGE/INSERT ... ON CONFLICT UPDATE
+ *
+ * SPANGRES: The updated version uses the CatalogAdapter to get the table name
+ * from an oid and the Engine User Catalog to get number of columns in the table
+ * and the column attr number for each column name.
  */
-#ifdef UNDEFINED_SPANGRES_CARVEOUT
 List *
-transformUpdateTargetList_UNUSED_SPANGRES(ParseState *pstate, List *origTlist)
+transformUpdateTargetList(ParseState *pstate, List *origTlist)
 {
 	List	   *tlist = NIL;
 	RangeTblEntry *target_rte;
@@ -2491,9 +2512,19 @@ transformUpdateTargetList_UNUSED_SPANGRES(ParseState *pstate, List *origTlist)
 	tlist = transformTargetList(pstate, origTlist,
 								EXPR_KIND_UPDATE_SOURCE);
 
+	// SPANGRES BEGIN
+	/*
+	 * Get the number of columns and the column data from the ZetaSQL catalog.
+	 */
+	int ncolumns = 0;
+	char** real_colnames = NULL;
+	GetColumnNamesC(pstate->p_target_relation_oid, &real_colnames, &ncolumns);
+
 	/* Prepare to assign non-conflicting resnos to resjunk attributes */
-	if (pstate->p_next_resno <= RelationGetNumberOfAttributes(pstate->p_target_relation))
-		pstate->p_next_resno = RelationGetNumberOfAttributes(pstate->p_target_relation) + 1;
+	if (pstate->p_next_resno <= ncolumns) {
+		pstate->p_next_resno = ncolumns + 1;
+	}
+	// SPANGRES END
 
 	/* Prepare non-junk columns for assignment to target table */
 	target_rte = pstate->p_target_nsitem->p_rte;
@@ -2521,15 +2552,19 @@ transformUpdateTargetList_UNUSED_SPANGRES(ParseState *pstate, List *origTlist)
 			elog(ERROR, "UPDATE target count mismatch --- internal error");
 		origTarget = lfirst_node(ResTarget, orig_tl);
 
-		attrno = attnameAttNum(pstate->p_target_relation,
-							   origTarget->name, true);
-		if (attrno == InvalidAttrNumber)
+		// SPANGRES BEGIN
+		/* Lookup the column id in the ZetaSQL catalog */
+		attrno = GetColumnAttrNumber(pstate->p_target_relation_oid,
+									 origTarget->name);
+		if (attrno == InvalidAttrNumber) {
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
 					 errmsg("column \"%s\" of relation \"%s\" does not exist",
-							origTarget->name,
-							RelationGetRelationName(pstate->p_target_relation)),
+									origTarget->name,
+									GetTableNameC(pstate->p_target_relation_oid)),
 					 parser_errposition(pstate, origTarget->location)));
+		}
+		// SPANGRES END
 
 		updateTargetListEntry(pstate, tle, origTarget->name,
 							  attrno,
@@ -2547,7 +2582,6 @@ transformUpdateTargetList_UNUSED_SPANGRES(ParseState *pstate, List *origTlist)
 
 	return tlist;
 }
-#endif  // UNDEFINED_SPANGRES_CARVEOUT
 
 /*
  * transformReturningList -
@@ -3052,15 +3086,17 @@ transformCreateTableAsStmt(ParseState *pstate, CreateTableAsStmt *stmt)
  * transform a CallStmt
  */
 static Query *
-transformCallStmt_UNUSED_SPANGRES(ParseState *pstate, CallStmt *stmt)
+transformCallStmt(ParseState *pstate, CallStmt *stmt)
 {
 	List	   *targs;
 	ListCell   *lc;
 	Node	   *node;
 	FuncExpr   *fexpr;
-	HeapTuple	proctup;
-	Datum		proargmodes;
-	bool		isNull;
+	// SPANGRES BEGIN
+	// HeapTuple	proctup;
+	// Datum		proargmodes;
+	// bool		isNull;
+	// SPANGRES END
 	List	   *outargs = NIL;
 	Query	   *result;
 
@@ -3088,81 +3124,19 @@ transformCallStmt_UNUSED_SPANGRES(ParseState *pstate, CallStmt *stmt)
 
 	fexpr = castNode(FuncExpr, node);
 
-	proctup = SearchSysCache1(PROCOID, ObjectIdGetDatum(fexpr->funcid));
-	if (!HeapTupleIsValid(proctup))
-		elog(ERROR, "cache lookup failed for function %u", fexpr->funcid);
-
+	// SPANGRES BEGIN
 	/*
-	 * Expand the argument list to deal with named-argument notation and
-	 * default arguments.  For ordinary FuncExprs this'd be done during
-	 * planning, but a CallStmt doesn't go through planning, and there seems
-	 * no good reason not to do it here.
+	 * SPANGRES does not support output arguments and skips looking them up in
+	 * the catalog.
+	 * TODO: b/329162323 - add back support for OUT arguments
 	 */
-	fexpr->args = expand_function_arguments(fexpr->args,
-											true,
-											fexpr->funcresulttype,
-											proctup);
-
-	/* Fetch proargmodes; if it's null, there are no output args */
-	proargmodes = SysCacheGetAttr(PROCOID, proctup,
-								  Anum_pg_proc_proargmodes,
-								  &isNull);
-	if (!isNull)
-	{
-		/*
-		 * Split the list into input arguments in fexpr->args and output
-		 * arguments in stmt->outargs.  INOUT arguments appear in both lists.
-		 */
-		ArrayType  *arr;
-		int			numargs;
-		char	   *argmodes;
-		List	   *inargs;
-		int			i;
-
-		arr = DatumGetArrayTypeP(proargmodes);	/* ensure not toasted */
-		numargs = list_length(fexpr->args);
-		if (ARR_NDIM(arr) != 1 ||
-			ARR_DIMS(arr)[0] != numargs ||
-			ARR_HASNULL(arr) ||
-			ARR_ELEMTYPE(arr) != CHAROID)
-			elog(ERROR, "proargmodes is not a 1-D char array of length %d or it contains nulls",
-				 numargs);
-		argmodes = (char *) ARR_DATA_PTR(arr);
-
-		inargs = NIL;
-		i = 0;
-		foreach(lc, fexpr->args)
-		{
-			Node	   *n = lfirst(lc);
-
-			switch (argmodes[i])
-			{
-				case PROARGMODE_IN:
-				case PROARGMODE_VARIADIC:
-					inargs = lappend(inargs, n);
-					break;
-				case PROARGMODE_OUT:
-					outargs = lappend(outargs, n);
-					break;
-				case PROARGMODE_INOUT:
-					inargs = lappend(inargs, n);
-					outargs = lappend(outargs, copyObject(n));
-					break;
-				default:
-					/* note we don't support PROARGMODE_TABLE */
-					elog(ERROR, "invalid argmode %c for procedure",
-						 argmodes[i]);
-					break;
-			}
-			i++;
-		}
-		fexpr->args = inargs;
-	}
-
+	// SPANGRES END
 	stmt->funcexpr = fexpr;
 	stmt->outargs = outargs;
 
-	ReleaseSysCache(proctup);
+	// SPANGRES BEGIN
+	// ReleaseSysCache(proctup);
+	// SPANGRES END
 
 	/* represent the command as a utility Query */
 	result = makeNode(Query);

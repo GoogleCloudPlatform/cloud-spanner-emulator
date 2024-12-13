@@ -705,11 +705,25 @@ EngineSystemCatalog::BuildGsqlFunctionArgumentType(
 absl::StatusOr<zetasql::FunctionSignature>
 EngineSystemCatalog::BuildGsqlFunctionSignature(
     const oidvector& postgres_input_types, Oid postgres_output_type,
-    Oid postgres_variadic_type) {
+    Oid postgres_variadic_type, bool postgres_retset) {
   ZETASQL_ASSIGN_OR_RETURN(
-      zetasql::FunctionArgumentType return_type,
+      zetasql::FunctionArgumentType pg_return_type,
       BuildGsqlFunctionArgumentType(postgres_output_type,
                                     zetasql::FunctionEnums::REQUIRED));
+  std::unique_ptr<zetasql::FunctionArgumentType> return_type_ptr;
+  if (postgres_retset) {
+    const zetasql::Type* array_type;
+    ZETASQL_RETURN_IF_ERROR(
+        type_factory()->MakeArrayType(pg_return_type.type(), &array_type));
+    zetasql::FunctionArgumentType array_argument_type =
+        zetasql::FunctionArgumentType(array_type,
+                                        zetasql::FunctionEnums::REQUIRED);
+    return_type_ptr =
+        std::make_unique<zetasql::FunctionArgumentType>(array_argument_type);
+  } else {
+    return_type_ptr =
+        std::make_unique<zetasql::FunctionArgumentType>(pg_return_type);
+  }
 
   zetasql::FunctionArgumentTypeList arguments;
   for (int i = 0; i < postgres_input_types.vl_len_; i++) {
@@ -723,7 +737,7 @@ EngineSystemCatalog::BuildGsqlFunctionSignature(
     arguments.push_back(input_type);
   }
 
-  return zetasql::FunctionSignature(return_type, arguments,
+  return zetasql::FunctionSignature(*return_type_ptr, arguments,
                                       /*context_ptr=*/nullptr);
 }
 
@@ -761,7 +775,7 @@ absl::StatusOr<Oid> EngineSystemCatalog::FindMatchingPgProcOid(
     // Convert the proc from a PostgreSQL signature into a ZetaSQL signature
     absl::StatusOr<const zetasql::FunctionSignature> postgres_signature =
         BuildGsqlFunctionSignature(pg_proc->proargtypes, pg_proc->prorettype,
-                                   pg_proc->provariadic);
+                                   pg_proc->provariadic, pg_proc->proretset);
 
     // If there is a problem transforming the postgres signature, potentially
     // due to unsupported types, just skip the proc.
@@ -865,7 +879,7 @@ EngineSystemCatalog::BuildVariadicPostgresExtendedFunctionSignature(
       std::make_unique<zetasql::Function>(
           mapped_builtin_function->FunctionNamePath(),
           mapped_builtin_function->GetGroup(), mapped_builtin_function->mode(),
-          mapped_builtin_function->signatures(),
+          std::vector<zetasql::FunctionSignature>{signature},
           mapped_builtin_function->function_options()),
       proc_oid);
 }

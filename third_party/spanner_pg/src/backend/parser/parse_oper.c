@@ -392,32 +392,28 @@ oper_select_candidate(int nargs,
  *
  * NOTE: on success, the returned object is a syscache entry.  The caller
  * must ReleaseSysCache() the entry when done with it.
+ *
+ * SPANGRES: The Spangres version of this function drops oper_cache support and
+ * gets the Operator HeapTuple by creating one from a bootstrap_catalog entry
+ * (via a copy). That's two significant pieces where we lose caching performance
+ * gains compared to PostgreSQL.
  */
 Operator
-oper_UNUSED_SPANGRES(ParseState *pstate, List *opname, Oid ltypeId, Oid rtypeId,
+oper(ParseState *pstate, List *opname, Oid ltypeId, Oid rtypeId,
 	 bool noError, int location)
 {
 	Oid			operOid;
-	OprCacheKey key;
-	bool		key_ok;
+	// SPANGRES BEGIN
+	// Unused variables
+	// OprCacheKey key;
+	// bool		key_ok;
+	// SPANGRES END
 	FuncDetailCode fdresult = FUNCDETAIL_NOTFOUND;
 	HeapTuple	tup = NULL;
 
-	/*
-	 * Try to find the mapping in the lookaside cache.
-	 */
-	key_ok = make_oper_cache_key(pstate, &key, opname, ltypeId, rtypeId, location);
-
-	if (key_ok)
-	{
-		operOid = find_oper_cache_entry(&key);
-		if (OidIsValid(operOid))
-		{
-			tup = SearchSysCache1(OPEROID, ObjectIdGetDatum(operOid));
-			if (HeapTupleIsValid(tup))
-				return (Operator) tup;
-		}
-	}
+	// SPANGRES BEGIN
+	/* Skip initial cache lookup */
+	// SPANGRES END
 
 	/*
 	 * First try for an "exact" match.
@@ -452,13 +448,19 @@ oper_UNUSED_SPANGRES(ParseState *pstate, List *opname, Oid ltypeId, Oid rtypeId,
 		}
 	}
 
+	// SPANGRES BEGIN
 	if (OidIsValid(operOid))
-		tup = SearchSysCache1(OPEROID, ObjectIdGetDatum(operOid));
+		tup = PgOperatorFormHeapTuple(operOid);
+	// SPANGRES END
 
 	if (HeapTupleIsValid(tup))
 	{
-		if (key_ok)
-			make_oper_cache_entry(&key, operOid);
+		// SPANGRES BEGIN
+		/*
+		 * Operator cache is unsupported. Skip caching this tuple.
+		 * TODO: Consider caching operator tuples.
+		 */
+		// SPANGRES END
 	}
 	else if (!noError)
 		op_error(pstate, opname, 'b', ltypeId, rtypeId, fdresult, location);
@@ -539,31 +541,27 @@ compatible_oper_opid(List *op, Oid arg1, Oid arg2, bool noError)
  *
  * NOTE: on success, the returned object is a syscache entry.  The caller
  * must ReleaseSysCache() the entry when done with it.
+ *
+ * SPANGRES:The Spangres version of this function drops oper_cache support and
+ * gets the Operator HeapTuple by creating one from a bootstrap_catalog entry
+ * (via a copy). That's two significant pieces where we lose caching performance
+ * gains compared to PostgreSQL.
  */
 Operator
-left_oper_UNUSED_SPANGRES(ParseState *pstate, List *op, Oid arg, bool noError, int location)
+left_oper(ParseState *pstate, List *op, Oid arg, bool noError, int location)
 {
 	Oid			operOid;
-	OprCacheKey key;
-	bool		key_ok;
+	// SPANGRES BEGIN
+	// Unused variables
+	// OprCacheKey key;
+	// bool		key_ok;
+	// SPANGRES END
 	FuncDetailCode fdresult = FUNCDETAIL_NOTFOUND;
 	HeapTuple	tup = NULL;
 
-	/*
-	 * Try to find the mapping in the lookaside cache.
-	 */
-	key_ok = make_oper_cache_key(pstate, &key, op, InvalidOid, arg, location);
-
-	if (key_ok)
-	{
-		operOid = find_oper_cache_entry(&key);
-		if (OidIsValid(operOid))
-		{
-			tup = SearchSysCache1(OPEROID, ObjectIdGetDatum(operOid));
-			if (HeapTupleIsValid(tup))
-				return (Operator) tup;
-		}
-	}
+	// SPANGRES BEGIN
+	/* Skip the initial cache lookup */
+	// SPANGRES END
 
 	/*
 	 * First try for an "exact" match.
@@ -602,13 +600,19 @@ left_oper_UNUSED_SPANGRES(ParseState *pstate, List *op, Oid arg, bool noError, i
 		}
 	}
 
+	// SPANGRES BEGIN
 	if (OidIsValid(operOid))
-		tup = SearchSysCache1(OPEROID, ObjectIdGetDatum(operOid));
+		tup = PgOperatorFormHeapTuple(operOid);
+	// SPANGRES END
 
 	if (HeapTupleIsValid(tup))
 	{
-		if (key_ok)
-			make_oper_cache_entry(&key, operOid);
+		// SPANGRES BEGIN
+		/*
+		 * Operator cache is unsupported. Skip caching this tuple.
+		 * TODO: Consider caching operator tuples.
+		 */
+		// SPANGRES END
 	}
 	else if (!noError)
 		op_error(pstate, op, 'l', InvalidOid, arg, fdresult, location);

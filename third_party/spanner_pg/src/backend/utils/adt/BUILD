@@ -174,6 +174,7 @@ cc_library(
         "jsonpath_gram.h",
     ],
     deps = [
+        "//third_party/spanner_pg/shims:catalog_shim_cc_wrappers_header",
         "//third_party/spanner_pg/shims:catalog_shim_header",
         "//third_party/spanner_pg/shims:json_shim",
         "//third_party/spanner_pg/shims:pg_locale_shim",

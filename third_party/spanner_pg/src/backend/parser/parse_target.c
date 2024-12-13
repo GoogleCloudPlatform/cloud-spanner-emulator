@@ -33,6 +33,7 @@
 #include "utils/typcache.h"
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 static void markTargetListOrigin(ParseState *pstate, TargetEntry *tle,
 								 Var *var, int levelsup);
@@ -452,9 +453,8 @@ markTargetListOrigin(ParseState *pstate, TargetEntry *tle,
  * omits the column name list.  So we should usually prefer to use
  * exprLocation(expr) for errors that can happen in a default INSERT.
  */
-#ifdef UNUSED_SPANGRES_CARVEOUT
 Expr *
-transformAssignedExpr_UNUSED_SPANGRES(ParseState *pstate,
+transformAssignedExpr(ParseState *pstate,
 					  Expr *expr,
 					  ParseExprKind exprKind,
 					  const char *colname,
@@ -462,7 +462,9 @@ transformAssignedExpr_UNUSED_SPANGRES(ParseState *pstate,
 					  List *indirection,
 					  int location)
 {
-	Relation	rd;/* SPANGRES = pstate->p_target_relation; */
+	// SPANGRES BEGIN
+	// Relation	rd;/* SPANGRES = pstate->p_target_relation; */
+	// SPANGRES END
 	Oid			type_id;		/* type of value provided */
 	Oid			attrtype;		/* type of target column */
 	int32		attrtypmod;
@@ -478,16 +480,31 @@ transformAssignedExpr_UNUSED_SPANGRES(ParseState *pstate,
 	sv_expr_kind = pstate->p_expr_kind;
 	pstate->p_expr_kind = exprKind;
 
-	Assert(rd != NULL);
+	// SPANGRES BEGIN
+	Assert(pstate->p_target_relation_oid != InvalidOid);
+	// SPANGRES END
 	if (attrno <= 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot assign to system column \"%s\"",
 						colname),
 				 parser_errposition(pstate, location)));
-	attrtype = attnumTypeId(rd, attrno);
-	attrtypmod = TupleDescAttr(rd->rd_att, attrno - 1)->atttypmod;
-	attrcollation = TupleDescAttr(rd->rd_att, attrno - 1)->attcollation;
+
+	// SPANGRES BEGIN
+	/*
+	 * SPANGRES: Use the Engine System Catalog and Bootstrap Catalog to get the
+	 * type info.
+	 */
+	GetAttributeTypeC(pstate->p_target_relation_oid, attrno, &attrtype,
+										&attrtypmod, &attrcollation);
+	if (attrtype == InvalidOid) {
+		ereport(ERROR,
+			(errcode(ERRCODE_UNDEFINED_COLUMN),
+			 errmsg("Unable to get type of column \"%s\" of relation \"%s\". "
+							"(Is the column type supported?)",
+							colname, pstate->p_target_nsitem->p_rte->eref->aliasname)));
+	}
+	// SPANGRES END
 
 	/*
 	 * If the expression is a DEFAULT placeholder, insert the attribute's
@@ -545,18 +562,17 @@ transformAssignedExpr_UNUSED_SPANGRES(ParseState *pstate,
 		}
 		else
 		{
+			// SPANGRES BEGIN
 			/*
 			 * Build a Var for the column to be updated.
 			 */
 			Var		   *var;
-			/* BEGIN SPANGRES */
-			/* var = makeVar(pstate->p_target_nsitem->p_rtindex, attrno, */
-			/* 			  attrtype, attrtypmod, attrcollation, 0); */
-			/* var->location = location; */
+			var = makeVar(pstate->p_target_nsitem->p_rtindex, attrno,
+							   attrtype, attrtypmod, attrcollation, 0);
+			var->location = location;
 
-			/* colVar = (Node *) var; */
-			var = NULL;
-			/* END SPANGRES */
+			colVar = (Node *) var;
+			// SPANGRES END
 		}
 
 		expr = (Expr *)
@@ -604,7 +620,7 @@ transformAssignedExpr_UNUSED_SPANGRES(ParseState *pstate,
 
 	return expr;
 }
-#endif  // UNUSED_SPANGRES_CARVEOUT
+
 
 /*
  * updateTargetListEntry()
@@ -1011,39 +1027,41 @@ transformAssignmentSubscripts(ParseState *pstate,
  *	  generate a list of INSERT column targets if not supplied, or
  *	  test supplied column names to make sure they are in target table.
  *	  Also return an integer list of the columns' attribute numbers.
+ *
+ * SPANGRES: The Spangres version uses the p_target_relation_oid and the Engine
+ * User Catalog to populate the ResTarget columns and to get the column ids.
  */
-#ifdef UNDEFINED_SPANGRES_CARVEOUT
 List *
-checkInsertTargets_UNUSED_SPANGRES(ParseState *pstate, List *cols, List **attrnos)
+checkInsertTargets(ParseState *pstate, List *cols, List **attrnos)
 {
 	*attrnos = NIL;
 
 	if (cols == NIL)
 	{
+		// SPANGRES BEGIN
 		/*
 		 * Generate default column list for INSERT.
+		 *
+		 * SPANGRES: use p_target_relation_oid and the Engine User Catalog instead
+		 * of p_target_relation.
 		 */
-		int			numcol = RelationGetNumberOfAttributes(pstate->p_target_relation);
+		char** real_colnames;
+		int numcol;
+		GetColumnNamesC(pstate->p_target_relation_oid, &real_colnames, &numcol);
 
-		int			i;
-
-		for (i = 0; i < numcol; i++)
+		for (int i = 0; i < numcol; ++i)
 		{
-			ResTarget  *col;
-			Form_pg_attribute attr;
-
-			attr = TupleDescAttr(pstate->p_target_relation->rd_att, i);
-			
-			if (attr->attisdropped)
+			if (IsAttributePseudoColumnC(pstate->p_target_relation_oid, i + 1)) {
 				continue;
-
-			col = makeNode(ResTarget);
-			col->name = pstrdup(NameStr(attr->attname));
+			}
+			ResTarget* col = makeNode(ResTarget);
+			col->name = real_colnames[i];
 			col->indirection = NIL;
 			col->val = NULL;
 			col->location = -1;
 			cols = lappend(cols, col);
 			*attrnos = lappend_int(*attrnos, i + 1);
+			// SPANGRES END
 		}
 	}
 	else
@@ -1061,16 +1079,19 @@ checkInsertTargets_UNUSED_SPANGRES(ParseState *pstate, List *cols, List **attrno
 			char	   *name = col->name;
 			int			attrno;
 
-			/* Lookup column name, ereport on failure */
-			attrno = attnameAttNum(pstate->p_target_relation, name, false);
-			if (attrno == InvalidAttrNumber)
+			// SPANGRES BEGIN
+			/* Lookup column id using Engine User Catalog, ereport on failure */
+			attrno = GetColumnAttrNumber(pstate->p_target_relation_oid, name);
+			if (attrno == InvalidAttrNumber) {
 				ereport(ERROR,
-						(errcode(ERRCODE_UNDEFINED_COLUMN),
-						 errmsg("column \"%s\" of relation \"%s\" does not exist",
-								name,
-								RelationGetRelationName(pstate->p_target_relation)),
-						 parser_errposition(pstate, col->location)));
-			
+								(errcode(ERRCODE_UNDEFINED_COLUMN),
+								 errmsg("column \"%s\" of relation \"%s\" does not exist",
+										name,
+										GetTableNameC(pstate->p_target_relation_oid)),
+								 parser_errposition(pstate, col->location)));
+			}
+			// SPANGRES END
+
 			/*
 			 * Check for duplicates, but only of whole columns --- we allow
 			 * INSERT INTO foo (col.subcol1, col.subcol2)
@@ -1105,7 +1126,7 @@ checkInsertTargets_UNUSED_SPANGRES(ParseState *pstate, List *cols, List **attrno
 
 	return cols;
 }
-#endif  // UNDEFINED_SPANGRES_CARVEOUT
+
 
 /*
  * ExpandColumnRefStar()

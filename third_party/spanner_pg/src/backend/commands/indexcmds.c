@@ -67,6 +67,7 @@
 #include "utils/syscache.h"
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 
 /* non-export function prototypes */
@@ -2210,16 +2211,19 @@ ResolveOpClass(List *opclass, Oid attrType,
  * operator class, if any.  Returns InvalidOid if there is none.
  */
 Oid
-GetDefaultOpClass_UNUSED_SPANGRES(Oid type_id, Oid am_id)
+GetDefaultOpClass(Oid type_id, Oid am_id)
 {
 	Oid			result = InvalidOid;
 	int			nexact = 0;
 	int			ncompatible = 0;
 	int			ncompatiblepreferred = 0;
-	Relation	rel;
-	ScanKeyData skey[1];
-	SysScanDesc scan;
-	HeapTuple	tup;
+	// SPANGRES BEGIN
+	// Unused variables
+	// Relation	rel;
+	// ScanKeyData skey[1];
+	// SysScanDesc scan;
+	// HeapTuple	tup;
+	// SPANGRES END
 	TYPCATEGORY tcategory;
 
 	/* If it's a domain, look at the base type instead */
@@ -2227,6 +2231,7 @@ GetDefaultOpClass_UNUSED_SPANGRES(Oid type_id, Oid am_id)
 
 	tcategory = TypeCategory(type_id);
 
+	// SPANGRES BEGIN
 	/*
 	 * We scan through all the opclasses available for the access method,
 	 * looking for one that is marked default and matches the target type
@@ -2238,20 +2243,26 @@ GetDefaultOpClass_UNUSED_SPANGRES(Oid type_id, Oid am_id)
 	 * kluge for varchar: it's binary-compatible to both text and bpchar, so
 	 * we need a tiebreaker.)  If we find more than one exact match, then
 	 * someone put bogus entries in pg_opclass.
+	 *
+	 * SPANGRES: Scan bootstrap catalog instead of the postgres heap.
+	 * We use the same scan method as PostgreSQL: get all pg_opclass structs
+	 * matching our desired access method, am_id, and then reject any that don't
+	 * meet the requirements below.
 	 */
-	rel = table_open(OperatorClassRelationId, AccessShareLock);
-
-	ScanKeyInit(&skey[0],
-				Anum_pg_opclass_opcmethod,
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(am_id));
-
-	scan = systable_beginscan(rel, OpclassAmNameNspIndexId, true,
-							  NULL, 1, skey);
-
-	while (HeapTupleIsValid(tup = systable_getnext(scan)))
-	{
-		Form_pg_opclass opclass = (Form_pg_opclass) GETSTRUCT(tup);
+	const Oid* opclasses;
+	size_t opclass_count;
+	GetOpclassesByAccessMethodFromBootstrapCatalog(am_id, &opclasses,
+												   &opclass_count);
+	for (int i = 0; i < opclass_count; ++i) {
+		const Oid oid = opclasses[i];
+		const FormData_pg_opclass* opclass = GetOpclassFromBootstrapCatalog(oid);
+		if (opclass == NULL) {
+			ereport(ERROR,
+							(errcode(ERRCODE_INTERNAL_ERROR),
+							 errmsg("Bootstrap catalog is missing operator class with Oid %u",
+											oid)));
+		}
+		// SPANGRES END
 
 		/* ignore altogether if not a default opclass */
 		if (!opclass->opcdefault)
@@ -2277,9 +2288,12 @@ GetDefaultOpClass_UNUSED_SPANGRES(Oid type_id, Oid am_id)
 		}
 	}
 
-	systable_endscan(scan);
-
-	table_close(rel, AccessShareLock);
+	// SPANGRES BEGIN
+	// No need to close the heap table since we didn't open it
+	// systable_endscan(scan);
+	//
+	// table_close(rel, AccessShareLock);
+	// SPANGRES END
 
 	/* raise error if pg_opclass contains inconsistent data */
 	if (nexact > 1)

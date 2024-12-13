@@ -22,6 +22,7 @@
 #include "catalog/objectaddress.h"
 #include "catalog/pg_type_d.h"
 #include "nodes/nodes.h"
+#include "utils/builtins.h"
 
 /* ----------------
  *		pg_type definition.  cpp turns this into

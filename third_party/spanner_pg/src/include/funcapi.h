@@ -176,7 +176,7 @@ extern int	get_func_input_arg_names(Datum proargnames, Datum proargmodes,
 									 char ***arg_names);
 
 extern int	get_func_trftypes(HeapTuple procTup, Oid **p_trftypes);
-extern char *get_func_result_name_UNUSED_SPANGRES(Oid functionId);
+extern char *get_func_result_name(Oid functionId);
 
 extern TupleDesc build_function_result_tupdesc_d(char prokind,
 												 Datum proallargtypes,
@@ -357,4 +357,10 @@ extern int	extract_variadic_args(FunctionCallInfo fcinfo, int variadic_start,
 								  bool convert_unknown, Datum **values,
 								  Oid **types, bool **nulls);
 
+// SPANGRES BEGIN
+// Visible for testing
+TypeFuncClass internal_get_result_type(Oid funcid, Node* call_expr,
+                                       ReturnSetInfo* rsinfo, Oid* resultTypeId,
+                                       TupleDesc* resultTupleDesc);
+// SPANGRES END
 #endif							/* FUNCAPI_H */

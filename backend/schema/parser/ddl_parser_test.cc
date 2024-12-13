@@ -4552,17 +4552,23 @@ TEST(CreateSequence, CanParseCreateSequenceAllOptions) {
       )pb")));
 }
 
-TEST(CreateSequence, Invalid_NoSequenceKind) {
-  EXPECT_THAT(ParseDDLStatement(R"sql(
+TEST(CreateSequence, AllowNoSequenceKind) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
       CREATE SEQUENCE seq OPTIONS (
           skip_range_min = 1,
           skip_range_max = 1000,
           start_with_counter = 1
       )
       )sql"),
-              StatusIs(StatusCode::kInvalidArgument,
-                       HasSubstr("CREATE SEQUENCE statements require option "
-                                 "`sequence_kind` to be set")));
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_sequence {
+          sequence_name: "seq"
+          set_options { option_name: "skip_range_min" int64_value: 1 }
+          set_options { option_name: "skip_range_max" int64_value: 1000 }
+          set_options { option_name: "start_with_counter" int64_value: 1 }
+        }
+      )pb")));
 }
 
 TEST(CreateSequence, Invalid_EmptyOptionList) {

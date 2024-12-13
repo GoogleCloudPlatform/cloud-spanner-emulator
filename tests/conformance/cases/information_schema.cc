@@ -53,7 +53,8 @@ class InformationSchemaTest
       : feature_flags_(
             {.enable_postgresql_interface = true,
              .enable_bit_reversed_positive_sequences = true,
-             .enable_bit_reversed_positive_sequences_postgresql = true}) {}
+             .enable_bit_reversed_positive_sequences_postgresql = true,
+             .enable_identity_columns = true}) {}
 
   void SetUp() override {
     dialect_ = GetParam();
@@ -95,9 +96,6 @@ class InformationSchemaTest
       "unsupported_columns",
       std::vector<std::string>({
           "IS_HIDDEN", "IS_STORED_VOLATILE",
-          "IS_IDENTITY", "IDENTITY_GENERATION", "IDENTITY_KIND",
-          "IDENTITY_START_WITH_COUNTER", "IDENTITY_SKIP_RANGE_MIN",
-          "IDENTITY_SKIP_RANGE_MAX",
       })};
 
   // Information schema constraints not yet supported.
@@ -462,7 +460,13 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
     {"", "INFORMATION_SCHEMA", "COLUMNS", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "DATA_TYPE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "GENERATION_EXPRESSION", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_GENERATION", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_KIND", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_SKIP_RANGE_MAX", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_SKIP_RANGE_MIN", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_START_WITH_COUNTER", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_GENERATED", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_IDENTITY", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_NULLABLE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_STORED", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "ORDINAL_POSITION", Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), Ns()},  // NOLINT

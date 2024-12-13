@@ -34,6 +34,7 @@
 #include "utils/syscache.h"
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 
 /*
@@ -582,15 +583,16 @@ hashTupleDesc(TupleDesc desc)
  * TupleDescInitEntryCollation.
  */
 void
-TupleDescInitEntry_UNUSED_SPANGRES(TupleDesc desc,
+TupleDescInitEntry(TupleDesc desc,
 				   AttrNumber attributeNumber,
 				   const char *attributeName,
 				   Oid oidtypeid,
 				   int32 typmod,
 				   int attdim)
 {
-	HeapTuple	tuple;
-	Form_pg_type typeForm;
+	// SPANGRES BEGIN
+	const FormData_pg_type *typeForm;
+	// SPANGRES END
 	Form_pg_attribute att;
 
 	/*
@@ -634,10 +636,13 @@ TupleDescInitEntry_UNUSED_SPANGRES(TupleDesc desc,
 	att->attinhcount = 0;
 	/* variable-length fields are not present in tupledescs */
 
-	tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(oidtypeid));
-	if (!HeapTupleIsValid(tuple))
+	// SPANGRES BEGIN
+	/* Get type info from bootstrap */
+	typeForm = GetTypeFromBootstrapCatalog(oidtypeid);
+	if (typeForm == NULL) {
 		elog(ERROR, "cache lookup failed for type %u", oidtypeid);
-	typeForm = (Form_pg_type) GETSTRUCT(tuple);
+	}
+	// SPANGRES END
 
 	att->atttypid = oidtypeid;
 	att->attlen = typeForm->typlen;
@@ -647,7 +652,9 @@ TupleDescInitEntry_UNUSED_SPANGRES(TupleDesc desc,
 	att->attcompression = InvalidCompressionMethod;
 	att->attcollation = typeForm->typcollation;
 
-	ReleaseSysCache(tuple);
+	// SPANGRES BEGIN
+	// ReleaseSysCache(tuple);
+	// SPANGRES END
 }
 
 /*

@@ -35,6 +35,7 @@
 #include "utils/syscache.h"
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 
 /* Possible error codes from LookupFuncNameInternal */
@@ -55,6 +56,34 @@ static Oid	LookupFuncNameInternal(ObjectType objtype, List *funcname,
 								   bool include_out_arguments, bool missing_ok,
 								   FuncLookupError *lookupError);
 
+
+
+// SPANGRES BEGIN
+/*
+ * SPANGRES: Unlike Postgres, Spanner function evaluators can not handle
+ * UNKNOWNOID values (and they will be rejected during forward transformation in
+ * BuildGsqlType). This function compensates for that by replacing UNKNOWNOID
+ * declared argument types with TEXTOID. The coercion itself will then be done
+ * in make_fn_arguments.
+ */
+static void coerce_unknown_literal_arguments(Oid funcid, List *fargs,
+                                             Oid *declared_arg_types) {
+  // For these functions UNKNOWNOID literals should be coerced as text values
+  if (funcid == F_JSONB_BUILD_ARRAY_ANY || funcid == F_JSONB_BUILD_OBJECT_ANY ||
+      funcid == F_CONCAT) {
+    ListCell *l;
+    int i = 0;
+    foreach (l, fargs) {
+      Node *arg = lfirst(l);
+      if (declared_arg_types[i] == ANYOID && IsA(arg, Const) &&
+          exprType(arg) == UNKNOWNOID) {
+        declared_arg_types[i] = TEXTOID;
+      }
+      i++;
+    }
+  }
+}
+// SPANGRES END
 
 /*
  *	Parse a function call
@@ -87,9 +116,12 @@ static Oid	LookupFuncNameInternal(ObjectType objtype, List *funcname,
  *	proc_call is true if we are considering a CALL statement, so that the
  *	name must resolve to a procedure name, not anything else.  This flag
  *	also specifies that the argument list includes any OUT-mode arguments.
+
+ *  SPANGRES: column projections are not supported.
+ *  TODO: Add back support for column projections.
  */
 Node *
-ParseFuncOrColumn_UNUSED_SPANGRES(ParseState *pstate, List *funcname, List *fargs,
+ParseFuncOrColumn(ParseState *pstate, List *funcname, List *fargs,
 				  Node *last_srf, FuncCall *fn, bool proc_call, int location)
 {
 	bool		is_column = (fn == NULL);
@@ -100,8 +132,10 @@ ParseFuncOrColumn_UNUSED_SPANGRES(ParseState *pstate, List *funcname, List *farg
 	bool		agg_star = (fn ? fn->agg_star : false);
 	bool		agg_distinct = (fn ? fn->agg_distinct : false);
 	bool		func_variadic = (fn ? fn->func_variadic : false);
-	CoercionForm funcformat = (fn ? fn->funcformat : COERCE_EXPLICIT_CALL);
-	bool		could_be_projection;
+	// SPANGRES BEGIN
+	// CoercionForm funcformat = (fn ? fn->funcformat : COERCE_EXPLICIT_CALL);
+	// bool		could_be_projection;
+	// SPANGRES END
 	Oid			rettype;
 	Oid			funcid;
 	ListCell   *l;
@@ -215,38 +249,13 @@ ParseFuncOrColumn_UNUSED_SPANGRES(ParseState *pstate, List *funcname, List *farg
 		Assert(first_arg != NULL);
 	}
 
+	// SPANGRES BEGIN
 	/*
-	 * Decide whether it's legitimate to consider the construct to be a column
-	 * projection.  For that, there has to be a single argument of complex
-	 * type, the function name must not be qualified, and there cannot be any
-	 * syntactic decoration that'd require it to be a function (such as
-	 * aggregate or variadic decoration, or named arguments).
+	 * SPANGRES: skip considering if the construct could be a column projection.
+	 * TODO: Add back support for column projections.
+	 *
 	 */
-	could_be_projection = (nargs == 1 && !proc_call &&
-						   agg_order == NIL && agg_filter == NULL &&
-						   !agg_star && !agg_distinct && over == NULL &&
-						   !func_variadic && argnames == NIL &&
-						   list_length(funcname) == 1 &&
-						   (actual_arg_types[0] == RECORDOID ||
-							ISCOMPLEX(actual_arg_types[0])));
-
-	/*
-	 * If it's column syntax, check for column projection case first.
-	 */
-	if (could_be_projection && is_column)
-	{
-		retval = ParseComplexProjection(pstate,
-										strVal(linitial(funcname)),
-										first_arg,
-										location);
-		if (retval)
-			return retval;
-
-		/*
-		 * If ParseComplexProjection doesn't recognize it as a projection,
-		 * just press on.
-		 */
-	}
+	// SPANGRES END
 
 	/*
 	 * func_get_detail looks up the function in the catalogs, does
@@ -362,17 +371,15 @@ ParseFuncOrColumn_UNUSED_SPANGRES(ParseState *pstate, List *funcname, List *farg
 		/*
 		 * It's an aggregate; fetch needed info from the pg_aggregate entry.
 		 */
-		HeapTuple	tup;
-		Form_pg_aggregate classForm;
-		int			catDirectArgs;
-
-		tup = SearchSysCache1(AGGFNOID, ObjectIdGetDatum(funcid));
-		if (!HeapTupleIsValid(tup)) /* should not happen */
-			elog(ERROR, "cache lookup failed for aggregate %u", funcid);
-		classForm = (Form_pg_aggregate) GETSTRUCT(tup);
+		// SPANGRES BEGIN
+		const FormData_pg_aggregate* classForm =
+				GetAggregateFromBootstrapCatalog(funcid);
+		if (classForm == NULL) { // should not happen.
+			elog(ERROR, "bootstrap catalog lookup failed for aggregate %u", funcid);
+		}
 		aggkind = classForm->aggkind;
-		catDirectArgs = classForm->aggnumdirectargs;
-		ReleaseSysCache(tup);
+		int catDirectArgs = classForm->aggnumdirectargs;
+		// SPANGRES END
 
 		/* Now check various disallowed cases. */
 		if (AGGKIND_IS_ORDERED_SET(aggkind))
@@ -588,18 +595,9 @@ ParseFuncOrColumn_UNUSED_SPANGRES(ParseState *pstate, List *funcname, List *farg
 		if (is_column)
 			return NULL;
 
-		/*
-		 * Check for column projection interpretation, since we didn't before.
-		 */
-		if (could_be_projection)
-		{
-			retval = ParseComplexProjection(pstate,
-											strVal(linitial(funcname)),
-											first_arg,
-											location);
-			if (retval)
-				return retval;
-		}
+		// SPANGRES BEGIN
+		/* TODO: Add back support for column projections */
+		// SPANGRES END
 
 		/*
 		 * No function, and no column either.  Since we're dealing with
@@ -648,7 +646,10 @@ ParseFuncOrColumn_UNUSED_SPANGRES(ParseState *pstate, List *funcname, List *farg
 	nargsplusdefs = nargs;
 	foreach(l, argdefaults)
 	{
-		Node	   *expr = (Node *) lfirst(l);
+		// SPANGRES BEGIN
+		// Unused variable
+		// Node	   *expr = (Node *) lfirst(l);
+		// SPANGRES BEGIN
 
 		/* probably shouldn't happen ... */
 		if (nargsplusdefs >= FUNC_MAX_ARGS)
@@ -660,7 +661,10 @@ ParseFuncOrColumn_UNUSED_SPANGRES(ParseState *pstate, List *funcname, List *farg
 								   FUNC_MAX_ARGS),
 					 parser_errposition(pstate, location)));
 
-		actual_arg_types[nargsplusdefs++] = exprType(expr);
+		// SPANGRES BEGIN
+		/* Defaults are type OIDs because the analyser doesn't use the values. */
+		actual_arg_types[nargsplusdefs++] = lfirst_oid(l);
+		// SPANGRES END
 	}
 
 	/*
@@ -673,6 +677,16 @@ ParseFuncOrColumn_UNUSED_SPANGRES(ParseState *pstate, List *funcname, List *farg
 											   nargsplusdefs,
 											   rettype,
 											   false);
+
+	// SPANGRES BEGIN
+	/*
+	 * Handle unknown string literals in functions declared to take "any"
+	 * arguments
+	 */
+	if (ShouldCoerceUnknownLiterals()) {
+		coerce_unknown_literal_arguments(funcid, fargs, declared_arg_types);
+	}
+	// SPANGRES END
 
 	/* perform the necessary typecasting of arguments */
 	make_fn_arguments(pstate, fargs, actual_arg_types, declared_arg_types);
@@ -744,6 +758,19 @@ ParseFuncOrColumn_UNUSED_SPANGRES(ParseState *pstate, List *funcname, List *farg
 	if (retset)
 		check_srf_call_placement(pstate, last_srf, location);
 
+	// SPANGRES BEGIN
+	/* Transform statement hints */
+	ListCell* lc;
+	List* function_hints = NIL;
+	if (fn) {
+		foreach(lc, fn->functionHints) {
+			function_hints =
+				lappend(function_hints,
+						transformSpangresHint(pstate, castNode(DefElem, lfirst(lc))));
+		}
+	}
+	// SPANGRES END
+
 	/* build the appropriate output structure */
 	if (fdresult == FUNCDETAIL_NORMAL || fdresult == FUNCDETAIL_PROCEDURE)
 	{
@@ -753,10 +780,15 @@ ParseFuncOrColumn_UNUSED_SPANGRES(ParseState *pstate, List *funcname, List *farg
 		funcexpr->funcresulttype = rettype;
 		funcexpr->funcretset = retset;
 		funcexpr->funcvariadic = func_variadic;
-		funcexpr->funcformat = funcformat;
+		// SPANGRES BEGIN
+		funcexpr->funcformat = COERCE_EXPLICIT_CALL;
+		// SPANGRES END
 		/* funccollid and inputcollid will be set by parse_collate.c */
 		funcexpr->args = fargs;
 		funcexpr->location = location;
+		// SPANGRES BEGIN
+		funcexpr->functionHints = function_hints;
+		// SPANGRES END
 
 		retval = (Node *) funcexpr;
 	}
@@ -778,9 +810,14 @@ ParseFuncOrColumn_UNUSED_SPANGRES(ParseState *pstate, List *funcname, List *farg
 		aggref->aggkind = aggkind;
 		/* agglevelsup will be set by transformAggregateCall */
 		aggref->aggsplit = AGGSPLIT_SIMPLE; /* planner might change this */
-		aggref->aggno = -1;		/* planner will set aggno and aggtransno */
-		aggref->aggtransno = -1;
+		// SPANGRES BEGIN
+		// aggref->aggno = -1;		/* planner will set aggno and aggtransno */
+		// aggref->aggtransno = -1;
+		// SPANGRES END
 		aggref->location = location;
+		// SPANGRES BEGIN
+		aggref->functionHints = function_hints;
+		// SPANGRES END
 
 		/*
 		 * Reject attempt to call a parameterless aggregate without (*)
@@ -836,6 +873,9 @@ ParseFuncOrColumn_UNUSED_SPANGRES(ParseState *pstate, List *funcname, List *farg
 		wfunc->winagg = (fdresult == FUNCDETAIL_AGGREGATE);
 		wfunc->aggfilter = agg_filter;
 		wfunc->location = location;
+		// SPANGRES BEGIN
+		wfunc->functionHints = function_hints;
+		// SPANGRES END
 
 		/*
 		 * agg_star is allowed for aggregate functions but distinct isn't
@@ -1390,9 +1430,17 @@ func_select_candidate(int nargs,
  * they don't need that check made.  Note also that when fargnames isn't NIL,
  * the fargs list must be passed if the caller wants actual argument position
  * information to be returned into the NamedArgExpr nodes.
+ *
+ * SPANGRES: Lookup a function by name + args and return a variety of
+ * information about it. If an exact match isn't found, fallback checks look at
+ * coercion and * ambiguous function resolution rules. This function is nearly
+ * identical to the PostgreSQL version except it uses bootstrap catalog and does
+ * not support default arguments (no bootstrap catalog support for them). In
+ * addition, this function depends on FuncnameGetCandidates, which does not
+ * include support for named arguments.
  */
 FuncDetailCode
-func_get_detail_UNUSED_SPANGRES(List *funcname,
+func_get_detail(List *funcname,
 				List *fargs,
 				List *fargnames,
 				int nargs,
@@ -1411,7 +1459,12 @@ func_get_detail_UNUSED_SPANGRES(List *funcname,
 	FuncCandidateList raw_candidates;
 	FuncCandidateList best_candidate;
 
-	/* initialize output arguments to silence compiler warnings */
+	// SPANGRES BEGIN
+	/* Initialize output arguments. (PostgreSQL claims this is "to silence
+	 * compiler warnings" but that's a lie. Some of these are passed in
+	 * uninitialized and then read by the caller.
+	 */
+	// SPANGRES END
 	*funcid = InvalidOid;
 	*rettype = InvalidOid;
 	*retset = false;
@@ -1575,9 +1628,12 @@ func_get_detail_UNUSED_SPANGRES(List *funcname,
 
 	if (best_candidate)
 	{
-		HeapTuple	ftup;
-		Form_pg_proc pform;
-		FuncDetailCode result;
+		// SPANGRES BEGIN
+		// Unused variables
+		// HeapTuple	ftup;
+		// Form_pg_proc pform;
+		// FuncDetailCode result;
+		// SPANGRES END
 
 		/*
 		 * If processing named args or expanding variadics or defaults, the
@@ -1620,34 +1676,52 @@ func_get_detail_UNUSED_SPANGRES(List *funcname,
 			}
 		}
 
-		ftup = SearchSysCache1(PROCOID,
-							   ObjectIdGetDatum(best_candidate->oid));
-		if (!HeapTupleIsValid(ftup))	/* should not happen */
-			elog(ERROR, "cache lookup failed for function %u",
-				 best_candidate->oid);
-		pform = (Form_pg_proc) GETSTRUCT(ftup);
+		// SPANGRES BEGIN
+		const FormData_pg_proc* pform =
+				GetProcByOid(best_candidate->oid);
+		if (pform == NULL) {
+			// should not happen.
+			ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR),
+											errmsg("catalog lookup failed for function %u",
+														 best_candidate->oid)));
+		}
+		// SPANGRES END
 		*rettype = pform->prorettype;
 		*retset = pform->proretset;
 		*vatype = pform->provariadic;
 		/* fetch default args if caller wants 'em */
 		if (argdefaults && best_candidate->ndargs > 0)
 		{
-			Datum		proargdefaults;
-			bool		isnull;
-			char	   *str;
-			List	   *defaults;
+			// SPANGRES BEGIN
+			// Unused variables
+			// Datum		proargdefaults;
+			// bool		isnull;
+			// char	   *str;
+			// List	   *defaults;
+			// SPANGRES END
 
 			/* shouldn't happen, FuncnameGetCandidates messed up */
 			if (best_candidate->ndargs > pform->pronargdefaults)
 				elog(ERROR, "not enough default arguments");
 
-			proargdefaults = SysCacheGetAttr(PROCOID, ftup,
-											 Anum_pg_proc_proargdefaults,
-											 &isnull);
-			Assert(!isnull);
-			str = TextDatumGetCString(proargdefaults);
-			defaults = castNode(List, stringToNode(str));
-			pfree(str);
+			// SPANGRES BEGIN
+			int			pronallargs;
+			Oid		   *p_argtypes;
+			char	  **p_argnames;
+			char	   *p_argmodes;
+
+			/* Default values are inserted by the planner. The analyzer only
+			 * needs the type OIDs for validating type consistency.
+			 * Construct a list of the default argument type OIDs instead. */
+			pronallargs = GetFunctionArgInfo(
+				best_candidate->oid, &p_argtypes, &p_argnames, &p_argmodes);
+			Assert(p_argmodes == NULL);
+			List *defaults = NIL;
+			for (int i = 0; i < pform->pronargdefaults; ++i) {
+				defaults = lappend_oid(
+					defaults, p_argtypes[pronallargs - pform->pronargdefaults + i]);
+			}
+			// SPANGRES END
 
 			/* Delete any unused defaults from the returned list */
 			if (best_candidate->argnumbers != NULL)
@@ -1675,8 +1749,11 @@ func_get_detail_UNUSED_SPANGRES(List *funcname,
 				i = best_candidate->nominalnargs - pform->pronargdefaults;
 				foreach(lc, defaults)
 				{
+					// SPANGRES BEGIN
 					if (bms_is_member(i, defargnumbers))
-						newdefaults = lappend(newdefaults, lfirst(lc));
+						/* Defaults are type OIDs as the analyser doesn't use the value. */
+						newdefaults = lappend_oid(newdefaults, lfirst_oid(lc));
+					// SPANGRES END
 					i++;
 				}
 				Assert(list_length(newdefaults) == best_candidate->ndargs);
@@ -1698,6 +1775,9 @@ func_get_detail_UNUSED_SPANGRES(List *funcname,
 			}
 		}
 
+		// SPANGRES BEGIN
+		FuncDetailCode result;
+		// SPANGRES END
 		switch (pform->prokind)
 		{
 			case PROKIND_AGGREGATE:
@@ -1718,7 +1798,9 @@ func_get_detail_UNUSED_SPANGRES(List *funcname,
 				break;
 		}
 
-		ReleaseSysCache(ftup);
+		// SPANGRES BEGIN
+		// ReleaseSysCache(ftup);
+		// SPANGRES END
 		return result;
 	}
 

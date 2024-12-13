@@ -112,6 +112,14 @@
 *---------------------------------------------------------------------------
 */
 
+// SPANGRES BEGIN
+// Error throwing function used to stop PostgreSQL execution when an unsupported
+// catalog API is called. DOES NOT RETURN
+#define ThrowSysCacheLookupError()                 \
+  ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), \
+                  errmsg("Attempted unsupported catalog lookup")))
+// SPANGRES END
+
 /*
  *		struct cachedesc: information defining a single syscache
  */
@@ -1042,17 +1050,20 @@ static const struct cachedesc cacheinfo[] = {
 	}
 };
 
-static CatCache *SysCache[SysCacheSize];
+// SPANGRES BEGIN
+// Unused variables
+// static CatCache *SysCache[SysCacheSize];
 
-static bool CacheInitialized = false;
+// static bool CacheInitialized = false;
 
 /* Sorted array of OIDs of tables that have caches on them */
-static Oid	SysCacheRelationOid[SysCacheSize];
-static int	SysCacheRelationOidSize;
+// static Oid	SysCacheRelationOid[SysCacheSize];
+// static int	SysCacheRelationOidSize;
 
 /* Sorted array of OIDs of tables and indexes used by caches */
-static Oid	SysCacheSupportingRelOid[SysCacheSize * 2];
-static int	SysCacheSupportingRelOidSize;
+// static Oid	SysCacheSupportingRelOid[SysCacheSize * 2];
+// static int	SysCacheSupportingRelOidSize;
+// SPANGRES END
 
 static int	oid_compare(const void *a, const void *b);
 
@@ -1068,54 +1079,9 @@ static int	oid_compare(const void *a, const void *b);
 void
 InitCatalogCache(void)
 {
-	int			cacheId;
-
-	StaticAssertStmt(SysCacheSize == (int) lengthof(cacheinfo),
-					 "SysCacheSize does not match syscache.c's array");
-
-	Assert(!CacheInitialized);
-
-	SysCacheRelationOidSize = SysCacheSupportingRelOidSize = 0;
-
-	for (cacheId = 0; cacheId < SysCacheSize; cacheId++)
-	{
-		SysCache[cacheId] = InitCatCache(cacheId,
-										 cacheinfo[cacheId].reloid,
-										 cacheinfo[cacheId].indoid,
-										 cacheinfo[cacheId].nkeys,
-										 cacheinfo[cacheId].key,
-										 cacheinfo[cacheId].nbuckets);
-		if (!PointerIsValid(SysCache[cacheId]))
-			elog(ERROR, "could not initialize cache %u (%d)",
-				 cacheinfo[cacheId].reloid, cacheId);
-		/* Accumulate data for OID lists, too */
-		SysCacheRelationOid[SysCacheRelationOidSize++] =
-			cacheinfo[cacheId].reloid;
-		SysCacheSupportingRelOid[SysCacheSupportingRelOidSize++] =
-			cacheinfo[cacheId].reloid;
-		SysCacheSupportingRelOid[SysCacheSupportingRelOidSize++] =
-			cacheinfo[cacheId].indoid;
-		/* see comments for RelationInvalidatesSnapshotsOnly */
-		Assert(!RelationInvalidatesSnapshotsOnly(cacheinfo[cacheId].reloid));
-	}
-
-	Assert(SysCacheRelationOidSize <= lengthof(SysCacheRelationOid));
-	Assert(SysCacheSupportingRelOidSize <= lengthof(SysCacheSupportingRelOid));
-
-	/* Sort and de-dup OID arrays, so we can use binary search. */
-	pg_qsort(SysCacheRelationOid, SysCacheRelationOidSize,
-			 sizeof(Oid), oid_compare);
-	SysCacheRelationOidSize =
-		qunique(SysCacheRelationOid, SysCacheRelationOidSize, sizeof(Oid),
-				oid_compare);
-
-	pg_qsort(SysCacheSupportingRelOid, SysCacheSupportingRelOidSize,
-			 sizeof(Oid), oid_compare);
-	SysCacheSupportingRelOidSize =
-		qunique(SysCacheSupportingRelOid, SysCacheSupportingRelOidSize,
-				sizeof(Oid), oid_compare);
-
-	CacheInitialized = true;
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 /*
@@ -1133,12 +1099,9 @@ InitCatalogCache(void)
 void
 InitCatalogCachePhase2(void)
 {
-	int			cacheId;
-
-	Assert(CacheInitialized);
-
-	for (cacheId = 0; cacheId < SysCacheSize; cacheId++)
-		InitCatCachePhase2(SysCache[cacheId], true);
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 
@@ -1165,64 +1128,60 @@ SearchSysCache(int cacheId,
 			   Datum key3,
 			   Datum key4)
 {
-	Assert(cacheId >= 0 && cacheId < SysCacheSize &&
-		   PointerIsValid(SysCache[cacheId]));
-
-	return SearchCatCache(SysCache[cacheId], key1, key2, key3, key4);
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 HeapTuple
 SearchSysCache1(int cacheId,
 				Datum key1)
 {
-	Assert(cacheId >= 0 && cacheId < SysCacheSize &&
-		   PointerIsValid(SysCache[cacheId]));
-	Assert(SysCache[cacheId]->cc_nkeys == 1);
-
-	return SearchCatCache1(SysCache[cacheId], key1);
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 HeapTuple
 SearchSysCache2(int cacheId,
 				Datum key1, Datum key2)
 {
-	Assert(cacheId >= 0 && cacheId < SysCacheSize &&
-		   PointerIsValid(SysCache[cacheId]));
-	Assert(SysCache[cacheId]->cc_nkeys == 2);
-
-	return SearchCatCache2(SysCache[cacheId], key1, key2);
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 HeapTuple
 SearchSysCache3(int cacheId,
 				Datum key1, Datum key2, Datum key3)
 {
-	Assert(cacheId >= 0 && cacheId < SysCacheSize &&
-		   PointerIsValid(SysCache[cacheId]));
-	Assert(SysCache[cacheId]->cc_nkeys == 3);
-
-	return SearchCatCache3(SysCache[cacheId], key1, key2, key3);
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 HeapTuple
 SearchSysCache4(int cacheId,
 				Datum key1, Datum key2, Datum key3, Datum key4)
 {
-	Assert(cacheId >= 0 && cacheId < SysCacheSize &&
-		   PointerIsValid(SysCache[cacheId]));
-	Assert(SysCache[cacheId]->cc_nkeys == 4);
-
-	return SearchCatCache4(SysCache[cacheId], key1, key2, key3, key4);
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 /*
  * ReleaseSysCache
  *		Release previously grabbed reference count on a tuple
+ *
+ * SPANGRES: Generates substitute heap tuples, so we must call Spangres'
+ * release.
  */
 void
 ReleaseSysCache(HeapTuple tuple)
 {
+	// SPANGRES BEGIN
 	ReleaseCatCache(tuple);
+	// SPANGRES END
 }
 
 /*
@@ -1240,15 +1199,9 @@ SearchSysCacheCopy(int cacheId,
 				   Datum key3,
 				   Datum key4)
 {
-	HeapTuple	tuple,
-				newtuple;
-
-	tuple = SearchSysCache(cacheId, key1, key2, key3, key4);
-	if (!HeapTupleIsValid(tuple))
-		return tuple;
-	newtuple = heap_copytuple(tuple);
-	ReleaseSysCache(tuple);
-	return newtuple;
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 /*
@@ -1264,13 +1217,9 @@ SearchSysCacheExists(int cacheId,
 					 Datum key3,
 					 Datum key4)
 {
-	HeapTuple	tuple;
-
-	tuple = SearchSysCache(cacheId, key1, key2, key3, key4);
-	if (!HeapTupleIsValid(tuple))
-		return false;
-	ReleaseSysCache(tuple);
-	return true;
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 /*
@@ -1288,19 +1237,9 @@ GetSysCacheOid(int cacheId,
 			   Datum key3,
 			   Datum key4)
 {
-	HeapTuple	tuple;
-	bool		isNull;
-	Oid			result;
-
-	tuple = SearchSysCache(cacheId, key1, key2, key3, key4);
-	if (!HeapTupleIsValid(tuple))
-		return InvalidOid;
-	result = heap_getattr(tuple, oidcol,
-						  SysCache[cacheId]->cc_tupdesc,
-						  &isNull);
-	Assert(!isNull);			/* columns used as oids should never be NULL */
-	ReleaseSysCache(tuple);
-	return result;
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 
@@ -1315,19 +1254,9 @@ GetSysCacheOid(int cacheId,
 HeapTuple
 SearchSysCacheAttName(Oid relid, const char *attname)
 {
-	HeapTuple	tuple;
-
-	tuple = SearchSysCache2(ATTNAME,
-							ObjectIdGetDatum(relid),
-							CStringGetDatum(attname));
-	if (!HeapTupleIsValid(tuple))
-		return NULL;
-	if (((Form_pg_attribute) GETSTRUCT(tuple))->attisdropped)
-	{
-		ReleaseSysCache(tuple);
-		return NULL;
-	}
-	return tuple;
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 /*
@@ -1338,15 +1267,9 @@ SearchSysCacheAttName(Oid relid, const char *attname)
 HeapTuple
 SearchSysCacheCopyAttName(Oid relid, const char *attname)
 {
-	HeapTuple	tuple,
-				newtuple;
-
-	tuple = SearchSysCacheAttName(relid, attname);
-	if (!HeapTupleIsValid(tuple))
-		return tuple;
-	newtuple = heap_copytuple(tuple);
-	ReleaseSysCache(tuple);
-	return newtuple;
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 /*
@@ -1357,13 +1280,9 @@ SearchSysCacheCopyAttName(Oid relid, const char *attname)
 bool
 SearchSysCacheExistsAttName(Oid relid, const char *attname)
 {
-	HeapTuple	tuple;
-
-	tuple = SearchSysCacheAttName(relid, attname);
-	if (!HeapTupleIsValid(tuple))
-		return false;
-	ReleaseSysCache(tuple);
-	return true;
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 
@@ -1378,19 +1297,9 @@ SearchSysCacheExistsAttName(Oid relid, const char *attname)
 HeapTuple
 SearchSysCacheAttNum(Oid relid, int16 attnum)
 {
-	HeapTuple	tuple;
-
-	tuple = SearchSysCache2(ATTNUM,
-							ObjectIdGetDatum(relid),
-							Int16GetDatum(attnum));
-	if (!HeapTupleIsValid(tuple))
-		return NULL;
-	if (((Form_pg_attribute) GETSTRUCT(tuple))->attisdropped)
-	{
-		ReleaseSysCache(tuple);
-		return NULL;
-	}
-	return tuple;
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 /*
@@ -1401,15 +1310,9 @@ SearchSysCacheAttNum(Oid relid, int16 attnum)
 HeapTuple
 SearchSysCacheCopyAttNum(Oid relid, int16 attnum)
 {
-	HeapTuple	tuple,
-				newtuple;
-
-	tuple = SearchSysCacheAttNum(relid, attnum);
-	if (!HeapTupleIsValid(tuple))
-		return NULL;
-	newtuple = heap_copytuple(tuple);
-	ReleaseSysCache(tuple);
-	return newtuple;
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 
@@ -1437,24 +1340,9 @@ SysCacheGetAttr(int cacheId, HeapTuple tup,
 				AttrNumber attributeNumber,
 				bool *isNull)
 {
-	/*
-	 * We just need to get the TupleDesc out of the cache entry, and then we
-	 * can apply heap_getattr().  Normally the cache control data is already
-	 * valid (because the caller recently fetched the tuple via this same
-	 * cache), but there are cases where we have to initialize the cache here.
-	 */
-	if (cacheId < 0 || cacheId >= SysCacheSize ||
-		!PointerIsValid(SysCache[cacheId]))
-		elog(ERROR, "invalid cache ID: %d", cacheId);
-	if (!PointerIsValid(SysCache[cacheId]->cc_tupdesc))
-	{
-		InitCatCachePhase2(SysCache[cacheId], false);
-		Assert(PointerIsValid(SysCache[cacheId]->cc_tupdesc));
-	}
-
-	return heap_getattr(tup, attributeNumber,
-						SysCache[cacheId]->cc_tupdesc,
-						isNull);
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 /*
@@ -1474,11 +1362,9 @@ GetSysCacheHashValue(int cacheId,
 					 Datum key3,
 					 Datum key4)
 {
-	if (cacheId < 0 || cacheId >= SysCacheSize ||
-		!PointerIsValid(SysCache[cacheId]))
-		elog(ERROR, "invalid cache ID: %d", cacheId);
-
-	return GetCatCacheHashValue(SysCache[cacheId], key1, key2, key3, key4);
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 /*
@@ -1488,12 +1374,9 @@ struct catclist *
 SearchSysCacheList(int cacheId, int nkeys,
 				   Datum key1, Datum key2, Datum key3)
 {
-	if (cacheId < 0 || cacheId >= SysCacheSize ||
-		!PointerIsValid(SysCache[cacheId]))
-		elog(ERROR, "invalid cache ID: %d", cacheId);
-
-	return SearchCatCacheList(SysCache[cacheId], nkeys,
-							  key1, key2, key3);
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 /*
@@ -1507,14 +1390,9 @@ SearchSysCacheList(int cacheId, int nkeys,
 void
 SysCacheInvalidate(int cacheId, uint32 hashValue)
 {
-	if (cacheId < 0 || cacheId >= SysCacheSize)
-		elog(ERROR, "invalid cache ID: %d", cacheId);
-
-	/* if this cache isn't initialized yet, no need to do anything */
-	if (!PointerIsValid(SysCache[cacheId]))
-		return;
-
-	CatCacheInvalidate(SysCache[cacheId], hashValue);
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
 }
 
 /*
@@ -1531,21 +1409,9 @@ SysCacheInvalidate(int cacheId, uint32 hashValue)
 bool
 RelationInvalidatesSnapshotsOnly(Oid relid)
 {
-	switch (relid)
-	{
-		case DbRoleSettingRelationId:
-		case DependRelationId:
-		case SharedDependRelationId:
-		case DescriptionRelationId:
-		case SharedDescriptionRelationId:
-		case SecLabelRelationId:
-		case SharedSecLabelRelationId:
-			return true;
-		default:
-			break;
-	}
-
+	// SPANGRES BEGIN
 	return false;
+	// SPANGRES END
 }
 
 /*
@@ -1554,22 +1420,9 @@ RelationInvalidatesSnapshotsOnly(Oid relid)
 bool
 RelationHasSysCache(Oid relid)
 {
-	int			low = 0,
-				high = SysCacheRelationOidSize - 1;
-
-	while (low <= high)
-	{
-		int			middle = low + (high - low) / 2;
-
-		if (SysCacheRelationOid[middle] == relid)
-			return true;
-		if (SysCacheRelationOid[middle] < relid)
-			low = middle + 1;
-		else
-			high = middle - 1;
-	}
-
+	// SPANGRES BEGIN
 	return false;
+	// SPANGRES END
 }
 
 /*
@@ -1579,22 +1432,9 @@ RelationHasSysCache(Oid relid)
 bool
 RelationSupportsSysCache(Oid relid)
 {
-	int			low = 0,
-				high = SysCacheSupportingRelOidSize - 1;
-
-	while (low <= high)
-	{
-		int			middle = low + (high - low) / 2;
-
-		if (SysCacheSupportingRelOid[middle] == relid)
-			return true;
-		if (SysCacheSupportingRelOid[middle] < relid)
-			low = middle + 1;
-		else
-			high = middle - 1;
-	}
-
+	// SPANGRES BEGIN
 	return false;
+	// SPANGRES END
 }
 
 

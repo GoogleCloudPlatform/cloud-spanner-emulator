@@ -26,7 +26,7 @@ extern void markTargetListOrigins(ParseState *pstate, List *targetlist);
 extern TargetEntry *transformTargetEntry(ParseState *pstate,
 					 Node *node, Node *expr, ParseExprKind exprKind,
 					 char *colname, bool resjunk);
-extern Expr *transformAssignedExpr_UNUSED_SPANGRES(ParseState *pstate, Expr *expr,
+extern Expr *transformAssignedExpr(ParseState *pstate, Expr *expr,
  					  ParseExprKind exprKind,
  					  const char *colname,
  					  int attrno,
@@ -48,7 +48,7 @@ extern Node *transformAssignmentIndirection(ParseState *pstate,
 											Node *rhs,
 											CoercionContext ccontext,
 											int location);
-extern List *checkInsertTargets_UNUSED_SPANGRES(ParseState *pstate, List *cols,
+extern List *checkInsertTargets(ParseState *pstate, List *cols,
 								List **attrnos);
 extern TupleDesc expandRecordVariable(ParseState *pstate, Var *var,
 					 int levelsup);extern char *FigureColname(Node *node);

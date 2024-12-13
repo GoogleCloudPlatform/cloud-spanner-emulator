@@ -85,6 +85,7 @@ cc_library(
         "gram.h",
     ],
     deps = [
+        "//third_party/spanner_pg/shims:catalog_shim_cc_wrappers_header",
         "//third_party/spanner_pg/shims:catalog_shim_header",
         "//third_party/spanner_pg/shims:parser_shim",
         "//third_party/spanner_pg/src/include",

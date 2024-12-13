@@ -29,14 +29,11 @@
 #include "mb/pg_wchar.h"
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 #define MAX_INT32_LEN 11
 
-// SPANGRES BEGIN
-// We've made these functions non-static to call them from catalog_shim.
-char *printTypmod(const char *typname, int32 typmod, Oid typmodout);
-// SPANGRES END
-
+static char *printTypmod(const char *typname, int32 typmod, Oid typmodout);
 
 /*
  * SQL function: format_type(type_oid, typemod)
@@ -115,36 +112,32 @@ format_type(PG_FUNCTION_ARGS)
  * see the comments above for format_type().
  *
  * Returns a palloc'd string, or NULL.
+ *
+ * SPANGRES: Mostly identical to the PostgreSQL version, except that we use
+ * bootstrap_catalog instead of the Heap.
  */
 char *
-format_type_extended_UNUSED_SPANGRES(Oid type_oid, int32 typemod, bits16 flags)
+format_type_extended(Oid type_oid, int32 typemod, bits16 flags)
 {
-	HeapTuple	tuple;
-	Form_pg_type typeform;
+	// SPANGRES BEGIN
+	const FormData_pg_type* typeform;
+	// SPANGRES END
 	Oid			array_base_type;
 	bool		is_array;
 	char	   *buf;
 	bool		with_typemod;
 
-	if (type_oid == InvalidOid)
-	{
-		if ((flags & FORMAT_TYPE_INVALID_AS_NULL) != 0)
-			return NULL;
-		else if ((flags & FORMAT_TYPE_ALLOW_INVALID) != 0)
-			return pstrdup("-");
-	}
+	// SPANGRES BEGIN
+	if (type_oid == InvalidOid && (flags & FORMAT_TYPE_ALLOW_INVALID) != 0)
+		return pstrdup("-");
 
-	tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_oid));
-	if (!HeapTupleIsValid(tuple))
-	{
-		if ((flags & FORMAT_TYPE_INVALID_AS_NULL) != 0)
-			return NULL;
-		else if ((flags & FORMAT_TYPE_ALLOW_INVALID) != 0)
-			return pstrdup("???");
-		else
-			elog(ERROR, "cache lookup failed for type %u", type_oid);
+	typeform = GetTypeFromBootstrapCatalog(type_oid);
+	if (typeform == NULL) {
+		ereport(ERROR,
+						(errmsg("Typeoid not found in bootstrap catalog: %d", type_oid),
+						 errcode(ERRCODE_INTERNAL_ERROR)));
 	}
-	typeform = (Form_pg_type) GETSTRUCT(tuple);
+	// SPANGRES END
 
 	/*
 	 * Check if it's a "true" array type.  Pseudo-array types such as "name"
@@ -154,27 +147,23 @@ format_type_extended_UNUSED_SPANGRES(Oid type_oid, int32 typemod, bits16 flags)
 	 */
 	array_base_type = typeform->typelem;
 
-	if (IsTrueArrayType(typeform) &&
-		typeform->typstorage != TYPSTORAGE_PLAIN)
+	// SPANGRES BEGIN
+	if (array_base_type != InvalidOid && typeform->typstorage != TYPSTORAGE_PLAIN)
 	{
 		/* Switch our attention to the array element type */
-		ReleaseSysCache(tuple);
-		tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(array_base_type));
-		if (!HeapTupleIsValid(tuple))
-		{
-			if ((flags & FORMAT_TYPE_INVALID_AS_NULL) != 0)
-				return NULL;
-			else if ((flags & FORMAT_TYPE_ALLOW_INVALID) != 0)
-				return pstrdup("???[]");
-			else
-				elog(ERROR, "cache lookup failed for type %u", type_oid);
+		typeform = GetTypeFromBootstrapCatalog(array_base_type);
+		if (typeform == NULL) {
+			ereport(ERROR,
+							(errmsg("Array base typeoid not found in bootstrap catalog: %d",
+											array_base_type),
+							 errcode(ERRCODE_INTERNAL_ERROR)));
 		}
-		typeform = (Form_pg_type) GETSTRUCT(tuple);
 		type_oid = array_base_type;
 		is_array = true;
 	}
 	else
 		is_array = false;
+	// SPANGRES END
 
 	with_typemod = (flags & FORMAT_TYPE_TYPEMOD_GIVEN) != 0 && (typemod >= 0);
 
@@ -312,8 +301,10 @@ format_type_extended_UNUSED_SPANGRES(Oid type_oid, int32 typemod, bits16 flags)
 		 * path or if caller requests it; and we must double-quote it if it's
 		 * not a standard identifier or if it matches any keyword.
 		 */
-		char	   *nspname;
-		char	   *typname;
+		// SPANGRES BEGIN
+		const char *nspname;
+		const char *typname;
+		// SPANGRES END
 
 		if ((flags & FORMAT_TYPE_FORCE_QUALIFY) == 0 &&
 			TypeIsVisible(type_oid))
@@ -332,7 +323,9 @@ format_type_extended_UNUSED_SPANGRES(Oid type_oid, int32 typemod, bits16 flags)
 	if (is_array)
 		buf = psprintf("%s[]", buf);
 
-	ReleaseSysCache(tuple);
+	// SPANGRES BEGIN
+	// ReleaseSysCache(tuple);
+	// SPANGRES END
 
 	return buf;
 }

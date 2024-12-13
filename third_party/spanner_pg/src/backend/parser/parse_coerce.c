@@ -32,6 +32,7 @@
 #include "utils/typcache.h"
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 static Node *coerce_type_typmod(Node *node,
 								Oid targetTypeId, int32 targetTypMod,
@@ -39,12 +40,6 @@ static Node *coerce_type_typmod(Node *node,
 								int location,
 								bool hideInputCoercion);
 static void hide_coercion_node(Node *node);
-static Node *build_coercion_expression_UNUSED_SPANGRES(Node *node,
- 						  CoercionPathType pathtype,
- 						  Oid funcId,
- 						  Oid targetTypeId, int32 targetTypMod,
-						  CoercionContext ccontext, CoercionForm cformat,
-					      int location);
 static Node *coerce_record_to_complex(ParseState *pstate, Node *node,
 						 Oid targetTypeId,
 						 CoercionContext ccontext,
@@ -556,9 +551,13 @@ coerce_type(ParseState *pstate, Node *node,
  *
  * We must be told the context (CAST construct, assignment, implicit coercion)
  * as this determines the set of available casts.
+ *
+ * SPANGRES: Loop through the arrays of input and target types, and determine
+ * whether a coercion path exists for each. For complex types and generics, just
+ * return false for now.
  */
 bool
-can_coerce_type_UNUSED_SPANGRES(int nargs, const Oid *input_typeids, const Oid *target_typeids,
+can_coerce_type(int nargs, const Oid *input_typeids, const Oid *target_typeids,
 				CoercionContext ccontext)
 {
 	bool		have_generics = false;
@@ -580,7 +579,11 @@ can_coerce_type_UNUSED_SPANGRES(int nargs, const Oid *input_typeids, const Oid *
 		if (targetTypeId == ANYOID)
 			continue;
 
-		/* accept if target is polymorphic, for now */
+		/*
+		 * accept if target is polymorphic, for now
+		 * SPANGRES: We will reject this later to keep control flow more
+		 * closely-matched to the PostgreSQL source.
+		 */
 		if (IsPolymorphicType(targetTypeId))
 		{
 			have_generics = true;	/* do more checking later */
@@ -603,57 +606,22 @@ can_coerce_type_UNUSED_SPANGRES(int nargs, const Oid *input_typeids, const Oid *
 		if (pathtype != COERCION_PATH_NONE)
 			continue;
 
+		// SPANGRES BEGIN
 		/*
-		 * If input is RECORD and target is a composite type, assume we can
-		 * coerce (may need tighter checking here)
-		 */
-		if (inputTypeId == RECORDOID &&
-			ISCOMPLEX(targetTypeId))
-			continue;
-
-		/*
-		 * If input is a composite type and target is RECORD, accept
-		 */
-		if (targetTypeId == RECORDOID &&
-			ISCOMPLEX(inputTypeId))
-			continue;
-
-#ifdef NOT_USED					/* not implemented yet */
-
-		/*
-		 * If input is record[] and target is a composite array type, assume
-		 * we can coerce (may need tighter checking here)
-		 */
-		if (inputTypeId == RECORDARRAYOID &&
-			is_complex_array(targetTypeId))
-			continue;
-#endif
-
-		/*
-		 * If input is a composite array type and target is record[], accept
-		 */
-		if (targetTypeId == RECORDARRAYOID &&
-			is_complex_array(inputTypeId))
-			continue;
-
-		/*
-		 * If input is a class type that inherits from target, accept
-		 */
-		if (typeInheritsFrom(inputTypeId, targetTypeId)
-			|| typeIsOfTypedTable(inputTypeId, targetTypeId))
-			continue;
-
-		/*
+		 * Here we skip checking complex types including records (and record
+		 * arrays), enums, and relations.
+		 * TODO: Add support for more types.
+		 *
 		 * Else, cannot coerce at this argument position
 		 */
 		return false;
+		// SPANGRES END
 	}
 
 	/* If we found any generic argument types, cross-check them */
 	if (have_generics)
 	{
-		if (!check_generic_type_consistency(input_typeids, target_typeids,
-											nargs))
+		if (!check_generic_type_consistency(input_typeids, target_typeids, nargs))
 			return false;
 	}
 
@@ -834,48 +802,61 @@ hide_coercion_node(Node *node)
 }
 
 /*
- * build_coercion_expression_spangres()
+ * build_coercion_expression()
  *		Construct an expression tree for applying a pg_cast entry.
  *
  * This is used for both type-coercion and length-coercion operations,
  * since there is no difference in terms of the calling convention.
+ *
+ * SPANGRES: The FormData_pg_proc strict is retrieved directly from
+ * bootstrap_catalog instead of getting and unwrapping a HeapTuple from the
+ * PostgreSQL system cache.
  */
-static Node *
-build_coercion_expression_UNUSED_SPANGRES(Node *node,
+// SPANGRES BEGIN
+// Non-static for testing
+Node *
+build_coercion_expression(Node *node,
 						  CoercionPathType pathtype,
 						  Oid funcId,
 						  Oid targetTypeId, int32 targetTypMod,
 						  CoercionContext ccontext, CoercionForm cformat,
 						  int location)
+// SPANGRES END
 {
 	int			nargs = 0;
 
 	if (OidIsValid(funcId))
 	{
-		HeapTuple	tp;
-		Form_pg_proc procstruct;
+		// SPANGRES BEGIN
+		const FormData_pg_proc* procstruct;
 
-		tp = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcId));
-		if (!HeapTupleIsValid(tp))
-			elog(ERROR, "cache lookup failed for function %u", funcId);
-		procstruct = (Form_pg_proc) GETSTRUCT(tp);
+		/*
+		 * Here we get the pg_proc struct directly from our catalogs instead of a
+		 * HeapTuple from the catalog cache.
+		 */
+		procstruct = GetProcByOid(funcId);
+		// SPANGRES END
 
 		/*
 		 * These Asserts essentially check that function is a legal coercion
 		 * function.  We can't make the seemingly obvious tests on prorettype
 		 * and proargtypes[0], even in the COERCION_PATH_FUNC case, because of
 		 * various binary-compatibility cases.
+		 * SPANGRES: these asserts are here in comment form as documentation
+		 * and to ensure they are not (incorrectly) added in the future.
 		 */
 		/* Assert(targetTypeId == procstruct->prorettype); */
-    Assert(!procstruct->proretset);
-    Assert(procstruct->prokind == PROKIND_FUNCTION);
+		Assert(!procstruct->proretset);
+		Assert(procstruct->prokind == PROKIND_FUNCTION);
 		nargs = procstruct->pronargs;
 		Assert(nargs >= 1 && nargs <= 3);
 		/* Assert(procstruct->proargtypes.values[0] == exprType(node)); */
 		Assert(nargs < 2 || procstruct->proargtypes.values[1] == INT4OID);
 		Assert(nargs < 3 || procstruct->proargtypes.values[2] == BOOLOID);
 
-		ReleaseSysCache(tp);
+		// SPANGRES BEGIN
+		// ReleaseSysCache(tp);
+		// SPANGRES END
 	}
 
 	if (pathtype == COERCION_PATH_FUNC)
@@ -2991,24 +2972,29 @@ IsPreferredType(TYPCATEGORY category, Oid type)
  * value as legitimate).  We also need to special-case various polymorphic
  * types.
  *
- * This function replaces IsBinaryCompatible(), which was an inherently
+ * SPANGRES: This function replaces IsBinaryCompatible(), which was an inherently
  * symmetric test.  Since the pg_cast entries aren't necessarily symmetric,
  * the order of the operands is now significant.
  */
 bool
-IsBinaryCoercible_UNUSED_SPANGRES(Oid srctype, Oid targettype)
+IsBinaryCoercible(Oid srctype, Oid targettype)
 {
-	HeapTuple	tuple;
-	Form_pg_cast castForm;
+	// SPANGRES BEGIN
+	// HeapTuple	tuple;
+	const FormData_pg_cast* castForm;
+	// SPANGRES END
 	bool		result;
 
 	/* Fast path if same type */
 	if (srctype == targettype)
 		return true;
 
-	/* Anything is coercible to ANY or ANYELEMENT */
-	if (targettype == ANYOID || targettype == ANYELEMENTOID)
+	// SPANGRES BEGIN
+	/* Anything is coercible to ANY or ANYELEMENT or ANYCOMPATIBLE */
+	if (targettype == ANYOID || targettype == ANYELEMENTOID ||
+		targettype == ANYCOMPATIBLEOID)
 		return true;
+	// SPANGRES END
 
 	/* If srctype is a domain, reduce to its base type */
 	if (OidIsValid(srctype))
@@ -3018,30 +3004,31 @@ IsBinaryCoercible_UNUSED_SPANGRES(Oid srctype, Oid targettype)
 	if (srctype == targettype)
 		return true;
 
-	/* Also accept any array type as coercible to ANYARRAY */
-	if (targettype == ANYARRAYOID)
+	// SPANGRES BEGIN
+	/* Also accept any array type as coercible to ANY[COMPATIBLE]ARRAY */
+	if (targettype == ANYARRAYOID || targettype == ANYCOMPATIBLEARRAYOID)
 		if (type_is_array(srctype))
 			return true;
+	// SPANGRES END
 
-	/* Also accept any non-array type as coercible to ANYNONARRAY */
-	if (targettype == ANYNONARRAYOID)
+	// SPANGRES BEGIN
+	/* Also accept any non-array type as coercible to ANY[COMPATIBLE]NONARRAY */
+	if (targettype == ANYNONARRAYOID || targettype == ANYCOMPATIBLENONARRAYOID)
 		if (!type_is_array(srctype))
 			return true;
+	// SPANGRES END
 
 	/* Also accept any enum type as coercible to ANYENUM */
 	if (targettype == ANYENUMOID)
 		if (type_is_enum(srctype))
 			return true;
 
-	/* Also accept any range type as coercible to ANYRANGE */
-	if (targettype == ANYRANGEOID)
+	// SPANGRES BEGIN
+	/* Also accept any range type as coercible to ANY[COMPATIBLE]RANGE */
+	if (targettype == ANYRANGEOID || targettype == ANYCOMPATIBLERANGEOID)
 		if (type_is_range(srctype))
 			return true;
-
-	/* Also, any multirange type is coercible to ANY[COMPATIBLE]MULTIRANGE */
-	if (targettype == ANYMULTIRANGEOID || targettype == ANYCOMPATIBLEMULTIRANGEOID)
-		if (type_is_multirange(srctype))
-			return true;
+	// SPANGRES END
 
 	/* Also accept any composite type as coercible to RECORD */
 	if (targettype == RECORDOID)
@@ -3053,17 +3040,16 @@ IsBinaryCoercible_UNUSED_SPANGRES(Oid srctype, Oid targettype)
 		if (is_complex_array(srctype))
 			return true;
 
+	// SPANGRES BEGIN
 	/* Else look in pg_cast */
-	tuple = SearchSysCache2(CASTSOURCETARGET,
-							ObjectIdGetDatum(srctype),
-							ObjectIdGetDatum(targettype));
-	if (!HeapTupleIsValid(tuple))
+	// SPANGRES: Use bootstrap instead of syscache.
+	castForm = GetCastFromBootstrapCatalog(srctype, targettype);
+	if (castForm == NULL)
 		return false;			/* no cast */
-	castForm = (Form_pg_cast) GETSTRUCT(tuple);
 
 	result = (castForm->castmethod == COERCION_METHOD_BINARY &&
 			  castForm->castcontext == COERCION_CODE_IMPLICIT);
-	ReleaseSysCache(tuple);
+	// SPANGRES END
 
 	return result;
 }
@@ -3093,18 +3079,26 @@ IsBinaryCoercible_UNUSED_SPANGRES(Oid srctype, Oid targettype)
  * needed to do the coercion; if the target is a domain then we may need to
  * apply domain constraint checking.  If you want to check for a zero-effort
  * conversion then use IsBinaryCoercible().
+ *
+ * SPANGRES: Lookup a coercion function in bootstrap_catalog. If found, set the
+ * context and cast function and return the cast type. If not found, do nothing
+ * and return (which is interpreted as an unsupported cast request).
  */
 CoercionPathType
-find_coercion_pathway_UNUSED_SPANGRES(Oid targetTypeId, Oid sourceTypeId,
+find_coercion_pathway(Oid targetTypeId, Oid sourceTypeId,
 					  CoercionContext ccontext,
 					  Oid *funcid)
 {
 	CoercionPathType result = COERCION_PATH_NONE;
-	HeapTuple	tuple;
 
 	*funcid = InvalidOid;
 
-	/* Perhaps the types are domains; if so, look at their base types */
+	/*
+	 * Perhaps the types are domains; if so, look at their base types
+	 * SPANGRES: These are no-ops in the current shim implementation (see
+	 * getBaseTypeAndTypmod), but we preserve them here so that adding
+	 * Domain support doesn't require changing this function.
+	 */
 	if (OidIsValid(sourceTypeId))
 		sourceTypeId = getBaseType(sourceTypeId);
 	if (OidIsValid(targetTypeId))
@@ -3114,14 +3108,15 @@ find_coercion_pathway_UNUSED_SPANGRES(Oid targetTypeId, Oid sourceTypeId,
 	if (sourceTypeId == targetTypeId)
 		return COERCION_PATH_RELABELTYPE;
 
-	/* Look in pg_cast */
-	tuple = SearchSysCache2(CASTSOURCETARGET,
-							ObjectIdGetDatum(sourceTypeId),
-							ObjectIdGetDatum(targetTypeId));
-
-	if (HeapTupleIsValid(tuple))
-	{
-		Form_pg_cast castForm = (Form_pg_cast) GETSTRUCT(tuple);
+	// SPANGRES BEGIN
+	/*
+	 * Here we bypass HeapTuple creation and get the FormData struct directly from
+	 * bootstrap_catalog.
+	 */
+	const FormData_pg_cast* castForm =
+			GetCastFromBootstrapCatalog(sourceTypeId, targetTypeId);
+	// SPANGRES END
+	if (castForm != NULL) {
 		CoercionContext castcontext;
 
 		/* convert char value for castcontext to CoercionContext enum */
@@ -3165,7 +3160,9 @@ find_coercion_pathway_UNUSED_SPANGRES(Oid targetTypeId, Oid sourceTypeId,
 			}
 		}
 
-		ReleaseSysCache(tuple);
+		// SPANGRES BEGIN
+		// ReleaseSysCache(tuple);
+		// SPANGRES END
 	}
 	else
 	{
@@ -3224,13 +3221,15 @@ find_coercion_pathway_UNUSED_SPANGRES(Oid targetTypeId, Oid sourceTypeId,
 		}
 	}
 
+	// SPANGRES BEGIN
 	/*
 	 * When parsing PL/pgSQL assignments, allow an I/O cast to be used
 	 * whenever no normal coercion is available.
 	 */
-	if (result == COERCION_PATH_NONE &&
-		ccontext == COERCION_PLPGSQL)
-		result = COERCION_PATH_COERCEVIAIO;
+	// if (result == COERCION_PATH_NONE &&
+	// 	ccontext == COERCION_PLPGSQL)
+	// 	result = COERCION_PATH_COERCEVIAIO;
+	// SPANGRES END
 
 	return result;
 }
@@ -3256,43 +3255,45 @@ find_coercion_pathway_UNUSED_SPANGRES(Oid targetTypeId, Oid sourceTypeId,
  *	COERCION_PATH_NONE: no length coercion needed
  *	COERCION_PATH_FUNC: apply the function returned in *funcid
  *	COERCION_PATH_ARRAYCOERCE: apply the function using ArrayCoerceExpr
+
+ * SPANGRES: Use the bootstrap catalog to get the Form_pg_cast instead of the
+ * syscache.
  */
 CoercionPathType
-find_typmod_coercion_function_UNUSED_SPANGRES(Oid typeId,
+find_typmod_coercion_function(Oid typeId,
 							  Oid *funcid)
 {
 	CoercionPathType result;
-	Type		targetType;
-	Form_pg_type typeForm;
-	HeapTuple	tuple;
+	// SPANGRES BEGIN
+	const FormData_pg_type* typeForm;
+	// SPANGRES END
 
 	*funcid = InvalidOid;
 	result = COERCION_PATH_FUNC;
 
-	targetType = typeidType(typeId);
-	typeForm = (Form_pg_type) GETSTRUCT(targetType);
+	// SPANGRES BEGIN
+	// Here we bypass HeapTuple creation and get the FormData struct directly
+	// from bootstrap_catalog.
+	typeForm = GetTypeFromBootstrapCatalog(typeId);
 
-	/* Check for a "true" array type */
-	if (IsTrueArrayType(typeForm))
+	/* Check for a varlena array type */
+	if (typeForm->typelem != InvalidOid && typeForm->typlen == -1)
+	// SPANGRES END
 	{
 		/* Yes, switch our attention to the element type */
 		typeId = typeForm->typelem;
 		result = COERCION_PATH_ARRAYCOERCE;
 	}
-	ReleaseSysCache(targetType);
 
-	/* Look in pg_cast */
-	tuple = SearchSysCache2(CASTSOURCETARGET,
-							ObjectIdGetDatum(typeId),
-							ObjectIdGetDatum(typeId));
-
-	if (HeapTupleIsValid(tuple))
-	{
-		Form_pg_cast castForm = (Form_pg_cast) GETSTRUCT(tuple);
-
+	// SPANGRES BEGIN
+	// Here we bypass HeapTuple creation and get the FormData struct directly
+	// from bootstrap_catalog.
+	const FormData_pg_cast* castForm =
+		GetCastFromBootstrapCatalog(typeId, typeId);
+	if (castForm != NULL) {
 		*funcid = castForm->castfunc;
-		ReleaseSysCache(tuple);
 	}
+	// SPANGRES END
 
 	if (!OidIsValid(*funcid))
 		result = COERCION_PATH_NONE;

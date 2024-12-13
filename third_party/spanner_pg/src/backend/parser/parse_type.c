@@ -28,6 +28,8 @@
 
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
+
 /* SPANGRES BEGIN */
 // We've made this function non-static to call it from catalog_shim.
 int32 typenameTypeMod(ParseState *pstate, const TypeName *typeName,
@@ -73,15 +75,19 @@ LookupTypeName(ParseState *pstate, const TypeName *typeName,
  * a type (or denotes nothing), pass true.
  *
  * pstate is only used for error location info, and may be NULL.
+ *
+ * SPANGRES: Create a Type (HeapTuple) out of our bootstrap_catalog instead of
+ * the real heap.
+ *
  */
 Type
-LookupTypeNameExtended_UNUSED_SPANGRES(ParseState *pstate,
+LookupTypeNameExtended(ParseState *pstate,
 					   const TypeName *typeName, int32 *typmod_p,
 					   bool temp_ok, bool missing_ok)
 {
-	Oid			typoid;
-	HeapTuple	tup;
-	int32		typmod;
+	// SPANGRES BEGIN
+	Oid typoid = InvalidOid;
+	// SPANGRES END
 
 	if (typeName->names == NIL)
 	{
@@ -90,136 +96,78 @@ LookupTypeNameExtended_UNUSED_SPANGRES(ParseState *pstate,
 	}
 	else if (typeName->pct_type)
 	{
-		/* Handle %TYPE reference to type of an existing field */
-		RangeVar   *rel = makeRangeVar(NULL, NULL, typeName->location);
-		char	   *field = NULL;
-		Oid			relid;
-		AttrNumber	attnum;
-
-		/* deconstruct the name list */
-		switch (list_length(typeName->names))
-		{
-			case 1:
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("improper %%TYPE reference (too few dotted names): %s",
-								NameListToString(typeName->names)),
-						 parser_errposition(pstate, typeName->location)));
-				break;
-			case 2:
-				rel->relname = strVal(linitial(typeName->names));
-				field = strVal(lsecond(typeName->names));
-				break;
-			case 3:
-				rel->schemaname = strVal(linitial(typeName->names));
-				rel->relname = strVal(lsecond(typeName->names));
-				field = strVal(lthird(typeName->names));
-				break;
-			case 4:
-				rel->catalogname = strVal(linitial(typeName->names));
-				rel->schemaname = strVal(lsecond(typeName->names));
-				rel->relname = strVal(lthird(typeName->names));
-				field = strVal(lfourth(typeName->names));
-				break;
-			default:
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("improper %%TYPE reference (too many dotted names): %s",
-								NameListToString(typeName->names)),
-						 parser_errposition(pstate, typeName->location)));
-				break;
-		}
-
-		/*
-		 * Look up the field.
-		 *
-		 * XXX: As no lock is taken here, this might fail in the presence of
-		 * concurrent DDL.  But taking a lock would carry a performance
-		 * penalty and would also require a permissions check.
-		 */
-		relid = RangeVarGetRelid(rel, NoLock, missing_ok);
-		attnum = get_attnum(relid, field);
-		if (attnum == InvalidAttrNumber)
-		{
-			if (missing_ok)
-				typoid = InvalidOid;
-			else
-				ereport(ERROR,
-						(errcode(ERRCODE_UNDEFINED_COLUMN),
-						 errmsg("column \"%s\" of relation \"%s\" does not exist",
-								field, rel->relname),
-						 parser_errposition(pstate, typeName->location)));
-		}
-		else
-		{
-			typoid = get_atttype(relid, attnum);
-
-			/* this construct should never have an array indicator */
-			Assert(typeName->arrayBounds == NIL);
-
-			/* emit nuisance notice (intentionally not errposition'd) */
-			ereport(NOTICE,
-					(errmsg("type reference %s converted to %s",
-							TypeNameToString(typeName),
-							format_type_be(typoid))));
-		}
+		// SPANGRES BEGIN
+		ereport(ERROR, (errmsg("%TYPE references are not supported"),
+										errcode(ERRCODE_FEATURE_NOT_SUPPORTED)));
+		// SPANGRES END
 	}
 	else
+	// SPANGRES BEGIN
 	{
 		/* Normal reference to a type name */
 		char	   *schemaname;
 		char	   *typname;
+  	Oid			 namespaceId;
 
 		/* deconstruct the name list */
 		DeconstructQualifiedName(typeName->names, &schemaname, &typname);
 
-		if (schemaname)
-		{
-			/* Look in specific schema only */
-			Oid			namespaceId;
-			ParseCallbackState pcbstate;
+    if (schemaname) {
+      namespaceId = GetNamespaceByNameFromBootstrapCatalog(schemaname);
+      if (!OidIsValid(namespaceId))
+        return NULL;
+    } else {
+      /*
+       * Spangres does not support search path. If a schemaname is not
+       * provided, use pg_catalog by default.
+       * TODO: Add support for search path.
+       */
+      namespaceId = GetNamespaceByNameFromBootstrapCatalog("pg_catalog");
+    }
 
-			setup_parser_errposition_callback(&pcbstate, pstate,
-											  typeName->location);
+    /* Search bootstrap catalog by type name only */
+    const FormData_pg_type* const* type_list;
+    size_t type_count;
+    GetTypesByNameFromBootstrapCatalog(typname, &type_list, &type_count);
 
-			namespaceId = LookupExplicitNamespace(schemaname, missing_ok);
-			if (OidIsValid(namespaceId))
-				typoid = GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid,
-										 PointerGetDatum(typname),
-										 ObjectIdGetDatum(namespaceId));
-			else
-				typoid = InvalidOid;
+    for (int type_index = 0; type_index < type_count; ++type_index) {
+      const FormData_pg_type* typeform = type_list[type_index];
+      /*
+       * Here PostgreSQL would check search path if a namespace was not
+       * provided. Spangres assumes that a namespace is provided or defaults
+       * to pg_catalog.
+       * TODO: Add support for search path.
+       */
+      if (typeform->typnamespace != namespaceId)
+        continue;
 
-			cancel_parser_errposition_callback(&pcbstate);
-		}
-		else
-		{
-			/* Unqualified type name, so search the search path */
-			typoid = TypenameGetTypidExtended(typname, temp_ok);
-		}
+      typoid = typeform->oid;
+    }
 
 		/* If an array reference, return the array type instead */
-		if (typeName->arrayBounds != NIL)
+		if (typeName->arrayBounds != NIL) {
 			typoid = get_array_type(typoid);
+		}
 	}
+	// SPANGRES END
 
+	// SPANGRES BEGIN
 	if (!OidIsValid(typoid))
 	{
-		if (typmod_p)
+		if (typmod_p) {
+			// -1 represents "this type does not use a typmod" and is a widely-used
+			// safe default for PostgreSQL.
 			*typmod_p = -1;
-		return NULL;
+		}
+		return NULL;	// Let callers decide whether this is an error.
 	}
 
-	tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typoid));
-	if (!HeapTupleIsValid(tup)) /* should not happen */
-		elog(ERROR, "cache lookup failed for type %u", typoid);
-
-	typmod = typenameTypeMod(pstate, typeName, (Type) tup);
-
-	if (typmod_p)
-		*typmod_p = typmod;
-
-	return (Type) tup;
+	Type type_tuple = PgTypeFormHeapTuple(typoid);
+	if (typmod_p) {
+		*typmod_p = typenameTypeMod(pstate, typeName, type_tuple);
+	}
+	return type_tuple;
+	// SPANGRES END
 }
 
 /*
@@ -585,16 +533,17 @@ GetColumnDefCollation(ParseState *pstate, ColumnDef *coldef, Oid typeOid)
 }
 
 /* return a Type structure, given a type id */
-/* NB: caller must ReleaseSysCache the type tuple when done with it */
+/* NB: caller must ReleaseSysCache the type tuple when done with it
+ *
+ * SPANGRES: Create a Type (HeapTuple) out of our bootstrap_catalog instead of
+ * the real heap.
+ */
 Type
-typeidType_UNUSED_SPANGRES(Oid id)
+typeidType(Oid id)
 {
-	HeapTuple	tup;
-
-	tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(id));
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR, "cache lookup failed for type %u", id);
-	return (Type) tup;
+	// SPANGRES BEGIN
+	return PgTypeFormHeapTuple(id);
+	// SPANGRES END
 }
 
 /* given type (as type struct), return the type OID */
@@ -675,21 +624,21 @@ stringTypeDatum(Type tp, char *string, int32 atttypmod)
 /*
  * Given a typeid, return the type's typrelid (associated relation), if any.
  * Returns InvalidOid if type is not a composite type.
+ *
+ * SPANGRES: This usually return InvalidOid because Spangres does not
+ * currently support complex types outside of system table row types themselves.
  */
 Oid
-typeidTypeRelid_UNUSED_SPANGRES(Oid type_id)
+typeidTypeRelid(Oid type_id)
 {
-	HeapTuple	typeTuple;
-	Form_pg_type type;
-	Oid			result;
-
-	typeTuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_id));
-	if (!HeapTupleIsValid(typeTuple))
-		elog(ERROR, "cache lookup failed for type %u", type_id);
-	type = (Form_pg_type) GETSTRUCT(typeTuple);
-	result = type->typrelid;
-	ReleaseSysCache(typeTuple);
-	return result;
+	// SPANGRES BEGIN
+	const FormData_pg_type* type_data = GetTypeFromBootstrapCatalog(type_id);
+	if (type_data == NULL) {
+		elog(ERROR, "bootstrap catalog lookup failed for type %u", type_id);
+	} else {
+		return type_data->typrelid;
+	}
+	// SPANGRES END
 }
 
 /*
@@ -698,30 +647,19 @@ typeidTypeRelid_UNUSED_SPANGRES(Oid type_id)
  * This is the same as typeidTypeRelid(getBaseType(type_id)), but faster.
  */
 Oid
-typeOrDomainTypeRelid_UNUSED_SPANGRES(Oid type_id)
+typeOrDomainTypeRelid(Oid type_id)
 {
-	HeapTuple	typeTuple;
-	Form_pg_type type;
-	Oid			result;
-
-	for (;;)
-	{
-		typeTuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_id));
-		if (!HeapTupleIsValid(typeTuple))
-			elog(ERROR, "cache lookup failed for type %u", type_id);
-		type = (Form_pg_type) GETSTRUCT(typeTuple);
-		if (type->typtype != TYPTYPE_DOMAIN)
-		{
-			/* Not a domain, so done looking through domains */
-			break;
-		}
-		/* It is a domain, so examine the base type instead */
-		type_id = type->typbasetype;
-		ReleaseSysCache(typeTuple);
-	}
-	result = type->typrelid;
-	ReleaseSysCache(typeTuple);
-	return result;
+	// SPANGRES BEGIN
+	/*
+	 * This Spangres code is not actually faster for now because getBaseType()
+	 * under Spanges is currently trivial so can't be optimized much.
+	 * (It calls getBaseTypeAndTypmod(), below, which currently just
+	 * immediately returns its own first argument.)
+	 * If getBaseTypeAndTypmod() gets extended to contain more upstream
+	 * logic, this function may require optimization.
+	 */
+	return typeidTypeRelid(getBaseType(type_id));
+	// SPANGRES END
 }
 
 /*

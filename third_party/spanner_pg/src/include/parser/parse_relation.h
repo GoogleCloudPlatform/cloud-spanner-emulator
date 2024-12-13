@@ -114,9 +114,11 @@ extern void errorMissingColumn(ParseState *pstate,
 extern void expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 					  int location, bool include_dropped,
 					  List **colnames, List **colvars);
-extern List *expandNSItemVars_UNUSED_SPANGRES(ParseNamespaceItem *nsitem,
+// SPANGRES BEGIN
+extern List *expandNSItemVars(ParseState* pstate, ParseNamespaceItem *nsitem,
 							  int sublevels_up, int location,
 							  List **colnames);
+// SPANGRES END
 extern List *expandNSItemAttrs(ParseState *pstate, ParseNamespaceItem *nsitem,
 							   int sublevels_up, bool require_col_privs,
 							   int location);
@@ -125,5 +127,13 @@ extern const NameData *attnumAttName(Relation rd, int attid);
 extern Oid	attnumTypeId(Relation rd, int attid);
 extern Oid	attnumCollationId(Relation rd, int attid);
 extern bool isQueryUsingTempRelation(Query *query);
+
+// SPANGRES BEGIN
+// Visible for testing
+void expandRelation(Oid relid, Alias *eref,
+						   int rtindex, int sublevels_up,
+						   int location, bool include_dropped,
+						   List **colnames, List **colvars);
+// SPANGRES END
 
 #endif							/* PARSE_RELATION_H */

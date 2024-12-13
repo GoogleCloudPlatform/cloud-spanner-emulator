@@ -602,6 +602,83 @@ TEST_P(SchemaUpdaterTest, CreateTable_SynonymConflictsWithSynonym) {
               StatusIs(error::SchemaObjectAlreadyExists("Table", "S")));
 }
 
+TEST_P(SchemaUpdaterTest, AlterTable_Rename) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T (
+        k1 INT64,
+      ) PRIMARY KEY (k1)
+    )"}));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T RENAME TO S
+    )"}));
+
+  auto t_new = new_schema->FindTable("T");
+  EXPECT_EQ(t_new, nullptr);
+
+  auto s_new = new_schema->FindTable("S");
+  EXPECT_NE(s_new, nullptr);
+}
+
+TEST_P(SchemaUpdaterTest, AlterTable_RenameWithSynonym) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T (
+        k1 INT64,
+      ) PRIMARY KEY (k1)
+    )"}));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T RENAME TO S, ADD SYNONYM T
+    )"}));
+
+  auto t_new = new_schema->FindTable("T");
+  EXPECT_NE(t_new, nullptr);
+
+  auto s_new = new_schema->FindTable("S");
+  EXPECT_NE(s_new, nullptr);
+
+  // The two table objects should be the same.
+  EXPECT_EQ(t_new, s_new);
+}
+
+TEST_P(SchemaUpdaterTest, AlterTable_RenameWithDependencies) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T (
+        k1 INT64,
+        c1 INT64,
+      ) PRIMARY KEY (k1)
+    )",
+                                                  R"(
+      CREATE TABLE T2 (
+        k1 INT64,
+        c1 INT64,
+      ) PRIMARY KEY (k1), INTERLEAVE IN PARENT T
+    )",
+                                                  R"(
+      CREATE INDEX Idx1 ON T(c1)
+    )"}));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T RENAME TO S
+    )"}));
+
+  auto t_new = new_schema->FindTable("T");
+  EXPECT_EQ(t_new, nullptr);
+
+  auto s_new = new_schema->FindTable("S");
+  EXPECT_NE(s_new, nullptr);
+
+  // Child table must be interleaved in the new parent table name.
+  auto t_child = new_schema->FindTable("T2");
+  EXPECT_NE(t_child, nullptr);
+  EXPECT_EQ(t_child->parent()->Name(), "S");
+
+  // Index must be indexing the new base table name.
+  auto idx = new_schema->FindIndex("Idx1");
+  EXPECT_NE(idx, nullptr);
+  EXPECT_EQ(idx->indexed_table()->Name(), "S");
+}
+
 TEST_P(SchemaUpdaterTest, AlterTable_AddColumn) {
   // Only BYTES(MAX) is supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();

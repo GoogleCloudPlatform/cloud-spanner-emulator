@@ -319,12 +319,12 @@ typedef struct ParseCallbackState
 
 
 extern ParseState *make_parsestate(ParseState *parentParseState);
-extern void free_parsestate_UNUSED_SPANGRES(ParseState *pstate);
+extern void free_parsestate(ParseState *pstate);
 extern int	parser_errposition(ParseState *pstate, int location);
 
-extern void setup_parser_errposition_callback_UNUSED_SPANGRES(ParseCallbackState *pcbstate,
+extern void setup_parser_errposition_callback(ParseCallbackState *pcbstate,
 											  ParseState *pstate, int location);
-extern void cancel_parser_errposition_callback_UNUSED_SPANGRES(ParseCallbackState *pcbstate);
+extern void cancel_parser_errposition_callback(ParseCallbackState *pcbstate);
 
 extern void transformContainerType(Oid *containerType, int32 *containerTypmod);
 
@@ -334,6 +334,6 @@ extern SubscriptingRef *transformContainerSubscripts(ParseState *pstate,
 													 int32 containerTypMod,
 													 List *indirection,
 													 bool isAssignment);
-extern Const *make_const_UNUSED_SPANGRES(ParseState *pstate, A_Const *aconst);
+extern Const *make_const(ParseState *pstate, A_Const *aconst);
 
 #endif							/* PARSE_NODE_H */

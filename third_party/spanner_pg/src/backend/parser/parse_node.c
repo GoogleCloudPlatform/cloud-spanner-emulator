@@ -31,6 +31,7 @@
 #include "utils/varbit.h"
 
 #include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
 
 static void pcb_error_callback(void *arg);
 
@@ -75,24 +76,20 @@ make_parsestate(ParseState *parentParseState)
  *		Release a ParseState and any subsidiary resources.
  */
 void
-free_parsestate_UNUSED_SPANGRES(ParseState *pstate)
-{
+free_parsestate(ParseState* pstate) {
 	/*
 	 * Check that we did not produce too many resnos; at the very least we
 	 * cannot allow more than 2^16, since that would exceed the range of a
 	 * AttrNumber. It seems safest to use MaxTupleAttributeNumber.
 	 */
-	if (pstate->p_next_resno - 1 > MaxTupleAttributeNumber)
+	// SPANGRES BEGIN
+	if (pstate->p_next_resno - 1 > MaxTupleAttributeNumber) {
 		ereport(ERROR,
-				(errcode(ERRCODE_TOO_MANY_COLUMNS),
-				 errmsg("target lists can have at most %d entries",
-						MaxTupleAttributeNumber)));
-
-	/* SPANGRES BEGIN */
-	// Commenting because this field got renamed and we're not patching up
-	// a dead function.
-	/* if (pstate->p_target_relation_oid != NULL) */
-	/* 	table_close(pstate->p_target_relation_oid, NoLock); */
+						(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+						 errmsg("target lists can have at most %d entries",
+										MaxTupleAttributeNumber)));
+	}
+	// SPANGRES END
 
 	pfree(pstate);
 }
@@ -146,26 +143,23 @@ parser_errposition(ParseState *pstate, int location)
  *		cancel_parser_errposition_callback(&pcbstate);
  */
 void
-setup_parser_errposition_callback_UNUSED_SPANGRES(ParseCallbackState *pcbstate,
+setup_parser_errposition_callback(ParseCallbackState *pcbstate,
 								  ParseState *pstate, int location)
 {
-	/* Setup error traceback support for ereport() */
-	pcbstate->pstate = pstate;
-	pcbstate->location = location;
-	pcbstate->errcallback.callback = pcb_error_callback;
-	pcbstate->errcallback.arg = (void *) pcbstate;
-	pcbstate->errcallback.previous = error_context_stack;
-	error_context_stack = &pcbstate->errcallback;
+	// SPANGRES BEGIN
+	// Do nothing
+	// SPANGRES END
 }
 
 /*
  * Cancel a previously-set-up errposition callback.
  */
 void
-cancel_parser_errposition_callback_UNUSED_SPANGRES(ParseCallbackState *pcbstate)
+cancel_parser_errposition_callback(ParseCallbackState *pcbstate)
 {
-	/* Pop the error context stack */
-	error_context_stack = pcbstate->errcallback.previous;
+	// SPANGRES BEGIN
+	// Do nothing
+	// SPANGRES END
 }
 
 /*
@@ -193,9 +187,11 @@ pcb_error_callback(void *arg)
  * the actual container type and typmod.  This mainly involves smashing
  * any domain to its base type, but there are some special considerations.
  * Note that caller still needs to check if the result type is a container.
+ *
+ * SPANGRES: uses bootstrap instead of syscache.
  */
 void
-transformContainerType_UNUSED_SPANGRES(Oid *containerType, int32 *containerTypmod)
+transformContainerType(Oid *containerType, int32 *containerTypmod)
 {
 	/*
 	 * If the input is a domain, smash to base type, and extract the actual
@@ -249,7 +245,7 @@ transformContainerType_UNUSED_SPANGRES(Oid *containerType, int32 *containerTypmo
  * isAssignment		True if this will become a container assignment.
  */
 SubscriptingRef *
-transformContainerSubscripts_UNUSED_SPANGRES(ParseState *pstate,
+transformContainerSubscripts(ParseState *pstate,
 							 Node *containerBase,
 							 Oid containerType,
 							 int32 containerTypMod,
@@ -257,7 +253,9 @@ transformContainerSubscripts_UNUSED_SPANGRES(ParseState *pstate,
 							 bool isAssignment)
 {
 	SubscriptingRef *sbsref;
-	const SubscriptRoutines *sbsroutines;
+	// SPANGRES BEGIN
+	const struct SubscriptRoutines *sbsroutines;
+	// SPANGRES END
 	Oid			elementType;
 	bool		isSlice = false;
 	ListCell   *idx;
@@ -351,12 +349,19 @@ transformContainerSubscripts_UNUSED_SPANGRES(ParseState *pstate,
  *	on the value of the number.  XXX We should produce int2 as well,
  *	but additional cleanup is needed before we can do that; there are
  *	too many examples that fail if we try.
+ *
+ * SPANGRES: choose int8 (instead of int4) for integers and int8 or numeric
+ * (never int4) for floats.
  */
 Const *
-make_const_UNUSED_SPANGRES(ParseState *pstate, A_Const *aconst)
+make_const(ParseState *pstate, A_Const *aconst)
 {
 	Const	   *con;
 	Datum		val;
+	// SPANGRES BEGIN
+	int64		val64;
+	char		*endptr;
+	// SPANGRES END
 	Oid			typeid;
 	int			typelen;
 	bool		typebyval;
@@ -378,65 +383,46 @@ make_const_UNUSED_SPANGRES(ParseState *pstate, A_Const *aconst)
 
 	switch (nodeTag(&aconst->val))
 	{
+		// SPANGRES BEGIN
 		case T_Integer:
-			val = Int32GetDatum(intVal(&aconst->val));
+			val = Int64GetDatum(intVal(&aconst->val));
 
-			typeid = INT4OID;
-			typelen = sizeof(int32);
+			typeid = INT8OID;
+			typelen = sizeof(int64);
 			typebyval = true;
 			break;
+		// SPANGRES END
 
+		// SPANGRES BEGIN
 		case T_Float:
+			/* could be an oversize integer as well as a float ... */
+			errno = 0;
+			val64 = strtoi64(aconst->val.fval.fval, &endptr, 10);
+			if (errno == 0 && *endptr == '\0')
 			{
-				/* could be an oversize integer as well as a float ... */
+				/* SPANGRES: skip checking if the value fits in an int32. */
+				val = Int64GetDatum(val64);
 
-				int64		val64;
-				char	   *endptr;
-
-				errno = 0;
-				val64 = strtoi64(aconst->val.fval.fval, &endptr, 10);
-				if (errno == 0 && *endptr == '\0')
-				{
-					/*
-					 * It might actually fit in int32. Probably only INT_MIN
-					 * can occur, but we'll code the test generally just to be
-					 * sure.
-					 */
-					int32		val32 = (int32) val64;
-
-					if (val64 == (int64) val32)
-					{
-						val = Int32GetDatum(val32);
-
-						typeid = INT4OID;
-						typelen = sizeof(int32);
-						typebyval = true;
-					}
-					else
-					{
-						val = Int64GetDatum(val64);
-
-						typeid = INT8OID;
-						typelen = sizeof(int64);
-						typebyval = FLOAT8PASSBYVAL;	/* int8 and float8 alike */
-					}
-				}
-				else
-				{
-					/* arrange to report location if numeric_in() fails */
-					setup_parser_errposition_callback(&pcbstate, pstate, aconst->location);
-					val = DirectFunctionCall3(numeric_in,
-											  CStringGetDatum(aconst->val.fval.fval),
-											  ObjectIdGetDatum(InvalidOid),
-											  Int32GetDatum(-1));
-					cancel_parser_errposition_callback(&pcbstate);
-
-					typeid = NUMERICOID;
-					typelen = -1;	/* variable len */
-					typebyval = false;
-				}
-				break;
+				typeid = INT8OID;
+				typelen = sizeof(int64);
+				typebyval = FLOAT8PASSBYVAL;	/* int8 and float8 alike */
 			}
+			else
+			{
+				/* arrange to report location if numeric_in() fails */
+				setup_parser_errposition_callback(&pcbstate, pstate, aconst->location);
+				val = DirectFunctionCall3(numeric_in,
+										  CStringGetDatum(aconst->val.fval.fval),
+										  ObjectIdGetDatum(InvalidOid),
+										  Int32GetDatum(-1));
+				cancel_parser_errposition_callback(&pcbstate);
+
+				typeid = NUMERICOID;
+				typelen = -1;	/* variable len */
+				typebyval = false;
+			}
+			break;
+		// SPANGRES END
 
 		case T_Boolean:
 			val = BoolGetDatum(boolVal(&aconst->val));

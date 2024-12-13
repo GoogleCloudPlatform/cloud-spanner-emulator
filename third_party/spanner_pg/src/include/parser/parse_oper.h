@@ -29,10 +29,9 @@ extern Oid	LookupOperWithArgs(ObjectWithArgs *oper, bool noError);
 
 /* Routines to find operators matching a name and given input types */
 /* NB: the selected operator may require coercion of the input types! */
-extern Operator oper_UNUSED_SPANGRES(ParseState *pstate, List *op, Oid ltypeId, Oid rtypeId,
+extern Operator oper(ParseState *pstate, List *op, Oid ltypeId, Oid rtypeId,
  	 bool noError, int location);
 
-/* SPANGRES END */
 extern Operator left_oper(ParseState *pstate, List *op, Oid arg,
  		  bool noError, int location);
 /* Routines to find operators that DO NOT require coercion --- ie, their */
