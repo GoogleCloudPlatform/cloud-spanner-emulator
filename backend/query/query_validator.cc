@@ -104,6 +104,11 @@ constexpr absl::string_view kHintTableScanGroupByScanOptimization =
 constexpr absl::string_view kUseAdditionalParallelism =
     "use_additional_parallelism";
 
+constexpr absl::string_view kScanMethod = "scan_method";
+constexpr absl::string_view kScanMethodAuto = "auto";
+constexpr absl::string_view kScanMethodBatch = "batch";
+constexpr absl::string_view kScanMethodRow = "row";
+
 // Lock scanned ranges
 constexpr absl::string_view kHintLockScannedRange = "lock_scanned_ranges";
 constexpr absl::string_view kHintLockScannedRangeShared = "shared";
@@ -210,7 +215,7 @@ absl::Status QueryValidator::CheckSpannerHintName(
                           zetasql_base::StringViewCaseEqual>>{
       {zetasql::RESOLVED_TABLE_SCAN,
        {kHintForceIndex, kHintTableScanGroupByScanOptimization,
-        kHintIndexStrategy}},
+        kHintIndexStrategy, kScanMethod}},
       {zetasql::RESOLVED_JOIN_SCAN,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
         kHintJoinForceOrder, kHashJoinExecution}},
@@ -236,6 +241,7 @@ absl::Status QueryValidator::CheckSpannerHintName(
            kHintAllowSearchIndexesInTransaction,
            kRequireEnhanceQuery,
            kEnhanceQueryTimeoutMs,
+           kScanMethod,
        }},
       {zetasql::RESOLVED_SUBQUERY_EXPR,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
@@ -298,6 +304,7 @@ absl::Status QueryValidator::CheckHintValue(
           {kHintAllowSearchIndexesInTransaction, zetasql::types::BoolType()},
           {kRequireEnhanceQuery, zetasql::types::BoolType()},
           {kEnhanceQueryTimeoutMs, zetasql::types::Int64Type()},
+          {kScanMethod, zetasql::types::StringType()},
       }};
 
   const auto& iter = supported_hint_types->find(name);
@@ -391,6 +398,13 @@ absl::Status QueryValidator::CheckHintValue(
     const std::string& string_value = value.string_value();
     if (!absl::EqualsIgnoreCase(string_value,
                                 kHintIndexStrategyForceIndexUnion)) {
+      return error::InvalidHintValue(name, value.DebugString());
+    }
+  } else if (absl::EqualsIgnoreCase(name, kScanMethod)) {
+    const std::string& string_value = value.string_value();
+    if (!(absl::EqualsIgnoreCase(string_value, kScanMethodAuto) ||
+          absl::EqualsIgnoreCase(string_value, kScanMethodBatch) ||
+          absl::EqualsIgnoreCase(string_value, kScanMethodRow))) {
       return error::InvalidHintValue(name, value.DebugString());
     }
   }
