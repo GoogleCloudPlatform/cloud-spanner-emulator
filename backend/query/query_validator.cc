@@ -105,7 +105,6 @@ constexpr absl::string_view kUseAdditionalParallelism =
     "use_additional_parallelism";
 
 constexpr absl::string_view kScanMethod = "scan_method";
-constexpr absl::string_view kScanMethodAuto = "auto";
 constexpr absl::string_view kScanMethodBatch = "batch";
 constexpr absl::string_view kScanMethodRow = "row";
 
@@ -402,8 +401,7 @@ absl::Status QueryValidator::CheckHintValue(
     }
   } else if (absl::EqualsIgnoreCase(name, kScanMethod)) {
     const std::string& string_value = value.string_value();
-    if (!(absl::EqualsIgnoreCase(string_value, kScanMethodAuto) ||
-          absl::EqualsIgnoreCase(string_value, kScanMethodBatch) ||
+    if (!(absl::EqualsIgnoreCase(string_value, kScanMethodBatch) ||
           absl::EqualsIgnoreCase(string_value, kScanMethodRow))) {
       return error::InvalidHintValue(name, value.DebugString());
     }
