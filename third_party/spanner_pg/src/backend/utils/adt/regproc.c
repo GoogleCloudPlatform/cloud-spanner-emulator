@@ -41,8 +41,6 @@
 #include "utils/syscache.h"
 #include "utils/varlena.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 static void parseNameAndArgTypes(const char *string, bool allowNone,
 								 List **names, int *nargs, Oid *argtypes);
 

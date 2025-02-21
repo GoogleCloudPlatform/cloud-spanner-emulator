@@ -52,6 +52,7 @@
 
 #include "postgres.h"
 
+#include <pthread.h>
 #include <time.h>
 
 #include "access/htup_details.h"
@@ -65,8 +66,6 @@
 #include "utils/memutils.h"
 #include "utils/pg_locale.h"
 #include "utils/syscache.h"
-
-#include "third_party/spanner_pg/shims/pg_locale_shim.h"
 
 #ifdef USE_ICU
 #include <unicode/ucnv.h>
@@ -82,6 +81,12 @@
 
 #define		MAX_L10N_DATA		80
 
+// SPANGRES BEGIN
+// Cloud Spanner does not allow for dynamic locales so it is hardcoded to the
+// one set below
+static char kDefaultLocale[] = "en_US.UTF-8";
+static struct lconv* locale;
+// SPANGRES END
 
 /* GUC settings */
 char	   *locale_messages;
@@ -96,10 +101,10 @@ char	   *locale_time;
  * element is left as NULL for the convenience of outside code that wants
  * to sequentially scan these arrays.
  */
-char	   *localized_abbrev_days_UNUSED_SPANGRES[7 + 1];
-char	   *localized_full_days_UNUSED_SPANGRES[7 + 1];
-char	   *localized_abbrev_months_UNUSED_SPANGRES[12 + 1];
-char	   *localized_full_months_UNUSED_SPANGRES[12 + 1];
+char	   *localized_abbrev_days[7 + 1];
+char	   *localized_full_days[7 + 1];
+char	   *localized_abbrev_months[12 + 1];
+char	   *localized_full_months[12 + 1];
 
 /* is the databases's LC_CTYPE the C locale? */
 bool		database_ctype_is_c = false;
@@ -463,208 +468,68 @@ db_encoding_convert(int encoding, char **str)
 }
 
 
+// SPANGRES BEGIN
+// Cloud Spanner does not allow for dynamic locales so it is hardcoded to the
+// one set below
+static pthread_once_t init_locale_once = PTHREAD_ONCE_INIT;
+
+void initialize_locale() {
+	// We malloc instead of palloc, because the variable is long lived.
+	struct lconv* result_locale = malloc(sizeof(struct lconv));
+	char* old_locale;
+
+	// Numeric locale
+	old_locale = strdup(setlocale(LC_NUMERIC, NULL));
+	setlocale(LC_NUMERIC, kDefaultLocale);
+	struct lconv* numeric = localeconv();
+	result_locale->decimal_point = strdup(numeric->decimal_point);
+	result_locale->thousands_sep = strdup(numeric->thousands_sep);
+	result_locale->grouping = strdup(numeric->grouping);
+	setlocale(LC_NUMERIC, old_locale);
+	free(old_locale);
+
+	// Monetary locale
+	old_locale = strdup(setlocale(LC_MONETARY, NULL));
+	setlocale(LC_MONETARY, kDefaultLocale);
+	struct lconv* monetary = localeconv();
+	result_locale->int_curr_symbol = strdup(monetary->int_curr_symbol);
+	result_locale->currency_symbol = strdup(monetary->currency_symbol);
+	result_locale->mon_decimal_point = strdup(monetary->mon_decimal_point);
+	result_locale->mon_thousands_sep = strdup(monetary->mon_thousands_sep);
+	result_locale->mon_grouping = strdup(monetary->mon_grouping);
+	result_locale->positive_sign = strdup(monetary->positive_sign);
+	result_locale->negative_sign = strdup(monetary->negative_sign);
+	result_locale->int_frac_digits = monetary->int_frac_digits;
+	result_locale->frac_digits = monetary->frac_digits;
+	result_locale->p_cs_precedes = monetary->p_cs_precedes;
+	result_locale->n_cs_precedes = monetary->n_cs_precedes;
+	result_locale->p_sep_by_space = monetary->p_sep_by_space;
+	result_locale->n_sep_by_space = monetary->n_sep_by_space;
+	result_locale->p_sign_posn = monetary->p_sign_posn;
+	result_locale->n_sign_posn = monetary->n_sign_posn;
+	setlocale(LC_MONETARY, old_locale);
+	free(old_locale);
+
+	locale = result_locale;
+}
+
+// SPANGRES END
+
 /*
  * Return the POSIX lconv struct (contains number/money formatting
  * information) with locale information for all categories.
+ *
+ * SPANGRES: Hardcodes locales in Cloud Spanner, as it does not support dynamic
+ * locales (and this implementation is not thread-safe)
  */
-// SPANGRES BEGIN
-// We have replaced this function by one at `shims/pg_locale_shim.cc`.
-// This function, as is, supports dynamic locales, which is unsupported by Cloud
-// Spanner and is not thread-safe.
 struct lconv *
-PGLC_localeconv_UNUSED_SPANGRES(void)
-// SPANGRES END
+PGLC_localeconv(void)
 {
-	static struct lconv CurrentLocaleConv;
-	static bool CurrentLocaleConvAllocated = false;
-	struct lconv *extlconv;
-	struct lconv worklconv;
-	char	   *save_lc_monetary;
-	char	   *save_lc_numeric;
-#ifdef WIN32
-	char	   *save_lc_ctype;
-#endif
-
-	/* Did we do it already? */
-	if (CurrentLocaleConvValid)
-		return &CurrentLocaleConv;
-
-	/* Free any already-allocated storage */
-	if (CurrentLocaleConvAllocated)
-	{
-		free_struct_lconv(&CurrentLocaleConv);
-		CurrentLocaleConvAllocated = false;
-	}
-
-	/*
-	 * This is tricky because we really don't want to risk throwing error
-	 * while the locale is set to other than our usual settings.  Therefore,
-	 * the process is: collect the usual settings, set locale to special
-	 * setting, copy relevant data into worklconv using strdup(), restore
-	 * normal settings, convert data to desired encoding, and finally stash
-	 * the collected data in CurrentLocaleConv.  This makes it safe if we
-	 * throw an error during encoding conversion or run out of memory anywhere
-	 * in the process.  All data pointed to by struct lconv members is
-	 * allocated with strdup, to avoid premature elog(ERROR) and to allow
-	 * using a single cleanup routine.
-	 */
-	memset(&worklconv, 0, sizeof(worklconv));
-
-	/* Save prevailing values of monetary and numeric locales */
-	save_lc_monetary = setlocale(LC_MONETARY, NULL);
-	if (!save_lc_monetary)
-		elog(ERROR, "setlocale(NULL) failed");
-	save_lc_monetary = pstrdup(save_lc_monetary);
-
-	save_lc_numeric = setlocale(LC_NUMERIC, NULL);
-	if (!save_lc_numeric)
-		elog(ERROR, "setlocale(NULL) failed");
-	save_lc_numeric = pstrdup(save_lc_numeric);
-
-#ifdef WIN32
-
-	/*
-	 * The POSIX standard explicitly says that it is undefined what happens if
-	 * LC_MONETARY or LC_NUMERIC imply an encoding (codeset) different from
-	 * that implied by LC_CTYPE.  In practice, all Unix-ish platforms seem to
-	 * believe that localeconv() should return strings that are encoded in the
-	 * codeset implied by the LC_MONETARY or LC_NUMERIC locale name.  Hence,
-	 * once we have successfully collected the localeconv() results, we will
-	 * convert them from that codeset to the desired server encoding.
-	 *
-	 * Windows, of course, resolutely does things its own way; on that
-	 * platform LC_CTYPE has to match LC_MONETARY/LC_NUMERIC to get sane
-	 * results.  Hence, we must temporarily set that category as well.
-	 */
-
-	/* Save prevailing value of ctype locale */
-	save_lc_ctype = setlocale(LC_CTYPE, NULL);
-	if (!save_lc_ctype)
-		elog(ERROR, "setlocale(NULL) failed");
-	save_lc_ctype = pstrdup(save_lc_ctype);
-
-	/* Here begins the critical section where we must not throw error */
-
-	/* use numeric to set the ctype */
-	setlocale(LC_CTYPE, locale_numeric);
-#endif
-
-	/* Get formatting information for numeric */
-	setlocale(LC_NUMERIC, locale_numeric);
-	extlconv = localeconv();
-
-	/* Must copy data now in case setlocale() overwrites it */
-	worklconv.decimal_point = strdup(extlconv->decimal_point);
-	worklconv.thousands_sep = strdup(extlconv->thousands_sep);
-	worklconv.grouping = strdup(extlconv->grouping);
-
-#ifdef WIN32
-	/* use monetary to set the ctype */
-	setlocale(LC_CTYPE, locale_monetary);
-#endif
-
-	/* Get formatting information for monetary */
-	setlocale(LC_MONETARY, locale_monetary);
-	extlconv = localeconv();
-
-	/* Must copy data now in case setlocale() overwrites it */
-	worklconv.int_curr_symbol = strdup(extlconv->int_curr_symbol);
-	worklconv.currency_symbol = strdup(extlconv->currency_symbol);
-	worklconv.mon_decimal_point = strdup(extlconv->mon_decimal_point);
-	worklconv.mon_thousands_sep = strdup(extlconv->mon_thousands_sep);
-	worklconv.mon_grouping = strdup(extlconv->mon_grouping);
-	worklconv.positive_sign = strdup(extlconv->positive_sign);
-	worklconv.negative_sign = strdup(extlconv->negative_sign);
-	/* Copy scalar fields as well */
-	worklconv.int_frac_digits = extlconv->int_frac_digits;
-	worklconv.frac_digits = extlconv->frac_digits;
-	worklconv.p_cs_precedes = extlconv->p_cs_precedes;
-	worklconv.p_sep_by_space = extlconv->p_sep_by_space;
-	worklconv.n_cs_precedes = extlconv->n_cs_precedes;
-	worklconv.n_sep_by_space = extlconv->n_sep_by_space;
-	worklconv.p_sign_posn = extlconv->p_sign_posn;
-	worklconv.n_sign_posn = extlconv->n_sign_posn;
-
-	/*
-	 * Restore the prevailing locale settings; failure to do so is fatal.
-	 * Possibly we could limp along with nondefault LC_MONETARY or LC_NUMERIC,
-	 * but proceeding with the wrong value of LC_CTYPE would certainly be bad
-	 * news; and considering that the prevailing LC_MONETARY and LC_NUMERIC
-	 * are almost certainly "C", there's really no reason that restoring those
-	 * should fail.
-	 */
-#ifdef WIN32
-	if (!setlocale(LC_CTYPE, save_lc_ctype))
-		elog(FATAL, "failed to restore LC_CTYPE to \"%s\"", save_lc_ctype);
-#endif
-	if (!setlocale(LC_MONETARY, save_lc_monetary))
-		elog(FATAL, "failed to restore LC_MONETARY to \"%s\"", save_lc_monetary);
-	if (!setlocale(LC_NUMERIC, save_lc_numeric))
-		elog(FATAL, "failed to restore LC_NUMERIC to \"%s\"", save_lc_numeric);
-
-	/*
-	 * At this point we've done our best to clean up, and can call functions
-	 * that might possibly throw errors with a clean conscience.  But let's
-	 * make sure we don't leak any already-strdup'd fields in worklconv.
-	 */
-	PG_TRY();
-	{
-		int			encoding;
-
-		/* Release the pstrdup'd locale names */
-		pfree(save_lc_monetary);
-		pfree(save_lc_numeric);
-#ifdef WIN32
-		pfree(save_lc_ctype);
-#endif
-
-		/* If any of the preceding strdup calls failed, complain now. */
-		if (!struct_lconv_is_valid(&worklconv))
-			ereport(ERROR,
-					(errcode(ERRCODE_OUT_OF_MEMORY),
-					 errmsg("out of memory")));
-
-		/*
-		 * Now we must perform encoding conversion from whatever's associated
-		 * with the locales into the database encoding.  If we can't identify
-		 * the encoding implied by LC_NUMERIC or LC_MONETARY (ie we get -1),
-		 * use PG_SQL_ASCII, which will result in just validating that the
-		 * strings are OK in the database encoding.
-		 */
-		encoding = pg_get_encoding_from_locale(locale_numeric, true);
-		if (encoding < 0)
-			encoding = PG_SQL_ASCII;
-
-		db_encoding_convert(encoding, &worklconv.decimal_point);
-		db_encoding_convert(encoding, &worklconv.thousands_sep);
-		/* grouping is not text and does not require conversion */
-
-		encoding = pg_get_encoding_from_locale(locale_monetary, true);
-		if (encoding < 0)
-			encoding = PG_SQL_ASCII;
-
-		db_encoding_convert(encoding, &worklconv.int_curr_symbol);
-		db_encoding_convert(encoding, &worklconv.currency_symbol);
-		db_encoding_convert(encoding, &worklconv.mon_decimal_point);
-		db_encoding_convert(encoding, &worklconv.mon_thousands_sep);
-		/* mon_grouping is not text and does not require conversion */
-		db_encoding_convert(encoding, &worklconv.positive_sign);
-		db_encoding_convert(encoding, &worklconv.negative_sign);
-	}
-	PG_CATCH();
-	{
-		free_struct_lconv(&worklconv);
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
-
-	/*
-	 * Everything is good, so save the results.
-	 */
-	CurrentLocaleConv = worklconv;
-	CurrentLocaleConvAllocated = true;
-	CurrentLocaleConvValid = true;
-	return &CurrentLocaleConv;
+	// SPANGRES BEGIN
+	// Safe initialization of locale
+	pthread_once(&init_locale_once, initialize_locale);
+	return locale;
+	// SPANGRES END
 }
 
 #ifdef WIN32
@@ -751,178 +616,58 @@ cache_single_string(char **dst, const char *src, int encoding)
 		pfree(ptr);
 }
 
-/*
- * Update the lc_time localization cache variables if needed.
- */
-void
-cache_locale_time_UNUSED_SPANGRES(void)
-{
-	char		buf[(2 * 7 + 2 * 12) * MAX_L10N_DATA];
-	char	   *bufptr;
-	time_t		timenow;
-	struct tm  *timeinfo;
-	bool		strftimefail = false;
-	int			encoding;
-	int			i;
-	char	   *save_lc_time;
-#ifdef WIN32
-	char	   *save_lc_ctype;
-#endif
+// SPANGRES BEGIN
+// Cloud Spanner does not allow for dynamic locales so it is hardcoded to the
+// one set below
+static pthread_once_t init_cache_locale_time_once = PTHREAD_ONCE_INIT;
 
-	/* did we do this already? */
-	if (CurrentLCTimeValid)
-		return;
+void initialize_cache_locale_time() {
+	char* old_locale = strdup(setlocale(LC_TIME, NULL));
+	setlocale(LC_TIME, kDefaultLocale);
 
-	elog(DEBUG3, "cache_locale_time() executed; locale: \"%s\"", locale_time);
+	// This is used to obtain a timeinfo struct which is used below
+	time_t timenow = time(NULL);
+	struct tm* timeinfo = localtime(&timenow);
 
-	/*
-	 * As in PGLC_localeconv(), it's critical that we not throw error while
-	 * libc's locale settings have nondefault values.  Hence, we just call
-	 * strftime() within the critical section, and then convert and save its
-	 * results afterwards.
-	 */
-
-	/* Save prevailing value of time locale */
-	save_lc_time = setlocale(LC_TIME, NULL);
-	if (!save_lc_time)
-		elog(ERROR, "setlocale(NULL) failed");
-	save_lc_time = pstrdup(save_lc_time);
-
-#ifdef WIN32
-
-	/*
-	 * On Windows, it appears that wcsftime() internally uses LC_CTYPE, so we
-	 * must set it here.  This code looks the same as what PGLC_localeconv()
-	 * does, but the underlying reason is different: this does NOT determine
-	 * the encoding we'll get back from strftime_win32().
-	 */
-
-	/* Save prevailing value of ctype locale */
-	save_lc_ctype = setlocale(LC_CTYPE, NULL);
-	if (!save_lc_ctype)
-		elog(ERROR, "setlocale(NULL) failed");
-	save_lc_ctype = pstrdup(save_lc_ctype);
-
-	/* use lc_time to set the ctype */
-	setlocale(LC_CTYPE, locale_time);
-#endif
-
-	setlocale(LC_TIME, locale_time);
-
-	/* We use times close to current time as data for strftime(). */
-	timenow = time(NULL);
-	timeinfo = localtime(&timenow);
-
-	/* Store the strftime results in MAX_L10N_DATA-sized portions of buf[] */
-	bufptr = buf;
-
-	/*
-	 * MAX_L10N_DATA is sufficient buffer space for every known locale, and
-	 * POSIX defines no strftime() errors.  (Buffer space exhaustion is not an
-	 * error.)  An implementation might report errors (e.g. ENOMEM) by
-	 * returning 0 (or, less plausibly, a negative value) and setting errno.
-	 * Report errno just in case the implementation did that, but clear it in
-	 * advance of the calls so we don't emit a stale, unrelated errno.
-	 */
-	errno = 0;
-
-	/* localized days */
-	for (i = 0; i < 7; i++)
-	{
+	char buffer[MAX_L10N_DATA];
+	// Iterates over week days to obtain abbreviated / full day names
+	for (int i = 0; i < 7; ++i) {
 		timeinfo->tm_wday = i;
-		if (strftime(bufptr, MAX_L10N_DATA, "%a", timeinfo) <= 0)
-			strftimefail = true;
-		bufptr += MAX_L10N_DATA;
-		if (strftime(bufptr, MAX_L10N_DATA, "%A", timeinfo) <= 0)
-			strftimefail = true;
-		bufptr += MAX_L10N_DATA;
-	}
-
-	/* localized months */
-	for (i = 0; i < 12; i++)
-	{
-		timeinfo->tm_mon = i;
-		timeinfo->tm_mday = 1;	/* make sure we don't have invalid date */
-		if (strftime(bufptr, MAX_L10N_DATA, "%b", timeinfo) <= 0)
-			strftimefail = true;
-		bufptr += MAX_L10N_DATA;
-		if (strftime(bufptr, MAX_L10N_DATA, "%B", timeinfo) <= 0)
-			strftimefail = true;
-		bufptr += MAX_L10N_DATA;
-	}
-
-	/*
-	 * Restore the prevailing locale settings; as in PGLC_localeconv(),
-	 * failure to do so is fatal.
-	 */
-#ifdef WIN32
-	if (!setlocale(LC_CTYPE, save_lc_ctype))
-		elog(FATAL, "failed to restore LC_CTYPE to \"%s\"", save_lc_ctype);
-#endif
-	if (!setlocale(LC_TIME, save_lc_time))
-		elog(FATAL, "failed to restore LC_TIME to \"%s\"", save_lc_time);
-
-	/*
-	 * At this point we've done our best to clean up, and can throw errors, or
-	 * call functions that might throw errors, with a clean conscience.
-	 */
-	if (strftimefail)
-		elog(ERROR, "strftime() failed: %m");
-
-	/* Release the pstrdup'd locale names */
-	pfree(save_lc_time);
-#ifdef WIN32
-	pfree(save_lc_ctype);
-#endif
-
-#ifndef WIN32
-
-	/*
-	 * As in PGLC_localeconv(), we must convert strftime()'s output from the
-	 * encoding implied by LC_TIME to the database encoding.  If we can't
-	 * identify the LC_TIME encoding, just perform encoding validation.
-	 */
-	encoding = pg_get_encoding_from_locale(locale_time, true);
-	if (encoding < 0)
-		encoding = PG_SQL_ASCII;
-
-#else
-
-	/*
-	 * On Windows, strftime_win32() always returns UTF8 data, so convert from
-	 * that if necessary.
-	 */
-	encoding = PG_UTF8;
-
-#endif							/* WIN32 */
-
-	bufptr = buf;
-
-	/* localized days */
-	for (i = 0; i < 7; i++)
-	{
-		cache_single_string(&localized_abbrev_days[i], bufptr, encoding);
-		bufptr += MAX_L10N_DATA;
-		cache_single_string(&localized_full_days[i], bufptr, encoding);
-		bufptr += MAX_L10N_DATA;
+		strftime(buffer, MAX_L10N_DATA, "%a", timeinfo);
+		localized_abbrev_days[i] = strdup(buffer);
+		strftime(buffer, MAX_L10N_DATA, "%A", timeinfo);
+		localized_full_days[i] = strdup(buffer);
 	}
 	localized_abbrev_days[7] = NULL;
 	localized_full_days[7] = NULL;
 
-	/* localized months */
-	for (i = 0; i < 12; i++)
-	{
-		cache_single_string(&localized_abbrev_months[i], bufptr, encoding);
-		bufptr += MAX_L10N_DATA;
-		cache_single_string(&localized_full_months[i], bufptr, encoding);
-		bufptr += MAX_L10N_DATA;
+	for (int i = 0; i < 12; ++i) {
+		timeinfo->tm_mon = i;
+		timeinfo->tm_mday = 1;  // make sure we don't have invalid date
+		strftime(buffer, MAX_L10N_DATA, "%b", timeinfo);
+		localized_abbrev_months[i] = strdup(buffer);
+		strftime(buffer, MAX_L10N_DATA, "%B", timeinfo);
+		localized_full_months[i] = strdup(buffer);
 	}
 	localized_abbrev_months[12] = NULL;
 	localized_full_months[12] = NULL;
 
-	CurrentLCTimeValid = true;
+	setlocale(LC_TIME, old_locale);
+	free(old_locale);
 }
+// SPANGRES END
 
+/*
+ * Update the lc_time localization cache variables if needed.
+ */
+void
+cache_locale_time(void)
+{
+	// SPANGRES BEGIN
+	// Safe initialization of cached locale time
+	pthread_once(&init_cache_locale_time_once, initialize_cache_locale_time);
+	// SPANGRES END
+}
 
 #if defined(WIN32) && defined(LC_MESSAGES)
 /*

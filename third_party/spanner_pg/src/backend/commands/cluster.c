@@ -58,8 +58,6 @@
 #include "utils/syscache.h"
 #include "utils/tuplesort.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * This struct is used to pass around the information on tables to be
  * clustered. We need this so we can make a list of them when invoked without

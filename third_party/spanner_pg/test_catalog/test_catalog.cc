@@ -69,6 +69,17 @@ void MutateLanguageOptionsForSpangres(zetasql::LanguageOptions* options) {
 
   options->EnableLanguageFeature(
       zetasql::FEATURE_V_1_3_NULLS_FIRST_LAST_IN_ORDER_BY);
+
+  // `SELECT ARRAY_AGG(x HAVING MAX y) FROM (SELECT 1 as x, 2 as y UNION ALL
+  //  SELECT 2, 3)` not supported in PostgreSQL.
+  options->DisableLanguageFeature(zetasql::FEATURE_V_1_1_HAVING_IN_AGGREGATE);
+  // `SELECT ARRAY_AGG(x LIMIT 10) FROM (SELECT 1 as x)` not supported in
+  // PostgreSQL.
+  options->DisableLanguageFeature(zetasql::FEATURE_V_1_1_LIMIT_IN_AGGREGATE);
+  // `SELECT ARRAY_AGG(x IGNORE NULLS) FROM (SELECT null as x
+  //  union all select 3)` not supported in PostgreSQL.
+  options->DisableLanguageFeature(
+      zetasql::FEATURE_V_1_1_NULL_HANDLING_MODIFIER_IN_AGGREGATE);
 }
 
 }  // namespace

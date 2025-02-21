@@ -35,8 +35,6 @@
 #include "utils/lsyscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /* These parameters are set by GUC */
 int			from_collapse_limit;
 int			join_collapse_limit;

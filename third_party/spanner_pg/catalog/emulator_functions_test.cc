@@ -48,6 +48,8 @@
 #include "zetasql/public/function.h"
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/functions/date_time_util.h"
+#include "zetasql/public/interval_value.h"
+#include "zetasql/public/types/timestamp_util.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
@@ -131,12 +133,23 @@ struct PGScalarFunctionTestCase {
   std::string function_name;
   std::vector<zetasql::Value> function_arguments;
   zetasql::Value expected_result;
+  absl::StatusCode expected_status_code = absl::StatusCode::kOk;
+  std::string expected_error_message = "";
 };
 
 using PGScalarFunctionsTest =
     ::testing::TestWithParam<PGScalarFunctionTestCase>;
 
 TEST_P(PGScalarFunctionsTest, ExecutesFunctionsSuccessfully) {
+  const PGScalarFunctionTestCase& param = GetParam();
+  std::vector<std::string> arg_strings;
+  arg_strings.reserve(param.function_arguments.size());
+  for (const zetasql::Value& value : param.function_arguments) {
+    arg_strings.push_back(value.DebugString());
+  }
+
+  SCOPED_TRACE(absl::StrCat("Function: ", param.function_name,
+                            "\n Args: ", absl::StrJoin(arg_strings, ", ")));
   std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
       functions;
   SpannerPGFunctions spanner_pg_functions =
@@ -145,7 +158,7 @@ TEST_P(PGScalarFunctionsTest, ExecutesFunctionsSuccessfully) {
   for (auto& function : spanner_pg_functions) {
     functions[function->Name()] = std::move(function);
   }
-  const PGScalarFunctionTestCase& param = GetParam();
+
   const zetasql::Function* function = functions[param.function_name].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       zetasql::FunctionEvaluator evaluator,
@@ -159,9 +172,14 @@ TEST_P(PGScalarFunctionsTest, ExecutesFunctionsSuccessfully) {
                 return signature.result_type().type() ==
                        param.expected_result.type();
               })));
-
-  EXPECT_THAT(evaluator(absl::MakeConstSpan(param.function_arguments)),
-              IsOkAndHolds(EqPG(param.expected_result)));
+  if (param.expected_status_code == absl::StatusCode::kOk) {
+    EXPECT_THAT(evaluator(absl::MakeConstSpan(param.function_arguments)),
+                IsOkAndHolds(EqPG(param.expected_result)));
+  } else {
+    EXPECT_THAT(evaluator(absl::MakeConstSpan(param.function_arguments)),
+                StatusIs(param.expected_status_code,
+                         HasSubstr(param.expected_error_message)));
+  }
 }
 
 const zetasql::Value kNullDoubleValue = zetasql::values::NullDouble();
@@ -228,6 +246,11 @@ const zetasql::Value kPGOidMaxValue =
     *CreatePgOidValue(std::numeric_limits<uint32_t>::max());
 const zetasql::Value kPGOidMinValue =
     *CreatePgOidValue(std::numeric_limits<uint32_t>::min());
+
+const zetasql::Value kMaxTimestampValue =
+    zetasql::values::Timestamp(zetasql::types::TimestampMaxBaseTime());
+const zetasql::Value kMinTimestampValue =
+    zetasql::values::Timestamp(zetasql::types::TimestampMinBaseTime());
 
 const zetasql::Value kNullStringValue = zetasql::values::NullString();
 absl::TimeZone default_timezone() {
@@ -315,7 +338,7 @@ INSTANTIATE_TEST_SUITE_P(
             kPGJsonbArrayElementFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"),
              zetasql::Value::Int64(-1)},
-            CreatePgJsonbNullValue()},
+            *CreatePgJsonbValueWithMemoryContext(R"("string val")")},
         PGScalarFunctionTestCase{
             kPGJsonbArrayElementFunctionName,
             {CreatePgJsonbNullValue(), zetasql::Value::Int64(0)},
@@ -407,11 +430,11 @@ INSTANTIATE_TEST_SUITE_P(
             zetasql::Value::String("number")},
         PGScalarFunctionTestCase{kPGJsonbTypeofFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext("true")},
-                                 zetasql::Value::String("bool")},
+                                 zetasql::Value::String("boolean")},
         PGScalarFunctionTestCase{
             kPGJsonbTypeofFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("false")},
-            zetasql::Value::String("bool")},
+            zetasql::Value::String("boolean")},
         // pg.jsonb_query_array
         PGScalarFunctionTestCase{
             kPGJsonbQueryArrayFunctionName,
@@ -872,20 +895,20 @@ INSTANTIATE_TEST_SUITE_P(
                                  {CreatePgNumericNullValue()},
                                  kNullFloatValue},
 
-        PGScalarFunctionTestCase{kPGCastNumericToStringFunctionName,
+        PGScalarFunctionTestCase{kPGCastToStringFunctionName,
                                  {kPGNumericNaNValue},
                                  zetasql::Value::String("NaN")},
-        PGScalarFunctionTestCase{kPGCastNumericToStringFunctionName,
+        PGScalarFunctionTestCase{kPGCastToStringFunctionName,
                                  {CreatePgNumericNullValue()},
                                  kNullStringValue},
-        PGScalarFunctionTestCase{kPGCastNumericToStringFunctionName,
+        PGScalarFunctionTestCase{kPGCastToStringFunctionName,
                                  {kPGNumericMinValue},
                                  zetasql::Value::String(MinNumericString())},
-        PGScalarFunctionTestCase{kPGCastNumericToStringFunctionName,
+        PGScalarFunctionTestCase{kPGCastToStringFunctionName,
                                  {kPGNumericMaxValue},
                                  zetasql::Value::String(MaxNumericString())},
         PGScalarFunctionTestCase{
-            kPGCastNumericToStringFunctionName,
+            kPGCastToStringFunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.1")},
             zetasql::Value::String("0.1")},
 
@@ -1793,7 +1816,8 @@ INSTANTIATE_TEST_SUITE_P(
                                  zetasql::values::Float(0.5f)},
         PGScalarFunctionTestCase{kPGFloatDivideFunctionName,
                                  {zetasql::values::Float(2.0), kFloatValue},
-                                 zetasql::values::Float(2.0f)}),
+                                 zetasql::values::Float(2.0f)}
+        ),
     [](const testing::TestParamInfo<PGScalarFunctionTestCase>& info) {
       std::string name = absl::StrCat(
           "idx_", info.index, "_", info.param.function_name, "_",
@@ -2323,7 +2347,7 @@ TEST_F(EmulatorFunctionsTest,
 TEST_F(EmulatorFunctionsTest,
        CastNumericToStringReturnsErrorWhenArgumentsAreInvalid) {
   const zetasql::Function* function =
-      functions_[kPGCastNumericToStringFunctionName].get();
+      functions_[kPGCastToStringFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
   // Insufficient arguments.
@@ -3432,10 +3456,11 @@ TEST_F(EvalJsonbSubscriptText, ElementIndexInput) {
               JsonbArrayElementText(CreatePgJsonbValueWithMemoryContext(
                                         R"([null, "string val"])"),
                                     2, kNullStringValue));
-  EXPECT_THAT(evaluator_,
-              JsonbArrayElementText(CreatePgJsonbValueWithMemoryContext(
-                                        R"([null, "string val"])"),
-                                    -1, kNullStringValue));
+  EXPECT_THAT(
+      evaluator_,
+      JsonbArrayElementText(
+          CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"), -1,
+          zetasql::values::String("string val")));
   EXPECT_THAT(evaluator_,
               JsonbArrayElementText(
                   CreatePgJsonbValueWithMemoryContext(R"({"a": "string val"})"),
@@ -3935,9 +3960,10 @@ TEST_P(EvalLeastGreatestTest, TestEvalLeastGreatest) {
 
   const std::vector<const zetasql::Type*> types = {
       zetasql::types::DoubleType(), zetasql::types::Int64Type(),
-      zetasql::types::BoolType(),   zetasql::types::BytesType(),
+      zetasql::types::BoolType(), zetasql::types::BytesType(),
       zetasql::types::StringType(), zetasql::types::DateType(),
-      zetasql::types::FloatType(),  zetasql::types::TimestampType()};
+      zetasql::types::FloatType(), zetasql::types::TimestampType(),
+  };
 
   absl::flat_hash_map<std::string, zetasql::FunctionEvaluator>
       least_evaluators;

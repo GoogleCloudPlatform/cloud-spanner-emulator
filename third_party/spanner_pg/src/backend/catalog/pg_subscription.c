@@ -34,8 +34,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 static List *textarray_to_stringlist(ArrayType *textarray);
 
 /*

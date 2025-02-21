@@ -29,8 +29,6 @@
 #include "utils/fmgroids.h"
 #include "utils/rel.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * CommentObject --
  *

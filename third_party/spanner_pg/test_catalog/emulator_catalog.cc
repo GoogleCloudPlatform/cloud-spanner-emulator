@@ -36,6 +36,7 @@
 #include <utility>
 
 #include "zetasql/public/catalog.h"
+#include "zetasql/public/options.pb.h"
 #include "zetasql/public/type.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"

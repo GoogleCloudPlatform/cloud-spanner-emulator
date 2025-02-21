@@ -52,7 +52,7 @@ cc_library(
     copts = [
         # This module reimplements PostgreSQL's ereport() in terms of
         # C++ exceptions, on "lesser of two evils" grounds.
-        # See docstrings in `ereport_shim.h` for details.
+        # See docstrings in `ereport.h` for details.
         "-fexceptions",
     ],
     features = ["-use_header_modules"],  # Incompatible with -fexceptions.
@@ -73,7 +73,7 @@ cc_library(
     copts = [
         # This module reimplements PostgreSQL's ereport() in terms of
         # C++ exceptions, on "lesser of two evils" grounds.
-        # See docstrings in `ereport_shim.h` for details.
+        # See docstrings in `ereport.h` for details.
         "-fexceptions",
     ],
     features = ["-use_header_modules"],  # Incompatible with -fexceptions.
@@ -96,13 +96,12 @@ cc_library(
     copts = [
         # This module reimplements PostgreSQL's ereport() in terms of
         # C++ exceptions, on "lesser of two evils" grounds.
-        # See docstrings in `ereport_shim.h` for details.
+        # See docstrings in `ereport.h` for details.
         "-fexceptions",
     ],
     features = ["-use_header_modules"],  # Incompatible with -fexceptions.
     deps = [
         "//third_party/spanner_pg/postgres_includes",
-        "//third_party/spanner_pg/shims:catalog_shim_header",
         "//third_party/spanner_pg/src/backend",
     ],
 )

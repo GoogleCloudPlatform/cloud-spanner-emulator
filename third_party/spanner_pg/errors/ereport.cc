@@ -29,12 +29,13 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include "third_party/spanner_pg/shims/ereport_shim.h"
+#include "third_party/spanner_pg/interface/ereport.h"
 
 #include <sstream>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/log.h"
+#include "absl/strings/str_cat.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 
 namespace postgres_translator {

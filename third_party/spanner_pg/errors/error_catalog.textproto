@@ -40,6 +40,11 @@ group {
     name: "InvalidDefaultSyntax"
     pg_message_id: "DEFAULT is not allowed in this context"
   }
+
+  message {
+    name: "SelectStarWithNoTables"
+    pg_message_id: "SELECT * with no tables specified is not valid"
+  }
 }
 
 group {
@@ -48,6 +53,15 @@ group {
   message {
     name: "FailedToDeserializeExtendedType"
     format: "Failed to deserialized extended type: $string"
+  }
+}
+
+group {
+  code: "INVALID_NAME",
+
+  message {
+    name: "InvalidNameSyntax"
+    pg_message_id: "invalid name syntax"
   }
 }
 
@@ -209,6 +223,11 @@ group {
   }
 
   message {
+    name: "FunctionNotExistQuoted"
+    pg_message_id: "function \"%s\" does not exist"
+  }
+
+  message {
     name: "OperatorNotExist"
     pg_message_id: "operator does not exist: %s"
   }
@@ -233,6 +252,16 @@ group {
   }
 
   message {
+    name: "UnsupportedXmlFeature"
+    pg_message_id: "unsupported XML feature"
+  }
+
+  message {
+    name: "CannotAcceptValueOfType"
+    pg_message_id: "cannot accept a value of type %s"
+  }
+
+  message {
     name: "CrossDatabaseReferencesNotSupport"
     pg_message_id: "cross-database references are not implemented: %s"
   }
@@ -250,6 +279,21 @@ group {
   message {
     name: "RecordTypesNotSupport"
     pg_message_id: "Record types are not supported."
+  }
+
+  message {
+    name: "RangeTypesNotSupport"
+    pg_message_id: "Range types are not supported."
+  }
+
+  message {
+    name: "DomainTypesNotSupport"
+    pg_message_id: "Domain types are not supported."
+  }
+
+  message {
+    name: "CompositeTypesNotSupport"
+    pg_message_id: "Composite types are not supported."
   }
 
   message {
@@ -682,6 +726,11 @@ group {
     name: "InvalidExpressionType"
     pg_message_id: "column \"%s\" is of type %s but expression is of type %s"
   }
+
+  message {
+    name: "InvalidTypeCoercion"
+    pg_message_id: "%s types %s and %s cannot be matched"
+  }
 }
 
 group {
@@ -835,7 +884,7 @@ group {
 }
 
 # We have some special error conversion in
-# third_party/spanner_pg/shims/catalog_shim_cc_wrappers.cc.
+# third_party/spanner_pg/catalog/catalog_wrappers.cc.
 group {
   code: "INVALID_DATETIME_FORMAT"
 

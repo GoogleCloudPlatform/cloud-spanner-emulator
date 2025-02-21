@@ -108,9 +108,6 @@
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * GUC parameters
  */

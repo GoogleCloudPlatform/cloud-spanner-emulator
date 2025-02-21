@@ -62,8 +62,8 @@ PgBootstrapCatalog::PgBootstrapCatalog(
     absl::Span<const FormData_pg_collation> pg_collation_data,
     absl::Span<const FormData_pg_namespace> pg_namespace_data,
     absl::Span<const FormData_pg_type> pg_type_data,
-    absl::Span<const FormData_pg_proc_WithArgTypes> pg_proc_data,
-    std::vector<std::string> pg_proc_textproto_data,
+    absl::Span<const FormData_pg_proc> pg_proc_data,
+    absl::Span<const std::string> pg_proc_textproto_data,
     absl::Span<const FormData_pg_cast> pg_cast_data,
     absl::Span<const FormData_pg_operator> pg_operator_data,
     absl::Span<const FormData_pg_aggregate> pg_aggregate_data,
@@ -95,14 +95,14 @@ PgBootstrapCatalog::PgBootstrapCatalog(
   absl::flat_hash_map<Oid, PgProcData> raw_proc_proto_by_oid;
   raw_proc_proto_by_oid.reserve(pg_proc_textproto_data.size());
   for (int i = 0; i < pg_proc_data.size(); ++i) {
-    const FormData_pg_proc_WithArgTypes& data = pg_proc_data[i];
+    const FormData_pg_proc& data = pg_proc_data[i];
     const std::string& textproto = pg_proc_textproto_data[i];
     PgProcData proto;
 
     if (!google::protobuf::TextFormat::ParseFromString(textproto, &proto)) {
       ABSL_LOG(FATAL)
-          << "Failed to parse PgProcData proto for " << data.data.proname.data
-          << "(" << data.data.oid << ")";
+          << "Failed to parse PgProcData proto for " << data.proname.data
+          << "(" << data.oid << ")";
     }
     // Catch any protos that have fewer proargnames than pronargs which would
     // indicate an issue related to the Perl script textproto generation.
@@ -124,20 +124,20 @@ PgBootstrapCatalog::PgBootstrapCatalog(
   // there are duplicate names, but duplicate names are <10% of all entries.
   proc_by_name_.reserve(pg_proc_data.size());
   for (int i = 0; i < pg_proc_data.size(); ++i) {
-    const FormData_pg_proc_WithArgTypes& data = pg_proc_data[i];
+    const FormData_pg_proc& data = pg_proc_data[i];
 
-    if (ProcIsRemoved(data.data)) {
-        continue;
+    if (ProcIsRemoved(data.oid)) {
+      continue;
     }
     // Get the updated (as needed) proc data.
-    const FormData_pg_proc_WithArgTypes* final_proc_data =
+    const FormData_pg_proc* final_proc_data =
         GetFinalProcFormData(data);
     std::unique_ptr<PgProcData> proto = GetFinalProcProto(
-        raw_proc_proto_by_oid[data.data.oid]);
+        raw_proc_proto_by_oid[data.oid]);
 
-    proc_by_oid_[final_proc_data->data.oid] = &final_proc_data->data;
-    proc_by_name_[NameStr(final_proc_data->data.proname)].push_back(
-        &final_proc_data->data);
+    proc_by_oid_[final_proc_data->oid] = final_proc_data;
+    proc_by_name_[NameStr(final_proc_data->proname)].push_back(
+        final_proc_data);
     proc_proto_by_oid_.insert({proto->oid(), std::move(proto)});
   }
 
@@ -329,8 +329,8 @@ absl::StatusOr<const PgProcData*> PgBootstrapCatalog::GetProcProto(
 }
 
 absl::StatusOr<const char*> PgBootstrapCatalog::GetProcName(Oid oid) const {
-  ZETASQL_ASSIGN_OR_RETURN(const FormData_pg_proc* pg_proc, GetProc(oid));
-  return NameStr(pg_proc->proname);
+  ZETASQL_ASSIGN_OR_RETURN(const PgProcData* proc_proto, GetProcProto(oid));
+  return proc_proto->proname().c_str();
 }
 
 absl::StatusOr<absl::Span<const FormData_pg_proc* const>>
@@ -355,12 +355,15 @@ absl::StatusOr<Oid> PgBootstrapCatalog::GetProcOid(
       continue;
     }
 
-    if (proc->proargtypes.vl_len_ != argument_types.size()) {
+    // FormData_pg_proc does not have proargtypes data so we need to get the
+    // proc proto to get the argument types.
+    ZETASQL_ASSIGN_OR_RETURN(const PgProcData* proc_proto, GetProcProto(proc->oid));
+    if (proc_proto->proargtypes().size() != argument_types.size()) {
       continue;
     }
     bool arguments_match = true;
-    for (int i = 0; i < proc->proargtypes.vl_len_; ++i) {
-      if (proc->proargtypes.values[i] != argument_types[i]) {
+    for (int i = 0; i < proc_proto->proargtypes().size(); ++i) {
+      if (proc_proto->proargtypes(i) != argument_types[i]) {
         arguments_match = false;
         break;
       }
@@ -543,43 +546,38 @@ PgBootstrapCatalog::GetAmprocsByFamily(Oid opfamily, Oid lefttype) const {
 }
 
 void PgBootstrapCatalog::UpdateProc(
-    const FormData_pg_proc_WithArgTypes& original_proc,
+    const FormData_pg_proc& original_proc,
     const PgProcSignature* updated_signature,
     uint16_t updated_default_arg_count) {
   // Create a non-const copy of the proc.
-  size_t data_size = sizeof(FormData_pg_proc_WithArgTypes);
-  std::unique_ptr<FormData_pg_proc_WithArgTypes> new_proc =
-      std::make_unique<FormData_pg_proc_WithArgTypes>();
+  size_t data_size = sizeof(FormData_pg_proc);
+  std::unique_ptr<FormData_pg_proc> new_proc =
+      std::make_unique<FormData_pg_proc>();
   memcpy(new_proc.get(), &original_proc, data_size);
 
   // Update the signature as needed.
   if (updated_signature != nullptr) {
-    if (updated_signature->arg_types.size() !=
-        original_proc.data.proargtypes.vl_len_) {
-      ABSL_LOG(ERROR) << "Updated proc for " << NameStr(original_proc.data.proname)
-                << " has a different number of input arguments than the "
-                    "original proc.";
-    }
-
-    // Update the arg types.
-    for (int i = 0; i < new_proc->data.proargtypes.vl_len_; ++i) {
-      new_proc->data.proargtypes.values[i] = updated_signature->arg_types[i];
-    }
+    // proargtypes is not updated as the static memory allocation for flexible
+    // arrays is not supported. Instead, the proargtypes data will be accessed
+    // from the updated proto.
 
     // Update the return type.
-    new_proc->data.prorettype = updated_signature->return_type;
+    new_proc->prorettype = updated_signature->return_type;
+
+    // Get updated default arguments count from the new signature.
+    updated_default_arg_count = GetProcDefaultArgumentCount(new_proc->oid);
   }
 
   // Update the default arg count.
-  new_proc->data.pronargdefaults = updated_default_arg_count;
+  new_proc->pronargdefaults = updated_default_arg_count;
 
   // Store the updated proc.
-  updated_proc_by_oid_.insert({original_proc.data.oid, std::move(new_proc)});
+  updated_proc_by_oid_.insert({original_proc.oid, std::move(new_proc)});
 }
 
 void PgBootstrapCatalog::UpdateOperator(
     const FormData_pg_operator& original_operator,
-    const oidvector& updated_arg_types, Oid updated_return_type) {
+    const absl::Span<const Oid>& updated_arg_types, Oid updated_return_type) {
   // Confirm that the number of updated args matches the number of inputs
   // for this operator.
   int num_operator_args = 0;
@@ -589,7 +587,7 @@ void PgBootstrapCatalog::UpdateOperator(
   if (original_operator.oprright != InvalidOid) {
     ++num_operator_args;
   }
-  if (updated_arg_types.vl_len_ != num_operator_args) {
+  if (updated_arg_types.size() != num_operator_args) {
     ABSL_LOG(ERROR) << "Updated proc for the " << NameStr(original_operator.oprname)
                << " operator has a different number of input arguments.";
   }
@@ -601,17 +599,17 @@ void PgBootstrapCatalog::UpdateOperator(
   memcpy(new_operator.get(), &original_operator, data_size);
 
   // Update the arg types.
-  if (updated_arg_types.vl_len_ == 2) {
+  if (updated_arg_types.size() == 2) {
     // A binary operator. Update both input types.
-    new_operator->oprleft = updated_arg_types.values[0];
-    new_operator->oprright = updated_arg_types.values[1];
+    new_operator->oprleft = updated_arg_types[0];
+    new_operator->oprright = updated_arg_types[1];
   } else {
     // A unary operator. Usually the input will be oprright but sometimes
     // PostgreSQL puts the input in oprleft. Update the single input type.
     if (new_operator->oprleft == InvalidOid) {
-      new_operator->oprright = updated_arg_types.values[0];
+      new_operator->oprright = updated_arg_types[0];
     } else {
-      new_operator->oprleft = updated_arg_types.values[0];
+      new_operator->oprleft = updated_arg_types[0];
     }
   }
 
@@ -623,43 +621,47 @@ void PgBootstrapCatalog::UpdateOperator(
       {original_operator.oid, std::move(new_operator)});
 }
 
-// Get a raw pointer to the FormData_pg_proc_WithArgTypes to store in the
+// Get a raw pointer to the FormData_pg_proc to store in the
 // bootstrap catalog. If the proc is removed, return a nullptr. If the proc
 // is unmodified, return the original input. If the proc is modified, make a
 // copy of the original input, update the necessary fields, and return the
 // updated copy.
-const FormData_pg_proc_WithArgTypes* PgBootstrapCatalog::GetFinalProcFormData(
-    const FormData_pg_proc_WithArgTypes& original_proc) {
-  if (!ProcIsModified(original_proc.data)) {
+const FormData_pg_proc* PgBootstrapCatalog::GetFinalProcFormData(
+    const FormData_pg_proc& original_proc) {
+  if (!ProcIsModified(original_proc.oid)) {
     return &original_proc;
   }
 
   const PgProcSignature* updated_signature =
-      GetUpdatedProcSignature(original_proc.data);
+      GetUpdatedProcSignature(original_proc.oid);
   uint16_t updated_default_arg_count =
-      GetProcDefaultArgumentCount(original_proc.data);
+      GetProcDefaultArgumentCount(original_proc.oid);
   UpdateProc(original_proc, updated_signature, updated_default_arg_count);
-  return updated_proc_by_oid_.find(original_proc.data.oid)->second.get();
+  return updated_proc_by_oid_.find(original_proc.oid)->second.get();
 }
 
 std::unique_ptr<PgProcData> PgBootstrapCatalog::GetFinalProcProto(
     PgProcData& proto) {
-    const PgProcSignature* signature =
-        GetUpdatedProcSignature(proto);
-    if (signature != nullptr) {
-      proto.clear_prorettype();
-      proto.set_prorettype(signature->return_type);
-      proto.clear_proargtypes();
-      for (Oid arg_type : signature->arg_types) {
-          proto.add_proargtypes(arg_type);
-      }
+  const PgProcSignature* signature = GetUpdatedProcSignature(proto.oid());
+  if (signature != nullptr) {
+    proto.clear_prorettype();
+    proto.set_prorettype(signature->return_type);
+    proto.clear_proargtypes();
+    for (Oid arg_type : signature->arg_types) {
+      proto.add_proargtypes(arg_type);
     }
-    const std::vector<std::string>* default_args =
-        GetProcDefaultArguments(proto);
-    if (default_args != nullptr) {
-      proto.set_proargdefaults(absl::StrJoin(*default_args, ", "));
-      proto.set_pronargdefaults(default_args->size());
-    }
+  }
+  const std::vector<std::string>* default_args =
+      GetProcDefaultArguments(proto.oid());
+  if (default_args != nullptr) {
+    proto.set_proargdefaults(absl::StrJoin(*default_args, ", "));
+    proto.set_pronargdefaults(default_args->size());
+  }
+  const std::vector<std::string>* arg_names =
+      GetUpdatedProcArgNames(proto.oid());
+  if (arg_names != nullptr) {
+    proto.mutable_proargnames()->Assign(arg_names->begin(), arg_names->end());
+  }
     return std::make_unique<PgProcData>(proto);
 }
 
@@ -685,10 +687,15 @@ const FormData_pg_operator* PgBootstrapCatalog::GetFinalOperatorData(
     return &original_operator;
   }
 
-  const FormData_pg_proc_WithArgTypes* updated_proc =
-      updated_proc_it->second.get();
-  UpdateOperator(original_operator, updated_proc->data.proargtypes,
-                 updated_proc->data.prorettype);
+  auto proc_proto = GetProcProto(proc_oid);
+  if (!proc_proto.ok()) {
+    ABSL_LOG(ERROR) << "Failed to get proc proto for operator "
+               << NameStr(original_operator.oprname) << ": "
+               << proc_proto.status();
+    return &original_operator;
+  }
+  UpdateOperator(original_operator, (*proc_proto)->proargtypes(),
+                 (*proc_proto)->prorettype());
   return updated_operator_by_oid_.find(original_operator.oid)->second.get();
 }
 

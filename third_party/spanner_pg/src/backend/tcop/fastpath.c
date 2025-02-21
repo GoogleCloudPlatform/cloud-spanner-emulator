@@ -33,9 +33,6 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * Formerly, this code attempted to cache the function and type info
  * looked up by fetch_fp_info, but only for the duration of a single

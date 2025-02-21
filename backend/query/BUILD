@@ -18,7 +18,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 cc_library(
     name = "query_engine_options",
@@ -424,6 +424,7 @@ cc_library(
         "//third_party/spanner_pg/catalog:pg_catalog",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
+        "//third_party/spanner_pg/datatypes/extended:pg_oid_type",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
@@ -459,6 +460,7 @@ cc_test(
         "//tests/common:test_schema_constructor",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
+        "//third_party/spanner_pg/datatypes/extended:pg_oid_type",
         "//third_party/spanner_pg/test_catalog",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_set",

@@ -18,7 +18,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 cc_library(
     name = "value",
@@ -116,7 +116,6 @@ cc_test(
     deps = [
         ":types",
         "//tests/common:proto_matchers",
-        "//tests/common:scoped_feature_flags_setter",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",

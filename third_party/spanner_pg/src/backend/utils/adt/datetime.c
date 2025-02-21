@@ -34,27 +34,43 @@
 
 // SPANGRES BEGIN
 #include "common/int.h"
-#include "third_party/spanner_pg/shims/catalog_shim.h"
 // SPANGRES END
 
 // SPANGRES BEGIN
-// We've made these functions non-static to call them from catalog_shim.
-int	DecodeNumber(int flen, char *field, bool haveTextMonth,
-						 int fmask, int *tmask,
-						 struct pg_tm *tm, fsec_t *fsec, bool *is2digits);
-int	DecodeNumberField(int len, char *str,
-							  int fmask, int *tmask,
-							  struct pg_tm *tm, fsec_t *fsec, bool *is2digits);
-int	DecodeTimeCommon(char *str, int fmask, int range,
-							 int *tmask, struct pg_itm *itm);
-int	DecodeTime(char *str, int fmask, int range,
-					   int *tmask, struct pg_tm *tm, fsec_t *fsec);
-int	DecodeTimeForInterval(char *str, int fmask, int range,
-								  int *tmask, struct pg_itm_in *itm_in);
-const datetkn *datebsearch(const char *key, const datetkn *base, int nel);
-int	DecodeDate(char *str, int fmask, int *tmask, bool *is2digits,
-					   struct pg_tm *tm);
+/*
+ * SPANGRES: Hardcodes the set of supported timezone abbreviations rather than
+ * loading them from a file
+ *
+ * Note that this table must be strictly alphabetically ordered to allow an
+ * O(ln(N)) search algorithm to be used.
+ *
+ * The token field must be NUL-terminated; we truncate entries to TOKMAXLEN
+ * characters to fit.
+ *
+ */
+static const datetkn SpangresTimezoneAbbrevTable[] = {
+    {"z", TZ, 0}
+};
+
+static const int SpangresTimezoneAbbrevTableSize =
+    sizeof SpangresTimezoneAbbrevTable / sizeof SpangresTimezoneAbbrevTable[0];
 // SPANGRES END
+
+static int DecodeNumber(int flen, char *str, bool haveTextMonth,
+												int fmask, int *tmask,
+												struct pg_tm *tm, fsec_t *fsec, bool *is2digits);
+static int DecodeNumberField(int len, char *str,
+														 int fmask, int *tmask,
+														 struct pg_tm *tm, fsec_t *fsec, bool *is2digits);
+static int DecodeTimeCommon(char *str, int fmask, int range,
+														int *tmask, struct pg_itm *itm);
+static int DecodeTime(char *str, int fmask, int range,
+											int *tmask, struct pg_tm *tm, fsec_t *fsec);
+static int DecodeTimeForInterval(char *str, int fmask, int range,
+																 int *tmask, struct pg_itm_in *itm_in);
+static const datetkn *datebsearch(const char *key, const datetkn *base, int nel);
+static int DecodeDate(char *str, int fmask, int *tmask, bool *is2digits,
+											struct pg_tm *tm);
 static char *AppendSeconds(char *cp, int sec, fsec_t fsec,
 						   int precision, bool fillzeros);
 static bool int64_multiply_add(int64 val, int64 multiplier, int64 *sum);
@@ -733,11 +749,8 @@ ParseFraction(char *cp, double *frac)
  * Fetch a fractional-second value with suitable error checking.
  * Same as ParseFraction except we convert the result to integer microseconds.
  */
-// SPANGRES BEGIN
-// We've made this function non-static to call it from catalog_shim.
-int
+static int
 ParseFractionalSecond(char *cp, fsec_t *fsec)
-// SPANGRES END
 {
 	double		frac;
 	int			dterr;
@@ -2564,12 +2577,9 @@ DecodeTimeOnly(char **field, int *ftype, int nf,
  *	*is2digits: set to true if we find 2-digit year
  *	*tm: field values are stored into appropriate members of this struct
  */
-// SPANGRES BEGIN
-// We've made this function non-static to call it from catalog_shim.
-int
+static int
 DecodeDate(char *str, int fmask, int *tmask, bool *is2digits,
 		   struct pg_tm *tm)
-// SPANGRES END
 {
 	fsec_t		fsec;
 	int			nf = 0;
@@ -2759,12 +2769,9 @@ ValidateDate(int fmask, bool isjulian, bool is2digits, bool bc,
  * and tm_hour fields are used) and let the wrapper functions below
  * convert and range-check as necessary.
  */
-// SPANGRES BEGIN
-// We've made this function non-static to call it from catalog_shim.
-int
+static int
 DecodeTimeCommon(char *str, int fmask, int range,
 				 int *tmask, struct pg_itm *itm)
-// SPANGRES END
 {
 	char	   *cp;
 	int			dterr;
@@ -2844,12 +2851,9 @@ DecodeTimeCommon(char *str, int fmask, int range,
  * This version is used for timestamps.  The results are returned into
  * the tm_hour/tm_min/tm_sec fields of *tm, and microseconds into *fsec.
  */
-// SPANGRES BEGIN
-// We've made this function non-static to call it from catalog_shim.
-int
+static int
 DecodeTime(char *str, int fmask, int range,
 		   int *tmask, struct pg_tm *tm, fsec_t *fsec)
-// SPANGRES END
 {
 	struct pg_itm itm;
 	int			dterr;
@@ -2876,12 +2880,9 @@ DecodeTime(char *str, int fmask, int range,
  * This version is used for intervals.  The results are returned into
  * itm_in->tm_usec.
  */
-// SPANGRES BEGIN
-// We've made this function non-static to call it from catalog_shim.
-int
+static int
 DecodeTimeForInterval(char *str, int fmask, int range,
 					  int *tmask, struct pg_itm_in *itm_in)
-// SPANGRES END
 {
 	struct pg_itm itm;
 	int			dterr;
@@ -2905,12 +2906,9 @@ DecodeTimeForInterval(char *str, int fmask, int range,
  * Interpret plain numeric field as a date value in context.
  * Return 0 if okay, a DTERR code if not.
  */
-// SPANGRES BEGIN
-// We've made this function non-static to call it from catalog_shim.
-int
+static int
 DecodeNumber(int flen, char *str, bool haveTextMonth, int fmask,
-			 int *tmask, struct pg_tm *tm, fsec_t *fsec, bool *is2digits)
-// SPANGRES END
+						 int *tmask, struct pg_tm *tm, fsec_t *fsec, bool *is2digits)
 {
 	int			val;
 	char	   *cp;
@@ -3093,12 +3091,9 @@ DecodeNumber(int flen, char *str, bool haveTextMonth, int fmask,
  * Use the context of previously decoded fields to help with
  * the interpretation.
  */
-// SPANGRES BEGIN
-// We've made this function non-static to call it from catalog_shim.
-int
+static int
 DecodeNumberField(int len, char *str, int fmask,
 				  int *tmask, struct pg_tm *tm, fsec_t *fsec, bool *is2digits)
-// SPANGRES END
 {
 	char	   *cp;
 
@@ -4103,11 +4098,8 @@ DateTimeParseError(int dterr, const char *str, const char *datatype)
  * Binary search -- from Knuth (6.2.1) Algorithm B.  Special case like this
  * is WAY faster than the generic bsearch().
  */
-// SPANGRES BEGIN
-// We've made this function non-static to call it from catalog_shim.
-const datetkn *
+static const datetkn *
 datebsearch(const char *key, const datetkn *base, int nel)
-// SPANGRES END
 {
 	if (nel > 0)
 	{

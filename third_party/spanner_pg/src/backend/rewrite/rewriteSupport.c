@@ -25,8 +25,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Is there a rule by the given name?
  */

@@ -133,6 +133,7 @@ static const CaseInsensitiveStringSet* const pseudo_reserved_words =
     "ADD",
     "ALTER",
     "ANALYZE",
+    "AUTO_INCREMENT",
     "BIT_REVERSED_POSITIVE",
     "BOOL",
     "BUNDLE",

@@ -27,6 +27,7 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/strings/str_cat.h"
 #include "frontend/common/uris.h"
+#include "frontend/entities/session.h"
 #include "tests/common/proto_matchers.h"
 
 namespace google {
@@ -64,8 +65,9 @@ class SessionExistenceTest : public testing::Test {
                              database_uri, empty_schema_operation));
 
     // Create a session that belongs to the database created above.
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> session,
-                         env_->session_manager()->CreateSession({}, database));
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        std::shared_ptr<Session> session,
+        env_->session_manager()->CreateSession({}, false, database));
 
     absl::string_view project_id, instance_id, database_id;
     ZETASQL_EXPECT_OK(ParseSessionUri(session->session_uri(), &project_id, &instance_id,

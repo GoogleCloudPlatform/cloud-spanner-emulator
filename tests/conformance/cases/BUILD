@@ -18,7 +18,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 cc_library(
     name = "cases",
@@ -56,7 +56,6 @@ cc_library(
         "partitioned_dml.cc",
         "pg_catalog_test.cc",
         "pg_change_streams_read_write.cc",
-        "pg_column_default_test.cc",
         "pg_functions_test.cc",
         "pg_named_schema.cc",
         "pg_synonyms.cc",

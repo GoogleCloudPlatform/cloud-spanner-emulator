@@ -133,8 +133,6 @@
 
 #include <math.h>
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 #define BloomEqualStrategyNumber	1
 
 /*

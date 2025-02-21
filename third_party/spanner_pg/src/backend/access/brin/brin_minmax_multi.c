@@ -84,8 +84,6 @@
 #include "utils/timestamp.h"
 #include "utils/uuid.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Additional SQL level support functions
  *

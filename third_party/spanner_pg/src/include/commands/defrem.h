@@ -45,7 +45,7 @@ extern bool CheckIndexCompatible(Oid oldId,
 					 const char *accessMethodName,
 					 List *attributeList,
 					 List *exclusionOpNames);
-extern Oid	GetDefaultOpClass_UNUSED_SPANGRES(Oid type_id, Oid am_id);
+extern Oid	GetDefaultOpClass(Oid type_id, Oid am_id);
 extern Oid ResolveOpClass(List *opclass, Oid attrType,
 			   const char *accessMethodName, Oid accessMethodId);
 /* commands/functioncmds.c */

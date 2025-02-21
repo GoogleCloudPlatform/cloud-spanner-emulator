@@ -72,7 +72,6 @@ cc_library(
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:error_shim",
         "//third_party/spanner_pg/shims:memory_context_pg_arena",
-        "//third_party/spanner_pg/shims:regex_shim_header",
         "//third_party/spanner_pg/shims:stub_memory_reservation_manager",
         "//third_party/spanner_pg/shims:timezone_helper",
         "//third_party/spanner_pg/src/backend:backend_with_shims",

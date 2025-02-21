@@ -35,9 +35,6 @@
 #include "utils/lsyscache.h"
 #include "utils/selfuncs.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /* XXX see PartCollMatchesExprColl */
 #define IndexCollMatchesExprColl(idxcollation, exprcollation) \
 	((idxcollation) == InvalidOid || (idxcollation) == (exprcollation))

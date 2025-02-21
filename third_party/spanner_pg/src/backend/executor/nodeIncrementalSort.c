@@ -85,9 +85,6 @@
 #include "utils/lsyscache.h"
 #include "utils/tuplesort.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * We need to store the instrumentation information in either local node's sort
  * info or, for a parallel worker process, in the shared info (this avoids

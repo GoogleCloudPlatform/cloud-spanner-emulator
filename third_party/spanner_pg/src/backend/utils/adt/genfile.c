@@ -37,9 +37,6 @@
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * Convert a "text" filename argument to C string, and check it's allowable.
  *

@@ -19,9 +19,6 @@
 #include "utils/lsyscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 static Datum array_position_common(FunctionCallInfo fcinfo);
 
 

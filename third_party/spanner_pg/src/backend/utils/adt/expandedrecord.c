@@ -29,9 +29,6 @@
 #include "utils/memutils.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /* "Methods" required for an expanded object */
 static Size ER_get_flat_size(ExpandedObjectHeader *eohptr);
 static void ER_flatten_into(ExpandedObjectHeader *eohptr,

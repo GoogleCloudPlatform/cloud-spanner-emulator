@@ -22,9 +22,6 @@
 #include "utils/portal.h"
 #include "utils/rel.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 static char *fetch_cursor_param_value(ExprContext *econtext, int paramId);
 static ScanState *search_plan_tree(PlanState *node, Oid table_oid,
 								   bool *pending_rescan);

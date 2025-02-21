@@ -77,6 +77,13 @@
 #include "utils/timestamp.h"
 #include "utils/varlena.h"
 
+// SPANGRES BEGIN
+// Inlines implementation of jsonpath helper functions that need to be defined.
+int jspConvertRegexFlags(uint flags) {
+	abort();
+}
+// SPANGRES END
+
 /*
  * Represents "base object" and it's "id" for .keyvalue() evaluation.
  */

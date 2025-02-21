@@ -83,8 +83,6 @@
 #include "utils/timestamp.h"
 #include "utils/varlena.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /* ----------------
  *		global variables
  * ----------------

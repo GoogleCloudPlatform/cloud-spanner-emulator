@@ -175,8 +175,11 @@ typedef Node *(*CoerceParamHook) (ParseState *pstate, Param *param,
  * interpretation of ColumnRefs and ParamRefs.
  *
  * p_ref_hook_state: passthrough state for the parser hook functions.
+ *
+ * SPANGRES: Replaces p_target_relation with p_target_relation_oid, which is an
+ * Oid for the target table of INSERT, UPDATE, or DELETE.
  */
-struct ParseState_UNUSED_SPANGRES
+struct ParseState
 {
 	ParseState *parentParseState;	/* stack link */
 	const char *p_sourcetext;	/* source text, or NULL if not available */
@@ -190,7 +193,11 @@ struct ParseState_UNUSED_SPANGRES
 	List	   *p_ctenamespace; /* current namespace for common table exprs */
 	List	   *p_future_ctes;	/* common table exprs not yet in namespace */
 	CommonTableExpr *p_parent_cte;	/* this query's containing CTE */
-	Relation	p_target_relation;	/* INSERT/UPDATE/DELETE/MERGE target rel */
+  // SPANGRES BEGIN
+  // Add new field to replace p_target_relation.
+  Oid p_target_relation_oid;  // INSERT/UPDATE/DELETE target rel oid
+	// Relation	p_target_relation;	/* INSERT/UPDATE/DELETE/MERGE target rel */
+  // SPANGRES END
 	ParseNamespaceItem *p_target_nsitem;	/* target rel's NSItem, or NULL */
 	bool		p_is_insert;	/* process assignment like INSERT not UPDATE */
 	List	   *p_windowdefs;	/* raw representations of window clauses */

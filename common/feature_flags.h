@@ -44,8 +44,9 @@ class EmulatorFeatureFlags {
     bool enable_batch_query_with_no_table_scan = true;
     bool enable_upsert_queries_with_returning = true;
     bool enable_identity_columns = true;
+    bool enable_serial_auto_increment = true;
     bool enable_user_defined_functions = false;
-    bool enable_fk_enforcement_option = false;
+    bool enable_fk_enforcement_option = true;
   };
 
   static const EmulatorFeatureFlags& instance() {

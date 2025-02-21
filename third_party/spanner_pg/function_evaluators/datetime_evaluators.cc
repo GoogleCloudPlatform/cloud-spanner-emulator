@@ -32,6 +32,7 @@
 #include "third_party/spanner_pg/interface/datetime_evaluators.h"
 
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <string>

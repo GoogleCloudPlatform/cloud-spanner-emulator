@@ -27,8 +27,6 @@
 #include "parser/parsetree.h"
 #include "utils/lsyscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * print
  *	  print contents of Node to stdout

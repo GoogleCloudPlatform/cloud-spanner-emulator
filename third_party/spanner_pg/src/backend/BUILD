@@ -52,8 +52,9 @@ cc_library(
     ],
     deps = [
         ":backend",
-        "//third_party/spanner_pg/shims:catalog_shim",
-        "//third_party/spanner_pg/shims:memory_shim",
+        "//third_party/spanner_pg/catalog:catalog_wrappers",
+        "//third_party/spanner_pg/errors:ereport",
+        "//third_party/spanner_pg/src/spangres:memory",
     ],
 )
 
@@ -61,10 +62,11 @@ cc_library(
     name = "backend_with_stub_shims",
     deps = [
         ":backend",
-        "//third_party/spanner_pg/shims:fake_catalog_shim",
-        # `memory_shim` is very widely used and very lightweight.
+        "//third_party/spanner_pg/interface:stub_catalog_wrappers",
+        # `memory` is very widely used and very lightweight.
         # Don't stub it, just use it.
-        "//third_party/spanner_pg/shims:memory_shim",
+        "//third_party/spanner_pg/src/spangres:memory",
+        "//third_party/spanner_pg/errors:ereport",
     ],
 )
 
@@ -86,7 +88,6 @@ cc_library(
         "-lrt",
     ],
     deps = [
-        "//third_party/spanner_pg/shims:catalog_shim_header",
         "//third_party/spanner_pg/src/backend/access/brin",
         "//third_party/spanner_pg/src/backend/access/common",
         "//third_party/spanner_pg/src/backend/access/gin",

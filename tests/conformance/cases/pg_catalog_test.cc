@@ -171,9 +171,6 @@ TEST_F(PGCatalogTest, PGAttrdef) {
 }
 
 TEST_F(PGCatalogTest, PGAttribute) {
-  if (in_prod_env()) {
-    GTEST_SKIP();
-  }
   constexpr absl::string_view query_template = R"sql(
       SELECT
         c.relname,
@@ -203,162 +200,181 @@ TEST_F(PGCatalogTest, PGAttribute) {
         c.relnamespace != 11 AND c.relnamespace != 75003 AND
         c.relnamespace != 75004 AND c.relkind = '%s'
       ORDER BY
-        attrelid, attnum)sql";
+        c.relnamespace, c.relname, attnum)sql";
 
   // Table attributes.
   auto expected = std::vector<ValueRow>({
-      {"base", "key1", "int8", 1, 0, -1, "\0", true, false, false, "\0", "\0",
-       false, true, 0},
-      {"base", "key2", "text", 2, 0, -1, "\0", true, false, false, "\0", "\0",
-       false, true, 0},
-      {"base", "bool_value", "bool", 3, 0, -1, "\0", false, false, false, "\0",
-       "\0", false, true, 0},
-      {"base", "int_value", "int8", 4, 0, -1, "\0", true, false, false, "\0",
-       "\0", false, true, 0},
-      {"base", "float_value", "float4", 5, 0, -1, "\0", false, false, false,
-       "\0", "\0", false, true, 0},
-      {"base", "double_value", "float8", 6, 0, -1, "\0", false, false, false,
-       "\0", "\0", false, true, 0},
-      {"base", "str_value", "text", 7, 0, -1, "\0", false, false, false, "\0",
-       "\0", false, true, 0},
-      {"base", "byte_value", "bytea", 8, 0, -1, "\0", false, false, false, "\0",
-       "\0", false, true, 0},
-      {"base", "timestamp_value", "timestamptz", 9, 0, -1, "\0", false, false,
-       false, "\0", "\0", false, true, 0},
-      {"base", "date_value", "date", 10, 0, -1, "\0", false, false, false, "\0",
-       "\0", false, true, 0},
-      {"base", "bool_array", "_bool", 11, 1, -1, "\0", true, false, false, "\0",
-       "\0", false, true, 0},
-      {"base", "int_array", "_int8", 12, 1, -1, "\0", false, false, false, "\0",
-       "\0", false, true, 0},
-      {"base", "float_array", "_float4", 13, 1, -1, "\0", false, false, false,
-       "\0", "\0", false, true, 0},
-      {"base", "double_array", "_float8", 14, 1, -1, "\0", false, false, false,
-       "\0", "\0", false, true, 0},
-      {"base", "str_array", "_text", 15, 1, -1, "\0", false, false, false, "\0",
-       "\0", false, true, 0},
-      {"base", "byte_array", "_bytea", 16, 1, -1, "\0", false, false, false,
-       "\0", "\0", false, true, 0},
-      {"base", "timestamp_array", "_timestamptz", 17, 1, -1, "\0", false, false,
-       false, "\0", "\0", false, true, 0},
-      {"base", "date_array", "_date", 18, 1, -1, "\0", false, false, false,
-       "\0", "\0", false, true, 0},
-      {"base", "gen_value", "int8", 19, 0, -1, "\0", false, false, false, "\0",
-       "s", false, true, 0},
-      {"base", "gen_function_value", "int8", 20, 0, -1, "\0", false, false,
-       false, "\0", "s", false, true, 0},
-      {"base", "default_col_value", "int8", 21, 0, -1, "\0", false, true, false,
-       "\0", "\0", false, true, 0},
-      {"base", "default_timestamp_col_value", "timestamptz", 22, 0, -1, "\0",
-       false, true, false, "\0", "\0", false, true, 0},
+      {"base", "key1", "int8", 1, 0, -1, std::string{'\0'}, true, false, false,
+       std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "key2", "varchar", 2, 0, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "bool_value", "bool", 3, 0, -1, std::string{'\0'}, false, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "int_value", "int8", 4, 0, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "float_value", "float4", 5, 0, -1, std::string{'\0'}, false,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "double_value", "float8", 6, 0, -1, std::string{'\0'}, false,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "str_value", "varchar", 7, 0, -1, std::string{'\0'}, false,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "byte_value", "bytea", 8, 0, -1, std::string{'\0'}, false, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "timestamp_value", "timestamptz", 9, 0, -1, std::string{'\0'},
+       false, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
+       0},
+      {"base", "date_value", "date", 10, 0, -1, std::string{'\0'}, false, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "bool_array", "_bool", 11, 1, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "int_array", "_int8", 12, 1, -1, std::string{'\0'}, false, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "float_array", "_float4", 13, 1, -1, std::string{'\0'}, false,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "double_array", "_float8", 14, 1, -1, std::string{'\0'}, false,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "str_array", "_varchar", 15, 1, -1, std::string{'\0'}, false,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "byte_array", "_bytea", 16, 1, -1, std::string{'\0'}, false,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "timestamp_array", "_timestamptz", 17, 1, -1, std::string{'\0'},
+       false, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
+       0},
+      {"base", "date_array", "_date", 18, 1, -1, std::string{'\0'}, false,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "gen_value", "int8", 19, 0, -1, std::string{'\0'}, false, false,
+       false, std::string{'\0'}, "s", false, true, 0},
+      {"base", "gen_function_value", "int8", 20, 0, -1, std::string{'\0'},
+       false, false, false, std::string{'\0'}, "s", false, true, 0},
+      {"base", "default_col_value", "int8", 21, 0, -1, std::string{'\0'}, false,
+       true, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"base", "default_timestamp_col_value", "timestamptz", 22, 0, -1,
+       std::string{'\0'}, false, true, false, std::string{'\0'},
+       std::string{'\0'}, false, true, 0},
 
-      {"cascade_child", "key1", "int8", 1, 0, -1, "\0", true, false, false,
-       "\0", "\0", false, true, 0},
-      {"cascade_child", "key2", "text", 2, 0, -1, "\0", true, false, false,
-       "\0", "\0", false, true, 0},
-      {"cascade_child", "child_key", "bool", 3, 0, -1, "\0", true, false, false,
-       "\0", "\0", false, true, 0},
-      {"cascade_child", "value1", "text", 4, 0, -1, "\0", true, false, false,
-       "\0", "\0", false, true, 0},
-      {"cascade_child", "value2", "bool", 5, 0, -1, "\0", false, false, false,
-       "\0", "\0", false, true, 0},
-      {"cascade_child", "created_at", "timestamptz", 6, 0, -1, "\0", false,
-       false, false, "\0", "\0", false, true, 0},
+      {"cascade_child", "key1", "int8", 1, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"cascade_child", "key2", "varchar", 2, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"cascade_child", "child_key", "bool", 3, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"cascade_child", "value1", "varchar", 4, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"cascade_child", "value2", "bool", 5, 0, -1, std::string{'\0'}, false,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"cascade_child", "created_at", "timestamptz", 6, 0, -1,
+       std::string{'\0'}, false, false, false, std::string{'\0'},
+       std::string{'\0'}, false, true, 0},
 
-      {"no_action_child", "key1", "int8", 1, 0, -1, "\0", true, false, false,
-       "\0", "\0", false, true, 0},
-      {"no_action_child", "key2", "text", 2, 0, -1, "\0", true, false, false,
-       "\0", "\0", false, true, 0},
-      {"no_action_child", "child_key", "bool", 3, 0, -1, "\0", true, false,
-       false, "\0", "\0", false, true, 0},
-      {"no_action_child", "value", "text", 4, 0, -1, "\0", false, false, false,
-       "\0", "\0", false, true, 0},
+      {"no_action_child", "key1", "int8", 1, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"no_action_child", "key2", "varchar", 2, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"no_action_child", "child_key", "bool", 3, 0, -1, std::string{'\0'},
+       true, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
+       0},
+      {"no_action_child", "value", "varchar", 4, 0, -1, std::string{'\0'},
+       false, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
+       0},
 
-      {"row_deletion_policy", "key", "int8", 1, 0, -1, "\0", true, false, false,
-       "\0", "\0", false, true, 0},
-      {"row_deletion_policy", "created_at", "timestamptz", 2, 0, -1, "\0",
-       false, false, false, "\0", "\0", false, true, 0},
+      {"row_deletion_policy", "key", "int8", 1, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"row_deletion_policy", "created_at", "timestamptz", 2, 0, -1,
+       std::string{'\0'}, false, false, false, std::string{'\0'},
+       std::string{'\0'}, false, true, 0},
 
-      {"ns_table_1", "key1", "int8", 1, 0, -1, "\0", true, false, false, "\0",
-       "\0", false, true, 0},
-      {"ns_table_1", "key2", "text", 2, 0, -1, "\0", false, false, false, "\0",
-       "\0", false, true, 0},
-      {"ns_table_1", "bool_value", "bool", 3, 0, -1, "\0", false, false, false,
-       "\0", "\0", false, true, 0},
+      {"ns_table_1", "key1", "int8", 1, 0, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"ns_table_1", "key2", "varchar", 2, 0, -1, std::string{'\0'}, false,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"ns_table_1", "bool_value", "bool", 3, 0, -1, std::string{'\0'}, false,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
 
-      {"ns_table_2", "key1", "int8", 1, 0, -1, "\0", true, false, false, "\0",
-       "\0", false, true, 0},
-      {"ns_table_2", "key2", "int8", 2, 0, -1, "\0", false, false, false, "\0",
-       "\0", false, true, 0},
+      {"ns_table_2", "key1", "int8", 1, 0, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"ns_table_2", "key2", "int8", 2, 0, -1, std::string{'\0'}, false, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
   });
   EXPECT_THAT(Query(absl::StrFormat(query_template, "r")),
               IsOkAndHoldsRows(expected));
 
   // Index attributes.
   expected = std::vector<ValueRow>({
-      {"PK_base", "key1", "int8", 1, 0, -1, "\0", true, false, false, "\0",
-       "\0", false, true, 0},
-      {"PK_base", "key2", "text", 2, 0, -1, "\0", true, false, false, "\0",
-       "\0", false, true, 0},
-
-      {"PK_cascade_child", "key1", "int8", 1, 0, -1, "\0", true, false, false,
-       "\0", "\0", false, true, 0},
-      {"PK_cascade_child", "key2", "text", 2, 0, -1, "\0", true, false, false,
-       "\0", "\0", false, true, 0},
-      {"PK_cascade_child", "child_key", "bool", 3, 0, -1, "\0", true, false,
-       false, "\0", "\0", false, true, 0},
-
-      {"PK_no_action_child", "key1", "int8", 1, 0, -1, "\0", true, false, false,
-       "\0", "\0", false, true, 0},
-      {"PK_no_action_child", "key2", "text", 2, 0, -1, "\0", true, false, false,
-       "\0", "\0", false, true, 0},
-      {"PK_no_action_child", "child_key", "bool", 3, 0, -1, "\0", true, false,
-       false, "\0", "\0", false, true, 0},
-
-      {"cascade_child_by_value", "key1", "int8", 1, 0, -1, "\0", true, false,
-       false, "\0", "\0", false, true, 0},
-      {"cascade_child_by_value", "key2", "text", 2, 0, -1, "\0", true, false,
-       false, "\0", "\0", false, true, 0},
-      {"cascade_child_by_value", "value2", "bool", 3, 0, -1, "\0", true, false,
-       false, "\0", "\0", false, true, 0},
-      {"cascade_child_by_value", "value1", "text", 4, 0, -1, "\0", true, false,
-       false, "\0", "\0", false, true, 0},
-
-      {"no_action_child_by_value", "value", "text", 1, 0, -1, "\0", false,
-       false, false, "\0", "\0", false, true, 0},
+      {"IDX_base_bool_value_key2_N_\\w{16}", "bool_value", "bool", 1, 0, -1,
+       std::string{'\0'}, true, false, false, std::string{'\0'},
+       std::string{'\0'}, false, true, 0},
+      {"IDX_base_bool_value_key2_N_\\w{16}", "key2", "varchar", 2, 0, -1,
+       std::string{'\0'}, true, false, false, std::string{'\0'},
+       std::string{'\0'}, false, true, 0},
 
       {"IDX_cascade_child_child_key_value1_U_\\w{16}", "child_key", "bool", 1,
-       0, -1, "\0", true, false, false, "\0", "\0", false, true, 0},
-      {"IDX_cascade_child_child_key_value1_U_\\w{16}", "value1", "text", 2, 0,
-       -1, "\0", true, false, false, "\0", "\0", false, true, 0},
+       0, -1, std::string{'\0'}, true, false, false, std::string{'\0'},
+       std::string{'\0'}, false, true, 0},
+      {"IDX_cascade_child_child_key_value1_U_\\w{16}", "value1", "varchar", 2,
+       0, -1, std::string{'\0'}, true, false, false, std::string{'\0'},
+       std::string{'\0'}, false, true, 0},
 
-      {"IDX_base_bool_value_key2_N_\\w{16}", "bool_value", "bool", 1, 0, -1,
-       "\0", true, false, false, "\0", "\0", false, true, 0},
-      {"IDX_base_bool_value_key2_N_\\w{16}", "key2", "text", 2, 0, -1, "\0",
-       true, false, false, "\0", "\0", false, true, 0},
+      {"PK_base", "key1", "int8", 1, 0, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"PK_base", "key2", "varchar", 2, 0, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
 
-      {"PK_row_deletion_policy", "key", "int8", 1, 0, -1, "\0", true, false,
-       false, "\0", "\0", false, true, 0},
+      {"PK_cascade_child", "key1", "int8", 1, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"PK_cascade_child", "key2", "varchar", 2, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"PK_cascade_child", "child_key", "bool", 3, 0, -1, std::string{'\0'},
+       true, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
+       0},
 
-      {"PK_ns_table_1", "key1", "int8", 1, 0, -1, "\0", true, false, false,
-       "\0", "\0", false, true, 0},
+      {"PK_no_action_child", "key1", "int8", 1, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"PK_no_action_child", "key2", "varchar", 2, 0, -1, std::string{'\0'},
+       true, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
+       0},
+      {"PK_no_action_child", "child_key", "bool", 3, 0, -1, std::string{'\0'},
+       true, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
+       0},
+      {"PK_row_deletion_policy", "key", "int8", 1, 0, -1, std::string{'\0'},
+       true, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
+       0},
 
-      {"PK_ns_table_2", "key1", "int8", 1, 0, -1, "\0", true, false, false,
-       "\0", "\0", false, true, 0},
+      {"cascade_child_by_value", "key1", "int8", 1, 0, -1, std::string{'\0'},
+       true, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
+       0},
+      {"cascade_child_by_value", "key2", "varchar", 2, 0, -1, std::string{'\0'},
+       true, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
+       0},
+      {"cascade_child_by_value", "value2", "bool", 3, 0, -1, std::string{'\0'},
+       true, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
+       0},
+      {"cascade_child_by_value", "value1", "varchar", 5, 0, -1,
+       std::string{'\0'}, true, false, false, std::string{'\0'},
+       std::string{'\0'}, false, true, 0},
 
-      {"ns_index", "key1", "int8", 1, 0, -1, "\0", true, false, false, "\0",
-       "\0", false, true, 0},
+      {"no_action_child_by_value", "value", "varchar", 1, 0, -1,
+       std::string{'\0'}, false, false, false, std::string{'\0'},
+       std::string{'\0'}, false, true, 0},
+
+      {"PK_ns_table_1", "key1", "int8", 1, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+
+      {"PK_ns_table_2", "key1", "int8", 1, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+
+      {"ns_index", "key1", "int8", 1, 0, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
   });
   auto results = Query(absl::StrFormat(query_template, "i"));
   EXPECT_THAT(*results, ExpectedRows(*results, expected));
 
   // View attributes.
   expected = std::vector<ValueRow>({
-      {"base_view", "key1", "int8", 1, 0, -1, "\0", false, false, false, "\0",
-       "\0", false, true, 0},
+      {"base_view", "key1", "int8", 1, 0, -1, std::string{'\0'}, false, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
 
-      {"ns_view", "key1", "int8", 1, 0, -1, "\0", false, false, false, "\0",
-       "\0", false, true, 0},
+      {"ns_view", "key1", "int8", 1, 0, -1, std::string{'\0'}, false, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
   });
   EXPECT_THAT(Query(absl::StrFormat(query_template, "v")),
               IsOkAndHoldsRows(expected));
@@ -373,6 +389,7 @@ TEST_F(PGCatalogTest, PGClass) {
         relhasindex,
         relpersistence,
         relkind,
+        relnatts,
         relchecks,
         relispopulated
       FROM
@@ -389,7 +406,7 @@ TEST_F(PGCatalogTest, PGClass) {
 
   auto sequence_results = Query(absl::StrFormat(query_template, "S"));
   auto expected_sequence_rows = std::vector<ValueRow>({
-      {"test_sequence", "public", PgOid(0), false, "p", "S", 0, true},
+      {"test_sequence", "public", PgOid(0), false, "p", "S", Ni64(), 0, true},
   });
   ZETASQL_EXPECT_OK(sequence_results);
   EXPECT_THAT(*sequence_results,
@@ -398,22 +415,25 @@ TEST_F(PGCatalogTest, PGClass) {
   auto index_results = Query(absl::StrFormat(query_template, "i"));
   auto expected_index_rows = std::vector<ValueRow>({
       {"IDX_base_bool_value_key2_N_\\w{16}", "public", PgOid(75002), false, "p",
-       "i", 0, true},
+       "i", 2, 0, true},
       {"IDX_cascade_child_child_key_value1_U_\\w{16}", "public", PgOid(75002),
-       false, "p", "i", 0, true},
-      {"PK_base", "public", PgOid(75002), false, "p", "i", 0, true},
-      {"PK_cascade_child", "public", PgOid(75002), false, "p", "i", 0, true},
-      {"PK_no_action_child", "public", PgOid(75002), false, "p", "i", 0, true},
-      {"PK_row_deletion_policy", "public", PgOid(75002), false, "p", "i", 0,
+       false, "p", "i", 2, 0, true},
+      {"PK_base", "public", PgOid(75002), false, "p", "i", 2, 0, true},
+      {"PK_cascade_child", "public", PgOid(75002), false, "p", "i", 3, 0, true},
+      {"PK_no_action_child", "public", PgOid(75002), false, "p", "i", 3, 0,
        true},
-      {"cascade_child_by_value", "public", PgOid(75002), false, "p", "i", 0,
+      {"PK_row_deletion_policy", "public", PgOid(75002), false, "p", "i", 1, 0,
        true},
-      {"no_action_child_by_value", "public", PgOid(75002), false, "p", "i", 0,
+      {"cascade_child_by_value", "public", PgOid(75002), false, "p", "i", 4, 0,
        true},
+      {"no_action_child_by_value", "public", PgOid(75002), false, "p", "i", 1,
+       0, true},
 
-      {"PK_ns_table_1", "named_schema", PgOid(75002), false, "p", "i", 0, true},
-      {"PK_ns_table_2", "named_schema", PgOid(75002), false, "p", "i", 0, true},
-      {"ns_index", "named_schema", PgOid(75002), false, "p", "i", 0, true},
+      {"PK_ns_table_1", "named_schema", PgOid(75002), false, "p", "i", 1, 0,
+       true},
+      {"PK_ns_table_2", "named_schema", PgOid(75002), false, "p", "i", 1, 0,
+       true},
+      {"ns_index", "named_schema", PgOid(75002), false, "p", "i", 1, 0, true},
   });
   ZETASQL_EXPECT_OK(index_results);
   EXPECT_THAT(*index_results,
@@ -421,13 +441,14 @@ TEST_F(PGCatalogTest, PGClass) {
 
   auto table_results = Query(absl::StrFormat(query_template, "r"));
   auto expected_table_rows = std::vector<ValueRow>({
-      {"base", "public", PgOid(75001), true, "p", "r", 2, true},
-      {"cascade_child", "public", PgOid(75001), true, "p", "r", 0, true},
-      {"no_action_child", "public", PgOid(75001), true, "p", "r", 0, true},
-      {"row_deletion_policy", "public", PgOid(75001), false, "p", "r", 0, true},
+      {"base", "public", PgOid(75001), true, "p", "r", 22, 2, true},
+      {"cascade_child", "public", PgOid(75001), true, "p", "r", 6, 0, true},
+      {"no_action_child", "public", PgOid(75001), true, "p", "r", 4, 0, true},
+      {"row_deletion_policy", "public", PgOid(75001), false, "p", "r", 2, 0,
+       true},
 
-      {"ns_table_1", "named_schema", PgOid(75001), true, "p", "r", 0, true},
-      {"ns_table_2", "named_schema", PgOid(75001), false, "p", "r", 0, true},
+      {"ns_table_1", "named_schema", PgOid(75001), true, "p", "r", 3, 0, true},
+      {"ns_table_2", "named_schema", PgOid(75001), false, "p", "r", 2, 0, true},
   });
   ZETASQL_EXPECT_OK(table_results);
   EXPECT_THAT(*table_results,
@@ -435,8 +456,8 @@ TEST_F(PGCatalogTest, PGClass) {
 
   auto view_results = Query(absl::StrFormat(query_template, "v"));
   auto expected_view_rows = std::vector<ValueRow>({
-      {"base_view", "public", PgOid(0), false, "p", "v", 0, true},
-      {"ns_view", "named_schema", PgOid(0), false, "p", "v", 0, true},
+      {"base_view", "public", PgOid(0), false, "p", "v", 1, 0, true},
+      {"ns_view", "named_schema", PgOid(0), false, "p", "v", 1, 0, true},
   });
   ZETASQL_EXPECT_OK(view_results);
   EXPECT_THAT(*view_results, ExpectedRows(*view_results, expected_view_rows));
@@ -630,90 +651,24 @@ TEST_F(PGCatalogTest, PGConstraint) {
 
 TEST_F(PGCatalogTest, PGIndex) {
   auto expected = std::vector<ValueRow>({
-      {"IDX_base_bool_value_key2_N_\\w{16}",
-       "base",
-       2,
-       2,
-       false,
-       false,
-       false,
-       Nb(),
-       false,
-       true,
-       false,
-       true,
-       true,
-       false,
-       std::vector<int>{3, 2},
-       NOidArray(),
-       NOidArray(),
-       Ni64Array(),
-       Ns(),
-       Ns()},
-      {"IDX_cascade_child_child_key_value1_U_\\w{16}",
-       "cascade_child",
-       2,
-       2,
-       true,
-       false,
-       false,
-       Nb(),
-       false,
-       true,
-       false,
-       true,
-       true,
-       false,
-       std::vector<int>{3, 4},
-       NOidArray(),
-       NOidArray(),
-       Ni64Array(),
-       Ns(),
-       Ns()},
-      {"cascade_child_by_value",
-       "cascade_child",
-       4,
-       3,
-       true,
-       false,
-       false,
-       Nb(),
-       false,
-       true,
-       false,
-       true,
-       true,
-       false,
-       std::vector<int>{1, 2, 5, 4},
-       NOidArray(),
-       NOidArray(),
-       Ni64Array(),
-       Ns(),
-       Ns()},
-      {"no_action_child_by_value",
-       "no_action_child",
-       1,
-       1,
-       false,
-       false,
-       false,
-       Nb(),
-       false,
-       true,
-       false,
-       true,
-       true,
-       false,
-       std::vector<int>{4},
-       NOidArray(),
-       NOidArray(),
-       Ni64Array(),
-       Ns(),
-       Ns()},
-      {"ns_index",  "ns_table_1", 1,           1,     true,
-       false,       false,        Nb(),        false, true,
-       false,       true,         true,        false, std::vector<int>{1},
-       NOidArray(), NOidArray(),  Ni64Array(), Ns(),  Ns()},
+      {"IDX_base_bool_value_key2_N_\\w{16}", "base", 2, 2, false, false,
+       std::vector<int>{3, 2}},
+      {"PK_base", "base", 2, 2, true, true, std::vector<int>{1, 2}},
+      {"IDX_cascade_child_child_key_value1_U_\\w{16}", "cascade_child", 2, 2,
+       true, false, std::vector<int>{3, 4}},
+      {"PK_cascade_child", "cascade_child", 3, 3, true, true,
+       std::vector<int>{1, 2, 3}},
+      {"cascade_child_by_value", "cascade_child", 4, 3, true, false,
+       std::vector<int>{1, 2, 5, 4}},
+      {"PK_no_action_child", "no_action_child", 3, 3, true, true,
+       std::vector<int>{1, 2, 3}},
+      {"no_action_child_by_value", "no_action_child", 1, 1, false, false,
+       std::vector<int>{4}},
+      {"PK_ns_table_1", "ns_table_1", 1, 1, true, true, std::vector<int>{1}},
+      {"ns_index", "ns_table_1", 1, 1, true, false, std::vector<int>{1}},
+      {"PK_ns_table_2", "ns_table_2", 1, 1, true, true, std::vector<int>{1}},
+      {"PK_row_deletion_policy", "row_deletion_policy", 1, 1, true, true,
+       std::vector<int>{1}},
   });
   auto results = Query(R"sql(
       SELECT
@@ -723,6 +678,19 @@ TEST_F(PGCatalogTest, PGIndex) {
         indnkeyatts,
         indisunique,
         indisprimary,
+        indkey
+      FROM
+        pg_catalog.pg_index as i
+      JOIN pg_catalog.pg_class as c ON i.indexrelid = c.oid
+      JOIN pg_catalog.pg_class as t ON i.indrelid = t.oid
+      ORDER BY
+        t.relname, c.relname)sql");
+  EXPECT_THAT(*results, ExpectedRows(*results, expected));
+
+  // Check constant columns.
+  EXPECT_THAT(
+      Query(R"sql(
+      SELECT DISTINCT
         indisexclusion,
         indimmediate,
         indisclustered,
@@ -731,20 +699,13 @@ TEST_F(PGCatalogTest, PGIndex) {
         indisready,
         indislive,
         indisreplident,
-        indkey,
-        indcollation,
-        indclass,
-        indoption,
         indexprs,
         indpred
       FROM
-        pg_catalog.pg_index as i
-      JOIN pg_catalog.pg_class as c ON i.indexrelid = c.oid
-      JOIN pg_catalog.pg_class as t ON i.indrelid = t.oid
-      WHERE indisprimary = false
-      ORDER BY
-        t.relname, c.relname)sql");
-  EXPECT_THAT(*results, ExpectedRows(*results, expected));
+        pg_catalog.pg_index as c)sql"),
+      IsOkAndHoldsRows({
+          {false, Nb(), false, true, false, true, true, false, Ns(), Ns()},
+      }));
 }
 
 TEST_F(PGCatalogTest, PGIndexes) {
@@ -835,6 +796,9 @@ TEST_F(PGCatalogTest, PGNamespace) {
 }
 
 TEST_F(PGCatalogTest, PGProc) {
+  if (in_prod_env()) {
+    GTEST_SKIP();
+  }
   auto expected = std::vector<ValueRow>({
       {"read_json_test_stream", "public", PgOid(0), "f", true, 5, 0,
        PgOid(3802),

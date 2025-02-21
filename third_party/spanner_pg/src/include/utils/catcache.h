@@ -210,7 +210,7 @@ extern HeapTuple SearchCatCache3(CatCache *cache,
 extern HeapTuple SearchCatCache4(CatCache *cache,
 
 				Datum v1, Datum v2, Datum v3, Datum v4);
-extern void ReleaseCatCache_UNUSED_SPANGRES(HeapTuple tuple);
+extern void ReleaseCatCache(HeapTuple tuple);
 extern uint32 GetCatCacheHashValue(CatCache *cache,
 								   Datum v1, Datum v2,
 								   Datum v3, Datum v4);

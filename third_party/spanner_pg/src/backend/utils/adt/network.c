@@ -31,9 +31,6 @@
 #include "utils/lsyscache.h"
 #include "utils/sortsupport.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * An IPv4 netmask size is a value in the range of 0 - 32, which is
  * represented with 6 bits in inet/cidr abbreviated keys where possible.

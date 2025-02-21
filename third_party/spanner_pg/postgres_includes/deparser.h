@@ -33,7 +33,6 @@
 #define SHIMS_DEPARSER_H_
 
 #include "third_party/spanner_pg/postgres_includes/all.h"
-#include "third_party/spanner_pg/shims/catalog_shim.h"
 
 // General utility for deparsing queries. Calls get_query_def with all
 // pretty-printing flags set if prettyPrint=true and unset otherwise

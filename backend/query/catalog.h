@@ -20,6 +20,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
@@ -73,6 +74,7 @@ class Catalog : public zetasql::EnumerableCatalog {
  private:
   friend class NetCatalog;
   friend class PGFunctionCatalog;
+
   // These tests needs to access the tvf map and manually add an empty tvf.
   FRIEND_TEST(ChangeStreamQueryValidatorTest,
               ValidateNoneChangeStreamTvfWithSamePrefixIsFiltered);

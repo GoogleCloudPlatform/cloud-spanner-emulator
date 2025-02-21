@@ -76,12 +76,11 @@ TEST_F(JsonbTypeofTest, ReturnsTypeString) {
   EXPECT_THAT(JsonbTypeof(postgres_translator::spangres::datatypes::common::
                               MaxJsonbNumericString()),
               IsOkAndHolds(zetasql::Value::String("number")));
-  std::string bool_type = "bool";
 
   EXPECT_THAT(JsonbTypeof("true"),
-              IsOkAndHolds(zetasql::Value::String(bool_type)));
+              IsOkAndHolds(zetasql::Value::String("boolean")));
   EXPECT_THAT(JsonbTypeof("false"),
-              IsOkAndHolds(zetasql::Value::String(bool_type)));
+              IsOkAndHolds(zetasql::Value::String("boolean")));
 }
 
 TEST_F(JsonbTypeofTest, ReturnsErrorWhenInvalidArgumentIsGiven) {

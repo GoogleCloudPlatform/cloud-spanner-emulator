@@ -32,7 +32,9 @@
 # Catalog libraries for mappings between Postgres and GoogleSQL.
 
 package(
-    default_visibility = ["//:__subpackages__"],
+    default_visibility = [
+        "//:__subpackages__",
+    ],
 )
 
 licenses(["notice"])
@@ -47,6 +49,7 @@ cc_library(
         ":function_identifier",
         ":type",
         "//third_party/spanner_pg/bootstrap_catalog",
+        "//third_party/spanner_pg/interface:bootstrap_catalog_data_cc_proto",
         "//third_party/spanner_pg/interface:interfaces_with_stub_implementations",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/util:nodetag_to_string",
@@ -645,6 +648,7 @@ cc_library(
         "//third_party/spanner_pg/datatypes/extended:spanner_extended_type",
         "//third_party/spanner_pg/function_evaluators:pg_evaluators_implementations",  # build_cleaner: keep
         "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/flags:flag",
@@ -659,6 +663,7 @@ cc_library(
         "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/common:string_util",
         "@com_google_zetasql//zetasql/public:function",
+        "@com_google_zetasql//zetasql/public:interval_value",
         "@com_google_zetasql//zetasql/public:json_value",
         "@com_google_zetasql//zetasql/public:options_cc_proto",
         "@com_google_zetasql//zetasql/public:type",
@@ -692,9 +697,11 @@ cc_test(
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:function",
+        "@com_google_zetasql//zetasql/public:interval_value",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
         "@com_google_zetasql//zetasql/public/functions:date_time_util",
+        "@com_google_zetasql//zetasql/public/types:timestamp_util",
     ],
 )
 
@@ -725,5 +732,80 @@ cc_library(
         "@com_google_zetasql//zetasql/public:simple_catalog",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_library(
+    name = "catalog_wrappers",
+    srcs = [
+        "catalog_wrappers.cc",
+    ],
+    copts = [
+        # The ereport module reimplements PostgreSQL's ereport() in terms of
+        # C++ exceptions, on "lesser of two evils" grounds.
+        # See docstrings in `ereport.h` for details.
+        # This means that all of the shims (which may have exceptions pass through them)
+        # need to be compiled with -fexceptions or risk missing destructors (and causing
+        # TSAN OOMs).
+        "-fexceptions",
+    ],
+    features = ["-use_header_modules"],
+    deps = [
+        "//third_party/spanner_pg/bootstrap_catalog",
+        "//third_party/spanner_pg/catalog:catalog_adapter",
+        "//third_party/spanner_pg/catalog:catalog_adapter_holder",
+        "//third_party/spanner_pg/catalog:udf_support",
+        "//third_party/spanner_pg/errors:error_catalog",
+        "//third_party/spanner_pg/interface:catalog_wrappers",
+        "//third_party/spanner_pg/postgres_includes",
+        "//third_party/spanner_pg/transformer",
+        "//third_party/spanner_pg/util:pg_list_iterators",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:function",
+    ],
+    alwayslink = 1,
+)
+
+# This test tests a library that throws exceptions.
+# It doesn't throw exceptions itself, but it does catch thrown exceptions.
+cc_test(
+    name = "catalog_wrappers_test",
+    srcs = ["catalog_wrappers_test.cc"],
+    copts = [
+        # The ereport module reimplements PostgreSQL's ereport() in terms of
+        # C++ exceptions, on "lesser of two evils" grounds.
+        # See docstrings in `ereport.h` for details.
+        # This means that all of the shims (which may have exceptions pass through them)
+        # need to be compiled with -fexceptions or risk missing destructors (and causing
+        # TSAN OOMs).
+        "-fexceptions",
+    ],
+    features = ["-use_header_modules"],
+    deps = [
+        ":catalog_wrappers",
+        "//third_party/spanner_pg/bootstrap_catalog",
+        "//third_party/spanner_pg/catalog:catalog_adapter_holder",
+        "//third_party/spanner_pg/interface:catalog_wrappers",
+        "//third_party/spanner_pg/interface:ereport",
+        "//third_party/spanner_pg/postgres_includes",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "//third_party/spanner_pg/test_catalog",
+        "//third_party/spanner_pg/util:postgres",
+        "//third_party/spanner_pg/util:valid_memory_context_fixture",
+        "@com_google_absl//absl/log:scoped_mock_log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:catalog",
     ],
 )

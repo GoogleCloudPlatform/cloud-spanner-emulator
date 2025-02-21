@@ -33,8 +33,7 @@
 #include "nodes/pathnodes.h"
 #include "utils/datum.h"
 
-#include "third_party/spanner_pg/shims/parser_shim.h"
-#include "third_party/spanner_pg/src/include/nodes/nodes.h"
+#include "nodes/nodes.h"
 
 /*
  * Macros to simplify comparison of different kinds of fields.  Use these

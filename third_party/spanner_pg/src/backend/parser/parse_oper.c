@@ -30,7 +30,9 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
+// SPANGRES BEGIN
+#include "parser/parse_relation.h"
+// SPANGRES END
 
 /*
  * The lookup key for the operator lookaside hash table.  Unused bits must be
@@ -65,25 +67,16 @@ typedef struct OprCacheEntry
 	Oid			opr_oid;		/* OID of the resolved operator */
 } OprCacheEntry;
 
-/* SPANGRES BEGIN */
-// We've made this function non-static to call it from catalog_shim.
-Oid	binary_oper_exact(List *opname, Oid arg1, Oid arg2);
-/* SPANGRES END */
-/* SPANGRES BEGIN */
-// We've made this function non-static to call it from catalog_shim.
-FuncDetailCode oper_select_candidate(int nargs,
-					  Oid *input_typeids,
-					  FuncCandidateList candidates,
-					  Oid *operOid);
-/* SPANGRES END */
+static Oid	binary_oper_exact(List *opname, Oid arg1, Oid arg2);
+static FuncDetailCode oper_select_candidate(int nargs,
+																						Oid *input_typeids,
+																						FuncCandidateList candidates,
+																						Oid *operOid);
 static const char *op_signature_string(List *op, char oprkind,
 					Oid arg1, Oid arg2);
-/* SPANGRES BEGIN */
-// We've made this function non-static to call it from catalog_shim.
-void op_error(ParseState *pstate, List *op, char oprkind,
-		 Oid arg1, Oid arg2,
-		 FuncDetailCode fdresult, int location);
-/* SPANGRES END */
+static void op_error(ParseState *pstate, List *op, char oprkind,
+										 Oid arg1, Oid arg2,
+										 FuncDetailCode fdresult, int location);
 static bool make_oper_cache_key(ParseState *pstate, OprCacheKey *key,
 					List *opname, Oid ltypeId, Oid rtypeId,
 					int location);
@@ -279,11 +272,8 @@ oprfuncid(Operator op)
  * the possibility that the other operand is a domain type that needs to
  * be reduced to its base type to find an "exact" match.
  */
-/* SPANGRES BEGIN */
-// We've made this function non-static to call it from catalog_shim.
-Oid
+static Oid
 binary_oper_exact(List *opname, Oid arg1, Oid arg2)
-/* SPANGRES END */
 {
 	Oid			result;
 	bool		was_unknown = false;
@@ -332,14 +322,11 @@ binary_oper_exact(List *opname, Oid arg1, Oid arg2)
  * exactly matching the input argtype(s).  Incompatible candidates are not yet
  * pruned away, however.
  */
-/* SPANGRES BEGIN */
-// We've made this function non-static to call it from catalog_shim.
-FuncDetailCode
+static FuncDetailCode
 oper_select_candidate(int nargs,
 					  Oid *input_typeids,
 					  FuncCandidateList candidates,
 					  Oid *operOid) /* output argument */
-/* SPANGRES END */
 {
 	int			ncandidates;
 
@@ -648,13 +635,10 @@ op_signature_string(List *op, char oprkind, Oid arg1, Oid arg2)
 /*
  * op_error - utility routine to complain about an unresolvable operator
  */
-/* SPANGRES BEGIN */
-// We've made this function non-static to call it from catalog_shim.
-void
+static void
 op_error(ParseState *pstate, List *op, char oprkind,
 		 Oid arg1, Oid arg2,
 		 FuncDetailCode fdresult, int location)
-/* SPANGRES END */
 {
 	if (fdresult == FUNCDETAIL_MULTIPLE)
 		ereport(ERROR,

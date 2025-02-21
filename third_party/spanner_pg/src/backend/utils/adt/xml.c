@@ -57,8 +57,6 @@
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * We used to check for xmlStructuredErrorContext via a configure test; but
  * that doesn't work on Windows, so instead use this grottier method of
@@ -103,8 +101,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 #include "utils/xml.h"
-
-#include "third_party/spanner_pg/shims/catalog_shim.h"
 
 /* GUC variables */
 int			xmlbinary;

@@ -391,6 +391,7 @@ void AddMiscellaneousFunctions(
   const zetasql::Type* gsql_date_arr = zetasql::types::DateArrayType();
   const zetasql::Type* gsql_pg_numeric_array =
       spangres::types::PgNumericArrayMapping()->mapped_type();
+  const zetasql::Type* gsql_uuid_arr = zetasql::types::UuidArrayType();
 
   functions.push_back(
       {"random", "rand", {{{gsql_double, {}, /*context_ptr=*/nullptr}}}});
@@ -419,6 +420,9 @@ void AddMiscellaneousFunctions(
                           /*context_ptr=*/nullptr}},
                         {{gsql_date_arr,
                           {gsql_date_arr, gsql_date_arr},
+                          /*context_ptr=*/nullptr}},
+                        {{gsql_uuid_arr,
+                          {gsql_uuid_arr, gsql_uuid_arr},
                           /*context_ptr=*/nullptr}}}});
   // Should be <required>, <required>, <optional>, but we don't support
   // optional. Workaround is to put in both variants as separate signatures.

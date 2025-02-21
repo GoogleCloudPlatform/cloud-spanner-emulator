@@ -23,9 +23,6 @@
 #include "utils/memdebug.h"
 #include "utils/memutils.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 static void printtup_startup(DestReceiver *self, int operation,
 							 TupleDesc typeinfo);
 static bool printtup(TupleTableSlot *slot, DestReceiver *self);

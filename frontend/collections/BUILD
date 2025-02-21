@@ -18,7 +18,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 cc_library(
     name = "database_manager",
@@ -68,6 +68,7 @@ cc_library(
     deps = [
         "//common:clock",
         "//common:errors",
+        "//frontend/common:labels",
         "//frontend/common:uris",
         "//frontend/entities:database",
         "//frontend/entities:session",

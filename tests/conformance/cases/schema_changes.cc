@@ -544,6 +544,19 @@ TEST_F(SchemaChangeTest, AlterColumnArrayType) {
 
 TEST_F(SchemaChangeTest, Analyze) { ZETASQL_EXPECT_OK(UpdateSchema({"ANALYZE"})); }
 
+TEST_F(SchemaChangeTest, UpdateWithNonKeyDefaultColumns) {
+  ZETASQL_EXPECT_OK(SetSchema({R"(
+     CREATE TABLE test_table (
+      id STRING(36) NOT NULL DEFAULT (GENERATE_UUID()),
+      str STRING(MAX) NOT NULL,
+      bool BOOL NOT NULL DEFAULT (false)
+    ) PRIMARY KEY (id)
+  )"}));
+
+  ZETASQL_ASSERT_OK(Insert("test_table", {"id", "str"}, {Value(1), Value("test")}));
+  ZETASQL_ASSERT_OK(Update("test_table", {"id", "str"}, {Value(1), Value("updated")}));
+}
+
 }  // namespace
 
 }  // namespace test

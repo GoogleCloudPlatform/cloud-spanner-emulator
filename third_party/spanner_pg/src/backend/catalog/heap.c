@@ -74,10 +74,6 @@
 #include "utils/lsyscache.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/parser_shim.h"
-
-
 /* Potentially set by pg_upgrade_support functions */
 Oid			binary_upgrade_next_heap_pg_class_oid = InvalidOid;
 Oid			binary_upgrade_next_heap_pg_class_relfilenode = InvalidOid;

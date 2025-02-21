@@ -48,6 +48,7 @@
 #include "zetasql/public/functions/arithmetics.h"
 #include "zetasql/public/functions/date_time_util.h"
 #include "zetasql/public/functions/json.h"
+#include "zetasql/public/interval_value.h"
 #include "zetasql/public/json_value.h"
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/table_valued_function.h"
@@ -55,6 +56,7 @@
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
+#include "absl/algorithm/container.h"
 #include "absl/base/casts.h"
 #include "absl/base/optimization.h"
 #include "absl/flags/flag.h"
@@ -257,7 +259,8 @@ std::unique_ptr<zetasql::Function> ArrayUpperFunction(
                                        /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{gsql_int64,
                                        {gsql_timestamp_array, gsql_int64},
-                                       /*context_ptr=*/nullptr}},
+                                       /*context_ptr=*/nullptr},
+      },
       function_options);
 }
 
@@ -485,7 +488,8 @@ std::unique_ptr<zetasql::Function> ToCharFunction(
                                        /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{gsql_string,
                                        {gsql_pg_numeric, gsql_string},
-                                       /*context_ptr=*/nullptr}},
+                                       /*context_ptr=*/nullptr},
+      },
       function_options);
 }
 
@@ -974,18 +978,46 @@ std::unique_ptr<zetasql::Function> CastNumericToFloatFunction(
       function_options);
 }
 
-std::unique_ptr<zetasql::Function> CastNumericToStringFunction(
+absl::StatusOr<zetasql::Value> EvalCastToString(
+    absl::Span<const zetasql::Value> args) {
+  ZETASQL_RET_CHECK(args.size() == 1);
+
+  switch (args[0].type()->kind()) {
+    case zetasql::TYPE_EXTENDED: {
+      auto type_code =
+          static_cast<const spangres::datatypes::SpannerExtendedType*>(
+              args[0].type())
+              ->code();
+      switch (type_code) {
+        case spangres::datatypes::TypeAnnotationCode::PG_NUMERIC:
+          return EvalCastNumericToString(args);
+        default:
+          return absl::InvalidArgumentError(
+              absl::StrCat("Unsupported type for CAST to text: ",
+                           args[0].type()->DebugString()));
+      }
+    }
+    default:
+      return absl::InvalidArgumentError(
+          absl::StrCat("Unsupported type for CAST to text: ",
+                       args[0].type()->DebugString()));
+  }
+}
+
+std::unique_ptr<zetasql::Function> CastToStringFunction(
     absl::string_view catalog_name) {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
 
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalCastNumericToString));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalCastToString));
+
   return std::make_unique<zetasql::Function>(
-      kPGCastNumericToStringFunctionName, catalog_name,
-      zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
-          gsql_string, {gsql_pg_numeric}, /*context_ptr=*/nullptr}},
+      kPGCastToStringFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{
+              gsql_string, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
+      },
       function_options);
 }
 
@@ -1388,6 +1420,7 @@ std::unique_ptr<zetasql::Function> CastToTimestampFunction(
 absl::StatusOr<zetasql::Value> EvalTimestamptzAdd(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
+
   ZETASQL_ASSIGN_OR_RETURN(absl::Time time,
                    PgTimestamptzAdd(args[0].ToTime(), args[1].string_value()));
   return zetasql::Value::Timestamp(time);
@@ -1398,19 +1431,21 @@ std::unique_ptr<zetasql::Function> TimestamptzAddFunction(
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
       PGFunctionEvaluator(EvalTimestamptzAdd, CleanupPostgresDateTimeCache));
-
   return std::make_unique<zetasql::Function>(
       kPGTimestamptzAddFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
-          zetasql::types::TimestampType(),
-          {zetasql::types::TimestampType(), zetasql::types::StringType()},
-          nullptr}},
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{zetasql::types::TimestampType(),
+                                       {zetasql::types::TimestampType(),
+                                        zetasql::types::StringType()},
+                                       nullptr},
+      },
       function_options);
 }
 
 absl::StatusOr<zetasql::Value> EvalTimestamptzSubtract(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
+
   ZETASQL_ASSIGN_OR_RETURN(
       absl::Time time,
       PgTimestamptzSubtract(args[0].ToTime(), args[1].string_value()));
@@ -1426,10 +1461,12 @@ std::unique_ptr<zetasql::Function> TimestamptzSubtractFunction(
   return std::make_unique<zetasql::Function>(
       kPGTimestamptzSubtractFunctionName, catalog_name,
       zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
-          zetasql::types::TimestampType(),
-          {zetasql::types::TimestampType(), zetasql::types::StringType()},
-          nullptr}},
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{zetasql::types::TimestampType(),
+                                       {zetasql::types::TimestampType(),
+                                        zetasql::types::StringType()},
+                                       nullptr},
+      },
       function_options);
 }
 
@@ -2326,7 +2363,8 @@ LeastGreatestFunctions(const std::string& catalog_name) {
   auto is_non_floating_point_supported_type =
       [](const zetasql::Type* type) -> bool {
     return (type->IsInt64() || type->IsBool() || type->IsBytes() ||
-            type->IsString() || type->IsDate() || type->IsTimestamp());
+            type->IsString() || type->IsDate() || type->IsTimestamp())
+        ;
   };
 
   zetasql::FunctionEvaluatorFactory least_evaluator_factory(
@@ -2370,14 +2408,10 @@ LeastGreatestFunctions(const std::string& catalog_name) {
   greatest_function_options.set_arguments_are_coercible(false);
 
   std::vector<const zetasql::Type*> supported_types{
-      zetasql::types::DoubleType(),
-      zetasql::types::FloatType(),
-      zetasql::types::Int64Type(),
-      zetasql::types::BoolType(),
-      zetasql::types::BytesType(),
-      zetasql::types::StringType(),
-      zetasql::types::DateType(),
-      zetasql::types::TimestampType(),
+      zetasql::types::DoubleType(), zetasql::types::FloatType(),
+      zetasql::types::Int64Type(), zetasql::types::BoolType(),
+      zetasql::types::BytesType(), zetasql::types::StringType(),
+      zetasql::types::DateType(), zetasql::types::TimestampType(),
       postgres_translator::spangres::datatypes::GetPgNumericType(),
       postgres_translator::spangres::datatypes::GetPgJsonbType(),
   };
@@ -3709,6 +3743,9 @@ std::unique_ptr<zetasql::Function> FloatArithmeticFunction(
 SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   SpannerPGFunctions functions;
 
+  auto cast_to_string_func = CastToStringFunction(catalog_name);
+  functions.push_back(std::move(cast_to_string_func));
+
   auto cast_to_date_func = CastToDateFunction(catalog_name);
   functions.push_back(std::move(cast_to_date_func));
 
@@ -3849,8 +3886,6 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   functions.push_back(std::move(cast_numeric_to_float_func));
   auto cast_to_numeric_func = CastToNumericFunction(catalog_name);
   functions.push_back(std::move(cast_to_numeric_func));
-  auto cast_numeric_to_string_func = CastNumericToStringFunction(catalog_name);
-  functions.push_back(std::move(cast_numeric_to_string_func));
   auto numeric_equals_func = NumericEqualsFunction(catalog_name);
   functions.push_back(std::move(numeric_equals_func));
   auto numeric_not_equals_func = NumericNotEqualsFunction(catalog_name);
@@ -3912,8 +3947,8 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   auto array_all_less_equal =
       ArrayAllFunction(catalog_name, "<=", "pg.array_all_less_equal");
   functions.push_back(std::move(array_all_less_equal));
-  // `<> all` is intentionally ommitted because it is equivalent to `NOT IN` and
-  // the transformer handles it as such.
+  // `<> all` is intentionally ommitted because it is equivalent to `NOT IN`
+  // and the transformer handles it as such.
   auto array_slice_function = ArraySliceFunction(catalog_name);
   functions.push_back(std::move(array_slice_function));
 

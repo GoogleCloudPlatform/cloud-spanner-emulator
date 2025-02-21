@@ -45,8 +45,6 @@
 #include "utils/memutils.h"
 #include "utils/varlena.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 #ifdef USE_LDAP
 #ifdef WIN32
 #include <winldap.h>

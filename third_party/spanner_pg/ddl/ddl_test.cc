@@ -158,24 +158,6 @@ TEST_F(DdlTest, DisablePgJsonbType) {
                                         "Type <jsonb> is not supported."));
 }
 
-TEST_F(DdlTest, BigSerialErrorMessage) {
-  const std::string input = "CREATE Table users(id BIGSERIAL);";
-
-  interfaces::ParserBatchOutput parsed_statements =
-      base_helper_.Parser()->ParseBatch(
-          interfaces::ParserParamsBuilder(input).Build());
-  ABSL_CHECK_OK(parsed_statements.global_status());
-  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
-
-  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
-      base_helper_.Translator()->Translate(parsed_statements);
-
-  EXPECT_THAT(statements,
-              StatusIs(absl::StatusCode::kFailedPrecondition,
-                       "Type <bigserial> is not supported;"
-                       " use bigint or int8 instead."));  // DO_NOT_TRANSFORM
-}
-
 TEST_F(DdlTest, DisableAnalyze) {
   const std::string input = "ANALYZE;";
 

@@ -39,7 +39,9 @@ load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("//third_party/spanner_pg/errors:error_generator.bzl", "spangres_error_catalog")
 
 package(
-    default_visibility = ["//:__subpackages__"],
+    default_visibility = [
+        "//:__subpackages__",
+    ],
 )
 
 licenses(["notice"])
@@ -114,6 +116,61 @@ cc_test(
     deps = [
         ":errors",
         "//third_party/spanner_pg/postgres_includes",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+# THIS LIBRARY CAN THROW EXCEPTIONS!
+# Specifically, the "spangres_throw_exception()" method will always throw.
+# (Other methods exposed by this library will not throw.)
+# Callers must be prepared to handle or re-throw the exception.
+cc_library(
+    name = "ereport",
+    srcs = ["ereport.cc"],
+    copts = [
+        # The ereport module reimplements PostgreSQL's ereport() in terms of
+        # C++ exceptions, on "lesser of two evils" grounds.
+        # See docstrings in `ereport.h` for details.
+        # This means that all of the shims (which may have exceptions pass through them)
+        # need to be compiled with -fexceptions or risk missing destructors (and causing
+        # TSAN OOMs).
+        "-fexceptions",
+    ],
+    features = ["-use_header_modules"],
+    deps = [
+        "//third_party/spanner_pg/interface:ereport",
+        "//third_party/spanner_pg/postgres_includes",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/base:die_if_null",
+    ],
+    alwayslink = 1,
+)
+
+cc_test(
+    name = "ereport_test",
+    srcs = ["ereport_test.cc"],
+    copts = [
+        # The ereport module reimplements PostgreSQL's ereport() in terms of
+        # C++ exceptions, on "lesser of two evils" grounds.
+        # See docstrings in `ereport.h` for details.
+        # This means that all of the shims (which may have exceptions pass through them)
+        # need to be compiled with -fexceptions or risk missing destructors (and causing
+        # TSAN OOMs).
+        "-fexceptions",
+    ],
+    features = ["-use_header_modules"],
+    deps = [
+        ":ereport",
+        "//third_party/spanner_pg/interface:ereport",
+        "//third_party/spanner_pg/postgres_includes",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "//third_party/spanner_pg/util:valid_memory_context_fixture",
+        "@com_google_absl//absl/log:scoped_mock_log",
+        "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],

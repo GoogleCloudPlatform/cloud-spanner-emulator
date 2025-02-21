@@ -37,9 +37,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 static Oid	OperatorGet(const char *operatorName,
 						Oid operatorNamespace,
 						Oid leftObjectId,

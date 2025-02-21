@@ -22,9 +22,6 @@
 #include "utils/lsyscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * To avoid consuming too much memory, IO and CPU load during analysis, and/or
  * too much space in the resulting pg_statistic rows, we ignore arrays that

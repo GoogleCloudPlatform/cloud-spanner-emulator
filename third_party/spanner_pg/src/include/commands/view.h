@@ -17,12 +17,6 @@
 #include "catalog/objectaddress.h"
 #include "nodes/parsenodes.h"
 
-/* SPANGRES BEGIN */
-// It is defined in third_party/spanner_pg/shims/parser_shim.h
-// Forward declare here to workaround the cycle dependency.
-struct ViewStmt;
-/* SPANGRES BEGIN */
-
 extern ObjectAddress DefineView(struct ViewStmt *stmt, const char *queryString,
 								int stmt_location, int stmt_len);
 

@@ -99,9 +99,6 @@
 #include "utils/spccache.h"
 #include "utils/tuplesort.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 #define LOG2(x)  (log(x) / 0.693147180559945)
 
 /*

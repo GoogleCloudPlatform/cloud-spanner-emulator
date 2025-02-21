@@ -58,6 +58,7 @@
 #include "third_party/spanner_pg/catalog/function.h"
 #include "third_party/spanner_pg/catalog/function_identifier.h"
 #include "third_party/spanner_pg/catalog/type.h"
+#include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 #include "third_party/spanner_pg/interface/engine_builtin_function_catalog.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 
@@ -529,8 +530,9 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // Given the input type oids, output type oid, and variadic type oid of a
   // PostgreSQL proc, return the corresponding ZetaSQL FunctionSignature.
   absl::StatusOr<zetasql::FunctionSignature> BuildGsqlFunctionSignature(
-      const oidvector& postgres_input_types, Oid postgres_output_type,
-      Oid postgres_variadic_type, bool postgres_retset);
+      const absl::Span<const Oid>& postgres_input_types,
+      Oid postgres_output_type, Oid postgres_variadic_type,
+      bool postgres_retset);
 
   // Transform the PostgreSQL input type oids into ZetaSQL InputArgumentTypes.
   absl::StatusOr<std::vector<zetasql::InputArgumentType>>
@@ -541,7 +543,7 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // argument types.
   // If no matching signature is found, return an error.
   absl::StatusOr<Oid> FindMatchingPgProcOid(
-      absl::Span<const FormData_pg_proc* const> procs,
+      absl::Span<const PgProcData* const> procs,
       const std::vector<zetasql::InputArgumentType>& input_argument_types,
       const zetasql::Type* return_type,
       const zetasql::LanguageOptions& language_options);

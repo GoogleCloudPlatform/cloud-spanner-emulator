@@ -29,8 +29,8 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#ifndef SHIMS_EREPORT_SHIM_H_
-#define SHIMS_EREPORT_SHIM_H_
+#ifndef INTERFACE_EREPORT_H_
+#define INTERFACE_EREPORT_H_
 
 #include "third_party/spanner_pg/postgres_includes/all.h"
 
@@ -43,7 +43,6 @@
 
 #include "zetasql/base/die_if_null.h"
 #include "absl/status/status.h"
-#include "absl/strings/string_view.h"
 
 namespace postgres_translator {
 
@@ -171,4 +170,4 @@ void spangres_log_exception(ErrorData* error_data);
 }  // namespace postgres_translator
 #endif
 
-#endif  // SHIMS_EREPORT_SHIM_H_
+#endif  // INTERFACE_EREPORT_H_

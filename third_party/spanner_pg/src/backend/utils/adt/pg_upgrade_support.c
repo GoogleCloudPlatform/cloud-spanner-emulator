@@ -20,9 +20,6 @@
 #include "utils/array.h"
 #include "utils/builtins.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 #define CHECK_IS_BINARY_UPGRADE									\
 do {															\
 	if (!IsBinaryUpgrade)										\

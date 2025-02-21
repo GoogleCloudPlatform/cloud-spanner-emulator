@@ -35,9 +35,6 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * These global variables are part of the API for various SPI functions
  * (a horrible API choice, but it's too late now).  To reduce the risk of

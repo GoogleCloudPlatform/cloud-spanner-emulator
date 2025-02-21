@@ -22,8 +22,6 @@
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 #define CALC_NEW_BUCKET(old_bucket, lowmask) \
 			old_bucket | (lowmask + 1)
 

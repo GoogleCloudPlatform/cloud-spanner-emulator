@@ -31,8 +31,6 @@
 #include "optimizer/restrictinfo.h"
 #include "utils/lsyscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 static EquivalenceMember *add_eq_member(EquivalenceClass *ec,
 										Expr *expr, Relids relids, Relids nullable_relids,
 										bool is_child, Oid datatype);

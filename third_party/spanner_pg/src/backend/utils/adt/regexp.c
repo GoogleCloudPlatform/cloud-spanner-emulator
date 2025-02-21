@@ -39,7 +39,7 @@
 #include "utils/varlena.h"
 
 // SPANGRES BEGIN
-#include "third_party/spanner_pg/shims/regex_shim.h"
+#include "regex/spangres_regex.h"
 // SPANGRES END
 
 #define PG_GETARG_TEXT_PP_IF_EXISTS(_n) \

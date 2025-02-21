@@ -52,8 +52,6 @@
 #include "utils/memutils.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 static bool preprocess_aggrefs_walker(Node *node, PlannerInfo *root);
 static int	find_compatible_agg(PlannerInfo *root, Aggref *newagg,
 								List **same_input_transnos);

@@ -45,7 +45,7 @@ namespace postgres_translator {
 //
 // Only one instance of this class may be on the stack at a time.
 //
-// See the comment in `memory_shim_cc.h` for details about
+// See the comment in `memory_cc.h` for details about
 // what `thread_memory_reservation` does.
 class MemoryReservationHolder {
  public:

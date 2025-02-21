@@ -44,8 +44,6 @@
 #include "utils/memutils.h"
 #include "utils/rel.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * When an ordering operator is used, tuples fetched from the index that
  * need to be reordered are queued in a pairing heap, as ReorderTuples.

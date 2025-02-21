@@ -26,9 +26,6 @@
 #include "utils/selfuncs.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /* Default selectivity constant for "@>" and "<@" operators */
 #define DEFAULT_CONTAIN_SEL 0.005
 

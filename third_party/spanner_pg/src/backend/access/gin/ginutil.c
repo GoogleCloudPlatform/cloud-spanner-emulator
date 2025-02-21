@@ -29,9 +29,6 @@
 #include "utils/index_selfuncs.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * GIN handler function: return IndexAmRoutine with access method parameters
  * and callbacks.

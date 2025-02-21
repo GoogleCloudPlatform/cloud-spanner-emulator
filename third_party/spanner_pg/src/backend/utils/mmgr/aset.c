@@ -50,7 +50,7 @@
 #include "utils/memdebug.h"
 #include "utils/memutils.h"
 
-#include "third_party/spanner_pg/shims/memory_shim.h"
+#include "third_party/spanner_pg/src/spangres/memory.h"
 
 /*--------------------
  * Chunk freelist k holds chunks of size 1 << (k + ALLOC_MINBITS),

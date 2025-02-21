@@ -33,8 +33,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 static Oid	lookup_agg_function(List *fnName, int nargs, Oid *input_types,
 								Oid variadicArgType,
 								Oid *rettype);

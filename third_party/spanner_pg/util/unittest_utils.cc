@@ -43,7 +43,7 @@
 #include "third_party/spanner_pg/interface/test/postgres_transformer.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
-#include "third_party/spanner_pg/shims/memory_shim_cc.h"
+#include "third_party/spanner_pg/src/spangres/memory_cc.h"
 #include "third_party/spanner_pg/test_catalog/spanner_test_catalog.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
 #include "third_party/spanner_pg/transformer/forward_transformer.h"

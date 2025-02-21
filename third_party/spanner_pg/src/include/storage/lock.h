@@ -547,7 +547,7 @@ extern LockAcquireResult LockAcquire(const LOCKTAG *locktag,
 									 LOCKMODE lockmode,
 									 bool sessionLock,
 									 bool dontWait);
-extern LockAcquireResult LockAcquireExtended_UNUSED_SPANGRES(const LOCKTAG *locktag,
+extern LockAcquireResult LockAcquireExtended(const LOCKTAG *locktag,
 											 LOCKMODE lockmode,
 											 bool sessionLock,
 											 bool dontWait,

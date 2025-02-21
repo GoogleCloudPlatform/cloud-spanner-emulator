@@ -23,7 +23,6 @@
 #include "common/clock.h"
 #include "frontend/entities/database.h"
 #include "frontend/entities/session.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -37,8 +36,8 @@ class SessionManager {
 
   // Creates a session attached to the given database.
   absl::StatusOr<std::shared_ptr<Session>> CreateSession(
-      const Labels& labels, std::shared_ptr<Database> database)
-      ABSL_LOCKS_EXCLUDED(mu_);
+      const Labels& labels, const bool multplexed,
+      std::shared_ptr<Database> database) ABSL_LOCKS_EXCLUDED(mu_);
 
   // Returns a session with the given URI.
   absl::StatusOr<std::shared_ptr<Session>> GetSession(

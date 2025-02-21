@@ -25,8 +25,6 @@
 #include "utils/lsyscache.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Checks if a given relation can be part of a partition tree.  Returns
  * false if the relation cannot be processed, in which case it is up to

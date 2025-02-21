@@ -74,8 +74,6 @@
 #include "utils/datum.h"
 #include "utils/lsyscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /* States of the ExecMemoize state machine */
 #define MEMO_CACHE_LOOKUP			1	/* Attempt to perform a cache lookup */
 #define MEMO_CACHE_FETCH_NEXT_TUPLE	2	/* Get another tuple from the cache */

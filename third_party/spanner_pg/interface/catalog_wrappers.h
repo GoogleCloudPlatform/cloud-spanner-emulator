@@ -29,8 +29,8 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#ifndef SHIMS_CATALOG_SHIM_CC_WRAPPERS_H_
-#define SHIMS_CATALOG_SHIM_CC_WRAPPERS_H_
+#ifndef INTERFACE_CATALOG_WRAPPERS_H_
+#define INTERFACE_CATALOG_WRAPPERS_H_
 
 #include "third_party/spanner_pg/postgres_includes/all.h"
 
@@ -45,6 +45,21 @@
 // outside PostgreSQL code should handle the exceptions or choose an API that
 // uses Google3 Status for error handling.
 
+#include "absl/status/statusor.h"
+#include "third_party/spanner_pg/catalog/table_name.h"
+// This file was formerly transformation functions common to both the PostgreSQL
+// analyzer and our transformer. Most functions have been moved into the
+// transformer.
+// TODO: Merge this file into catalog_wrappers.
+namespace postgres_translator {
+
+// Given a PostgreSQL RangeVar representing a Table object, gets a TableName
+// representing the qualified name per PostgreSQL namespacing rules
+// (<catalogname>.<schemaname>.<relname>).
+absl::StatusOr<TableName> TableNameFromRangeVar(RangeVar& relation);
+
+}  // namespace postgres_translator
+
 extern "C" {
 #endif  // ifdef __cplusplus
 
@@ -53,7 +68,7 @@ extern "C" {
 // If the relation does not already have an assigned Oid, the transformer will
 // ask the Catalog Adapter to generate one.
 // Arguments are intended to be passed through directly from the
-// PostgreSQL function `addRangeTableEntrySpangres()`.
+// PostgreSQL function `addRangeTableEntry()`.
 // This function throws exceptions on table-not-found failure. Logs the error
 // and returns nullptr on all other errors.
 RangeTblEntry* AddRangeTableEntryC(ParseState* pstate, RangeVar* relation,
@@ -214,4 +229,4 @@ bool ShouldCoerceUnknownLiterals();
 }
 #endif  // ifdef __cplusplus
 
-#endif  // SHIMS_CATALOG_SHIM_CC_WRAPPERS_H_
+#endif  // INTERFACE_CATALOG_WRAPPERS_H_

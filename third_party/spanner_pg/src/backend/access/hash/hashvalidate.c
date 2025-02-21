@@ -31,9 +31,6 @@
 #include "utils/regproc.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 static bool check_hash_func_signature(Oid funcid, int16 amprocnum, Oid argtype);
 
 

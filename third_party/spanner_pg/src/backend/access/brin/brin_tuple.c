@@ -41,9 +41,6 @@
 #include "utils/datum.h"
 #include "utils/memutils.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * This enables de-toasting of index entries.  Needed until VACUUM is
  * smart enough to rebuild indexes from scratch.

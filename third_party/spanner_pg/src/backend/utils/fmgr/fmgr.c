@@ -32,8 +32,6 @@
 #include "utils/lsyscache.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Hooks for function calls
  */
@@ -71,10 +69,7 @@ extern Datum fmgr_security_definer(PG_FUNCTION_ARGS);
  * Lookup routines for builtin-function table.  We can search by either Oid
  * or name, but search by Oid is much faster.
  */
-/* SPANGRES BEGIN */
-// Removed static storage specifier to call from catalog shim.
-const FmgrBuiltin *
-/* SPANGRES END */
+static const FmgrBuiltin *
 fmgr_isbuiltin(Oid id)
 {
 	uint16		index;

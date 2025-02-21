@@ -109,8 +109,6 @@
 #include "utils/memutils.h"
 #include "utils/timestamp.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Directory where Two-phase commit files reside within PGDATA
  */

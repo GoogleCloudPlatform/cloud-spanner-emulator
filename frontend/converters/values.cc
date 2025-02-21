@@ -25,9 +25,13 @@
 
 #include "google/protobuf/struct.pb.h"
 #include "zetasql/public/functions/date_time_util.h"
+#include "zetasql/public/interval_value.h"
 #include "zetasql/public/options.pb.h"
+#include "zetasql/public/type.pb.h"
+#include "zetasql/public/uuid_value.h"
 #include "zetasql/public/value.h"
 #include "absl/base/optimization.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
 #include "absl/strings/escaping.h"

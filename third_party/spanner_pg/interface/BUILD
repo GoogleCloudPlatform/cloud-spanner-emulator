@@ -193,7 +193,6 @@ cc_library(
 
 cc_library(
     name = "parser_without_serialization_only",
-    testonly = 1,
     srcs = ["parser_without_serialization.cc"],
     hdrs = [
         "parser_without_serialization.h",
@@ -431,8 +430,7 @@ proto_library(
 cc_proto_library(
     name = "bootstrap_catalog_data_cc_proto",
     visibility = [
-        "//third_party/spanner_pg/bootstrap_catalog:__subpackages__",
-        "//third_party/spanner_pg/transformer:__subpackages__",
+        "//:__subpackages__",
     ],
     deps = [":bootstrap_catalog_data"],
 )
@@ -503,5 +501,52 @@ cc_test(
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:simple_catalog",
+    ],
+)
+
+cc_library(
+    name = "catalog_wrappers",
+    hdrs = ["catalog_wrappers.h"],
+    deps = [
+        "//third_party/spanner_pg/catalog:table_name",
+        "//third_party/spanner_pg/postgres_includes",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+cc_library(
+    name = "stub_catalog_wrappers",
+    srcs = ["stub_catalog_wrappers.cc"],
+    deps = [
+        ":catalog_wrappers",
+        "//third_party/spanner_pg/postgres_includes",
+    ],
+)
+
+# THIS LIBRARY CAN THROW EXCEPTIONS!
+# Specifically, the "spangres_throw_exception()" method will always throw.
+# (Other methods exposed by this library will not throw.)
+# Callers must be prepared to handle or re-throw the exception.
+cc_library(
+    name = "ereport",
+    hdrs = ["ereport.h"],
+    copts = [
+        # The ereport module reimplements PostgreSQL's ereport() in terms of
+        # C++ exceptions, on "lesser of two evils" grounds.
+        # See docstrings in `ereport.h` for details.
+        # This means that all of the shims (which may have exceptions pass through them)
+        # need to be compiled with -fexceptions or risk missing destructors (and causing
+        # TSAN OOMs).
+        "-fexceptions",
+    ],
+    features = ["-use_header_modules"],
+    deps = [
+        "//third_party/spanner_pg/postgres_includes",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/base:die_if_null",
     ],
 )

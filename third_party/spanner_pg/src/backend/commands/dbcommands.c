@@ -69,8 +69,6 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Create database strategy.
  *
@@ -2977,6 +2975,11 @@ errdetail_busy_db(int notherbackends, int npreparedxacts)
  *
  * If missing_ok is false, throw an error if database name not found.  If
  * true, just return InvalidOid.
+ *
+ * SPANGRES: does not support Oids for databases, so this returns InvalidOid if
+ * missing_ok or throws an unsupported exception otherwise.
+ * NOTE: though PostgreSQL treats "databases" as special in this context,
+ * Spangres does not--they are simply an additional name qualifier.
  */
 Oid
 get_database_oid(const char *dbname, bool missing_ok)

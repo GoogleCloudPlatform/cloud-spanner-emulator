@@ -31,8 +31,7 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
 
 static Node *coerce_type_typmod(Node *node,
 								Oid targetTypeId, int32 targetTypMod,
@@ -45,10 +44,7 @@ static Node *coerce_record_to_complex(ParseState *pstate, Node *node,
 						 CoercionContext ccontext,
 						 CoercionForm cformat,
 						 int location);
-/* SPANGRES BEGIN */
-// Make this non-static to call from catalog_shim.c
-bool is_complex_array(Oid typid);
-/* SPANGRES END */
+static bool is_complex_array(Oid typid);
 static bool typeIsOfTypedTable(Oid reltypeId, Oid reloftypeId);
 
 
@@ -835,6 +831,14 @@ build_coercion_expression(Node *node,
 		 * HeapTuple from the catalog cache.
 		 */
 		procstruct = GetProcByOid(funcId);
+		// Get the argument types that are missing from the proc form.
+		Oid *p_argtypes = NULL;
+		char **p_argnames = NULL;
+		char *p_argmodes = NULL;
+		GetFunctionArgInfo(
+			procstruct->oid, &p_argtypes, &p_argnames, &p_argmodes);
+		if (p_argnames != NULL) pfree(p_argnames);
+		if (p_argmodes != NULL) pfree(p_argmodes);
 		// SPANGRES END
 
 		/*
@@ -851,8 +855,8 @@ build_coercion_expression(Node *node,
 		nargs = procstruct->pronargs;
 		Assert(nargs >= 1 && nargs <= 3);
 		/* Assert(procstruct->proargtypes.values[0] == exprType(node)); */
-		Assert(nargs < 2 || procstruct->proargtypes.values[1] == INT4OID);
-		Assert(nargs < 3 || procstruct->proargtypes.values[2] == BOOLOID);
+		Assert(nargs < 2 || p_argtypes[1] == INT4OID);
+		Assert(nargs < 3 || p_argtypes[2] == BOOLOID);
 
 		// SPANGRES BEGIN
 		// ReleaseSysCache(tp);
@@ -3308,11 +3312,8 @@ find_typmod_coercion_function(Oid typeId,
  * Note: this will not return true for record[]; check for RECORDARRAYOID
  * separately if needed.
  */
-/* SPANGRES BEGIN */
-// Make this non-static to call from catalog_shim.c
-bool
+static bool
 is_complex_array(Oid typid)
-/* SPANGRES END */
 {
 	Oid			elemtype = get_element_type(typid);
 

@@ -26,9 +26,6 @@
 #include "parser/parse_coerce.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * identify_opfamily_groups() returns a List of OpFamilyOpFuncGroup structs,
  * one for each combination of lefttype/righttype present in the family's

@@ -59,7 +59,7 @@ cc_library(
         "-fexceptions",
     ],
     deps = [
-        "//third_party/spanner_pg/shims:ereport_shim",
+        "//third_party/spanner_pg/interface:ereport",
         "//third_party/spanner_pg/src/include",
     ],
     alwayslink = 1,

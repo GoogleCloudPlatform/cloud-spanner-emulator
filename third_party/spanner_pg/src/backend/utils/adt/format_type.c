@@ -28,8 +28,7 @@
 #include "utils/syscache.h"
 #include "mb/pg_wchar.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
 
 #define MAX_INT32_LEN 11
 
@@ -364,11 +363,8 @@ format_type_with_typemod(Oid type_oid, int32 typemod)
 /*
  * Add typmod decoration to the basic type name
  */
-// SPANGRES BEGIN
-// We've made these functions non-static to call them from catalog_shim.
-char *
+static char *
 printTypmod(const char *typname, int32 typmod, Oid typmodout)
-// SPANGRES END
 {
 	char	   *res;
 

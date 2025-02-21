@@ -68,9 +68,6 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/parser_shim.h"
-
 /* State shared by transformCreateStmt and its subroutines */
 typedef struct
 {

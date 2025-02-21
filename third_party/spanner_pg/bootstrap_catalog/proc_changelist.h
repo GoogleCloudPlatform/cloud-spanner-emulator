@@ -55,27 +55,27 @@ struct PgProcSignature {
 };
 
 // Returns true if a proc should be excluded from the bootstrap catalog.
-bool ProcIsRemoved(const FormData_pg_proc& proc);
+bool ProcIsRemoved(Oid proc_oid);
 
 // Returns true if a proc needs to be modified before being added to the
-// bootstrap catalog. If true, should be followed by GetUpdatedProcSignature
-// and GetProcDefaultArgumentCount/GetProcDefaultArguments.
-bool ProcIsModified(const FormData_pg_proc& proc);
+// bootstrap catalog. If true, should be followed by GetUpdatedProcSignature,
+// GetProcDefaultArgumentCount, GetProcDefaultArguments, and GetProcArgNames.
+bool ProcIsModified(Oid proc_oid);
 
 // Returns the new signature for this proc. Returns a nullptr if there is no
 // updated signature for this proc.
-const PgProcSignature* GetUpdatedProcSignature(const FormData_pg_proc& proc);
-
-// Returns the new signature for this proc. Does not check if the proc should be
-// modified. Only call on functions that should be modified.
-const PgProcSignature* GetUpdatedProcSignature(const PgProcData& proc);
+const PgProcSignature* GetUpdatedProcSignature(Oid proc_oid);
 
 // Returns the new pronargdefaults value for this proc. Returns 0 if the proc
 // should not have any default arguments.
-uint16_t GetProcDefaultArgumentCount(const FormData_pg_proc& proc);
+uint16_t GetProcDefaultArgumentCount(Oid proc_oid);
 
 // Returns the default arguments for this proc. Returns a nullptr if the proc
 // should not have any default arguments.
-const std::vector<std::string>* GetProcDefaultArguments(const PgProcData& proc);
+const std::vector<std::string>* GetProcDefaultArguments(Oid proc_oid);
+
+// Returns the arg names for this proc. Returns a nullptr if the proc should not
+// have any modified arg names.
+const std::vector<std::string>* GetUpdatedProcArgNames(Oid proc_oid);
 
 }  // namespace postgres_translator

@@ -73,8 +73,7 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
 
 /* The main type cache hashtable searched by lookup_type_cache */
 static HTAB *TypeCacheHash = NULL;
@@ -273,7 +272,10 @@ static const dshash_parameters srtr_typmod_table_params = {
 };
 
 /* hashtable for recognizing registered record types */
-static HTAB *RecordCacheHash = NULL;
+// SPANGRES BEGIN
+// Unused variable
+// static HTAB *RecordCacheHash = NULL;
+// SPANGRES END
 
 typedef struct RecordCacheArrayEntry
 {
@@ -301,42 +303,18 @@ static int	dcs_cmp(const void *a, const void *b);
 static void decr_dcc_refcount(DomainConstraintCache *dcc);
 static void dccref_deletion_callback(void *arg);
 static List *prep_domain_constraints(List *constraints, MemoryContext execctx);
-/* SPANGRES BEGIN */
-// Remove 'static' type modifier so we can call these methods from elsewhere
-bool array_element_has_equality(TypeCacheEntry *typentry);
-/* SPANGRES END */
-/* SPANGRES BEGIN */
-// Remove 'static' type modifier so we can call these methods from elsewhere
-bool array_element_has_compare(TypeCacheEntry *typentry);
-/* SPANGRES END */
-/* SPANGRES BEGIN */
-// Remove 'static' type modifier so we can call these methods from elsewhere
-bool array_element_has_hashing(TypeCacheEntry *typentry);
-/* SPANGRES END */
-/* SPANGRES BEGIN */
-// Remove 'static' type modifier so we can call these methods from elsewhere
-bool array_element_has_extended_hashing(TypeCacheEntry *typentry);
-/* SPANGRES END */
+static bool array_element_has_equality(TypeCacheEntry *typentry);
+static bool array_element_has_compare(TypeCacheEntry *typentry);
+static bool array_element_has_hashing(TypeCacheEntry *typentry);
+static bool array_element_has_extended_hashing(TypeCacheEntry *typentry);
 static void cache_array_element_properties(TypeCacheEntry *typentry);
-/* SPANGRES BEGIN */
-// Remove 'static' type modifier so we can call these methods from elsewhere
-bool record_fields_have_equality(TypeCacheEntry *typentry);
-/* SPANGRES END */
-/* SPANGRES BEGIN */
-// Remove 'static' type modifier so we can call these methods from elsewhere
-bool record_fields_have_compare(TypeCacheEntry *typentry);
-/* SPANGRES END */
+static bool record_fields_have_equality(TypeCacheEntry *typentry);
+static bool record_fields_have_compare(TypeCacheEntry *typentry);
 static bool record_fields_have_hashing(TypeCacheEntry *typentry);
 static bool record_fields_have_extended_hashing(TypeCacheEntry *typentry);
 static void cache_record_field_properties(TypeCacheEntry *typentry);
-/* SPANGRES BEGIN */
-// Remove 'static' type modifier so we can call these methods from elsewhere
-bool range_element_has_hashing(TypeCacheEntry *typentry);
-/* SPANGRES END */
-/* SPANGRES BEGIN */
-// Remove 'static' type modifier so we can call these methods from elsewhere
-bool range_element_has_extended_hashing(TypeCacheEntry *typentry);
-/* SPANGRES END */
+static bool range_element_has_hashing(TypeCacheEntry *typentry);
+static bool range_element_has_extended_hashing(TypeCacheEntry *typentry);
 static void cache_range_element_properties(TypeCacheEntry *typentry);
 static bool multirange_element_has_hashing(TypeCacheEntry *typentry);
 static bool multirange_element_has_extended_hashing(TypeCacheEntry *typentry);
@@ -365,536 +343,468 @@ static dsa_pointer share_tupledesc(dsa_area *area, TupleDesc tupdesc,
  * invalid.  Note however that we may fail to find one or more of the
  * values requested by 'flags'; the caller needs to check whether the fields
  * are InvalidOid or not.
+ *
+ * SPANGRES: Don't cache; just lookup directly in the bootstrap catalog. We
+ * could cache these in the future.
  */
 TypeCacheEntry *
-lookup_type_cache_UNUSED_SPANGRES(Oid type_id, int flags)
+lookup_type_cache(Oid type_id, int flags)
 {
-	TypeCacheEntry *typentry;
-	bool		found;
+	// SPANGRES BEGIN
+  TypeCacheEntry *typentry;
 
-	if (TypeCacheHash == NULL)
-	{
-		/* First time through: initialize the hash table */
-		HASHCTL		ctl;
+  // SPANGRES: We're skipping hash/cache setup and lookup here.
 
-		ctl.keysize = sizeof(Oid);
-		ctl.entrysize = sizeof(TypeCacheEntry);
-		TypeCacheHash = hash_create("Type information cache", 64,
-									&ctl, HASH_ELEM | HASH_BLOBS);
+  const FormData_pg_type* typtup = GetTypeFromBootstrapCatalog(type_id);
+  if (typtup == NULL) {
+    ereport(ERROR,
+        (errcode(ERRCODE_UNDEFINED_OBJECT),
+          errmsg("type with OID %u does not exist", type_id)));
+  }
+  if (!typtup->typisdefined) {
+    ereport(ERROR,
+        (errcode(ERRCODE_UNDEFINED_OBJECT),
+          errmsg("type \"%s\" is only a shell",
+            NameStr(typtup->typname))));
+  }
+	// SPANGRES END
 
-		/* Also set up callbacks for SI invalidations */
-		CacheRegisterRelcacheCallback(TypeCacheRelCallback, (Datum) 0);
-		CacheRegisterSyscacheCallback(TYPEOID, TypeCacheTypCallback, (Datum) 0);
-		CacheRegisterSyscacheCallback(CLAOID, TypeCacheOpcCallback, (Datum) 0);
-		CacheRegisterSyscacheCallback(CONSTROID, TypeCacheConstrCallback, (Datum) 0);
+  /* Now make the typcache entry */
+  // We're creating this on the heap instead of in the cache.
+	typentry = (TypeCacheEntry*)palloc(sizeof(TypeCacheEntry));
 
-		/* Also make sure CacheMemoryContext exists */
-		if (!CacheMemoryContext)
-			CreateCacheMemoryContext();
-	}
+  MemSet(typentry, 0, sizeof(TypeCacheEntry));
 
-	/* Try to look up an existing entry */
-	typentry = (TypeCacheEntry *) hash_search(TypeCacheHash,
-											  (void *) &type_id,
-											  HASH_FIND, NULL);
-	if (typentry == NULL)
-	{
-		/*
-		 * If we didn't find one, we want to make one.  But first look up the
-		 * pg_type row, just to make sure we don't make a cache entry for an
-		 * invalid type OID.  If the type OID is not valid, present a
-		 * user-facing error, since some code paths such as domain_in() allow
-		 * this function to be reached with a user-supplied OID.
-		 */
-		HeapTuple	tp;
-		Form_pg_type typtup;
+  /* These fields can never change, by definition */
+  typentry->type_id = type_id;
+  // SPANGRES: do not set the type_id_hash
 
-		tp = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_id));
-		if (!HeapTupleIsValid(tp))
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("type with OID %u does not exist", type_id)));
-		typtup = (Form_pg_type) GETSTRUCT(tp);
-		if (!typtup->typisdefined)
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("type \"%s\" is only a shell",
-							NameStr(typtup->typname))));
+  typentry->typlen = typtup->typlen;
+  typentry->typbyval = typtup->typbyval;
+  typentry->typalign = typtup->typalign;
+  typentry->typstorage = typtup->typstorage;
+  typentry->typtype = typtup->typtype;
+  typentry->typrelid = typtup->typrelid;
+  typentry->typelem = typtup->typelem;
+  typentry->typcollation = typtup->typcollation;
+  typentry->flags |= TCFLAGS_HAVE_PG_TYPE_DATA;
 
-		/* Now make the typcache entry */
-		typentry = (TypeCacheEntry *) hash_search(TypeCacheHash,
-												  (void *) &type_id,
-												  HASH_ENTER, &found);
-		Assert(!found);			/* it wasn't there a moment ago */
+  // SPANGRES: We're skipping domain cache list updates here. This would be used
+  // to invalidate this cache item in case the domain became invalid.
 
-		MemSet(typentry, 0, sizeof(TypeCacheEntry));
+  /*
+   * Look up opclasses if we haven't already and any dependent info is
+   * requested.
+   */
+  if ((flags & (TYPECACHE_EQ_OPR | TYPECACHE_LT_OPR | TYPECACHE_GT_OPR |
+          TYPECACHE_CMP_PROC |
+          TYPECACHE_EQ_OPR_FINFO | TYPECACHE_CMP_PROC_FINFO |
+          TYPECACHE_BTREE_OPFAMILY)) &&
+    !(typentry->flags & TCFLAGS_CHECKED_BTREE_OPCLASS))
+  {
+    Oid opclass = GetDefaultOpClass(type_id, BTREE_AM_OID);
+    if (OidIsValid(opclass)) {
+      typentry->btree_opf = get_opclass_family(opclass);
+      typentry->btree_opintype = get_opclass_input_type(opclass);
+    }
+    else
+    {
+      typentry->btree_opf = typentry->btree_opintype = InvalidOid;
+    }
 
-		/* These fields can never change, by definition */
-		typentry->type_id = type_id;
-		typentry->type_id_hash = GetSysCacheHashValue1(TYPEOID,
-													   ObjectIdGetDatum(type_id));
-
-		/* Keep this part in sync with the code below */
-		typentry->typlen = typtup->typlen;
-		typentry->typbyval = typtup->typbyval;
-		typentry->typalign = typtup->typalign;
-		typentry->typstorage = typtup->typstorage;
-		typentry->typtype = typtup->typtype;
-		typentry->typrelid = typtup->typrelid;
-		typentry->typsubscript = typtup->typsubscript;
-		typentry->typelem = typtup->typelem;
-		typentry->typcollation = typtup->typcollation;
-		typentry->flags |= TCFLAGS_HAVE_PG_TYPE_DATA;
-
-		/* If it's a domain, immediately thread it into the domain cache list */
-		if (typentry->typtype == TYPTYPE_DOMAIN)
-		{
-			typentry->nextDomain = firstDomainTypeEntry;
-			firstDomainTypeEntry = typentry;
-		}
-
-		ReleaseSysCache(tp);
-	}
-	else if (!(typentry->flags & TCFLAGS_HAVE_PG_TYPE_DATA))
-	{
-		/*
-		 * We have an entry, but its pg_type row got changed, so reload the
-		 * data obtained directly from pg_type.
-		 */
-		HeapTuple	tp;
-		Form_pg_type typtup;
-
-		tp = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_id));
-		if (!HeapTupleIsValid(tp))
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("type with OID %u does not exist", type_id)));
-		typtup = (Form_pg_type) GETSTRUCT(tp);
-		if (!typtup->typisdefined)
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("type \"%s\" is only a shell",
-							NameStr(typtup->typname))));
-
-		/*
-		 * Keep this part in sync with the code above.  Many of these fields
-		 * shouldn't ever change, particularly typtype, but copy 'em anyway.
-		 */
-		typentry->typlen = typtup->typlen;
-		typentry->typbyval = typtup->typbyval;
-		typentry->typalign = typtup->typalign;
-		typentry->typstorage = typtup->typstorage;
-		typentry->typtype = typtup->typtype;
-		typentry->typrelid = typtup->typrelid;
-		typentry->typsubscript = typtup->typsubscript;
-		typentry->typelem = typtup->typelem;
-		typentry->typcollation = typtup->typcollation;
-		typentry->flags |= TCFLAGS_HAVE_PG_TYPE_DATA;
-
-		ReleaseSysCache(tp);
-	}
-
-	/*
-	 * Look up opclasses if we haven't already and any dependent info is
-	 * requested.
-	 */
-	if ((flags & (TYPECACHE_EQ_OPR | TYPECACHE_LT_OPR | TYPECACHE_GT_OPR |
-				  TYPECACHE_CMP_PROC |
-				  TYPECACHE_EQ_OPR_FINFO | TYPECACHE_CMP_PROC_FINFO |
-				  TYPECACHE_BTREE_OPFAMILY)) &&
-		!(typentry->flags & TCFLAGS_CHECKED_BTREE_OPCLASS))
-	{
-		Oid			opclass;
-
-		opclass = GetDefaultOpClass(type_id, BTREE_AM_OID);
-		if (OidIsValid(opclass))
-		{
-			typentry->btree_opf = get_opclass_family(opclass);
-			typentry->btree_opintype = get_opclass_input_type(opclass);
-		}
-		else
-		{
-			typentry->btree_opf = typentry->btree_opintype = InvalidOid;
-		}
-
-		/*
-		 * Reset information derived from btree opclass.  Note in particular
-		 * that we'll redetermine the eq_opr even if we previously found one;
-		 * this matters in case a btree opclass has been added to a type that
-		 * previously had only a hash opclass.
-		 */
-		typentry->flags &= ~(TCFLAGS_CHECKED_EQ_OPR |
-							 TCFLAGS_CHECKED_LT_OPR |
-							 TCFLAGS_CHECKED_GT_OPR |
-							 TCFLAGS_CHECKED_CMP_PROC);
+    /*
+     * Reset information derived from btree opclass.  Note in particular
+     * that we'll redetermine the eq_opr even if we previously found one;
+     * this matters in case a btree opclass has been added to a type that
+     * previously had only a hash opclass.
+     */
+    typentry->flags &= ~(TCFLAGS_CHECKED_EQ_OPR |
+               TCFLAGS_CHECKED_LT_OPR |
+               TCFLAGS_CHECKED_GT_OPR |
+               TCFLAGS_CHECKED_CMP_PROC);
 		typentry->flags |= TCFLAGS_CHECKED_BTREE_OPCLASS;
-	}
-
-	/*
-	 * If we need to look up equality operator, and there's no btree opclass,
-	 * force lookup of hash opclass.
-	 */
-	if ((flags & (TYPECACHE_EQ_OPR | TYPECACHE_EQ_OPR_FINFO)) &&
-		!(typentry->flags & TCFLAGS_CHECKED_EQ_OPR) &&
-		typentry->btree_opf == InvalidOid)
-		flags |= TYPECACHE_HASH_OPFAMILY;
-
-	if ((flags & (TYPECACHE_HASH_PROC | TYPECACHE_HASH_PROC_FINFO |
-				  TYPECACHE_HASH_EXTENDED_PROC |
-				  TYPECACHE_HASH_EXTENDED_PROC_FINFO |
-				  TYPECACHE_HASH_OPFAMILY)) &&
-		!(typentry->flags & TCFLAGS_CHECKED_HASH_OPCLASS))
-	{
-		Oid			opclass;
-
-		opclass = GetDefaultOpClass(type_id, HASH_AM_OID);
-		if (OidIsValid(opclass))
-		{
-			typentry->hash_opf = get_opclass_family(opclass);
-			typentry->hash_opintype = get_opclass_input_type(opclass);
-		}
-		else
-		{
-			typentry->hash_opf = typentry->hash_opintype = InvalidOid;
 		}
 
-		/*
-		 * Reset information derived from hash opclass.  We do *not* reset the
-		 * eq_opr; if we already found one from the btree opclass, that
-		 * decision is still good.
-		 */
-		typentry->flags &= ~(TCFLAGS_CHECKED_HASH_PROC |
-							 TCFLAGS_CHECKED_HASH_EXTENDED_PROC);
-		typentry->flags |= TCFLAGS_CHECKED_HASH_OPCLASS;
+  /*
+   * If we need to look up equality operator, and there's no btree opclass,
+   * force lookup of hash opclass.
+   */
+  if ((flags & (TYPECACHE_EQ_OPR | TYPECACHE_EQ_OPR_FINFO)) &&
+    !(typentry->flags & TCFLAGS_CHECKED_EQ_OPR) &&
+    typentry->btree_opf == InvalidOid)
+    flags |= TYPECACHE_HASH_OPFAMILY;
+
+  if ((flags & (TYPECACHE_HASH_PROC | TYPECACHE_HASH_PROC_FINFO |
+          TYPECACHE_HASH_EXTENDED_PROC |
+          TYPECACHE_HASH_EXTENDED_PROC_FINFO |
+          TYPECACHE_HASH_OPFAMILY)) &&
+    !(typentry->flags & TCFLAGS_CHECKED_HASH_OPCLASS))
+  {
+    Oid      opclass = InvalidOid;
+
+    opclass = GetDefaultOpClass(type_id, HASH_AM_OID);
+    if (OidIsValid(opclass)) {
+      typentry->hash_opf = get_opclass_family(opclass);
+      typentry->hash_opintype = get_opclass_input_type(opclass);
+    }
+    else
+    {
+      typentry->hash_opf = typentry->hash_opintype = InvalidOid;
+    }
+
+    /*
+     * Reset information derived from hash opclass.  We do *not* reset the
+     * eq_opr; if we already found one from the btree opclass, that
+     * decision is still good.
+     */
+    typentry->flags &= ~(TCFLAGS_CHECKED_HASH_PROC |
+               TCFLAGS_CHECKED_HASH_EXTENDED_PROC);
+    typentry->flags |= TCFLAGS_CHECKED_HASH_OPCLASS;
+  }
+
+  /*
+   * Look for requested operators and functions, if we haven't already.
+   */
+  if ((flags & (TYPECACHE_EQ_OPR | TYPECACHE_EQ_OPR_FINFO)) &&
+    !(typentry->flags & TCFLAGS_CHECKED_EQ_OPR))
+  {
+    Oid      eq_opr = InvalidOid;
+
+    if (typentry->btree_opf != InvalidOid)
+      eq_opr = get_opfamily_member(typentry->btree_opf,
+                     typentry->btree_opintype,
+                     typentry->btree_opintype,
+                     BTEqualStrategyNumber);
+    if (eq_opr == InvalidOid &&
+      typentry->hash_opf != InvalidOid)
+      eq_opr = get_opfamily_member(typentry->hash_opf,
+                     typentry->hash_opintype,
+                     typentry->hash_opintype,
+                     HTEqualStrategyNumber);
+
+    /*
+     * If the proposed equality operator is array_eq or record_eq, check
+     * to see if the element type or column types support equality.  If
+     * not, array_eq or record_eq would fail at runtime, so we don't want
+     * to report that the type has equality.  (We can omit similar
+     * checking for ranges because ranges can't be created in the first
+     * place unless their subtypes support equality.)
+     */
+    if (eq_opr == ARRAY_EQ_OP &&
+      !array_element_has_equality(typentry))
+      eq_opr = InvalidOid;
+    // SPANGRES: We're removing record type support here.
+    // TODO: Add support for complex types.
+    // else if (eq_opr == RECORD_EQ_OP &&
+    //      !record_fields_have_equality(typentry))
+    // eq_opr = InvalidOid;
+    else if (eq_opr == RECORD_EQ_OP) {
+      ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                      errmsg("Record types are not supported.")));
+    }
+
+    /* Force update of eq_opr_finfo only if we're changing state */
+    if (typentry->eq_opr != eq_opr)
+      typentry->eq_opr_finfo.fn_oid = InvalidOid;
+
+    typentry->eq_opr = eq_opr;
+
+    /*
+     * Reset info about hash functions whenever we pick up new info about
+     * equality operator.  This is so we can ensure that the hash
+     * functions match the operator.
+     */
+    typentry->flags &= ~(TCFLAGS_CHECKED_HASH_PROC |
+               TCFLAGS_CHECKED_HASH_EXTENDED_PROC);
+    typentry->flags |= TCFLAGS_CHECKED_EQ_OPR;
+  }
+  if ((flags & TYPECACHE_LT_OPR) &&
+    !(typentry->flags & TCFLAGS_CHECKED_LT_OPR))
+  {
+    Oid      lt_opr = InvalidOid;
+
+    if (typentry->btree_opf != InvalidOid)
+      lt_opr = get_opfamily_member(typentry->btree_opf,
+                     typentry->btree_opintype,
+                     typentry->btree_opintype,
+                     BTLessStrategyNumber);
+
+    /*
+     * As above, make sure array_cmp or record_cmp will succeed; but again
+     * we need no special check for ranges.
+     */
+    if (lt_opr == ARRAY_LT_OP &&
+      !array_element_has_compare(typentry))
+      lt_opr = InvalidOid;
+    // SPANGRES: We're removing record type support here.
+    // TODO: Add support for complex types.
+    // else if (lt_opr == RECORD_LT_OP &&
+    //      !record_fields_have_compare(typentry))
+    //   lt_opr = InvalidOid;
+    else if (lt_opr == RECORD_LT_OP) {
+      ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                      errmsg("Record types are not supported.")));
+    }
+
+    typentry->lt_opr = lt_opr;
+    typentry->flags |= TCFLAGS_CHECKED_LT_OPR;
+  }
+  if ((flags & TYPECACHE_GT_OPR) &&
+    !(typentry->flags & TCFLAGS_CHECKED_GT_OPR))
+  {
+    Oid      gt_opr = InvalidOid;
+
+    if (typentry->btree_opf != InvalidOid)
+      gt_opr = get_opfamily_member(typentry->btree_opf,
+                     typentry->btree_opintype,
+                     typentry->btree_opintype,
+                     BTGreaterStrategyNumber);
+
+    /*
+     * As above, make sure array_cmp or record_cmp will succeed; but again
+     * we need no special check for ranges.
+     */
+    if (gt_opr == ARRAY_GT_OP &&
+      !array_element_has_compare(typentry))
+      gt_opr = InvalidOid;
+    // SPANGRES: We're removing record type support here.
+    // TODO: Add support for complex types.
+    // else if (gt_opr == RECORD_GT_OP &&
+    //      !record_fields_have_compare(typentry))
+    //   gt_opr = InvalidOid;
+    else if (gt_opr == RECORD_LT_OP) {
+      ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                      errmsg("Record types are not supported.")));
+    }
+
+    typentry->gt_opr = gt_opr;
+    typentry->flags |= TCFLAGS_CHECKED_GT_OPR;
+  }
+  if ((flags & (TYPECACHE_CMP_PROC | TYPECACHE_CMP_PROC_FINFO)) &&
+    !(typentry->flags & TCFLAGS_CHECKED_CMP_PROC))
+  {
+    Oid      cmp_proc = InvalidOid;
+
+    if (typentry->btree_opf != InvalidOid)
+      cmp_proc = get_opfamily_proc(
+          typentry->btree_opf, typentry->btree_opintype,
+          typentry->btree_opintype, BTORDER_PROC);
+
+    /*
+     * As above, make sure array_cmp or record_cmp will succeed; but again
+     * we need no special check for ranges.
+     */
+    if (cmp_proc == F_BTARRAYCMP &&
+      !array_element_has_compare(typentry))
+      cmp_proc = InvalidOid;
+    // SPANGRES: We're removing record type support here.
+    // TODO: Add support for complex types.
+    // else if (cmp_proc == F_BTRECORDCMP &&
+    //      !record_fields_have_compare(typentry))
+    //   cmp_proc = InvalidOid;
+    else if (cmp_proc == F_BTRECORDCMP) {
+      ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                      errmsg("Record types are not supported.")));
+    }
+
+    /* Force update of cmp_proc_finfo only if we're changing state */
+    if (typentry->cmp_proc != cmp_proc)
+      typentry->cmp_proc_finfo.fn_oid = InvalidOid;
+
+    typentry->cmp_proc = cmp_proc;
+    typentry->flags |= TCFLAGS_CHECKED_CMP_PROC;
+  }
+  if ((flags & (TYPECACHE_HASH_PROC | TYPECACHE_HASH_PROC_FINFO)) &&
+    !(typentry->flags & TCFLAGS_CHECKED_HASH_PROC))
+  {
+    Oid      hash_proc = InvalidOid;
+
+    /*
+     * We insist that the eq_opr, if one has been determined, match the
+     * hash opclass; else report there is no hash function.
+     */
+    if (typentry->hash_opf != InvalidOid &&
+      (!OidIsValid(typentry->eq_opr) ||
+       typentry->eq_opr == get_opfamily_member(typentry->hash_opf,
+                           typentry->hash_opintype,
+                           typentry->hash_opintype,
+                           HTEqualStrategyNumber)))
+      hash_proc = get_opfamily_proc(
+          typentry->hash_opf, typentry->hash_opintype, typentry->hash_opintype,
+          HASHSTANDARD_PROC);
+
+    /*
+     * As above, make sure hash_array will succeed.  We don't currently
+     * support hashing for composite types, but when we do, we'll need
+     * more logic here to check that case too.
+     */
+    if (hash_proc == F_HASH_ARRAY &&
+      !array_element_has_hashing(typentry))
+      hash_proc = InvalidOid;
+
+    /*
+     * Likewise for hash_range.
+     */
+    // SPANGRES: We're removing record type support here.
+    // TODO: Add support for complex types.
+    // if (hash_proc == F_HASH_RANGE &&
+    //   !range_element_has_hashing(typentry))
+    //   hash_proc = InvalidOid;
+    if (hash_proc == F_HASH_RANGE) {
+      ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                      errmsg("Record types are not supported.")));
+    }
+
+    /* Force update of hash_proc_finfo only if we're changing state */
+    if (typentry->hash_proc != hash_proc)
+      typentry->hash_proc_finfo.fn_oid = InvalidOid;
+
+    typentry->hash_proc = hash_proc;
+    typentry->flags |= TCFLAGS_CHECKED_HASH_PROC;
+  }
+  if ((flags & (TYPECACHE_HASH_EXTENDED_PROC |
+          TYPECACHE_HASH_EXTENDED_PROC_FINFO)) &&
+    !(typentry->flags & TCFLAGS_CHECKED_HASH_EXTENDED_PROC))
+  {
+    Oid      hash_extended_proc = InvalidOid;
+
+    /*
+     * We insist that the eq_opr, if one has been determined, match the
+     * hash opclass; else report there is no hash function.
+     */
+    if (typentry->hash_opf != InvalidOid &&
+      (!OidIsValid(typentry->eq_opr) ||
+       typentry->eq_opr == get_opfamily_member(typentry->hash_opf,
+                           typentry->hash_opintype,
+                           typentry->hash_opintype,
+                           HTEqualStrategyNumber)))
+      hash_extended_proc = get_opfamily_proc(
+          typentry->hash_opf, typentry->hash_opintype, typentry->hash_opintype,
+          HASHEXTENDED_PROC);
+
+    /*
+     * As above, make sure hash_array_extended will succeed.  We don't
+     * currently support hashing for composite types, but when we do,
+     * we'll need more logic here to check that case too.
+     */
+    if (hash_extended_proc == F_HASH_ARRAY_EXTENDED &&
+      !array_element_has_extended_hashing(typentry))
+      hash_extended_proc = InvalidOid;
+
+    /*
+     * Likewise for hash_range_extended.
+     */
+    // SPANGRES: We're removing record type support here.
+    // TODO: Add support for complex types.
+    // if (hash_extended_proc == F_HASH_RANGE_EXTENDED &&
+    //   !range_element_has_extended_hashing(typentry))
+    //   hash_extended_proc = InvalidOid;
+    if (hash_extended_proc == F_HASH_RANGE_EXTENDED) {
+      ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                      errmsg("Range types are not supported.")));
+    }
+
+    /* Force update of proc finfo only if we're changing state */
+    if (typentry->hash_extended_proc != hash_extended_proc)
+      typentry->hash_extended_proc_finfo.fn_oid = InvalidOid;
+
+    typentry->hash_extended_proc = hash_extended_proc;
+    typentry->flags |= TCFLAGS_CHECKED_HASH_EXTENDED_PROC;
+  }
+
+  /*
+   * Set up fmgr lookup info as requested
+   *
+   * Note: we tell fmgr the finfo structures live in CacheMemoryContext,
+   * which is not quite right (they're really in the hash table's private
+   * memory context) but this will do for our purposes.
+   *
+   * Note: the code above avoids invalidating the finfo structs unless the
+   * referenced operator/function OID actually changes.  This is to prevent
+   * unnecessary leakage of any subsidiary data attached to an finfo, since
+   * that would cause session-lifespan memory leaks.
+   */
+  if ((flags & TYPECACHE_EQ_OPR_FINFO) &&
+    typentry->eq_opr_finfo.fn_oid == InvalidOid &&
+    typentry->eq_opr != InvalidOid)
+  {
+    Oid      eq_opr_func;
+
+    eq_opr_func = get_opcode(typentry->eq_opr);
+    if (eq_opr_func != InvalidOid)
+      fmgr_info_cxt(eq_opr_func, &typentry->eq_opr_finfo,
+              CacheMemoryContext);
+  }
+  if ((flags & TYPECACHE_CMP_PROC_FINFO) &&
+    typentry->cmp_proc_finfo.fn_oid == InvalidOid &&
+    typentry->cmp_proc != InvalidOid)
+  {
+    fmgr_info_cxt(typentry->cmp_proc, &typentry->cmp_proc_finfo,
+            CacheMemoryContext);
+  }
+  if ((flags & TYPECACHE_HASH_PROC_FINFO) &&
+    typentry->hash_proc_finfo.fn_oid == InvalidOid &&
+    typentry->hash_proc != InvalidOid)
+  {
+    fmgr_info_cxt(typentry->hash_proc, &typentry->hash_proc_finfo,
+            CacheMemoryContext);
+  }
+  if ((flags & TYPECACHE_HASH_EXTENDED_PROC_FINFO) &&
+    typentry->hash_extended_proc_finfo.fn_oid == InvalidOid &&
+    typentry->hash_extended_proc != InvalidOid)
+  {
+    fmgr_info_cxt(typentry->hash_extended_proc,
+            &typentry->hash_extended_proc_finfo,
+            CacheMemoryContext);
+  }
+
+  /*
+   * If it's a composite type (row type), get tupdesc if requested
+   */
+  if ((flags & TYPECACHE_TUPDESC) &&
+    typentry->tupDesc == NULL &&
+    typentry->typtype == TYPTYPE_COMPOSITE)
+  {
+    // TODO: Add support for complex types.
+    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+										errmsg("Composite types are not supported.")));
+  }
+
+  /*
+   * If requested, get information about a range type
+   */
+  if ((flags & TYPECACHE_RANGE_INFO) &&
+    typentry->typtype == TYPTYPE_RANGE)
+  {
+    // TODO: Add support for complex types.
+		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+										errmsg("Range types are not supported.")));
+  }
+
+  /*
+   * If requested, get information about a domain type
+   *
+   * This includes making sure that the basic info about the range element
+   * type is up-to-date.
+   */
+  if ((flags & TYPECACHE_DOMAIN_BASE_INFO) &&
+    typentry->domainBaseType == InvalidOid &&
+    typentry->typtype == TYPTYPE_DOMAIN)
+  {
+    typentry->domainBaseTypmod = -1;
+    typentry->domainBaseType =
+      getBaseTypeAndTypmod(type_id, &typentry->domainBaseTypmod);
+  }
+  if ((flags & TYPECACHE_DOMAIN_CONSTR_INFO) &&
+    (typentry->flags & TCFLAGS_CHECKED_DOMAIN_CONSTRAINTS) == 0 &&
+    typentry->typtype == TYPTYPE_DOMAIN)
+  {
+    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+										errmsg("Domain types are not supported.")));
 	}
 
-	/*
-	 * Look for requested operators and functions, if we haven't already.
-	 */
-	if ((flags & (TYPECACHE_EQ_OPR | TYPECACHE_EQ_OPR_FINFO)) &&
-		!(typentry->flags & TCFLAGS_CHECKED_EQ_OPR))
-	{
-		Oid			eq_opr = InvalidOid;
-
-		if (typentry->btree_opf != InvalidOid)
-			eq_opr = get_opfamily_member(typentry->btree_opf,
-										 typentry->btree_opintype,
-										 typentry->btree_opintype,
-										 BTEqualStrategyNumber);
-		if (eq_opr == InvalidOid &&
-			typentry->hash_opf != InvalidOid)
-			eq_opr = get_opfamily_member(typentry->hash_opf,
-										 typentry->hash_opintype,
-										 typentry->hash_opintype,
-										 HTEqualStrategyNumber);
-
-		/*
-		 * If the proposed equality operator is array_eq or record_eq, check
-		 * to see if the element type or column types support equality.  If
-		 * not, array_eq or record_eq would fail at runtime, so we don't want
-		 * to report that the type has equality.  (We can omit similar
-		 * checking for ranges and multiranges because ranges can't be created
-		 * in the first place unless their subtypes support equality.)
-		 */
-		if (eq_opr == ARRAY_EQ_OP &&
-			!array_element_has_equality(typentry))
-			eq_opr = InvalidOid;
-		else if (eq_opr == RECORD_EQ_OP &&
-				 !record_fields_have_equality(typentry))
-			eq_opr = InvalidOid;
-
-		/* Force update of eq_opr_finfo only if we're changing state */
-		if (typentry->eq_opr != eq_opr)
-			typentry->eq_opr_finfo.fn_oid = InvalidOid;
-
-		typentry->eq_opr = eq_opr;
-
-		/*
-		 * Reset info about hash functions whenever we pick up new info about
-		 * equality operator.  This is so we can ensure that the hash
-		 * functions match the operator.
-		 */
-		typentry->flags &= ~(TCFLAGS_CHECKED_HASH_PROC |
-							 TCFLAGS_CHECKED_HASH_EXTENDED_PROC);
-		typentry->flags |= TCFLAGS_CHECKED_EQ_OPR;
-	}
-	if ((flags & TYPECACHE_LT_OPR) &&
-		!(typentry->flags & TCFLAGS_CHECKED_LT_OPR))
-	{
-		Oid			lt_opr = InvalidOid;
-
-		if (typentry->btree_opf != InvalidOid)
-			lt_opr = get_opfamily_member(typentry->btree_opf,
-										 typentry->btree_opintype,
-										 typentry->btree_opintype,
-										 BTLessStrategyNumber);
-
-		/*
-		 * As above, make sure array_cmp or record_cmp will succeed; but again
-		 * we need no special check for ranges or multiranges.
-		 */
-		if (lt_opr == ARRAY_LT_OP &&
-			!array_element_has_compare(typentry))
-			lt_opr = InvalidOid;
-		else if (lt_opr == RECORD_LT_OP &&
-				 !record_fields_have_compare(typentry))
-			lt_opr = InvalidOid;
-
-		typentry->lt_opr = lt_opr;
-		typentry->flags |= TCFLAGS_CHECKED_LT_OPR;
-	}
-	if ((flags & TYPECACHE_GT_OPR) &&
-		!(typentry->flags & TCFLAGS_CHECKED_GT_OPR))
-	{
-		Oid			gt_opr = InvalidOid;
-
-		if (typentry->btree_opf != InvalidOid)
-			gt_opr = get_opfamily_member(typentry->btree_opf,
-										 typentry->btree_opintype,
-										 typentry->btree_opintype,
-										 BTGreaterStrategyNumber);
-
-		/*
-		 * As above, make sure array_cmp or record_cmp will succeed; but again
-		 * we need no special check for ranges or multiranges.
-		 */
-		if (gt_opr == ARRAY_GT_OP &&
-			!array_element_has_compare(typentry))
-			gt_opr = InvalidOid;
-		else if (gt_opr == RECORD_GT_OP &&
-				 !record_fields_have_compare(typentry))
-			gt_opr = InvalidOid;
-
-		typentry->gt_opr = gt_opr;
-		typentry->flags |= TCFLAGS_CHECKED_GT_OPR;
-	}
-	if ((flags & (TYPECACHE_CMP_PROC | TYPECACHE_CMP_PROC_FINFO)) &&
-		!(typentry->flags & TCFLAGS_CHECKED_CMP_PROC))
-	{
-		Oid			cmp_proc = InvalidOid;
-
-		if (typentry->btree_opf != InvalidOid)
-			cmp_proc = get_opfamily_proc(typentry->btree_opf,
-										 typentry->btree_opintype,
-										 typentry->btree_opintype,
-										 BTORDER_PROC);
-
-		/*
-		 * As above, make sure array_cmp or record_cmp will succeed; but again
-		 * we need no special check for ranges or multiranges.
-		 */
-		if (cmp_proc == F_BTARRAYCMP &&
-			!array_element_has_compare(typentry))
-			cmp_proc = InvalidOid;
-		else if (cmp_proc == F_BTRECORDCMP &&
-				 !record_fields_have_compare(typentry))
-			cmp_proc = InvalidOid;
-
-		/* Force update of cmp_proc_finfo only if we're changing state */
-		if (typentry->cmp_proc != cmp_proc)
-			typentry->cmp_proc_finfo.fn_oid = InvalidOid;
-
-		typentry->cmp_proc = cmp_proc;
-		typentry->flags |= TCFLAGS_CHECKED_CMP_PROC;
-	}
-	if ((flags & (TYPECACHE_HASH_PROC | TYPECACHE_HASH_PROC_FINFO)) &&
-		!(typentry->flags & TCFLAGS_CHECKED_HASH_PROC))
-	{
-		Oid			hash_proc = InvalidOid;
-
-		/*
-		 * We insist that the eq_opr, if one has been determined, match the
-		 * hash opclass; else report there is no hash function.
-		 */
-		if (typentry->hash_opf != InvalidOid &&
-			(!OidIsValid(typentry->eq_opr) ||
-			 typentry->eq_opr == get_opfamily_member(typentry->hash_opf,
-													 typentry->hash_opintype,
-													 typentry->hash_opintype,
-													 HTEqualStrategyNumber)))
-			hash_proc = get_opfamily_proc(typentry->hash_opf,
-										  typentry->hash_opintype,
-										  typentry->hash_opintype,
-										  HASHSTANDARD_PROC);
-
-		/*
-		 * As above, make sure hash_array, hash_record, or hash_range will
-		 * succeed.
-		 */
-		if (hash_proc == F_HASH_ARRAY &&
-			!array_element_has_hashing(typentry))
-			hash_proc = InvalidOid;
-		else if (hash_proc == F_HASH_RECORD &&
-				 !record_fields_have_hashing(typentry))
-			hash_proc = InvalidOid;
-		else if (hash_proc == F_HASH_RANGE &&
-				 !range_element_has_hashing(typentry))
-			hash_proc = InvalidOid;
-
-		/*
-		 * Likewise for hash_multirange.
-		 */
-		if (hash_proc == F_HASH_MULTIRANGE &&
-			!multirange_element_has_hashing(typentry))
-			hash_proc = InvalidOid;
-
-		/* Force update of hash_proc_finfo only if we're changing state */
-		if (typentry->hash_proc != hash_proc)
-			typentry->hash_proc_finfo.fn_oid = InvalidOid;
-
-		typentry->hash_proc = hash_proc;
-		typentry->flags |= TCFLAGS_CHECKED_HASH_PROC;
-	}
-	if ((flags & (TYPECACHE_HASH_EXTENDED_PROC |
-				  TYPECACHE_HASH_EXTENDED_PROC_FINFO)) &&
-		!(typentry->flags & TCFLAGS_CHECKED_HASH_EXTENDED_PROC))
-	{
-		Oid			hash_extended_proc = InvalidOid;
-
-		/*
-		 * We insist that the eq_opr, if one has been determined, match the
-		 * hash opclass; else report there is no hash function.
-		 */
-		if (typentry->hash_opf != InvalidOid &&
-			(!OidIsValid(typentry->eq_opr) ||
-			 typentry->eq_opr == get_opfamily_member(typentry->hash_opf,
-													 typentry->hash_opintype,
-													 typentry->hash_opintype,
-													 HTEqualStrategyNumber)))
-			hash_extended_proc = get_opfamily_proc(typentry->hash_opf,
-												   typentry->hash_opintype,
-												   typentry->hash_opintype,
-												   HASHEXTENDED_PROC);
-
-		/*
-		 * As above, make sure hash_array_extended, hash_record_extended, or
-		 * hash_range_extended will succeed.
-		 */
-		if (hash_extended_proc == F_HASH_ARRAY_EXTENDED &&
-			!array_element_has_extended_hashing(typentry))
-			hash_extended_proc = InvalidOid;
-		else if (hash_extended_proc == F_HASH_RECORD_EXTENDED &&
-				 !record_fields_have_extended_hashing(typentry))
-			hash_extended_proc = InvalidOid;
-		else if (hash_extended_proc == F_HASH_RANGE_EXTENDED &&
-				 !range_element_has_extended_hashing(typentry))
-			hash_extended_proc = InvalidOid;
-
-		/*
-		 * Likewise for hash_multirange_extended.
-		 */
-		if (hash_extended_proc == F_HASH_MULTIRANGE_EXTENDED &&
-			!multirange_element_has_extended_hashing(typentry))
-			hash_extended_proc = InvalidOid;
-
-		/* Force update of proc finfo only if we're changing state */
-		if (typentry->hash_extended_proc != hash_extended_proc)
-			typentry->hash_extended_proc_finfo.fn_oid = InvalidOid;
-
-		typentry->hash_extended_proc = hash_extended_proc;
-		typentry->flags |= TCFLAGS_CHECKED_HASH_EXTENDED_PROC;
-	}
-
-	/*
-	 * Set up fmgr lookup info as requested
-	 *
-	 * Note: we tell fmgr the finfo structures live in CacheMemoryContext,
-	 * which is not quite right (they're really in the hash table's private
-	 * memory context) but this will do for our purposes.
-	 *
-	 * Note: the code above avoids invalidating the finfo structs unless the
-	 * referenced operator/function OID actually changes.  This is to prevent
-	 * unnecessary leakage of any subsidiary data attached to an finfo, since
-	 * that would cause session-lifespan memory leaks.
-	 */
-	if ((flags & TYPECACHE_EQ_OPR_FINFO) &&
-		typentry->eq_opr_finfo.fn_oid == InvalidOid &&
-		typentry->eq_opr != InvalidOid)
-	{
-		Oid			eq_opr_func;
-
-		eq_opr_func = get_opcode(typentry->eq_opr);
-		if (eq_opr_func != InvalidOid)
-			fmgr_info_cxt(eq_opr_func, &typentry->eq_opr_finfo,
-						  CacheMemoryContext);
-	}
-	if ((flags & TYPECACHE_CMP_PROC_FINFO) &&
-		typentry->cmp_proc_finfo.fn_oid == InvalidOid &&
-		typentry->cmp_proc != InvalidOid)
-	{
-		fmgr_info_cxt(typentry->cmp_proc, &typentry->cmp_proc_finfo,
-					  CacheMemoryContext);
-	}
-	if ((flags & TYPECACHE_HASH_PROC_FINFO) &&
-		typentry->hash_proc_finfo.fn_oid == InvalidOid &&
-		typentry->hash_proc != InvalidOid)
-	{
-		fmgr_info_cxt(typentry->hash_proc, &typentry->hash_proc_finfo,
-					  CacheMemoryContext);
-	}
-	if ((flags & TYPECACHE_HASH_EXTENDED_PROC_FINFO) &&
-		typentry->hash_extended_proc_finfo.fn_oid == InvalidOid &&
-		typentry->hash_extended_proc != InvalidOid)
-	{
-		fmgr_info_cxt(typentry->hash_extended_proc,
-					  &typentry->hash_extended_proc_finfo,
-					  CacheMemoryContext);
-	}
-
-	/*
-	 * If it's a composite type (row type), get tupdesc if requested
-	 */
-	if ((flags & TYPECACHE_TUPDESC) &&
-		typentry->tupDesc == NULL &&
-		typentry->typtype == TYPTYPE_COMPOSITE)
-	{
-		load_typcache_tupdesc(typentry);
-	}
-
-	/*
-	 * If requested, get information about a range type
-	 *
-	 * This includes making sure that the basic info about the range element
-	 * type is up-to-date.
-	 */
-	if ((flags & TYPECACHE_RANGE_INFO) &&
-		typentry->typtype == TYPTYPE_RANGE)
-	{
-		if (typentry->rngelemtype == NULL)
-			load_rangetype_info(typentry);
-		else if (!(typentry->rngelemtype->flags & TCFLAGS_HAVE_PG_TYPE_DATA))
-			(void) lookup_type_cache(typentry->rngelemtype->type_id, 0);
-	}
-
-	/*
-	 * If requested, get information about a multirange type
-	 */
-	if ((flags & TYPECACHE_MULTIRANGE_INFO) &&
-		typentry->rngtype == NULL &&
-		typentry->typtype == TYPTYPE_MULTIRANGE)
-	{
-		load_multirangetype_info(typentry);
-	}
-
-	/*
-	 * If requested, get information about a domain type
-	 */
-	if ((flags & TYPECACHE_DOMAIN_BASE_INFO) &&
-		typentry->domainBaseType == InvalidOid &&
-		typentry->typtype == TYPTYPE_DOMAIN)
-	{
-		typentry->domainBaseTypmod = -1;
-		typentry->domainBaseType =
-			getBaseTypeAndTypmod(type_id, &typentry->domainBaseTypmod);
-	}
-	if ((flags & TYPECACHE_DOMAIN_CONSTR_INFO) &&
-		(typentry->flags & TCFLAGS_CHECKED_DOMAIN_CONSTRAINTS) == 0 &&
-		typentry->typtype == TYPTYPE_DOMAIN)
-	{
-		load_domaintype_info(typentry);
-	}
-
-	return typentry;
+  return typentry;
+	// SPANGRES END
 }
 
 /*
@@ -1446,10 +1356,7 @@ DomainHasConstraints(Oid type_id)
  * component datatype(s).
  */
 
-/* SPANGRES BEGIN */
-// Remove 'static' qualifier so we can call this function elsewhere
-bool
-/* SPANGRES END */
+static bool
 array_element_has_equality(TypeCacheEntry *typentry)
 {
 	if (!(typentry->flags & TCFLAGS_CHECKED_ELEM_PROPERTIES))
@@ -1457,10 +1364,7 @@ array_element_has_equality(TypeCacheEntry *typentry)
 	return (typentry->flags & TCFLAGS_HAVE_ELEM_EQUALITY) != 0;
 }
 
-/* SPANGRES BEGIN */
-// Remove 'static' qualifier so we can call this function elsewhere
-bool
-/* SPANGRES END */
+static bool
 array_element_has_compare(TypeCacheEntry *typentry)
 {
 	if (!(typentry->flags & TCFLAGS_CHECKED_ELEM_PROPERTIES))
@@ -1468,10 +1372,7 @@ array_element_has_compare(TypeCacheEntry *typentry)
 	return (typentry->flags & TCFLAGS_HAVE_ELEM_COMPARE) != 0;
 }
 
-/* SPANGRES BEGIN */
-// Remove 'static' qualifier so we can call this function elsewhere
-bool
-/* SPANGRES END */
+static bool
 array_element_has_hashing(TypeCacheEntry *typentry)
 {
 	if (!(typentry->flags & TCFLAGS_CHECKED_ELEM_PROPERTIES))
@@ -1479,10 +1380,7 @@ array_element_has_hashing(TypeCacheEntry *typentry)
 	return (typentry->flags & TCFLAGS_HAVE_ELEM_HASHING) != 0;
 }
 
-/* SPANGRES BEGIN */
-// Remove 'static' qualifier so we can call this function elsewhere
-bool
-/* SPANGRES END */
+static bool
 array_element_has_extended_hashing(TypeCacheEntry *typentry)
 {
 	if (!(typentry->flags & TCFLAGS_CHECKED_ELEM_PROPERTIES))
@@ -1520,10 +1418,7 @@ cache_array_element_properties(TypeCacheEntry *typentry)
  * Likewise, some helper functions for composite types.
  */
 
-/* SPANGRES BEGIN */
-// Remove 'static' qualifier so we can call this function elsewhere
-bool
-/* SPANGRES END */
+static bool
 record_fields_have_equality(TypeCacheEntry *typentry)
 {
 	if (!(typentry->flags & TCFLAGS_CHECKED_FIELD_PROPERTIES))
@@ -1531,10 +1426,7 @@ record_fields_have_equality(TypeCacheEntry *typentry)
 	return (typentry->flags & TCFLAGS_HAVE_FIELD_EQUALITY) != 0;
 }
 
-/* SPANGRES BEGIN */
-// Remove 'static' qualifier so we can call this function elsewhere
-/* SPANGRES END */
-bool
+static bool
 record_fields_have_compare(TypeCacheEntry *typentry)
 {
 	if (!(typentry->flags & TCFLAGS_CHECKED_FIELD_PROPERTIES))
@@ -1663,10 +1555,7 @@ cache_record_field_properties(TypeCacheEntry *typentry)
  * range or multirange type's typcache entry.
  */
 
-/* SPANGRES BEGIN */
-// Remove 'static' qualifier so we can call this function elsewhere
-bool
-/* SPANGRES END */
+static bool
 range_element_has_hashing(TypeCacheEntry *typentry)
 {
 	if (!(typentry->flags & TCFLAGS_CHECKED_ELEM_PROPERTIES))
@@ -1674,10 +1563,7 @@ range_element_has_hashing(TypeCacheEntry *typentry)
 	return (typentry->flags & TCFLAGS_HAVE_ELEM_HASHING) != 0;
 }
 
-/* SPANGRES BEGIN */
-// Remove 'static' qualifier so we can call this function elsewhere
-bool
-/* SPANGRES END */
+static bool
 range_element_has_extended_hashing(TypeCacheEntry *typentry)
 {
 	if (!(typentry->flags & TCFLAGS_CHECKED_ELEM_PROPERTIES))
@@ -1995,87 +1881,15 @@ record_type_typmod_compare(const void *a, const void *b, size_t size)
  * Given a tuple descriptor for a RECORD type, find or create a cache entry
  * for the type, and set the tupdesc's tdtypmod field to a value that will
  * identify this cache entry to lookup_rowtype_tupdesc.
+ *
+ * SPANGRES: This function relies on RecordCacheHash which is not supported yet.
+ * TODO: Implement this function with a storage replacement.
  */
 void
-assign_record_type_typmod_UNUSED_SPANGRES(TupleDesc tupDesc)
+assign_record_type_typmod(TupleDesc tupDesc)
 {
-	RecordCacheEntry *recentry;
-	TupleDesc	entDesc;
-	bool		found;
-	MemoryContext oldcxt;
-
-	Assert(tupDesc->tdtypeid == RECORDOID);
-
-	if (RecordCacheHash == NULL)
-	{
-		/* First time through: initialize the hash table */
-		HASHCTL		ctl;
-
-		ctl.keysize = sizeof(TupleDesc);	/* just the pointer */
-		ctl.entrysize = sizeof(RecordCacheEntry);
-		ctl.hash = record_type_typmod_hash;
-		ctl.match = record_type_typmod_compare;
-		RecordCacheHash = hash_create("Record information cache", 64,
-									  &ctl,
-									  HASH_ELEM | HASH_FUNCTION | HASH_COMPARE);
-
-		/* Also make sure CacheMemoryContext exists */
-		if (!CacheMemoryContext)
-			CreateCacheMemoryContext();
-	}
-
-	/*
-	 * Find a hashtable entry for this tuple descriptor. We don't use
-	 * HASH_ENTER yet, because if it's missing, we need to make sure that all
-	 * the allocations succeed before we create the new entry.
-	 */
-	recentry = (RecordCacheEntry *) hash_search(RecordCacheHash,
-												(void *) &tupDesc,
-												HASH_FIND, &found);
-	if (found && recentry->tupdesc != NULL)
-	{
-		tupDesc->tdtypmod = recentry->tupdesc->tdtypmod;
-		return;
-	}
-
-	/* Not present, so need to manufacture an entry */
-	oldcxt = MemoryContextSwitchTo(CacheMemoryContext);
-
-	/* Look in the SharedRecordTypmodRegistry, if attached */
-	entDesc = find_or_make_matching_shared_tupledesc(tupDesc);
-	if (entDesc == NULL)
-	{
-		/*
-		 * Make sure we have room before we CreateTupleDescCopy() or advance
-		 * NextRecordTypmod.
-		 */
-		ensure_record_cache_typmod_slot_exists(NextRecordTypmod);
-
-		/* Reference-counted local cache only. */
-		entDesc = CreateTupleDescCopy(tupDesc);
-		entDesc->tdrefcount = 1;
-		entDesc->tdtypmod = NextRecordTypmod++;
-	}
-	else
-	{
-		ensure_record_cache_typmod_slot_exists(entDesc->tdtypmod);
-	}
-
-	RecordCacheArray[entDesc->tdtypmod].tupdesc = entDesc;
-
-	/* Assign a unique tupdesc identifier, too. */
-	RecordCacheArray[entDesc->tdtypmod].id = ++tupledesc_id_counter;
-
-	/* Fully initialized; create the hash table entry */
-	recentry = (RecordCacheEntry *) hash_search(RecordCacheHash,
-												(void *) &tupDesc,
-												HASH_ENTER, NULL);
-	recentry->tupdesc = entDesc;
-
-	/* Update the caller's tuple descriptor. */
-	tupDesc->tdtypmod = entDesc->tdtypmod;
-
-	MemoryContextSwitchTo(oldcxt);
+  ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                  errmsg("Record types are not supported.")));
 }
 
 /*

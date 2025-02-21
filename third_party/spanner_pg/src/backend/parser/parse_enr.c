@@ -16,8 +16,6 @@
 
 #include "parser/parse_enr.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 bool
 name_matches_visible_ENR(ParseState *pstate, const char *refname)
 {

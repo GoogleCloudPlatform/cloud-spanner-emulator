@@ -650,7 +650,9 @@ typedef uint32 CommandId;
 struct varlena
 {
 	char		vl_len_[4];		/* Do not touch this field directly! */
-	char		vl_dat[FLEXIBLE_ARRAY_MEMBER];	/* Data content is here */
+	// SPANGRES BEGIN
+	char		vl_dat[];	/* Data content is here */
+	// SPANGRES END
 };
 
 #define VARHDRSZ		((int32) sizeof(int32))
@@ -683,7 +685,9 @@ typedef struct
 	Oid			elemtype;
 	int			dim1;
 	int			lbound1;
-	int16		values[FLEXIBLE_ARRAY_MEMBER];
+	// SPANGRES BEGIN
+	int16		values[];
+	// SPANGRES END
 } int2vector;
 
 typedef struct
@@ -694,7 +698,9 @@ typedef struct
 	Oid			elemtype;
 	int			dim1;
 	int			lbound1;
-	Oid			values[FLEXIBLE_ARRAY_MEMBER];
+	// SPANGRES BEGIN
+	Oid			values[];
+	// SPANGRES END
 } oidvector;
 
 /*

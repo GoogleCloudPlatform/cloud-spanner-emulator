@@ -62,7 +62,6 @@ cc_library(
     ],
     copts = ["-D_GNU_SOURCE"],
     deps = [
-        "//third_party/spanner_pg/shims:catalog_shim_header",
         "//third_party/spanner_pg/src/include",
     ],
     alwayslink = 1,

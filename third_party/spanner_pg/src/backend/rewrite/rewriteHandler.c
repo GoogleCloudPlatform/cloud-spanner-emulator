@@ -46,8 +46,6 @@
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /* We use a list of these to detect recursion in RewriteQuery */
 typedef struct rewrite_event
 {
@@ -138,6 +136,9 @@ static Bitmapset *adjust_view_column_set(Bitmapset *cols, List *targetlist);
  * get_rte_attribute_is_dropped() recurse to detect dropped columns in joins.
  * That approach had horrible performance unfortunately; in particular
  * construction of a nested join was O(N^2) in the nesting depth.)
+ *
+ * SPANGRES: This is a no-op function. Its original version acquire PostgreSQL
+ * locks for future operations, but we don't need such locks for Spangres.
  */
 void
 AcquireRewriteLocks(Query *parsetree,

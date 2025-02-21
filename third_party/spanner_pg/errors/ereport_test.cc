@@ -29,7 +29,7 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include "third_party/spanner_pg/shims/ereport_shim.h"
+#include "third_party/spanner_pg/interface/ereport.h"
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

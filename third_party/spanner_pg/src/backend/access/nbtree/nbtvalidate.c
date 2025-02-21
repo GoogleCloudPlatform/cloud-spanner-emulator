@@ -28,9 +28,6 @@
 #include "utils/regproc.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * Validator for a btree opclass.
  *

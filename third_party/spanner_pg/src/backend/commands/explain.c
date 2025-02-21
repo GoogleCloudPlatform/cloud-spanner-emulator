@@ -40,9 +40,6 @@
 #include "utils/typcache.h"
 #include "utils/xml.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /* Hook for plugins to get control in ExplainOneQuery() */
 ExplainOneQuery_hook_type ExplainOneQuery_hook = NULL;
 

@@ -67,10 +67,12 @@ class Session {
   };
 
   Session(const std::string& session_uri, const Labels& labels,
-          const absl::Time create_time, std::shared_ptr<Database> database)
+          const bool multiplexed, const absl::Time create_time,
+          std::shared_ptr<Database> database)
       : session_uri_(session_uri),
         labels_(labels),
         create_time_(create_time),
+        multiplexed_(multiplexed),
         database_(database) {}
 
   // Returns the URI for this session.
@@ -81,6 +83,8 @@ class Session {
 
   // Returns the time this session was created.
   absl::Time create_time() const { return create_time_; }
+
+  const bool multiplexed() const { return multiplexed_; }
 
   // Return the time this session was last used.
   absl::Time approximate_last_use_time() const ABSL_LOCKS_EXCLUDED(mu_) {
@@ -146,6 +150,9 @@ class Session {
 
   // The time this session was created.
   const absl::Time create_time_;
+
+  // Whether this session is multiplexed.
+  const bool multiplexed_;
 
   // The database to which this session is attached.
   std::shared_ptr<Database> database_;

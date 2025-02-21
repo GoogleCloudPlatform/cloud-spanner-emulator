@@ -70,11 +70,6 @@ absl::StatusOr<zetasql::Value> JsonbArrayElement(
                      std::numeric_limits<int32_t>::max()));
   }
 
-  if (element < 0) {
-    return zetasql::Value::Null(
-        postgres_translator::spangres::datatypes::GetPgJsonbType());
-  }
-
   Datum element_in = Int64GetDatum(element);
   ZETASQL_ASSIGN_OR_RETURN(Datum jsonb_in, JsonbIn(jsonb_string));
 
@@ -115,10 +110,6 @@ absl::StatusOr<zetasql::Value> JsonbTypeof(absl::string_view jsonb_string) {
     return zetasql::Value::NullString();
   }
   ZETASQL_ASSIGN_OR_RETURN(char* result, CheckedPgTextDatumGetCString(type_out));
-
-  if (strncmp(result, "boolean", 7) == 0) {
-    return zetasql::Value::StringValue("bool");
-  }
 
   return zetasql::Value::String(result);
 }

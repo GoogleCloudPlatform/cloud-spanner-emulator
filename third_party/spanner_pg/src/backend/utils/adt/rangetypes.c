@@ -42,9 +42,6 @@
 #include "utils/rangetypes.h"
 #include "utils/timestamp.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /* fn_extra cache entry for one of the range I/O functions */
 typedef struct RangeIOData
 {

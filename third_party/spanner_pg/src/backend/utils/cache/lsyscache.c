@@ -47,8 +47,7 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
 
 /* Hook for plugins to get control in get_attavgwidth() */
 get_attavgwidth_hook_type get_attavgwidth_hook = NULL;
@@ -1946,24 +1945,18 @@ get_rel_namespace(Oid relid)
  *
  * Note: not all pg_class entries have associated pg_type OIDs; so be
  * careful to check for InvalidOid result.
+ *
+ * SPANGRES: We don't maintain a pg_type entry as we don't support row types.
  */
 Oid
-get_rel_type_id_UNUSED_SPANGRES(Oid relid)
+get_rel_type_id(Oid relid)
 {
-	HeapTuple	tp;
-
-	tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-	if (HeapTupleIsValid(tp))
-	{
-		Form_pg_class reltup = (Form_pg_class) GETSTRUCT(tp);
-		Oid			result;
-
-		result = reltup->reltype;
-		ReleaseSysCache(tp);
-		return result;
-	}
-	else
-		return InvalidOid;
+	// TODO: Add support for table row types if desired.
+	const char* table_name = GetTableNameC(relid);
+	ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("Tried to lookup a rowtype id for table %s but this "
+						   "feature is not supported",
+						   table_name ? table_name : "<unknown table>")));
 }
 
 /*

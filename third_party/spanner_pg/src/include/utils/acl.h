@@ -213,7 +213,7 @@ extern bool is_member_of_role(Oid member, Oid role);
 extern bool is_member_of_role_nosuper(Oid member, Oid role);
 extern bool is_admin_of_role(Oid member, Oid role);
 extern void check_is_member_of_role(Oid member, Oid role);
-extern Oid	get_role_oid_UNUSED_SPANGRES(const char *rolename, bool missing_ok);
+extern Oid	get_role_oid(const char *rolename, bool missing_ok);
 extern Oid	get_role_oid_or_public(const char *rolename);
 extern Oid	get_rolespec_oid(const RoleSpec *role, bool missing_ok);
 extern void check_rolespec_name(const RoleSpec *role, const char *detail_msg);

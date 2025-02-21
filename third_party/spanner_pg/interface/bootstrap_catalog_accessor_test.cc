@@ -33,6 +33,7 @@
 
 #include "net/proto2/contrib/parse_proto/parse_text_proto.h"
 #include "absl/status/status.h"
+#include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -212,10 +213,11 @@ INSTANTIATE_TEST_SUITE_P(
     R"pb(
       oid: 16
       typname: "bool"
-      typlen: 1,
-      typbyval: true,
-      typtype: "b",
-      typcategory: "B",
+      typnamespace: 11
+      typlen: 1
+      typbyval: true
+      typtype: "b"
+      typcategory: "B"
       typispreferred: true
       typisdefined: true
       typdelim: ","
@@ -225,6 +227,7 @@ INSTANTIATE_TEST_SUITE_P(
     R"pb(
       oid: 1000
       typname: "_bool"
+      typnamespace: 11
       typlen: -1
       typbyval: false
       typtype: "b"

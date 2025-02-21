@@ -31,8 +31,6 @@
 #include "utils/selfuncs.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 static double calc_multirangesel(TypeCacheEntry *typcache,
 								 VariableStatData *vardata,
 								 const MultirangeType *constval, Oid operator);

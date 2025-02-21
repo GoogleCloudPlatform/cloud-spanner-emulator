@@ -34,8 +34,6 @@
 #include "utils/pg_lsn.h"
 #include "utils/tuplestore.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 PG_MODULE_MAGIC;
 
 void		_PG_init(void);

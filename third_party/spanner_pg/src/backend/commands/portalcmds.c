@@ -34,9 +34,6 @@
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * PerformCursorOpen
  *		Execute SQL DECLARE CURSOR command.

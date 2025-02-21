@@ -98,7 +98,6 @@
 
 // SPANGRES BEGIN
 #include "common/int.h"
-#include "third_party/spanner_pg/shims/pg_locale_shim.h"
 // SPANGRES END
 
 /* ----------

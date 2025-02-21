@@ -77,8 +77,6 @@
 #include "utils/typcache.h"
 #include "utils/xml.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Use computed-goto-based opcode dispatch when computed gotos are available.
  * But use a separate symbol so that it's easy to adjust locally in this file

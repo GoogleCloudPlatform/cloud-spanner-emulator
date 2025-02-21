@@ -31,6 +31,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/query/analyzer_options.h"
@@ -43,6 +44,7 @@
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
 
 namespace google {
@@ -53,6 +55,7 @@ namespace {
 
 using postgres_translator::spangres::datatypes::GetPgJsonbType;
 using postgres_translator::spangres::datatypes::GetPgNumericType;
+using postgres_translator::spangres::datatypes::GetPgOidType;
 using ::testing::Contains;
 using ::testing::Property;
 using ::zetasql_base::testing::StatusIs;
@@ -571,7 +574,7 @@ TEST_F(CatalogTest, CatalogGettersWithUDFs) {
   EXPECT_EQ(t1->FullName(), "t1");
 };
 
-TEST_F(CatalogTest, GetPGNumericAndPGJsonbType) {
+TEST_F(CatalogTest, GetExtendedTypes) {
   MakeCatalog(
       {
           R"(
@@ -593,6 +596,10 @@ TEST_F(CatalogTest, GetPGNumericAndPGJsonbType) {
   const zetasql::Type* pg_jsonb_type;
   ZETASQL_ASSERT_OK(catalog().FindType({"PG", "JSONB"}, &pg_jsonb_type));
   EXPECT_EQ(pg_jsonb_type, GetPgJsonbType());
+
+  const zetasql::Type* pg_oid_type;
+  ZETASQL_ASSERT_OK(catalog().FindType({"pg", "oid"}, &pg_oid_type));
+  EXPECT_EQ(pg_oid_type, GetPgOidType());
 
   const zetasql::Type* empty_type;
   EXPECT_THAT(catalog().FindType({"UNKNOWN"}, &empty_type),

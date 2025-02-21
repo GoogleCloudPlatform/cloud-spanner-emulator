@@ -21,7 +21,6 @@
 
 #include "nodes/parsenodes.h"
 #include "parser/scanner.h"
-#include "third_party/spanner_pg/shims/parser_shim.h"
 
 /*
  * NB: include gram.h only AFTER including scanner.h, because scanner.h

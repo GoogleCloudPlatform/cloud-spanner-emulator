@@ -66,9 +66,7 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
-
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
 
 /* non-export function prototypes */
 static bool CompareOpclassOptions(Datum *opts1, Datum *opts2, int natts);
@@ -2209,6 +2207,8 @@ ResolveOpClass(List *opclass, Oid attrType,
  *
  * Given the OIDs of a datatype and an access method, find the default
  * operator class, if any.  Returns InvalidOid if there is none.
+ *
+ * SPANGRES: Uses bootstrap catalog instead of a heap scan.
  */
 Oid
 GetDefaultOpClass(Oid type_id, Oid am_id)

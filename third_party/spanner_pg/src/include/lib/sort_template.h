@@ -298,11 +298,12 @@ loop:
 	DO_CHECK_FOR_INTERRUPTS();
 	if (n < 7)
 	{
-		for (pm = a + ST_POINTER_STEP; pm < a + n * ST_POINTER_STEP;
-			 pm += ST_POINTER_STEP)
-			for (pl = pm; pl > a && DO_COMPARE(pl - ST_POINTER_STEP, pl) > 0;
-				 pl -= ST_POINTER_STEP)
-				DO_SWAP(pl, pl - ST_POINTER_STEP);
+		if(n > 0)  /* SPECKLE_POSTGRES: ubsan pointer-overflow */
+			for (pm = a + ST_POINTER_STEP; pm < a + n * ST_POINTER_STEP;
+				pm += ST_POINTER_STEP)
+				for (pl = pm; pl > a && DO_COMPARE(pl - ST_POINTER_STEP, pl) > 0;
+					pl -= ST_POINTER_STEP)
+					DO_SWAP(pl, pl - ST_POINTER_STEP);
 		return;
 	}
 	presorted = 1;

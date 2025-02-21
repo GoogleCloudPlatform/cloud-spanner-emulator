@@ -276,7 +276,6 @@ SpangresSystemCatalog::GetPgNumericCastFunction(
 
 bool SpangresSystemCatalog::IsTransformationRequiredForComparison(
     const zetasql::ResolvedExpr& gsql_expr) {
-
   // Transformation is required for expressions of type double and float as
   // Postgres' comparison semantics for double and float differ from Spanner
   // native double comparison semantics.
@@ -351,7 +350,6 @@ SpangresSystemCatalog::GetOriginalExprFromComparisonExpr(
 
 std::optional<Oid> SpangresSystemCatalog::GetMappedOidForComparisonFuncid(
     Oid funcid) const {
-
   const auto it = kComparisonOidMap.find(funcid);
   if (it != kComparisonOidMap.end()) {
     return it->second;
@@ -573,7 +571,6 @@ absl::Status SpangresSystemCatalog::AddFunctions(
   AddArrayAtFunctions(expr_functions);
   AddArraySliceFunctions(expr_functions);
   AddMakeArrayFunctions(expr_functions);
-
   AddPgLeastGreatestFunctions(expr_functions);
 
   // Add each expression type to the catalog.

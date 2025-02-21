@@ -63,10 +63,8 @@ TEST_F(JsonbArrayElementTest, ReturnsJsonbValue) {
               IsOkAndHolds(*CreatePgJsonbValue(R"("string val")")));
   EXPECT_THAT(JsonbArrayElement(R"([null, "string val"])", 2),
               IsOkAndHolds(CreatePgJsonbNullValue()));
-
-  zetasql::Value result = CreatePgJsonbNullValue();
   EXPECT_THAT(JsonbArrayElement(R"([null, "string val"])", -1),
-              IsOkAndHolds(result));
+              IsOkAndHolds(*CreatePgJsonbValue(R"("string val")")));
 
   EXPECT_THAT(JsonbArrayElement(R"({"a": "string val"})", 0),
               IsOkAndHolds(CreatePgJsonbNullValue()));

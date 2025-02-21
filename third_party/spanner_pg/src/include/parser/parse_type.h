@@ -56,8 +56,9 @@ extern void parseTypeString(const char *str, Oid *typeid_p, int32 *typmod_p, boo
 
 /* SPANGRES BEGIN */
 // NOTE: typeidTypeRelid has no declaration in this header. Since this
-// is a macro, only callsites need include the declaration (in catalog_shim.h).
-// Currently that's 3 places: parse_coerce.c, parse_expr.c, and parse_func.c.
+// is a macro, only call sites need include the declaration.
+// Currently that's 4 places: analyze.c, parse_coerce.c, parse_expr.c, and
+// parse_func.c.
 // Those all include the declaration already. Future call sites would also need
 // catalog_shim.h for this expansion to be compile.
 #define ISCOMPLEX(typeid) (typeOrDomainTypeRelid(typeid) != InvalidOid)

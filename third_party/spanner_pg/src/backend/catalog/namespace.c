@@ -59,9 +59,7 @@
 #include "utils/syscache.h"
 #include "utils/varlena.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
-
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
 
 /*
  * The namespace search path is a possibly-empty list of namespace OIDs.
@@ -1204,12 +1202,20 @@ FuncnameGetCandidates(List *names, int nargs, List *argnames,
 		 * masked by an earlier result, but really that's a pretty infrequent
 		 * case so it's not worth worrying about.
 		 */
-		// SPANGRES BEGIN
 		int effective_nargs = Max(pronargs, nargs);
 		FuncCandidateList newResult = (FuncCandidateList)
 			palloc(offsetof(struct _FuncCandidateList, args) +
 				   effective_nargs * sizeof(Oid));
+		// SPANGRES BEGIN
 		newResult->pathpos = 0;	// Search path is not supported.
+		// Get the argument types that are missing from the proc form.
+		Oid *p_argtypes = NULL;
+		char **p_argnames = NULL;
+		char *p_argmodes = NULL;
+		GetFunctionArgInfo(
+			procform->oid, &p_argtypes, &p_argnames, &p_argmodes);
+		if (p_argnames != NULL) pfree(p_argnames);
+		if (p_argmodes != NULL) pfree(p_argmodes);
 		// SPANGRES END
 		newResult->oid = procform->oid;
 		newResult->nominalnargs = pronargs;
@@ -1222,13 +1228,13 @@ FuncnameGetCandidates(List *names, int nargs, List *argnames,
 
 			for (i = 0; i < pronargs; i++)
 				// SPANGRES BEGIN
-				newResult->args[i] = procform->proargtypes.values[argnumbers[i]];
+				newResult->args[i] = p_argtypes[argnumbers[i]];
 				// SPANGRES END
 		}
 		else
 		{
 			// SPANGRES BEGIN
-			memcpy(newResult->args, procform->proargtypes.values,
+			memcpy(newResult->args, p_argtypes,
 						pronargs * sizeof(Oid));
 			// SPANGRES END
 		}
@@ -1560,7 +1566,17 @@ FunctionIsVisible(Oid funcid)
 
 		for (; clist; clist = clist->next)
 		{
-			if (memcmp(clist->args, procform->proargtypes.values,
+			// SPANGRES BEGIN
+			// Get the argument types that are missing from the proc form.
+			Oid *p_argtypes = NULL;
+			char **p_argnames = NULL;
+			char *p_argmodes = NULL;
+			GetFunctionArgInfo(
+				procform->oid, &p_argtypes, &p_argnames, &p_argmodes);
+			if (p_argnames != NULL) pfree(p_argnames);
+			if (p_argmodes != NULL) pfree(p_argmodes);
+			// SPANGRES END
+			if (memcmp(clist->args, p_argtypes,
 					   nargs * sizeof(Oid)) == 0)
 			{
 				/* Found the expected entry; is it the right proc? */

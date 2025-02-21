@@ -38,8 +38,6 @@
 #include "statistics/extended_stats_internal.h"
 #include "statistics/statistics.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 static double ndistinct_for_combination(double totalrows, StatsBuildData *data,
 										int k, int *combination);
 static double estimate_ndistinct(double totalrows, int numrows, int d, int f1);

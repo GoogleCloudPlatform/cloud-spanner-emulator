@@ -41,8 +41,6 @@
 #include "utils/rel.h"
 #include "utils/rls.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  *	 DoCopy executes the SQL COPY statement
  *

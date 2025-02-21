@@ -32,9 +32,6 @@
 #include "utils/memutils.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /* static function decls */
 static void init_sexpr(Oid foid, Oid input_collation, Expr *node,
 					   SetExprState *sexpr, PlanState *parent,

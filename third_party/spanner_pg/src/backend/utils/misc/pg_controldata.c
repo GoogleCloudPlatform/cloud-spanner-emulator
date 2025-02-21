@@ -29,8 +29,6 @@
 #include "utils/pg_lsn.h"
 #include "utils/timestamp.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 Datum
 pg_control_system(PG_FUNCTION_ARGS)
 {

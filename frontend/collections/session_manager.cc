@@ -27,6 +27,7 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "common/errors.h"
+#include "frontend/common/labels.h"
 #include "frontend/common/uris.h"
 #include "frontend/entities/database.h"
 #include "frontend/entities/session.h"
@@ -37,13 +38,14 @@ namespace emulator {
 namespace frontend {
 
 absl::StatusOr<std::shared_ptr<Session>> SessionManager::CreateSession(
-    const Labels& labels, std::shared_ptr<Database> database) {
+    const Labels& labels, const bool multiplexed,
+    std::shared_ptr<Database> database) {
   absl::MutexLock lock(&mu_);
   const std::string session_id = absl::StrCat(next_session_id_++);
   std::string session_uri =
       MakeSessionUri(database->database_uri(), session_id);
   std::shared_ptr<Session> session =
-      std::make_shared<Session>(session_uri, labels,
+      std::make_shared<Session>(session_uri, labels, multiplexed,
                                 /* create_time = */ clock_->Now(), database);
   session->set_approximate_last_use_time(clock_->Now());
 
@@ -59,8 +61,11 @@ absl::StatusOr<std::shared_ptr<Session>> SessionManager::GetSession(
     return error::SessionNotFound(session_uri);
   }
   std::shared_ptr<Session> session = itr->second;
-  if (clock_->Now() - session->approximate_last_use_time() > absl::Hours(1)) {
-    // Delete inactive sessions after 1 hour.
+  absl::Duration expiration_duration =
+      session->multiplexed() ? absl::Hours(28 * 24) : absl::Hours(1);
+  if (clock_->Now() - session->approximate_last_use_time() >
+      expiration_duration) {
+    // Delete inactive sessions after expiration duration.
     session_map_.erase(session_uri);
     return error::SessionNotFound(session_uri);
   }
@@ -76,7 +81,13 @@ SessionManager::ListSessions(const std::string& database_uri) const {
   for (auto itr = session_map_.lower_bound(session_uri_prefix);
        itr != session_map_.end(); ++itr) {
     if (absl::StartsWith(itr->first, session_uri_prefix)) {
-      sessions.push_back(itr->second);
+      std::shared_ptr<Session> session = itr->second;
+      absl::Duration expiration_duration =
+          session->multiplexed() ? absl::Hours(28 * 24) : absl::Hours(1);
+      if (clock_->Now() - session->approximate_last_use_time() <=
+          expiration_duration) {
+        sessions.push_back(session);
+      }
     } else {
       return sessions;
     }

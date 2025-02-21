@@ -39,8 +39,6 @@
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Defines for CommitTs page sizes.  A page is the same BLCKSZ as is used
  * everywhere else in Postgres.

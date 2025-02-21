@@ -29,8 +29,6 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 typedef struct JsonbInState
 {
 	JsonbParseState *parseState;

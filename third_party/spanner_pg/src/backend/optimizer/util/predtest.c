@@ -28,9 +28,6 @@
 #include "utils/lsyscache.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * Proof attempts involving large arrays in ScalarArrayOpExpr nodes are
  * likely to require O(N^2) time, and more often than not fail anyway.

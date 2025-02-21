@@ -32,8 +32,6 @@
 #include "third_party/spanner_pg/postgres_includes/deparser.h"
 
 #include "third_party/spanner_pg/postgres_includes/all.h"
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 
 extern "C" {
 void get_query_def(Query* query, StringInfo buf, List* parentnamespace,

@@ -36,8 +36,6 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /* size of the struct header fields (magic, type, ndeps) */
 #define SizeOfHeader		(3 * sizeof(uint32))
 

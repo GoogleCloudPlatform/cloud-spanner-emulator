@@ -26,14 +26,11 @@
 #include "executor/nodeTableFuncscan.h"
 #include "executor/tablefunc.h"
 #include "miscadmin.h"
-
 #include "nodes/execnodes.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/xml.h"
-
-#include "third_party/spanner_pg/shims/catalog_shim.h"
 
 static TupleTableSlot *TableFuncNext(TableFuncScanState *node);
 static bool TableFuncRecheck(TableFuncScanState *node, TupleTableSlot *slot);

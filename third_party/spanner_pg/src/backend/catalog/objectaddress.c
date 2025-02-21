@@ -90,8 +90,6 @@
 #include "utils/regproc.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * ObjectProperty
  *
@@ -2313,6 +2311,7 @@ pg_get_object_address(PG_FUNCTION_ARGS)
 		case OBJECT_OPCLASS:
 		case OBJECT_OPFAMILY:
     case OBJECT_CHANGE_STREAM:
+
 			objnode = (Node *) name;
 			break;
 		case OBJECT_ACCESS_METHOD:

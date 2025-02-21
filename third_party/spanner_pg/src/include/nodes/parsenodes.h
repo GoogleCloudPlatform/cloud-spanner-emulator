@@ -2083,7 +2083,7 @@ typedef struct ReplicaIdentityStmt
 	char	   *name;
 } ReplicaIdentityStmt;
 
-typedef struct AlterTableCmd_UNUSED_SPANGRES	/* one subcommand of an ALTER TABLE */
+typedef struct AlterTableCmd /* one subcommand of an ALTER TABLE */
 {
 	NodeTag		type;
 	AlterTableType subtype;		/* Type of table alteration to apply */
@@ -2097,7 +2097,13 @@ typedef struct AlterTableCmd_UNUSED_SPANGRES	/* one subcommand of an ALTER TABLE
 	DropBehavior behavior;		/* RESTRICT or CASCADE for DROP cases */
 	bool		missing_ok;		/* skip error if missing? */
 	bool		recurse;		/* exec-time recursion */
-} AlterTableCmd_UNUSED_SPANGRES;
+
+	// SPANGRES BEGIN
+  char *raw_expr_string;  // `raw_expr` in its SQL text representation
+                          // used for the constraints with expression
+                          // when altering a column of a table via SET DEFAULT.
+	// SPANGRES END
+} AlterTableCmd;
 
 
 /* ----------------------
@@ -2388,7 +2394,7 @@ typedef enum ConstrType			/* types of constraints */
 #define FKCONSTR_MATCH_PARTIAL		'p'
 #define FKCONSTR_MATCH_SIMPLE		's'
 
-typedef struct Constraint_UNUSED_SPANGRES
+typedef struct Constraint
 {
 	NodeTag		type;
 	ConstrType	contype;		/* see above */
@@ -2440,7 +2446,16 @@ typedef struct Constraint_UNUSED_SPANGRES
 	/* Fields used for constraints that allow a NOT VALID specification */
 	bool		skip_validation;	/* skip validation of existing rows? */
 	bool		initially_valid;	/* mark the new constraint as valid? */
-} Constraint_UNUSED_SPANGRES;
+
+	// SPANGRES BEGIN
+  GeneratedColStoreOpt stored_kind;     /* STORED or VIRTUAL */
+  char *constraint_expr_string;  // `raw_expr` in its SQL text representation
+                                 // used for the constraints with expression
+                                 // (CHECK, GENERATED and DEFAULT)
+
+  int vector_length; /* Vector length */
+	// SPANGRES END
+} Constraint;
 
 /* ----------------------
  *		Synonym
@@ -3436,7 +3451,7 @@ typedef enum ViewCheckOption
 	CASCADED_CHECK_OPTION
 } ViewCheckOption;
 
-typedef struct ViewStmt_UNUSED_SPANGRES
+typedef struct ViewStmt
 {
 	NodeTag		type;
 	RangeVar   *view;			/* the view to be created */
@@ -3445,7 +3460,13 @@ typedef struct ViewStmt_UNUSED_SPANGRES
 	bool		replace;		/* replace an existing view? */
 	List	   *options;		/* options from WITH clause */
 	ViewCheckOption withCheckOption;	/* WITH CHECK OPTION */
-} ViewStmt_UNUSED_SPANGRES;
+  // SPANGRES BEGIN
+  bool is_definer;    /* is security type DEFINER or INVOKER */
+  char* query_string;  // sql string of the query field, it is set in gram.y by
+                       // using token location information and extracted from
+                       // the whole <CREATE VIEW> string.
+	// SPANGRES END
+} ViewStmt;
 
 /* ----------------------
  *		Load Statement
@@ -3919,5 +3940,45 @@ typedef struct DropSubscriptionStmt
 	bool		missing_ok;		/* Skip error if missing? */
 	DropBehavior behavior;		/* RESTRICT or CASCADE behavior */
 } DropSubscriptionStmt;
+
+// SPANGRES BEGIN
+/* ----------------------
+ *		ChangeStreams
+ * ----------------------
+*/
+typedef struct CreateChangeStreamStmt {
+  NodeTag type;
+  RangeVar *change_stream_name; /* Name of the change stream */
+  List *opt_options;            /* Optional list of DefElem nodes */
+  List *opt_for_tables;         /* Optional list of ChangeStreamTrackedTable */
+  bool for_all; /* Whether change stream tracks all tables in database */
+} CreateChangeStreamStmt;
+
+typedef struct AlterChangeStreamStmt {
+  NodeTag type;
+  RangeVar *change_stream_name; /* Name of the change stream */
+
+  /* parameters used for ALTER CHANGE STREAM ... WITH */
+  List *opt_options; /* List of DefElem nodes */
+
+  /* parameters used for ALTER CHANGE STREAM ... ADD/DROP TABLE */
+  List *opt_for_tables;      /* List of ChangeStreamTrackedTable to set */
+  List *opt_drop_for_tables; /* List of ChangeStreamTrackedTable to drop */
+  bool for_all;
+  bool drop_for_all;
+
+  /* parameters used for ALTER CHANGE STREAM ... RESET */
+  List *opt_reset_options; /* Special change stream to drop all tables in
+                              db */
+} AlterChangeStreamStmt;
+
+typedef struct ChangeStreamTrackedTable {
+  NodeTag type;
+  RangeVar *table_name; /* Name of the tracked table */
+  List *columns;        /* Name of the tracked columns */
+  bool for_all_columns; /* Whether all columns in table are tracked */
+} ChangeStreamTrackedTable;
+
+// SPANGRES END
 
 #endif							/* PARSENODES_H */

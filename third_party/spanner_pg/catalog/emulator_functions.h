@@ -138,8 +138,7 @@ inline constexpr char kPGCastToNumericFunctionName[] = "pg.cast_to_numeric";
 inline constexpr char kPGCastNumericToDoubleFunctionName[] =
     "pg.cast_to_double";
 inline constexpr char kPGCastNumericToFloatFunctionName[] = "pg.cast_to_float";
-inline constexpr char kPGCastNumericToStringFunctionName[] =
-    "pg.cast_to_string";
+inline constexpr char kPGCastToStringFunctionName[] = "pg.cast_to_string";
 inline constexpr char kPGCastNumericToInt64FunctionName[] = "pg.cast_to_int64";
 
 // PG NUMERIC operators.
@@ -200,6 +199,7 @@ absl::StatusOr<zetasql::Value> EvalCastOidToInt64(
 
 absl::StatusOr<zetasql::Value> EvalCastOidToString(
     absl::Span<const zetasql::Value> args);
+
 }  // namespace postgres_translator
 
 #endif  // CATALOG_EMULATOR_FUNCTIONS_H_

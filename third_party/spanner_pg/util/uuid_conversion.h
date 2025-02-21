@@ -44,5 +44,5 @@ absl::StatusOr<Const*> UuidStringToPgConst(absl::string_view uuid_string);
 
 // Converts a PG Const to a human-readable UUID string using PG uuid_out
 // function.
-absl::StatusOr<absl::string_view> PgConstToUuidString(Const* pg_const);
+absl::StatusOr<absl::string_view> PgConstToUuidString(const Const* pg_const);
 #endif  // UTIL_UUID_CONVERSION_H_

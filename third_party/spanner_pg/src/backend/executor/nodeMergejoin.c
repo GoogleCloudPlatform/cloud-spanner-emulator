@@ -99,9 +99,6 @@
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * States of the ExecMergeJoin state machine
  */

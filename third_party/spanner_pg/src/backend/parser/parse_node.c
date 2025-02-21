@@ -30,8 +30,7 @@
 #include "utils/syscache.h"
 #include "utils/varbit.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
 
 static void pcb_error_callback(void *arg);
 

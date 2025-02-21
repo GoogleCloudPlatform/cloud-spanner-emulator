@@ -36,9 +36,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 static void RelationBuildPartitionKey(Relation relation);
 static List *generate_partition_qual(Relation rel);
 

@@ -51,7 +51,6 @@
 #include "optimizer/optimizer.h"
 #include "parser/parse_agg.h"
 #include "parser/parse_func.h"
-#include "parser/parse_node.h"
 #include "parser/parse_oper.h"
 #include "parser/parse_relation.h"
 #include "parser/parser.h"
@@ -74,7 +73,8 @@
 #include "utils/varlena.h"
 #include "utils/xml.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
+#include "third_party/spanner_pg/util/nodetag_to_string.h"
 
 /* ----------
 
@@ -83,7 +83,7 @@
  */
 
 /* SPANGRES BEGIN */
-// These flags are redefined in catalog_shim.h
+// These flags are redefined in ruleutils.h
 
  /* Indent counts */
 #define PRETTYINDENT_STD               POSTGRES_PRETTYINDENT_STD
@@ -122,188 +122,11 @@
  * ----------
  */
 
-/* Context info needed for invoking a recursive querytree display routine */
-typedef struct
-{
-	StringInfo	buf;			/* output buffer to append to */
-	List	   *namespaces;		/* List of deparse_namespace nodes */
-	List	   *windowClause;	/* Current query level's WINDOW clause */
-	List	   *windowTList;	/* targetlist for resolving WINDOW clause */
-	int			prettyFlags;	/* enabling of pretty-print functions */
-	int			wrapColumn;		/* max line length, or -1 for no limit */
-	int			indentLevel;	/* current indent level for pretty-print */
-	bool		varprefix;		/* true to print prefixes on Vars */
-	ParseExprKind special_exprkind; /* set only for exprkinds needing special
-									 * handling */
-	Bitmapset  *appendparents;	/* if not null, map child Vars of these relids
-								 * back to the parent rel */
-} deparse_context_UNUSED_SPANGRES;
-
-/*
- * Each level of query context around a subtree needs a level of Var namespace.
- * A Var having varlevelsup=N refers to the N'th item (counting from 0) in
- * the current context's namespaces list.
- *
- * rtable is the list of actual RTEs from the Query or PlannedStmt.
- * rtable_names holds the alias name to be used for each RTE (either a C
- * string, or NULL for nameless RTEs such as unnamed joins).
- * rtable_columns holds the column alias names to be used for each RTE.
- *
- * subplans is a list of Plan trees for SubPlans and CTEs (it's only used
- * in the PlannedStmt case).
- * ctes is a list of CommonTableExpr nodes (only used in the Query case).
- * appendrels, if not null (it's only used in the PlannedStmt case), is an
- * array of AppendRelInfo nodes, indexed by child relid.  We use that to map
- * child-table Vars to their inheritance parents.
- *
- * In some cases we need to make names of merged JOIN USING columns unique
- * across the whole query, not only per-RTE.  If so, unique_using is true
- * and using_names is a list of C strings representing names already assigned
- * to USING columns.
- *
- * When deparsing plan trees, there is always just a single item in the
- * deparse_namespace list (since a plan tree never contains Vars with
- * varlevelsup > 0).  We store the Plan node that is the immediate
- * parent of the expression to be deparsed, as well as a list of that
- * Plan's ancestors.  In addition, we store its outer and inner subplan nodes,
- * as well as their targetlists, and the index tlist if the current plan node
- * might contain INDEX_VAR Vars.  (These fields could be derived on-the-fly
- * from the current Plan node, but it seems notationally clearer to set them
- * up as separate fields.)
- */
-typedef struct
-{
-	List	   *rtable;			/* List of RangeTblEntry nodes */
-	List	   *rtable_names;	/* Parallel list of names for RTEs */
-	List	   *rtable_columns; /* Parallel list of deparse_columns structs */
-	List	   *subplans;		/* List of Plan trees for SubPlans */
-	List	   *ctes;			/* List of CommonTableExpr nodes */
-	AppendRelInfo **appendrels; /* Array of AppendRelInfo nodes, or NULL */
-	/* Workspace for column alias assignment: */
-	bool		unique_using;	/* Are we making USING names globally unique */
-	List	   *using_names;	/* List of assigned names for USING columns */
-	/* Remaining fields are used only when deparsing a Plan tree: */
-	Plan	   *plan;			/* immediate parent of current expression */
-	List	   *ancestors;		/* ancestors of plan */
-	Plan	   *outer_plan;		/* outer subnode, or NULL if none */
-	Plan	   *inner_plan;		/* inner subnode, or NULL if none */
-	List	   *outer_tlist;	/* referent for OUTER_VAR Vars */
-	List	   *inner_tlist;	/* referent for INNER_VAR Vars */
-	List	   *index_tlist;	/* referent for INDEX_VAR Vars */
-	/* Special namespace representing a function signature: */
-	char	   *funcname;
-	int			numargs;
-	char	  **argnames;
-} deparse_namespace_UNUSED_SPANGRES;
-
-/*
- * Per-relation data about column alias names.
- *
- * Selecting aliases is unreasonably complicated because of the need to dump
- * rules/views whose underlying tables may have had columns added, deleted, or
- * renamed since the query was parsed.  We must nonetheless print the rule/view
- * in a form that can be reloaded and will produce the same results as before.
- *
- * For each RTE used in the query, we must assign column aliases that are
- * unique within that RTE.  SQL does not require this of the original query,
- * but due to factors such as *-expansion we need to be able to uniquely
- * reference every column in a decompiled query.  As long as we qualify all
- * column references, per-RTE uniqueness is sufficient for that.
- *
- * However, we can't ensure per-column name uniqueness for unnamed join RTEs,
- * since they just inherit column names from their input RTEs, and we can't
- * rename the columns at the join level.  Most of the time this isn't an issue
- * because we don't need to reference the join's output columns as such; we
- * can reference the input columns instead.  That approach can fail for merged
- * JOIN USING columns, however, so when we have one of those in an unnamed
- * join, we have to make that column's alias globally unique across the whole
- * query to ensure it can be referenced unambiguously.
- *
- * Another problem is that a JOIN USING clause requires the columns to be
- * merged to have the same aliases in both input RTEs, and that no other
- * columns in those RTEs or their children conflict with the USING names.
- * To handle that, we do USING-column alias assignment in a recursive
- * traversal of the query's jointree.  When descending through a JOIN with
- * USING, we preassign the USING column names to the child columns, overriding
- * other rules for column alias assignment.  We also mark each RTE with a list
- * of all USING column names selected for joins containing that RTE, so that
- * when we assign other columns' aliases later, we can avoid conflicts.
- *
- * Another problem is that if a JOIN's input tables have had columns added or
- * deleted since the query was parsed, we must generate a column alias list
- * for the join that matches the current set of input columns --- otherwise, a
- * change in the number of columns in the left input would throw off matching
- * of aliases to columns of the right input.  Thus, positions in the printable
- * column alias list are not necessarily one-for-one with varattnos of the
- * JOIN, so we need a separate new_colnames[] array for printing purposes.
- */
-typedef struct
-{
-	/*
-	 * colnames is an array containing column aliases to use for columns that
-	 * existed when the query was parsed.  Dropped columns have NULL entries.
-	 * This array can be directly indexed by varattno to get a Var's name.
-	 *
-	 * Non-NULL entries are guaranteed unique within the RTE, *except* when
-	 * this is for an unnamed JOIN RTE.  In that case we merely copy up names
-	 * from the two input RTEs.
-	 *
-	 * During the recursive descent in set_using_names(), forcible assignment
-	 * of a child RTE's column name is represented by pre-setting that element
-	 * of the child's colnames array.  So at that stage, NULL entries in this
-	 * array just mean that no name has been preassigned, not necessarily that
-	 * the column is dropped.
-	 */
-	int			num_cols;		/* length of colnames[] array */
-	char	  **colnames;		/* array of C strings and NULLs */
-
-	/*
-	 * new_colnames is an array containing column aliases to use for columns
-	 * that would exist if the query was re-parsed against the current
-	 * definitions of its base tables.  This is what to print as the column
-	 * alias list for the RTE.  This array does not include dropped columns,
-	 * but it will include columns added since original parsing.  Indexes in
-	 * it therefore have little to do with current varattno values.  As above,
-	 * entries are unique unless this is for an unnamed JOIN RTE.  (In such an
-	 * RTE, we never actually print this array, but we must compute it anyway
-	 * for possible use in computing column names of upper joins.) The
-	 * parallel array is_new_col marks which of these columns are new since
-	 * original parsing.  Entries with is_new_col false must match the
-	 * non-NULL colnames entries one-for-one.
-	 */
-	int			num_new_cols;	/* length of new_colnames[] array */
-	char	  **new_colnames;	/* array of C strings */
-	bool	   *is_new_col;		/* array of bool flags */
-
-	/* This flag tells whether we should actually print a column alias list */
-	bool		printaliases;
-
-	/* This list has all names used as USING names in joins above this RTE */
-	List	   *parentUsing;	/* names assigned to parent merged columns */
-
-	/*
-	 * If this struct is for a JOIN RTE, we fill these fields during the
-	 * set_using_names() pass to describe its relationship to its child RTEs.
-	 *
-	 * leftattnos and rightattnos are arrays with one entry per existing
-	 * output column of the join (hence, indexable by join varattno).  For a
-	 * simple reference to a column of the left child, leftattnos[i] is the
-	 * child RTE's attno and rightattnos[i] is zero; and conversely for a
-	 * column of the right child.  But for merged columns produced by JOIN
-	 * USING/NATURAL JOIN, both leftattnos[i] and rightattnos[i] are nonzero.
-	 * Note that a simple reference might be to a child RTE column that's been
-	 * dropped; but that's OK since the column could not be used in the query.
-	 *
-	 * If it's a JOIN USING, usingNames holds the alias names selected for the
-	 * merged columns (these might be different from the original USING list,
-	 * if we had to modify names to achieve uniqueness).
-	 */
-	int			leftrti;		/* rangetable index of left child */
-	int			rightrti;		/* rangetable index of right child */
-	int		   *leftattnos;		/* left-child varattnos of join cols, or 0 */
-	int		   *rightattnos;	/* right-child varattnos of join cols, or 0 */
-	List	   *usingNames;		/* names assigned to merged columns */
-} deparse_columns_UNUSED_SPANGRES;
+// SPANGRES BEGIN
+// Moved deparse_context to header file
+// Moved deparse_namespace to header file
+// Moved deparse_columns to header file
+// SPANGRES END
 
 /* This macro is analogous to rt_fetch(), but for deparse_columns structs */
 #define deparse_columns_fetch(rangetable_index, dpns) \
@@ -374,7 +197,7 @@ static void print_function_sqlbody(StringInfo buf, HeapTuple proctup);
 static void set_rtable_names(deparse_namespace *dpns, List *parent_namespaces,
 							 Bitmapset *rels_used);
 // SPANGRES BEGIN
-// We've made this function non-static to call it from deparser
+// We've made this function non-static to call it from deparser.
 void set_deparse_for_query(deparse_namespace *dpns, Query *query,
 								  List *parent_namespaces);
 // SPANGRES END
@@ -382,19 +205,19 @@ static void set_simple_column_names(deparse_namespace *dpns);
 static bool has_dangerous_join_using(deparse_namespace *dpns, Node *jtnode);
 static void set_using_names(deparse_namespace *dpns, Node *jtnode,
 							List *parentUsing);
-static void set_relation_column_names_UNUSED_SPANGRES(deparse_namespace *dpns,
+// SPANGRES BEGIN
+// Visible for testing
+void set_relation_column_names(deparse_namespace *dpns,
 									  RangeTblEntry *rte,
 									  deparse_columns *colinfo);
+// SPANGRES END
 static void set_join_column_names(deparse_namespace *dpns, RangeTblEntry *rte,
 								  deparse_columns *colinfo);
 static bool colname_is_unique(const char *colname, deparse_namespace *dpns,
 				  deparse_columns *colinfo);
-// SPANGRES BEGIN
-// We've made these functions non-static to call them from catalog_shim.
-char *make_colname_unique(char *colname, deparse_namespace *dpns,
+static char *make_colname_unique(char *colname, deparse_namespace *dpns,
 								 deparse_columns *colinfo);
-void expand_colnames_array_to(deparse_columns *colinfo, int n);
-// SPANGRES END
+static void expand_colnames_array_to(deparse_columns *colinfo, int n);
 static void identify_join_columns(JoinExpr *j, RangeTblEntry *jrte,
 								  deparse_columns *colinfo);
 static char *get_rtable_name(int rtindex, deparse_context *context);
@@ -413,38 +236,27 @@ static void make_ruledef(StringInfo buf, HeapTuple ruletup, TupleDesc rulettc,
 						 int prettyFlags);
 static void make_viewdef(StringInfo buf, HeapTuple ruletup, TupleDesc rulettc,
 						 int prettyFlags, int wrapColumn);
+// SPANGRES BEGIN
+// We've made this function non-static to call it from deparser.
 void get_query_def(Query *query, StringInfo buf, List *parentnamespace,
 						  TupleDesc resultDesc, bool colNamesVisible,
 						  int prettyFlags, int wrapColumn, int startIndent);
-static void get_values_def(List *values_lists, deparse_context *context);
-/* SPANGRES BEGIN */
-// We've made these functions non-static to call them from catalog_shim.
-void get_with_clause(Query *query, deparse_context *context);
-/* SPANGRES END */
-static void get_select_query_def(Query *query, deparse_context *context,
-								 TupleDesc resultDesc, bool colNamesVisible);
-static void get_insert_query_def(Query *query, deparse_context *context,
-								 bool colNamesVisible);
-static void get_update_query_def_UNUSED_SPANGRES(Query *query, deparse_context *context,
-								 bool colNamesVisible);
-void get_update_query_targetlist_def(Query *query, List *targetList,
-											deparse_context *context,
-											RangeTblEntry *rte);
-static void get_delete_query_def_UNUSED_SPANGRES(Query *query, deparse_context *context,
-								 bool colNamesVisible);
-static void get_merge_query_def(Query *query, deparse_context *context,
-								bool colNamesVisible);
-static void get_utility_query_def_UNUSED_SPANGRES(Query *query, deparse_context *context);
-static void get_basic_select_query(Query *query, deparse_context *context,
-								   TupleDesc resultDesc, bool colNamesVisible);
-// SPANGRES BEGIN
-// We've made this function non-static to call them from catalog_shim.
-void get_target_list(List *targetList, deparse_context *context,
-							TupleDesc resultDesc, bool colNamesVisible);
 // SPANGRES END
-static void get_setop_query_UNUSED_SPANGRES(Node *setOp, Query *query,
-							deparse_context *context,
-							TupleDesc resultDesc, bool colNamesVisible);
+static void get_values_def(List *values_lists, deparse_context *context);
+static void get_with_clause(Query *query, deparse_context *context);
+static void get_select_query_def(Query *query, deparse_context *context);
+static void get_insert_query_def(Query *query, deparse_context *context);
+static void get_update_query_def(Query *query, deparse_context *context);
+static void get_update_query_targetlist_def(Query *query, List *targetList,
+																						deparse_context *context,
+																						RangeTblEntry *rte);
+static void get_delete_query_def(Query *query, deparse_context *context);
+static void get_merge_query_def(Query *query, deparse_context *context);
+static void get_utility_query_def(Query *query, deparse_context *context);
+static void get_basic_select_query(Query *query, deparse_context *context);
+static void get_target_list(List *targetList, deparse_context *context);
+static void get_setop_query(Node *setOp, Query *query,
+							deparse_context *context);
 static Node *get_rule_sortgroupclause(Index ref, List *tlist,
 									  bool force_colno,
 									  deparse_context *context);
@@ -466,15 +278,11 @@ static Node *find_param_referent(Param *param, deparse_context *context,
 static void get_parameter(Param *param, deparse_context *context);
 static const char *get_simple_binary_op_name(OpExpr *expr);
 static bool isSimpleNode(Node *node, Node *parentNode, int prettyFlags);
-// SPANGRES BEGIN
-// We've made these functions non-static to call them from catalog_shim.
-void appendContextKeyword(deparse_context *context, const char *str,
+static void appendContextKeyword(deparse_context *context, const char *str,
 								 int indentBefore, int indentAfter, int indentPlus);
 static void removeStringInfoSpaces(StringInfo str);
-/* SPANGRES BEGIN */
-// We've made these functions non-static to call them from catalog_shim.
-void get_rule_expr(Node *node, deparse_context *context,
-						  bool showimplicit);
+static void get_rule_expr(Node *node, deparse_context *context,
+													bool showimplicit);
 static void get_rule_expr_toplevel(Node *node, deparse_context *context,
 								   bool showimplicit);
 static void get_rule_list_toplevel(List *lst, deparse_context *context,
@@ -482,7 +290,7 @@ static void get_rule_list_toplevel(List *lst, deparse_context *context,
 static void get_rule_expr_funccall(Node *node, deparse_context *context,
 								   bool showimplicit);
 static bool looks_like_function(Node *node);
-static void get_oper_expr_UNUSED_SPANGRES(OpExpr *expr, deparse_context *context);
+static void get_oper_expr(OpExpr *expr, deparse_context *context);
 static void get_func_expr(FuncExpr *expr, deparse_context *context,
 						  bool showimplicit);
 static void get_agg_expr(Aggref *aggref, deparse_context *context,
@@ -498,7 +306,6 @@ static void get_const_expr(Const *constval, deparse_context *context,
 						   int showtype);
 static void get_const_collation(Const *constval, deparse_context *context);
 // SPANGRES BEGIN
-// We've made these functions non-static to call them from catalog_shim.
 void simple_quote_literal(StringInfo buf, const char *val);
 // SPANGRES END
 static void get_sublink_expr(SubLink *sublink, deparse_context *context);
@@ -522,21 +329,28 @@ static void get_opclass_name(Oid opclass, Oid actual_datatype,
 static Node *processIndirection(Node *node, deparse_context *context);
 static void printSubscripts(SubscriptingRef *sbsref, deparse_context *context);
 static char *get_relation_name(Oid relid);
-static char *generate_relation_name_UNUSED_SPANGRES(Oid relid, List *namespaces);
+// SPANGRES BEGIN
+// Made non-static for deparser
+char *generate_relation_name(Oid relid, List *namespaces);
+// SPANGRES END
 static char *generate_qualified_relation_name(Oid relid);
-static char *generate_function_name_UNUSED_SPANGRES(Oid funcid, int nargs,
-									List *argnames, Oid *argtypes,
-									bool has_variadic, bool *use_variadic_p,
-									ParseExprKind special_exprkind);
-static char *generate_operator_name_UNUSED_SPANGRES(Oid operid, Oid arg1, Oid arg2);
+// SPANGRES BEGIN
+// Visible for testing
+char *generate_function_name(Oid funcid, int nargs, List *argnames,
+                             Oid *argtypes, bool has_variadic,
+                             bool *use_variadic_p,
+                             bool inGroupBy);
+// SPANGRES END
+static char *generate_operator_name(Oid operid, Oid arg1, Oid arg2);
 static void add_cast_to(StringInfo buf, Oid typid);
 static char *generate_qualified_type_name(Oid typid);
 static text *string_to_text(char *str);
 static char *flatten_reloptions(Oid relid);
 static void get_reloptions(StringInfo buf, Datum reloptions);
 
-#define only_marker_UNUSED_SPANGRES(rte) ((rte)->inh ? "" : "ONLY ")
-
+// SPANGRES BEGIN
+// Moved only_marker to header
+// SPANGRES END
 
 /* ----------
  * pg_get_ruledef		- Do it all and return a text
@@ -1098,13 +912,16 @@ pg_get_triggerdef_worker(Oid trigid, bool pretty)
 		/* Set up context with one-deep namespace stack */
 		context.buf = &buf;
 		context.namespaces = list_make1(&dpns);
+		context.resultDesc = NULL;
+		context.targetList = NIL;
 		context.windowClause = NIL;
-		context.windowTList = NIL;
 		context.varprefix = true;
 		context.prettyFlags = GET_PRETTY_FLAGS(pretty);
 		context.wrapColumn = WRAP_COLUMN_DEFAULT;
 		context.indentLevel = PRETTYINDENT_STD;
-		context.special_exprkind = EXPR_KIND_NONE;
+		context.colNamesVisible = true;
+		context.inGroupBy = false;
+		context.varInOrderBy = false;
 		context.appendparents = NULL;
 
 		get_rule_expr(qual, &context, false);
@@ -1115,7 +932,7 @@ pg_get_triggerdef_worker(Oid trigid, bool pretty)
 	appendStringInfo(&buf, "EXECUTE PROCEDURE %s(",
 					 generate_function_name(trigrec->tgfoid, 0,
 											NIL, argtypes,
-											false, NULL, EXPR_KIND_NONE));
+											false, NULL, false));
 
 	if (trigrec->tgnargs > 0)
 	{
@@ -3043,7 +2860,7 @@ pg_get_functiondef(PG_FUNCTION_ARGS)
 		appendStringInfo(&buf, " SUPPORT %s",
 						 generate_function_name(proc->prosupport, 1,
 												NIL, argtypes,
-												false, NULL, EXPR_KIND_NONE));
+												false, NULL, false));
 	}
 
 	if (oldlen != buf.len)
@@ -3688,13 +3505,16 @@ deparse_expression_pretty(Node *expr, List *dpcontext,
 	initStringInfo(&buf);
 	context.buf = &buf;
 	context.namespaces = dpcontext;
+	context.resultDesc = NULL;
+	context.targetList = NIL;
 	context.windowClause = NIL;
-	context.windowTList = NIL;
 	context.varprefix = forceprefix;
 	context.prettyFlags = prettyFlags;
 	context.wrapColumn = WRAP_COLUMN_DEFAULT;
 	context.indentLevel = startIndent;
-	context.special_exprkind = EXPR_KIND_NONE;
+	context.colNamesVisible = true;
+	context.inGroupBy = false;
+	context.varInOrderBy = false;
 	context.appendparents = NULL;
 
 	get_rule_expr(expr, &context, showimplicit);
@@ -4022,7 +3842,7 @@ set_rtable_names(deparse_namespace *dpns, List *parent_namespaces,
  * from scratch.
  */
 /* SPANGRES BEGIN */
-// We've made this function non-static to call it from deparser
+// We've made this function non-static to call it from deparser.
 void
 set_deparse_for_query(deparse_namespace *dpns, Query *query,
 					  List *parent_namespaces)
@@ -4360,9 +4180,11 @@ set_using_names(deparse_namespace *dpns, Node *jtnode, List *parentUsing)
  * Column alias info is saved in *colinfo, which is assumed to be pre-zeroed.
  * If any colnames entries are already filled in, those override local
  * choices.
+ *
+ * SPANGRES: Use bootstrap catalog instead of syscache.
  */
-static void
-set_relation_column_names_UNUSED_SPANGRES(deparse_namespace *dpns, RangeTblEntry *rte,
+void
+set_relation_column_names(deparse_namespace *dpns, RangeTblEntry *rte,
 						  deparse_columns *colinfo)
 {
 	int			ncolumns;
@@ -4379,56 +4201,20 @@ set_relation_column_names_UNUSED_SPANGRES(deparse_namespace *dpns, RangeTblEntry
 	 */
 	if (rte->rtekind == RTE_RELATION)
 	{
-		/* Relation --- look to the system catalogs for up-to-date info */
-		Relation	rel;
-		TupleDesc	tupdesc;
-
-		rel = relation_open(rte->relid, AccessShareLock);
-		tupdesc = RelationGetDescr(rel);
-
-		ncolumns = tupdesc->natts;
-		real_colnames = (char **) palloc(ncolumns * sizeof(char *));
-
-		for (i = 0; i < ncolumns; i++)
-		{
-			Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
-
-			if (attr->attisdropped)
-				real_colnames[i] = NULL;
-			else
-				real_colnames[i] = pstrdup(NameStr(attr->attname));
-		}
-		relation_close(rel, AccessShareLock);
+		// SPANGRES BEGIN
+		ncolumns = 0;
+		real_colnames = NULL;
+		GetColumnNamesC(rte->relid, &real_colnames, &ncolumns);
+		// SPANGRES END
 	}
 	else
 	{
 		/* Otherwise get the column names from eref or expandRTE() */
 		List	   *colnames;
 		ListCell   *lc;
-
-		/*
-		 * Functions returning composites have the annoying property that some
-		 * of the composite type's columns might have been dropped since the
-		 * query was parsed.  If possible, use expandRTE() to handle that
-		 * case, since it has the tedious logic needed to find out about
-		 * dropped columns.  However, if we're explaining a plan, then we
-		 * don't have rte->functions because the planner thinks that won't be
-		 * needed later, and that breaks expandRTE().  So in that case we have
-		 * to rely on rte->eref, which may lead us to report a dropped
-		 * column's old name; that seems close enough for EXPLAIN's purposes.
-		 *
-		 * For non-RELATION, non-FUNCTION RTEs, we can just look at rte->eref,
-		 * which should be sufficiently up-to-date: no other RTE types can
-		 * have columns get dropped from under them after parsing.
-		 */
-		if (rte->rtekind == RTE_FUNCTION && rte->functions != NIL)
-		{
-			/* Since we're not creating Vars, rtindex etc. don't matter */
-			expandRTE(rte, 1, 0, -1, true /* include dropped */ ,
-					  &colnames, NULL);
-		}
-		else
-			colnames = rte->eref->colnames;
+		// SPANGRES BEGIN
+		colnames = rte->eref->colnames;
+		// SPANGRES END
 
 		ncolumns = list_length(colnames);
 		real_colnames = (char **) palloc(ncolumns * sizeof(char *));
@@ -4436,14 +4222,14 @@ set_relation_column_names_UNUSED_SPANGRES(deparse_namespace *dpns, RangeTblEntry
 		i = 0;
 		foreach(lc, colnames)
 		{
-			/*
-			 * If the column name we find here is an empty string, then it's a
-			 * dropped column, so change to NULL.
-			 */
-			char	   *cname = strVal(lfirst(lc));
-
-			if (cname[0] == '\0')
-				cname = NULL;
+			// SPANGRES BEGIN
+			// Column names in eref should not be empty:
+			char* cname = strVal(lfirst(lc));
+			if (cname == NULL || cname[0] == '\0') {
+				ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT),
+								errmsg("Column name in RangeTblEntry should not be empty")));
+			}
+			// SPANGRES END
 			real_colnames[i] = cname;
 			i++;
 		}
@@ -4869,12 +4655,9 @@ colname_is_unique(const char *colname, deparse_namespace *dpns,
  *
  * dpns is query-wide info, colinfo is for the column's RTE
  */
-/* SPANGRES BEGIN */
-// We've made this function non-static to call it from catalog_shim.
-char *
+static char *
 make_colname_unique(char *colname, deparse_namespace *dpns,
 					deparse_columns *colinfo)
-/* SPANGRES END */
 {
 	/*
 	 * If the selected name isn't unique, append digits to make it so.  For a
@@ -4911,11 +4694,8 @@ make_colname_unique(char *colname, deparse_namespace *dpns,
  *
  * Any added array entries are initialized to zero.
  */
-/* SPANGRES BEGIN */
-// We've made this function non-static to call it from catalog_shim.
-void
+static void
 expand_colnames_array_to(deparse_columns *colinfo, int n)
-/* SPANGRES END */
 {
 	if (n > colinfo->num_cols)
 	{
@@ -5348,13 +5128,16 @@ make_ruledef(StringInfo buf, HeapTuple ruletup, TupleDesc rulettc,
 
 		context.buf = buf;
 		context.namespaces = list_make1(&dpns);
+		context.resultDesc = NULL;
+		context.targetList = NIL;
 		context.windowClause = NIL;
-		context.windowTList = NIL;
 		context.varprefix = (list_length(query->rtable) != 1);
 		context.prettyFlags = prettyFlags;
 		context.wrapColumn = WRAP_COLUMN_DEFAULT;
 		context.indentLevel = PRETTYINDENT_STD;
-		context.special_exprkind = EXPR_KIND_NONE;
+		context.colNamesVisible = true;
+		context.inGroupBy = false;
+		context.varInOrderBy = false;
 		context.appendparents = NULL;
 
 		set_deparse_for_query(&dpns, query, NIL);
@@ -5492,7 +5275,7 @@ make_viewdef(StringInfo buf, HeapTuple ruletup, TupleDesc rulettc,
  * ----------
  */
 /* SPANGRES BEGIN */
-// We've made this function non-static to call it from catalog_shim.
+// We've made this function non-static to call it from deparser.
 void
 get_query_def(Query *query, StringInfo buf, List *parentnamespace,
 			  TupleDesc resultDesc, bool colNamesVisible,
@@ -5519,14 +5302,17 @@ get_query_def(Query *query, StringInfo buf, List *parentnamespace,
 
 	context.buf = buf;
 	context.namespaces = lcons(&dpns, list_copy(parentnamespace));
+	context.resultDesc = NULL;
+	context.targetList = NIL;
 	context.windowClause = NIL;
-	context.windowTList = NIL;
 	context.varprefix = (parentnamespace != NIL ||
 						 list_length(query->rtable) != 1);
 	context.prettyFlags = prettyFlags;
 	context.wrapColumn = wrapColumn;
 	context.indentLevel = startIndent;
-	context.special_exprkind = EXPR_KIND_NONE;
+	context.colNamesVisible = colNamesVisible;
+	context.inGroupBy = false;
+	context.varInOrderBy = false;
 	context.appendparents = NULL;
 
 	set_deparse_for_query(&dpns, query, parentnamespace);
@@ -5538,23 +5324,25 @@ get_query_def(Query *query, StringInfo buf, List *parentnamespace,
 	switch (query->commandType)
 	{
 		case CMD_SELECT:
-			get_select_query_def(query, &context, resultDesc, colNamesVisible);
+			/* We set context.resultDesc only if it's a SELECT */
+			context.resultDesc = resultDesc;
+			get_select_query_def(query, &context);
 			break;
 
 		case CMD_UPDATE:
-			get_update_query_def(query, &context, colNamesVisible);
+			get_update_query_def(query, &context);
 			break;
 
 		case CMD_INSERT:
-			get_insert_query_def(query, &context, colNamesVisible);
+			get_insert_query_def(query, &context);
 			break;
 
 		case CMD_DELETE:
-			get_delete_query_def(query, &context, colNamesVisible);
+			get_delete_query_def(query, &context);
 			break;
 
 		case CMD_MERGE:
-			get_merge_query_def(query, &context, colNamesVisible);
+			get_merge_query_def(query, &context);
 			break;
 
 		case CMD_NOTHING:
@@ -5619,11 +5407,8 @@ get_values_def(List *values_lists, deparse_context *context)
  * get_with_clause			- Parse back a WITH clause
  * ----------
  */
-/* SPANGRES BEGIN */
-// We've made these functions non-static to call them from catalog_shim.
-void
+static void
 get_with_clause(Query *query, deparse_context *context)
-/* SPANGRES END */
 {
 	StringInfo	buf = context->buf;
 	const char *sep;
@@ -5762,23 +5547,18 @@ get_with_clause(Query *query, deparse_context *context)
  * ----------
  */
 static void
-get_select_query_def(Query *query, deparse_context *context,
-					 TupleDesc resultDesc, bool colNamesVisible)
+get_select_query_def(Query *query, deparse_context *context)
 {
 	StringInfo	buf = context->buf;
-	List	   *save_windowclause;
-	List	   *save_windowtlist;
 	bool		force_colno;
 	ListCell   *l;
 
 	/* Insert the WITH clause if given */
 	get_with_clause(query, context);
 
-	/* Set up context for possible window functions */
-	save_windowclause = context->windowClause;
+	/* Subroutines may need to consult the SELECT targetlist and windowClause */
+	context->targetList = query->targetList;
 	context->windowClause = query->windowClause;
-	save_windowtlist = context->windowTList;
-	context->windowTList = query->targetList;
 
 	/*
 	 * If the Query node has a setOperations tree, then it's the top level of
@@ -5787,14 +5567,13 @@ get_select_query_def(Query *query, deparse_context *context,
 	 */
 	if (query->setOperations)
 	{
-		get_setop_query(query->setOperations, query, context, resultDesc,
-						colNamesVisible);
+		get_setop_query(query->setOperations, query, context);
 		/* ORDER BY clauses must be simple in this case */
 		force_colno = true;
 	}
 	else
 	{
-		get_basic_select_query(query, context, resultDesc, colNamesVisible);
+		get_basic_select_query(query, context);
 		force_colno = false;
 	}
 
@@ -5888,9 +5667,6 @@ get_select_query_def(Query *query, deparse_context *context,
 				appendStringInfoString(buf, " SKIP LOCKED");
 		}
 	}
-
-	context->windowClause = save_windowclause;
-	context->windowTList = save_windowtlist;
 }
 
 /*
@@ -5968,8 +5744,7 @@ get_simple_values_rte(Query *query, TupleDesc resultDesc)
 }
 
 static void
-get_basic_select_query(Query *query, deparse_context *context,
-					   TupleDesc resultDesc, bool colNamesVisible)
+get_basic_select_query(Query *query, deparse_context *context)
 {
 	StringInfo	buf = context->buf;
 	RangeTblEntry *values_rte;
@@ -5987,7 +5762,7 @@ get_basic_select_query(Query *query, deparse_context *context,
 	 * VALUES part.  This reverses what transformValuesClause() did at parse
 	 * time.
 	 */
-	values_rte = get_simple_values_rte(query, resultDesc);
+	values_rte = get_simple_values_rte(query, context->resultDesc);
 	if (values_rte)
 	{
 		get_values_def(values_rte->values_lists, context);
@@ -6025,7 +5800,7 @@ get_basic_select_query(Query *query, deparse_context *context,
 	}
 
 	/* Then we tell what to select (the targetlist) */
-	get_target_list(query->targetList, context, resultDesc, colNamesVisible);
+	get_target_list(query->targetList, context);
 
 	/* Add the FROM clause if needed */
 	get_from_clause(query, " FROM ", context);
@@ -6041,15 +5816,15 @@ get_basic_select_query(Query *query, deparse_context *context,
 	/* Add the GROUP BY clause if given */
 	if (query->groupClause != NULL || query->groupingSets != NULL)
 	{
-		ParseExprKind save_exprkind;
+		bool save_ingroupby;
 
 		appendContextKeyword(context, " GROUP BY ",
 							 -PRETTYINDENT_STD, PRETTYINDENT_STD, 1);
 		if (query->groupDistinct)
 			appendStringInfoString(buf, "DISTINCT ");
 
-		save_exprkind = context->special_exprkind;
-		context->special_exprkind = EXPR_KIND_GROUP_BY;
+		save_ingroupby = context->inGroupBy;
+		context->inGroupBy = true;
 
 		if (query->groupingSets == NIL)
 		{
@@ -6077,7 +5852,7 @@ get_basic_select_query(Query *query, deparse_context *context,
 			}
 		}
 
-		context->special_exprkind = save_exprkind;
+		context->inGroupBy = save_ingroupby;
 	}
 
 	/* Add the HAVING clause if given */
@@ -6097,16 +5872,10 @@ get_basic_select_query(Query *query, deparse_context *context,
  * get_target_list			- Parse back a SELECT target list
  *
  * This is also used for RETURNING lists in INSERT/UPDATE/DELETE.
- *
- * resultDesc and colNamesVisible are as for get_query_def()
  * ----------
  */
-/* SPANGRES BEGIN */
-// We've made these functions non-static to call them from catalog_shim.
-void
-get_target_list(List *targetList, deparse_context *context,
-				TupleDesc resultDesc, bool colNamesVisible)
-/* SPANGRES END */
+static void
+get_target_list(List *targetList, deparse_context *context)
 {
 	StringInfo	buf = context->buf;
 	StringInfoData targetbuf;
@@ -6163,7 +5932,7 @@ get_target_list(List *targetList, deparse_context *context,
 			 * assigned column name explicitly.  Otherwise, show it only if
 			 * it's not FigureColname's fallback.
 			 */
-			attname = colNamesVisible ? NULL : "?column?";
+			attname = context->colNamesVisible ? NULL : "?column?";
 		}
 
 		/*
@@ -6172,8 +5941,9 @@ get_target_list(List *targetList, deparse_context *context,
 		 * effects of any column RENAME that's been done on the view).
 		 * Otherwise, just use what we can find in the TLE.
 		 */
-		if (resultDesc && colno <= resultDesc->natts)
-			colname = NameStr(TupleDescAttr(resultDesc, colno - 1)->attname);
+		if (context->resultDesc && colno <= context->resultDesc->natts)
+			colname = NameStr(TupleDescAttr(context->resultDesc,
+											colno - 1)->attname);
 		else
 			colname = tle->resname;
 
@@ -6241,8 +6011,7 @@ get_target_list(List *targetList, deparse_context *context,
 }
 
 static void
-get_setop_query_UNUSED_SPANGRES(Node *setOp, Query *query, deparse_context *context,
-				TupleDesc resultDesc, bool colNamesVisible)
+get_setop_query(Node *setOp, Query *query, deparse_context *context)
 {
 	StringInfo	buf = context->buf;
 	bool		need_paren;
@@ -6258,7 +6027,15 @@ get_setop_query_UNUSED_SPANGRES(Node *setOp, Query *query, deparse_context *cont
 		Query	   *subquery = rte->subquery;
 
 		Assert(subquery != NULL);
-		Assert(subquery->setOperations == NULL);
+		// SPANGRES BEGIN
+		// Spangres removes an assert which checks that the subquery does not
+		// include set operations. The assert caused subqueries containing set
+		// operations and limit/offset/order by to fail in the deparser. The assert
+		// can be safely removed without causing the deparser to incorrectly bind
+		// a WITH, ORDER BY, FOR UPDATE, or LIMIT/OFFSET clause to an incorrect
+		// subquery level.
+		// SPANGRES END
+
 		/* Need parens if WITH, ORDER BY, FOR UPDATE, or LIMIT; see gram.y */
 		need_paren = (subquery->cteList ||
 					  subquery->sortClause ||
@@ -6267,8 +6044,8 @@ get_setop_query_UNUSED_SPANGRES(Node *setOp, Query *query, deparse_context *cont
 					  subquery->limitCount);
 		if (need_paren)
 			appendStringInfoChar(buf, '(');
-		get_query_def(subquery, buf, context->namespaces, resultDesc,
-					  colNamesVisible,
+		get_query_def(subquery, buf, context->namespaces,
+						context->resultDesc, context->colNamesVisible,
 					  context->prettyFlags, context->wrapColumn,
 					  context->indentLevel);
 		if (need_paren)
@@ -6278,6 +6055,7 @@ get_setop_query_UNUSED_SPANGRES(Node *setOp, Query *query, deparse_context *cont
 	{
 		SetOperationStmt *op = (SetOperationStmt *) setOp;
 		int			subindent;
+		bool		save_colnamesvisible;
 
 		/*
 		 * We force parens when nesting two SetOperationStmts, except when the
@@ -6311,7 +6089,7 @@ get_setop_query_UNUSED_SPANGRES(Node *setOp, Query *query, deparse_context *cont
 		else
 			subindent = 0;
 
-		get_setop_query(op->larg, query, context, resultDesc, colNamesVisible);
+		get_setop_query(op->larg, query, context);
 
 		if (need_paren)
 			appendContextKeyword(context, ") ", -subindent, 0, 0);
@@ -6355,7 +6133,15 @@ get_setop_query_UNUSED_SPANGRES(Node *setOp, Query *query, deparse_context *cont
 			subindent = 0;
 		appendContextKeyword(context, "", subindent, 0, 0);
 
-		get_setop_query(op->rarg, query, context, resultDesc, false);
+		/*
+		 * The output column names of the RHS sub-select don't matter.
+		 */
+		save_colnamesvisible = context->colNamesVisible;
+		context->colNamesVisible = false;
+
+		get_setop_query(op->rarg, query, context);
+
+		context->colNamesVisible = save_colnamesvisible;
 
 		if (POSTGRES_PRETTY_INDENT(context))
 			context->indentLevel -= subindent;
@@ -6389,20 +6175,32 @@ get_rule_sortgroupclause(Index ref, List *tlist, bool force_colno,
 	 * Use column-number form if requested by caller.  Otherwise, if
 	 * expression is a constant, force it to be dumped with an explicit cast
 	 * as decoration --- this is because a simple integer constant is
-	 * ambiguous (and will be misinterpreted by findTargetlistEntry()) if we
-	 * dump it without any decoration.  If it's anything more complex than a
-	 * simple Var, then force extra parens around it, to ensure it can't be
-	 * misinterpreted as a cube() or rollup() construct.
+	 * ambiguous (and will be misinterpreted by findTargetlistEntrySQL92()) if
+	 * we dump it without any decoration.  Similarly, if it's just a Var,
+	 * there is risk of misinterpretation if the column name is reassigned in
+	 * the SELECT list, so we may need to force table qualification.  And, if
+	 * it's anything more complex than a simple Var, then force extra parens
+	 * around it, to ensure it can't be misinterpreted as a cube() or rollup()
+	 * construct.
 	 */
 	if (force_colno)
 	{
 		Assert(!tle->resjunk);
 		appendStringInfo(buf, "%d", tle->resno);
 	}
-	else if (expr && IsA(expr, Const))
+	else if (!expr)
+		 /* do nothing, probably can't happen */ ;
+	else if (IsA(expr, Const))
 		get_const_expr((Const *) expr, context, 1);
-	else if (!expr || IsA(expr, Var))
-		get_rule_expr(expr, context, true);
+	else if (IsA(expr, Var))
+	{
+		/* Tell get_variable to check for name conflict */
+		bool		save_varinorderby = context->varInOrderBy;
+
+		context->varInOrderBy = true;
+		(void) get_variable((Var *) expr, 0, false, context);
+		context->varInOrderBy = save_varinorderby;
+	}
 	else
 	{
 		/*
@@ -6690,8 +6488,7 @@ get_rule_windowspec(WindowClause *wc, List *targetList,
  * ----------
  */
 static void
-get_insert_query_def(Query *query, deparse_context *context,
-					 bool colNamesVisible)
+get_insert_query_def(Query *query, deparse_context *context)
 {
 	StringInfo	buf = context->buf;
 	RangeTblEntry *select_rte = NULL;
@@ -6897,7 +6694,7 @@ get_insert_query_def(Query *query, deparse_context *context,
 	{
 		appendContextKeyword(context, " RETURNING",
 							 -PRETTYINDENT_STD, PRETTYINDENT_STD, 1);
-		get_target_list(query->returningList, context, NULL, colNamesVisible);
+		get_target_list(query->returningList, context);
 	}
 }
 
@@ -6907,8 +6704,7 @@ get_insert_query_def(Query *query, deparse_context *context,
  * ----------
  */
 static void
-get_update_query_def_UNUSED_SPANGRES(Query *query, deparse_context *context,
-					 bool colNamesVisible)
+get_update_query_def(Query *query, deparse_context *context)
 {
 	StringInfo	buf = context->buf;
 	RangeTblEntry *rte;
@@ -6924,7 +6720,9 @@ get_update_query_def_UNUSED_SPANGRES(Query *query, deparse_context *context,
 	if (POSTGRES_PRETTY_INDENT(context))
 	{
 		appendStringInfoChar(buf, ' ');
-		context->indentLevel += PRETTYINDENT_STD;
+		// SPANGRES BEGIN
+		context->indentLevel += POSTGRES_PRETTYINDENT_STD;
+		// SPANGRES END
 	}
 	appendStringInfo(buf, "UPDATE %s%s",
 					 only_marker(rte),
@@ -6938,23 +6736,39 @@ get_update_query_def_UNUSED_SPANGRES(Query *query, deparse_context *context,
 	/* Deparse targetlist */
 	get_update_query_targetlist_def(query, query->targetList, context, rte);
 
+	// SPANGRES BEGIN
+	// Mark the result relation as not inFromCl so that it will not be included
+	// in the FROM clause.
+	bool original_inFromCl = rte->inFromCl;
+	rte->inFromCl = false;
+	// SPANGRES END
+
 	/* Add the FROM clause if needed */
 	get_from_clause(query, " FROM ", context);
+
+	// SPANGRES BEGIN
+	// Change the rte inFromCl back to the original value.
+	rte->inFromCl = original_inFromCl;
+	// SPANGRES END
 
 	/* Add a WHERE clause if given */
 	if (query->jointree->quals != NULL)
 	{
+		// SPANGRES BEGIN
 		appendContextKeyword(context, " WHERE ",
-							 -PRETTYINDENT_STD, PRETTYINDENT_STD, 1);
+							 -POSTGRES_PRETTYINDENT_STD, POSTGRES_PRETTYINDENT_STD, 1);
+		// SPANGRES END
 		get_rule_expr(query->jointree->quals, context, false);
 	}
 
 	/* Add RETURNING if present */
 	if (query->returningList)
 	{
+		// SPANGRES BEGIN
 		appendContextKeyword(context, " RETURNING",
-							 -PRETTYINDENT_STD, PRETTYINDENT_STD, 1);
-		get_target_list(query->returningList, context, NULL, colNamesVisible);
+							 -POSTGRES_PRETTYINDENT_STD, POSTGRES_PRETTYINDENT_STD, 1);
+		// SPANGRES END
+		get_target_list(query->returningList, context);
 	}
 }
 
@@ -6963,12 +6777,9 @@ get_update_query_def_UNUSED_SPANGRES(Query *query, deparse_context *context,
  * get_update_query_targetlist_def			- Parse back an UPDATE targetlist
  * ----------
  */
-/* SPANGRES BEGIN */
-// We've made this function non-static to call it from catalog_shim.
-void
+static void
 get_update_query_targetlist_def(Query *query, List *targetList,
 								deparse_context *context, RangeTblEntry *rte)
-/* SPANGRES END */
 {
 	StringInfo	buf = context->buf;
 	ListCell   *l;
@@ -7119,8 +6930,7 @@ get_update_query_targetlist_def(Query *query, List *targetList,
  * ----------
  */
 static void
-get_delete_query_def_UNUSED_SPANGRES(Query *query, deparse_context *context,
-					 bool colNamesVisible)
+get_delete_query_def(Query *query, deparse_context *context)
 {
 	StringInfo	buf = context->buf;
 	RangeTblEntry *rte;
@@ -7136,7 +6946,9 @@ get_delete_query_def_UNUSED_SPANGRES(Query *query, deparse_context *context,
 	if (POSTGRES_PRETTY_INDENT(context))
 	{
 		appendStringInfoChar(buf, ' ');
-		context->indentLevel += PRETTYINDENT_STD;
+		// SPANGRES BEGIN
+		context->indentLevel += POSTGRES_PRETTYINDENT_STD;
+		// SPANGRES END
 	}
 	appendStringInfo(buf, "DELETE FROM %s%s",
 					 only_marker(rte),
@@ -7145,23 +6957,39 @@ get_delete_query_def_UNUSED_SPANGRES(Query *query, deparse_context *context,
 	/* Print the relation alias, if needed */
 	get_rte_alias(rte, query->resultRelation, false, context);
 
+	// SPANGRES BEGIN
+	// Mark the result relation as not inFromCl so that it will not be included
+	// in the USING clause.
+	bool original_inFromCl = rte->inFromCl;
+	rte->inFromCl = false;
+	// SPANGRES END
+
 	/* Add the USING clause if given */
 	get_from_clause(query, " USING ", context);
+
+	// SPANGRES BEGIN
+	// Change the rte inFromCl back to the original value.
+	rte->inFromCl = original_inFromCl;
+	// SPANGRES END
 
 	/* Add a WHERE clause if given */
 	if (query->jointree->quals != NULL)
 	{
+		// SPANGRES BEGIN
 		appendContextKeyword(context, " WHERE ",
-							 -PRETTYINDENT_STD, PRETTYINDENT_STD, 1);
+							 -POSTGRES_PRETTYINDENT_STD, POSTGRES_PRETTYINDENT_STD, 1);
+		// SPANGRES END
 		get_rule_expr(query->jointree->quals, context, false);
 	}
 
 	/* Add RETURNING if present */
 	if (query->returningList)
 	{
+		// SPANGRES BEGIN
 		appendContextKeyword(context, " RETURNING",
-							 -PRETTYINDENT_STD, PRETTYINDENT_STD, 1);
-		get_target_list(query->returningList, context, NULL, colNamesVisible);
+							 -POSTGRES_PRETTYINDENT_STD, POSTGRES_PRETTYINDENT_STD, 1);
+		// SPANGRES END
+		get_target_list(query->returningList, context);
 	}
 }
 
@@ -7171,8 +6999,7 @@ get_delete_query_def_UNUSED_SPANGRES(Query *query, deparse_context *context,
  * ----------
  */
 static void
-get_merge_query_def(Query *query, deparse_context *context,
-					bool colNamesVisible)
+get_merge_query_def(Query *query, deparse_context *context)
 {
 	StringInfo	buf = context->buf;
 	RangeTblEntry *rte;
@@ -7287,35 +7114,1040 @@ get_merge_query_def(Query *query, deparse_context *context,
 	Assert(query->returningList == NIL);
 }
 
+// SPANGRES BEGIN
+// Deparsing utility methods for SPANGRES
+
+// Match type for foreign keys:
+//   - kFull = MATCH FULL will not allow one column of a multicolumn foreign
+//     key to be null unless all foreign key columns are null.
+//   - kSimple = MATCH SIMPLE allows some foreign key columns to be null while
+//     other parts of the foreign key are not null.
+enum MatchType {
+  kMatchFull = 'f',
+  kMatchSimple = 's',
+};
+
+// Action for foreign key's <ON UPDATE>/<ON DELETE> clauses
+// The only supported action for now is kNoAction=NO ACTION
+enum ForeignKeyAction {
+  kActionNoAction = 'a',
+  kRestrict = 'r',
+  kCascade = 'c',
+  kSetNull = 'n',
+  kSetDefault = 'd'
+};
+
+static char* err_msg_where_clause_create_index =
+    "<WHERE> clause of <CREATE INDEX> statement only supports <column IS "
+    "NOT NULL> expressions and their <AND> conjunctions.";
+// Deparse Value node and print it as literal depending on type:
+//   - for int nodes, just print as is
+//   - for string nodes, quote the value before printing
+void GetValueDef(A_Const* aconst, deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  switch (aconst->val.node.type) {
+    case T_Integer:
+      appendStringInfo(buf, "%d", aconst->val.ival.ival);
+      break;
+
+    case T_String:
+      simple_quote_literal(buf, aconst->val.sval.sval);
+      break;
+
+    // TODO: add test case and support for T_Float, T_Null values
+    default:
+      elog(ERROR, "unexpected value type %s",
+           CNodeTagToNodeString(aconst->val.node.type));
+  }
+}
+
+// Deparse Value node and print it as identifier
+void GetIdentifierValueDef(union ValUnion* val, deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  if (val->node.type != T_String || val->sval.sval == NULL) {
+    elog(ERROR, "invalid identifier type");
+  }
+
+  appendStringInfoString(buf, quote_identifier(val->sval.sval));
+}
+
+// Deparse RangeVar and append it to buf.
+void AppendRangeVarToStringInfo(StringInfo buf, RangeVar* stmt) {
+  if (stmt == NULL || stmt->relname == NULL || *stmt->relname == '\0') {
+    elog(ERROR, "invalid parse tree: table name is missing");
+  }
+  if (stmt->schemaname != NULL) {
+    appendStringInfoString(buf, quote_identifier(stmt->schemaname));
+    appendStringInfoString(buf, ".");
+  }
+  appendStringInfoString(buf, quote_identifier(stmt->relname));
+}
+
+// Deparse column type
+void GetTypeNameDef(TypeName* stmt, deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  if (stmt->typemod != -1) {
+    elog(ERROR, "Support for prespecified type modifiers is not implemented");
+  }
+
+  // We expect name to be <[schema_name.]type_name>
+  if (list_length(stmt->names) > 2) {
+    elog(ERROR,
+         "invalid parse tree: no more than 2 name components are expected, but "
+         "got %u",
+         list_length(stmt->names));
+  }
+
+  char* schema_name = NULL;
+  ListCell* names_to_process = list_head(stmt->names);
+  if (lnext(stmt->names, names_to_process)) {
+    schema_name = strVal(lfirst(names_to_process));
+    appendStringInfo(buf, "%s.", quote_identifier(schema_name));
+    names_to_process = lnext(stmt->names, names_to_process);
+  }
+  char* type_name = strVal(lfirst(names_to_process));
+  appendStringInfoString(buf, type_name);
+
+  if (list_length(stmt->typmods) > 0) {
+    if (schema_name != NULL && strcmp(schema_name, "pg_catalog") != 0) {
+      // schema==NULL implies default (pg_catalog) schema
+      elog(ERROR,
+           "type modifiers are supported only for types from the pg_catalog "
+           "schema, but got: %s",
+           schema_name);
+    }
+
+    appendStringInfoString(buf, "(");
+    if (strcmp(type_name, "varchar") == 0 || strcmp(type_name, "bpchar") == 0 ||
+        strcmp(type_name, "varbit") == 0 || strcmp(type_name, "bit") == 0 ||
+        strcmp(type_name, "timestamp") == 0 ||
+        strcmp(type_name, "timestamptz") == 0) {
+      if (list_length(stmt->typmods) != 1) {
+        elog(ERROR, "invalid parse tree: only one modifier allowed for type %s",
+             type_name);
+      }
+      A_Const* typmod_node = castNode(A_Const, linitial(stmt->typmods));
+      GetValueDef(typmod_node, context);
+    } else if (strcmp(type_name, "numeric") == 0) {
+      if (list_length(stmt->typmods) != 2) {
+        elog(ERROR,
+             "invalid parse tree: two modifiers must be present for type %s",
+             type_name);
+      }
+      A_Const* precision_node = castNode(A_Const, linitial(stmt->typmods));
+      A_Const* scale_node = castNode(A_Const, lsecond(stmt->typmods));
+      GetValueDef(precision_node, context);
+      appendStringInfoString(buf, ", ");
+      GetValueDef(scale_node, context);
+    } else {
+      elog(ERROR, "type modifiers are not allowed for type %s", type_name);
+    }
+    appendStringInfoString(buf, ")");
+  }
+
+  for (ListCell* bound_it = list_head(stmt->arrayBounds); bound_it;
+       bound_it = lnext(stmt->arrayBounds, bound_it)) {
+    int bound = intVal(lfirst(bound_it));
+
+    if (bound != -1) {
+      appendStringInfo(buf, "[%d]", bound);
+    } else {
+      appendStringInfoString(buf, "[]");
+    }
+  }
+}
+
+// Deparse NOTIFY statements
+void GetNotifyStmtDef(NotifyStmt* stmt, deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  appendContextKeyword(context, "", 0, POSTGRES_PRETTYINDENT_STD, 1);
+  appendStringInfo(buf, "NOTIFY %s", quote_identifier(stmt->conditionname));
+
+  if (stmt->payload) {
+    appendStringInfoString(buf, ", ");
+    simple_quote_literal(buf, stmt->payload);
+  }
+}
+
+// Deparse CREATE DATABASE statements
+void GetCreatedbStmtDef(CreatedbStmt* stmt, deparse_context* context) {
+  if (list_length(stmt->options) != 0) {
+    elog(ERROR,
+         "options support is not implemented in <CREATE DATABASE> statement");
+  }
+
+  StringInfo buf = context->buf;
+
+  appendStringInfo(buf, "CREATE DATABASE %s", quote_identifier(stmt->dbname));
+}
+
+
+// Deparse IS NOT NULL in WHERE clause
+void GetNullTestDef(NullTest* node, deparse_context* context) {
+  StringInfo buf = context->buf;
+  if (node->nulltesttype != IS_NOT_NULL || nodeTag(node->arg) != T_ColumnRef) {
+    elog(ERROR, err_msg_where_clause_create_index);
+  }
+
+  ColumnRef* column_ref = castNode(ColumnRef, node->arg);
+
+  const List* column_list = column_ref->fields;
+  if (list_length(column_list) != 1) {
+    elog(ERROR, err_msg_where_clause_create_index);
+  }
+
+  const char* column_name = strVal(linitial(column_list));
+  appendStringInfo(buf, "%s IS NOT NULL", quote_identifier(column_name));
+}
+
+void ValidateIndexElem(IndexElem* index_elem) {
+  if (!index_elem->name || *index_elem->name == '\0') {
+    elog(ERROR, "column name is missing in <CREATE INDEX> statement");
+  }
+  if (index_elem->expr != NULL) {
+    elog(ERROR,
+         "expressions support is not implemented in <CREATE INDEX> "
+         "statement");
+  }
+  if (index_elem->collation != NULL) {
+    elog(ERROR,
+         "setting collation is not implemented in <CREATE INDEX> statement");
+  }
+  if (index_elem->opclass != NULL) {
+    elog(ERROR,
+         "setting operator class is not implemented in <CREATE INDEX> "
+         "statement");
+  }
+}
+
+// Deparse CREATE INDEX statements
+void GetIndexStmtDef(IndexStmt* stmt, deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  if (stmt->primary || stmt->isconstraint || stmt->deferrable ||
+      stmt->initdeferred || stmt->excludeOpNames != NULL) {
+    elog(ERROR,
+         "invalid parse tree: constraints based on existing indexes cannot be "
+         "created via <CREATE INDEX> statement");
+  }
+  if (stmt->idxcomment != NULL) {
+    elog(ERROR,
+         "index comments support is not implemented in <CREATE INDEX> "
+         "statement");
+  }
+  if (stmt->tableSpace != NULL) {
+    elog(ERROR,
+         "tablespaces support is not implemented in <CREATE INDEX> statement");
+  }
+  if (stmt->concurrent) {
+    elog(ERROR,
+         "consurrent index creation support is not implemented in <CREATE "
+         "INDEX> statement");
+  }
+  if (stmt->if_not_exists) {
+    elog(ERROR,
+         "<IF NOT EXISTS> support is not implemented in <CREATE INDEX> "
+         "statement");
+  }
+
+  if (!stmt->idxname || *stmt->idxname == '\0') {
+    elog(ERROR, "index name is missing in <CREATE INDEX> statement");
+  }
+
+  appendStringInfoString(buf, "CREATE");
+  if (stmt->unique) {
+    appendStringInfoString(buf, " UNIQUE");
+  }
+  appendStringInfo(buf, " INDEX %s ON ", quote_identifier(stmt->idxname));
+  AppendRangeVarToStringInfo(buf, stmt->relation);
+  appendStringInfoString(buf, " (");
+
+  for (ListCell* index_elem_it = list_head(stmt->indexParams); index_elem_it;
+       index_elem_it = lnext(stmt->indexParams, index_elem_it)) {
+    IndexElem* index_elem = lfirst_node(IndexElem, index_elem_it);
+
+    ValidateIndexElem(index_elem);
+    appendStringInfo(buf, "%s", quote_identifier(index_elem->name));
+    if (index_elem->ordering == SORTBY_DESC) {
+      appendStringInfoString(buf, " DESC");
+    }
+
+    switch (index_elem->nulls_ordering) {
+      case SORTBY_NULLS_FIRST: {
+        appendStringInfoString(buf, " NULLS FIRST");
+        break;
+      }
+
+      case SORTBY_NULLS_LAST: {
+        appendStringInfoString(buf, " NULLS LAST");
+        break;
+      }
+
+      default: {
+        // avoid extra verbosity and rely on default ordering
+        break;
+      }
+    }
+
+    if (lnext(stmt->indexParams, index_elem_it) != NULL) {
+      appendStringInfo(buf, ", ");
+    }
+  }
+  appendStringInfoString(buf, ")");
+
+  if (list_length(stmt->indexIncludingParams) > 0) {
+    appendStringInfoString(buf, " INCLUDE (");
+
+    for (ListCell* index_elem_it = list_head(stmt->indexIncludingParams);
+         index_elem_it; index_elem_it = lnext(stmt->indexIncludingParams, index_elem_it)) {
+      IndexElem* index_elem = lfirst_node(IndexElem, index_elem_it);
+
+      ValidateIndexElem(index_elem);
+
+      appendStringInfo(buf, "%s", quote_identifier(index_elem->name));
+
+      if (lnext(stmt->indexIncludingParams, index_elem_it) != NULL) {
+        appendStringInfo(buf, ", ");
+      }
+    }
+
+    appendStringInfoString(buf, ")");
+  }
+
+  Node* whereClause = stmt->whereClause;
+
+  if (whereClause != NULL) {
+    appendStringInfoString(buf, " WHERE (");
+
+    switch (nodeTag(whereClause)) {
+      case T_NullTest: {
+        NullTest* null_test = castNode(NullTest, whereClause);
+        GetNullTestDef(null_test, context);
+        break;
+      }
+      case T_BoolExpr: {
+        BoolExpr* bool_expr = castNode(BoolExpr, whereClause);
+        if (bool_expr->boolop != AND_EXPR) {
+          elog(ERROR, err_msg_where_clause_create_index);
+        }
+
+        for (ListCell* null_test = list_head(bool_expr->args); null_test;
+             null_test = lnext(bool_expr->args, null_test)) {
+          GetNullTestDef(lfirst_node(NullTest, null_test), context);
+          if (lnext(bool_expr->args, null_test) != NULL) {
+            appendStringInfoString(buf, " AND ");
+          }
+        }
+        break;
+      }
+      default: {
+        elog(ERROR, err_msg_where_clause_create_index);
+      }
+    }
+    appendStringInfoString(buf, ")");
+  }
+}
+
+void GetForeignKeyAction(char action, deparse_context* context) {
+  StringInfo buf = context->buf;
+  switch (action) {
+    case FKCONSTR_ACTION_NOACTION: {
+      appendStringInfoString(buf, " NO ACTION");
+      break;
+    }
+    case FKCONSTR_ACTION_CASCADE: {
+      appendStringInfoString(buf, " CASCADE");
+      break;
+    }
+    case FKCONSTR_ACTION_RESTRICT: {
+      appendStringInfoString(buf, " RESTRICT");
+      break;
+    }
+    case FKCONSTR_ACTION_SETNULL: {
+      appendStringInfoString(buf, " SET NULL");
+      break;
+    }
+    default: {
+      elog(ERROR, "support for foreign key action %c is not implemented",
+           action);
+    }
+  }
+}
+
+// Deparse constraint
+void GetConstraintDef(Constraint* stmt, deparse_context* context) {
+  StringInfo buf = context->buf;
+  if (stmt->deferrable) {
+    elog(ERROR, "support for <DEFERRABLE> constraints is not implemented");
+  }
+  // It's not possible for constraint to not be deferrable, but have
+  // deferred initialization
+  if (stmt->initdeferred) {
+    elog(ERROR,
+         "invalid parse tree: deferred initialization for non-deferrable "
+         "constraint");
+  }
+  if (stmt->skip_validation) {
+    elog(ERROR, "support for <NOT VALID> constraints is not implemented");
+  }
+
+  if (stmt->conname != NULL && *stmt->conname != '\0') {
+    appendStringInfo(buf, "CONSTRAINT %s ", quote_identifier(stmt->conname));
+  }
+
+  switch (stmt->contype) {
+    case CONSTR_PRIMARY: {
+      appendStringInfoString(buf, "PRIMARY KEY");
+
+      if (list_length(stmt->keys) > 0) {
+        // Table-level constraint: have to output list of column names
+        appendStringInfoString(buf, " (");
+        for (ListCell* pk_it = list_head(stmt->keys); pk_it;
+             pk_it = lnext(stmt->keys, pk_it)) {
+          GetIdentifierValueDef((union ValUnion*)lfirst(pk_it), context);
+
+          if (lnext(stmt->keys, pk_it) != NULL) {
+            appendStringInfo(buf, ", ");
+          }
+        }
+        appendStringInfoString(buf, ")");
+      }
+
+      break;
+    }
+
+    case CONSTR_NOTNULL: {
+      appendStringInfo(buf, "NOT NULL");
+      break;
+    }
+
+    case CONSTR_NULL: {
+      appendStringInfo(buf, "NULL");
+      break;
+    }
+
+    case CONSTR_UNIQUE: {
+      elog(ERROR, "support for <UNIQUE> constraints is not implemented");
+      break;
+    }
+
+    case CONSTR_FOREIGN: {
+      if (list_length(stmt->fk_attrs) > 0) {
+        // Table-level constraint: have to output FOREIGN KEY (columns)
+        appendStringInfoString(buf, "FOREIGN KEY (");
+
+        for (ListCell* fk_it = list_head(stmt->fk_attrs); fk_it;
+             fk_it = lnext(stmt->fk_attrs, fk_it)) {
+          GetIdentifierValueDef(lfirst(fk_it), context);
+
+          if (lnext(stmt->fk_attrs, fk_it) != NULL) {
+            appendStringInfo(buf, ", ");
+          }
+        }
+        appendStringInfoString(buf, ") ");
+      }
+
+      appendStringInfoString(buf, "REFERENCES ");
+      AppendRangeVarToStringInfo(buf, stmt->pktable);
+      appendStringInfoString(buf, "(");
+
+      for (ListCell* pk_it = list_head(stmt->pk_attrs); pk_it;
+           pk_it = lnext(stmt->pk_attrs, pk_it)) {
+        GetIdentifierValueDef(lfirst(pk_it), context);
+
+        if (lnext(stmt->pk_attrs, pk_it) != NULL) {
+          appendStringInfo(buf, ", ");
+        }
+      }
+      appendStringInfoString(buf, ")");
+
+      switch (stmt->fk_matchtype) {
+        case kMatchSimple: {
+          // do nothing: MATCH SIMPLE is default
+          break;
+        }
+        case kMatchFull: {
+          appendStringInfo(buf, " MATCH FULL");
+          break;
+        }
+        default: {
+          elog(ERROR, "support for <MATCH> type %c is not implemented",
+               stmt->fk_matchtype);
+        }
+      }
+
+      if (stmt->fk_upd_action != FKCONSTR_ACTION_NOACTION) {
+        appendStringInfo(buf, " ON UPDATE");
+        GetForeignKeyAction(stmt->fk_upd_action, context);
+      }
+
+      if (stmt->fk_del_action != FKCONSTR_ACTION_NOACTION) {
+        appendStringInfo(buf, " ON DELETE");
+        GetForeignKeyAction(stmt->fk_del_action, context);
+      }
+      break;
+    }
+
+    default: {
+      elog(ERROR, "support for given constraint type is not implemented");
+    }
+  }
+}
+
+// Deparse column definition
+void GetColumnDefDef(ColumnDef* stmt, deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  if (stmt->colname == NULL) {
+    elog(ERROR, "invalid parse tree: missing column name");
+  }
+  if (stmt->typeName == NULL) {
+    elog(ERROR, "invalid parse tree: missing column type");
+  };
+  // unused/unsupported by PostgreSQL
+  if (stmt->is_from_type) {
+    elog(ERROR, "support for columns from table type is not implemented");
+  }
+  if (!stmt->is_local) {
+    elog(ERROR, "support for non-local column definitions is not implemented");
+  }
+  if (stmt->collClause != NULL) {
+    elog(ERROR,
+         "support for <COLLATE> clause in column definition is not "
+         "implemented");
+  }
+  if (stmt->cooked_default != NULL) {
+    elog(ERROR,
+         "support for <DEFAULT> clause in column definition is not "
+         "implemented");
+  }
+  if (stmt->fdwoptions != NULL) {
+    elog(ERROR,
+         "support for foreign data wrapper options in column definition is not "
+         "implemented");
+  }
+  if (stmt->identity != 0) {
+    elog(ERROR, "support for identity columns is not implemented");
+  }
+
+  appendStringInfo(buf, "%s ", quote_identifier(stmt->colname));
+  GetTypeNameDef(stmt->typeName, context);
+
+  for (ListCell* constraint_it = list_head(stmt->constraints); constraint_it;
+       constraint_it = lnext(stmt->constraints, constraint_it)) {
+    Constraint* constraint = lfirst_node(Constraint, constraint_it);
+    appendStringInfoString(buf, " ");
+    GetConstraintDef(constraint, context);
+  }
+}
+
+// Deparse ALTER DATABASE SET statements
+void GetAlterDatabaseSetStmtDef(AlterDatabaseSetStmt* stmt,
+                                deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  appendStringInfo(buf, "ALTER DATABASE %s", quote_identifier(stmt->dbname));
+
+  const VariableSetStmt* set_statement = stmt->setstmt;
+  switch (set_statement->kind) {
+    case VAR_SET_VALUE: {
+      appendStringInfo(buf,
+                       " SET %s = ", quote_identifier(set_statement->name));
+      if (list_length(set_statement->args) != 1) {
+        elog(ERROR,
+             "support for multiple options is not implemented in <ALTER "
+             "DATABASE SET> statement, only one option is supported per "
+             "statement");
+      }
+
+      A_Const* const_node = castNode(A_Const, linitial(set_statement->args));
+      GetValueDef(const_node, context);
+
+      return;
+    }
+
+    case VAR_SET_DEFAULT: {
+      appendStringInfo(buf, " SET %s TO DEFAULT",
+                       quote_identifier(set_statement->name));
+      return;
+    }
+
+    case VAR_RESET: {
+      appendStringInfo(buf, " RESET %s", quote_identifier(set_statement->name));
+      return;
+    }
+
+    case VAR_SET_CURRENT:
+    case VAR_SET_MULTI:
+    case VAR_RESET_ALL: {
+      elog(ERROR,
+           "support for the operation is not implemented in <ALTER DATABASE> "
+           "statement");
+    }
+  }
+
+  elog(ERROR, "invalid enum value in <ALTER DATABASE> statement");
+}
+
+// Deparse DROP (TABLE/INDEX/SCHEMA) statements
+void GetDropStmtDef(DropStmt* stmt, deparse_context* context) {
+  if (stmt->missing_ok) {
+    elog(ERROR, "<IF EXISTS> support is not implemented in <DROP> statement");
+  }
+  if (stmt->concurrent) {
+    elog(ERROR,
+         "concurrent dropping support is not implemented in <DROP> statement");
+  }
+  if (stmt->behavior != DROP_RESTRICT) {
+    elog(ERROR,
+         "<CASCADE> drop behavior support is not implemented in <DROP> "
+         "statement");
+  }
+
+  StringInfo buf = context->buf;
+
+  switch (stmt->removeType) {
+    case OBJECT_TABLE: {
+      appendStringInfoString(buf, "DROP TABLE ");
+      break;
+    }
+
+    case OBJECT_INDEX: {
+      appendStringInfoString(buf, "DROP INDEX ");
+      break;
+    }
+
+    case OBJECT_SCHEMA: {
+      appendStringInfoString(buf, "DROP SCHEMA ");
+      break;
+    }
+
+    default: {
+      elog(ERROR,
+           "support for object type %u is not implemented in <DROP> statement",
+           stmt->removeType);
+    }
+  }
+
+  if (list_length(stmt->objects) != 1) {
+    elog(ERROR,
+         "support for multiple identifiers in <DROP> statement is not "
+         "implemented");
+  }
+
+  List* name_components = castNode(List, linitial(stmt->objects));
+  if (list_length(name_components) == 0) {
+    elog(ERROR, "missing value");
+  }
+  if (list_length(name_components) > 2) {
+    elog(ERROR,
+         "catalog qualifiers support is not implemented in <DROP> statement");
+  } else if (list_length(name_components) == 2) {
+    GetIdentifierValueDef(list_nth(name_components, 0), context);
+    appendStringInfoString(buf, ".");
+    GetIdentifierValueDef(list_nth(name_components, 1), context);
+    return;
+  }
+  GetIdentifierValueDef(linitial(name_components), context);
+}
+
+void GetAlterTableCmdDropColumn(AlterTableCmd* cmd, deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  if (cmd->def != NULL) {
+    elog(ERROR,
+         "invalid parse tree: new column definition present in <ALTER "
+         "TABLE DROP COLUMN> statement");
+  }
+  if (cmd->num != 0) {
+    elog(ERROR,
+         "invalid parse tree: columns referenced by number are not "
+         "supported in <ALTER TABLE DROP COLUMN> statement");
+  }
+  if (cmd->name == NULL || *cmd->name == '\0') {
+    elog(ERROR, "missing column name in <ALTER TABLE DROP COLUMN> statement");
+  }
+  if (cmd->missing_ok) {
+    elog(ERROR,
+         "<IF EXISTS> support is not implemented in <ALTER TABLE DROP "
+         "COLUMN> statement");
+  }
+  if (cmd->behavior != DROP_RESTRICT) {
+    elog(ERROR,
+         "<CASCADE> drop behavior support is not implemented in <ALTER "
+         "TABLE DROP COLUMN> statement");
+  }
+
+  appendStringInfo(buf, " DROP COLUMN %s", quote_identifier(cmd->name));
+}
+
+void GetAlterTableCmdDropConstraint(AlterTableCmd* cmd,
+                                    deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  if (cmd->def != NULL) {
+    elog(ERROR,
+         "invalid parse tree: new column definition present in <ALTER "
+         "TABLE DROP CONSTRAINT> statement");
+  }
+  if (cmd->num != 0) {
+    elog(ERROR,
+         "invalid parse tree: columns referenced by number are not "
+         "supported in <ALTER TABLE DROP CONSTRAINT> statement");
+  }
+  if (cmd->name == NULL || *cmd->name == '\0') {
+    elog(ERROR,
+         "missing column name in <ALTER TABLE DROP CONSTRAINT> statement");
+  }
+  if (cmd->missing_ok) {
+    elog(ERROR,
+         "<IF EXISTS> support is not implemented in <ALTER TABLE DROP "
+         "CONSTRAINT> statement");
+  }
+  if (cmd->behavior != DROP_RESTRICT) {
+    elog(ERROR,
+         "<CASCADE> drop behavior support is not implemented in <ALTER "
+         "TABLE DROP CONSTRAINT> statement");
+  }
+
+  appendStringInfo(buf, " DROP CONSTRAINT %s", quote_identifier(cmd->name));
+}
+
+void GetAlterTableCmdAddConstraint(AlterTableCmd* cmd,
+                                   deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  appendStringInfoString(buf, " ADD ");
+  GetConstraintDef(castNode(Constraint, cmd->def), context);
+}
+
+void GetAlterTableCmdAddColumn(AlterTableCmd* cmd, deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  // <name> is used for operations on existing entities and holds the name
+  // of such entity, e.g. column, constraints, etc.
+  if (cmd->name != NULL) {
+    elog(ERROR, "invalid parse tree: name cannot be set for ADD operations");
+  }
+
+  // <num> is a (currently officially unsupported by PostgreSQL) way to
+  // reference columns by index as opposed to usual name.
+  if (cmd->num != 0) {
+    elog(ERROR,
+         "invalid parse tree: referencing columns by number is unsupported");
+  }
+
+  if (cmd->missing_ok) {
+    elog(ERROR,
+         "<IF NOT EXISTS> support is not implemented in <ALTER TABLE ADD "
+         "COLUMN> statement");
+  }
+
+  ColumnDef* column = castNode(ColumnDef, cmd->def);
+
+  appendStringInfoString(buf, " ADD COLUMN ");
+  GetColumnDefDef(column, context);
+}
+
+void GetAlterTableCmdSetNotNull(AlterTableCmd* cmd, deparse_context* context) {
+  elog(ERROR,
+       "support for <ALTER COLUMN SET NOT NULL> is not implemented in <ALTER "
+       "TABLE> statement");
+}
+
+void GetAlterTableCmdDropNotNull(AlterTableCmd* cmd, deparse_context* context) {
+  elog(ERROR,
+       "support for <ALTER COLUMN DROP NOT NULL> is not implemented in <ALTER "
+       "TABLE> statement");
+}
+
+void GetAlterTableCmdAlterColumnType(AlterTableCmd* cmd,
+                                     deparse_context* context) {
+  elog(ERROR,
+       "support for <ALTER COLUMN SET DATA TYPE> is not implemented in <ALTER "
+       "TABLE> statement");
+}
+
+// Deparse ALTER TABLE statements
+void GetAlterTableStmtDef(AlterTableStmt* stmt, deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  if (stmt->objtype != OBJECT_TABLE) {
+    elog(ERROR,
+         "invalid parse tree: only tables are supported in <ALTER TABLE> "
+         "statement");
+  }
+  if (stmt->missing_ok) {
+    elog(ERROR, "<IF EXISTS> support is not implemented in <ALTER TABLE>");
+  }
+
+  appendStringInfoString(buf, "ALTER TABLE ");
+  AppendRangeVarToStringInfo(buf, stmt->relation);
+
+  if (list_length(stmt->cmds) != 1) {
+    elog(ERROR,
+         "support for multiple commands in <ALTER TABLE> statement is not "
+         "implemented");
+  }
+
+  AlterTableCmd* cmd = linitial_node(AlterTableCmd, stmt->cmds);
+
+  switch (cmd->subtype) {
+    case AT_DropColumn: {
+      GetAlterTableCmdDropColumn(cmd, context);
+      break;
+    }
+
+    case AT_DropConstraint: {
+      GetAlterTableCmdDropConstraint(cmd, context);
+      break;
+    }
+
+    // TODO: add support for the full ALTER TABLE syntax
+    case AT_AddConstraint: {
+      GetAlterTableCmdAddConstraint(cmd, context);
+      break;
+    }
+
+    case AT_AddColumn: {
+      GetAlterTableCmdAddColumn(cmd, context);
+      break;
+    }
+
+    case AT_SetNotNull: {
+      GetAlterTableCmdSetNotNull(cmd, context);
+      break;
+    }
+
+    case AT_DropNotNull: {
+      GetAlterTableCmdDropNotNull(cmd, context);
+      break;
+    }
+
+    case AT_AlterColumnType: {
+      GetAlterTableCmdAlterColumnType(cmd, context);
+      break;
+    }
+
+    default: {
+      elog(ERROR,
+           "support for operation %u is not implemented in <ALTER TABLE> "
+           "statement",
+           cmd->subtype);
+    }
+  }
+}
+
+void GetInterleaveIn(InterleaveSpec* interleave_spec, deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  switch(interleave_spec->interleavetype) {
+    case INTERLEAVE_IN_PARENT: {
+      appendStringInfoString(buf, " INTERLEAVE IN PARENT ");
+      break;
+    }
+    case INTERLEAVE_IN: {
+      appendStringInfoString(buf, " INTERLEAVE IN ");
+      break;
+    }
+    default: {
+      elog(ERROR, "Interleve type should be only INTERELAVE_IN and INTERLEAVE_IN_PARENT");
+    }
+  }
+  appendStringInfoString(buf, quote_identifier(interleave_spec->parent->relname));
+}
+
+// Deparse CREATE TABLE statements
+void GetCreateStmtDef(CreateStmt* stmt, deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  if (stmt->if_not_exists) {
+    elog(ERROR,
+         "support for <IF NOT EXISTS> is not implemented in <CREATE TABLE> "
+         "statement");
+  }
+  if (list_length(stmt->inhRelations) > 0) {
+    elog(ERROR,
+         "support for <INHERITS> clause is not implemented in <CREATE TABLE> "
+         "statement");
+  }
+  if (stmt->ofTypename != NULL) {
+    elog(ERROR,
+         "support for <OF type_name> clause is not implemented in <CREATE "
+         "TABLE> statement");
+  }
+  if (stmt->oncommit != ONCOMMIT_NOOP) {
+    elog(ERROR,
+         "support for <ON COMMIT> clause is not implemented in <CREATE TABLE> "
+         "statement");
+  }
+  if (list_length(stmt->options)) {
+    elog(ERROR,
+         "support for <WITH> clause is not implemented in <CREATE TABLE> "
+         "statement");
+  }
+  if (stmt->partbound != NULL) {
+    elog(ERROR,
+         "support for <FOR VALUES> clause is not implemented in <CREATE TABLE> "
+         "statement");
+  }
+  if (stmt->partspec != NULL) {
+    elog(ERROR,
+         "support for <PARTITION BY> clause is not implemented in <CREATE "
+         "TABLE> statement");
+  }
+  if (stmt->tablespacename != NULL) {
+    elog(ERROR,
+         "support for <TABLESPACE> clause is not implemented in <CREATE TABLE> "
+         "statement");
+  }
+
+  appendStringInfoString(buf, "CREATE TABLE ");
+  AppendRangeVarToStringInfo(buf, stmt->relation);
+  appendStringInfoString(buf, " (");
+
+  // <tableElts> contains a List that can include ColumnDef, Constraint or
+  // T_TableLikeClause.
+  bool add_comma = false;
+  for (ListCell* elt_it = list_head(stmt->tableElts); elt_it;
+       elt_it = lnext(stmt->tableElts, elt_it)) {
+    Node* elt = (Node*) lfirst(elt_it);
+
+	if (add_comma) {
+      appendStringInfoString(buf, ", ");
+    }
+	add_comma = true;
+
+    // If pretty-printing is enabled, provide line break and indentation for
+    // each column/constraint definition
+    appendContextKeyword(context, "", 0, 0, 2);
+    switch (elt->type) {
+      case T_ColumnDef: {
+        GetColumnDefDef(castNode(ColumnDef, elt), context);
+        break;
+      }
+
+      case T_Constraint: {
+        GetConstraintDef(castNode(Constraint, elt), context);
+        break;
+      }
+
+      case T_TableLikeClause: {
+        elog(ERROR,
+             "support for <LIKE> clause is not implemented in <CREATE TABLE> "
+             "statement");
+      }
+
+      default: {
+        elog(ERROR, "unkown clause in <CREATE TABLE> statement: %d", elt->type);
+      }
+    }
+
+  }
+
+  // TODO: constraints field is populated with all the CHECK
+  // constraints by the analyzer. Figure out if we need to process it, and if so
+  // - add a test running parse tree through analyzer before deparser.
+  if (list_length(stmt->constraints) > 0) {
+    elog(ERROR, "unexpected constraint node");
+  }
+
+  appendContextKeyword(context, ")", 0, 0, 0);
+  if (stmt->interleavespec != NULL) {
+    GetInterleaveIn(stmt->interleavespec, context);
+  }
+}
+
+// Deparse CREATE SCHEMA statements
+void GetCreateSchemaStmtDef(CreateSchemaStmt* stmt, deparse_context* context) {
+  StringInfo buf = context->buf;
+
+  if (stmt->if_not_exists) {
+    elog(ERROR,
+         "support for <IF NOT EXISTS> is not implemented in <CREATE SCHEMA> "
+         "statement");
+  }
+  if (stmt->authrole != NULL) {
+    elog(ERROR,
+         "support for <TABLESPACE> clause is not implemented in <CREATE TABLE> "
+         "statement");
+  }
+  if (list_length(stmt->schemaElts) > 0) {
+    elog(ERROR,
+         "support for <INHERITS> clause is not implemented in <CREATE TABLE> "
+         "statement");
+  }
+
+  appendStringInfo(buf, "CREATE SCHEMA %s", stmt->schemaname);
+}
+// SPANGRES END
 
 /* ----------
  * get_utility_query_def			- Parse back a UTILITY parsetree
  * ----------
+ *
+ * SPANGRES: Original PostgreSQL supports deparsing only for NOTIFY statements
+ * out of all utility statement types. This function expands this support with
+ * all the utility statements supported by Spangres (CREATE/ALTER TABLE,
+ * CREATE/ALTER DATABASE, etc.). The support is provided only for the subset of
+ * features that is supported by Spangres, meaning that deparsing for arbitrary
+ * PostgreSQL parse trees is not guaranteed.
  */
 static void
-get_utility_query_def_UNUSED_SPANGRES(Query *query, deparse_context *context)
+get_utility_query_def(Query *query, deparse_context *context)
 {
-	StringInfo	buf = context->buf;
+	// SPANGRES BEGIN
+  Node* stmt = query->utilityStmt;
+  if (!stmt) {
+    elog(ERROR, "missing utility statement");
+  }
 
-	if (query->utilityStmt && IsA(query->utilityStmt, NotifyStmt))
-	{
-		NotifyStmt *stmt = (NotifyStmt *) query->utilityStmt;
+  // TODO: we should support pretty-printing for large statements,
+  // e.g. multiline, indents, etc.
+  switch (stmt->type) {
+    case T_NotifyStmt: {
+      return GetNotifyStmtDef(castNode(NotifyStmt, stmt), context);
+    }
 
-		appendContextKeyword(context, "",
-							 0, PRETTYINDENT_STD, 1);
-		appendStringInfo(buf, "NOTIFY %s",
-						 quote_identifier(stmt->conditionname));
-		if (stmt->payload)
-		{
-			appendStringInfoString(buf, ", ");
-			simple_quote_literal(buf, stmt->payload);
-		}
-	}
-	else
-	{
-		/* Currently only NOTIFY utility commands can appear in rules */
-		elog(ERROR, "unexpected utility statement type");
-	}
+    case T_CreatedbStmt: {
+      return GetCreatedbStmtDef(castNode(CreatedbStmt, stmt), context);
+    }
+
+    case T_AlterDatabaseSetStmt: {
+      return GetAlterDatabaseSetStmtDef(castNode(AlterDatabaseSetStmt, stmt),
+                                        context);
+    }
+
+    case T_DropStmt: {
+      return GetDropStmtDef(castNode(DropStmt, stmt), context);
+    }
+
+    case T_IndexStmt: {
+      return GetIndexStmtDef(castNode(IndexStmt, stmt), context);
+    }
+
+    case T_AlterTableStmt: {
+      return GetAlterTableStmtDef(castNode(AlterTableStmt, stmt), context);
+    }
+
+    case T_CreateStmt: {
+      return GetCreateStmtDef(castNode(CreateStmt, stmt), context);
+    }
+
+    case T_CreateSchemaStmt: {
+      return GetCreateSchemaStmtDef(castNode(CreateSchemaStmt, stmt), context);
+    }
+
+    default: {
+      elog(ERROR, "unexpected utility statement type %s",
+           CNodeTagToNodeString(query->utilityStmt->type));
+    }
+  }
+	// SPANGRES END
 }
 
 /*
@@ -7350,6 +8182,7 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 	deparse_columns *colinfo;
 	char	   *refname;
 	char	   *attname;
+	bool		need_prefix;
 
 	/* Find appropriate nesting depth */
 	netlevelsup = var->varlevelsup + levelsup;
@@ -7545,7 +8378,45 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 		attname = get_rte_attribute_name(rte, attnum);
 	}
 
-	if (refname && (context->varprefix || attname == NULL))
+	need_prefix = (context->varprefix || attname == NULL);
+
+	/*
+	 * If we're considering a plain Var in an ORDER BY (but not GROUP BY)
+	 * clause, we may need to add a table-name prefix to prevent
+	 * findTargetlistEntrySQL92 from misinterpreting the name as an
+	 * output-column name.  To avoid cluttering the output with unnecessary
+	 * prefixes, do so only if there is a name match to a SELECT tlist item
+	 * that is different from the Var.
+	 */
+	if (context->varInOrderBy && !context->inGroupBy && !need_prefix)
+	{
+		int			colno = 0;
+
+		foreach_node(TargetEntry, tle, context->targetList)
+		{
+			char	   *colname;
+
+			if (tle->resjunk)
+				continue;		/* ignore junk entries */
+			colno++;
+
+			/* This must match colname-choosing logic in get_target_list() */
+			if (context->resultDesc && colno <= context->resultDesc->natts)
+				colname = NameStr(TupleDescAttr(context->resultDesc,
+												colno - 1)->attname);
+			else
+				colname = tle->resname;
+
+			if (colname && strcmp(colname, attname) == 0 &&
+				!equal(var, tle->expr))
+			{
+				need_prefix = true;
+				break;
+			}
+		}
+	}
+
+	if (refname && need_prefix)
 	{
 		appendStringInfoString(buf, quote_identifier(refname));
 		appendStringInfoChar(buf, '.');
@@ -8599,7 +9470,7 @@ isSimpleNode(Node *node, Node *parentNode, int prettyFlags)
  * If prettyPrint is enabled, perform a line break, and adjust indentation.
  * Otherwise, just append the keyword.
  */
-void
+static void
 appendContextKeyword(deparse_context *context, const char *str,
 					 int indentBefore, int indentAfter, int indentPlus)
 {
@@ -8708,12 +9579,9 @@ get_rule_expr_paren(Node *node, deparse_context *context,
  * or operator will be chosen when the expression is re-parsed.
  * ----------
  */
-/* SPANGRES BEGIN */
-// We've made these functions non-static to call them from catalog_shim.
-void
+static void
 get_rule_expr(Node *node, deparse_context *context,
 			  bool showimplicit)
-/* SPANGRES END */
 {
 	StringInfo	buf = context->buf;
 
@@ -9989,10 +10857,10 @@ looks_like_function(Node *node)
 
 
 /*
- * get_oper_expr_spangres			- Parse back an OpExpr node
+ * get_oper_expr			- Parse back an OpExpr node
  */
-static void
-get_oper_expr_UNUSED_SPANGRES(OpExpr *expr, deparse_context *context)
+void
+get_oper_expr(OpExpr *expr, deparse_context *context)
 {
 	StringInfo	buf = context->buf;
 	Oid			opno = expr->opno;
@@ -10018,11 +10886,32 @@ get_oper_expr_UNUSED_SPANGRES(OpExpr *expr, deparse_context *context)
 		/* prefix operator */
 		Node	   *arg = (Node *) linitial(args);
 
-		appendStringInfo(buf, "%s ",
-						 generate_operator_name(opno,
-												InvalidOid,
-												exprType(arg)));
-		get_rule_expr_paren(arg, context, true, (Node *) expr);
+		// SPANGRES BEGIN
+		/* Look up operator from the Bootstrap Catalog */
+		const FormData_pg_operator* optup = GetOperatorFromBootstrapCatalog(opno);
+		if (optup == NULL) {
+			elog(ERROR, "catalog lookup failed for operator %u", opno);
+		}
+		switch (optup->oprkind)
+		{
+			case 'l':
+				appendStringInfo(buf, "%s ",
+								 generate_operator_name(opno,
+														InvalidOid,
+														exprType(arg)));
+				get_rule_expr_paren(arg, context, true, (Node *) expr);
+				break;
+			case 'r':
+				get_rule_expr_paren(arg, context, true, (Node *) expr);
+				appendStringInfo(buf, " %s",
+								 generate_operator_name(opno,
+														exprType(arg),
+														InvalidOid));
+				break;
+			default:
+				elog(ERROR, "bogus oprkind: %d", optup->oprkind);
+		}
+		// SPANGRES END
 	}
 	if (!POSTGRES_PRETTY_PAREN(context))
 		appendStringInfoChar(buf, ')');
@@ -10111,7 +11000,7 @@ get_func_expr(FuncExpr *expr, deparse_context *context,
 											argnames, argtypes,
 											expr->funcvariadic,
 											&use_variadic,
-											context->special_exprkind));
+											context->inGroupBy));
 	nargs = 0;
 	foreach(l, expr->args)
 	{
@@ -10174,7 +11063,7 @@ get_agg_expr(Aggref *aggref, deparse_context *context,
 											NIL, argtypes,
 											aggref->aggvariadic,
 											&use_variadic,
-											context->special_exprkind),
+											context->inGroupBy),
 					 (aggref->aggdistinct != NIL) ? "DISTINCT " : "");
 
 	if (AGGKIND_IS_ORDERED_SET(aggref->aggkind))
@@ -10294,7 +11183,7 @@ get_windowfunc_expr(WindowFunc *wfunc, deparse_context *context)
 					 generate_function_name(wfunc->winfnoid, nargs,
 											argnames, argtypes,
 											false, NULL,
-											context->special_exprkind));
+											context->inGroupBy));
 	/* winstar can be set only in zero-argument aggregates */
 	if (wfunc->winstar)
 		appendStringInfoChar(buf, '*');
@@ -10324,7 +11213,7 @@ get_windowfunc_expr(WindowFunc *wfunc, deparse_context *context)
 			if (wc->name)
 				appendStringInfoString(buf, quote_identifier(wc->name));
 			else
-				get_rule_windowspec(wc, context->windowTList, context);
+				get_rule_windowspec(wc, context->targetList, context);
 			break;
 		}
 	}
@@ -11622,7 +12511,7 @@ get_tablesample_def(TableSampleClause *tablesample, deparse_context *context)
 	appendStringInfo(buf, " TABLESAMPLE %s (",
 					 generate_function_name(tablesample->tsmhandler, 1,
 											NIL, argtypes,
-											false, NULL, EXPR_KIND_NONE));
+											false, NULL, false));
 
 	nargs = 0;
 	foreach(l, tablesample->args)
@@ -11941,59 +12830,40 @@ get_relation_name(Oid relid)
  * If namespaces isn't NIL, it must be a list of deparse_namespace nodes.
  * We will forcibly qualify the relation name if it equals any CTE name
  * visible in the namespace list.
+ *
+ * SPANGRES: Differs from PostgreSQL in the following ways:
+ *
+ * - It doesn't manually add a namespace prefix to the table name, since Spanner
+ * does not support inferring namespace from search path. If the table is in
+ * fact in a namespace it will use that name.
+ * - The table name is looked up in the catalog adapter instead of the
+ * PostgreSQL catalog.
+ * - It doesn't use the query's cteList (in WITH clause) to check against
+ * the need to qualify the table name.
  */
-static char *
-generate_relation_name_UNUSED_SPANGRES(Oid relid, List *namespaces)
+char *
+generate_relation_name(Oid relid, List *namespaces)
 {
-	HeapTuple	tp;
-	Form_pg_class reltup;
-	bool		need_qual;
-	ListCell   *nslist;
-	char	   *relname;
-	char	   *nspname;
-	char	   *result;
-
-	tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for relation %u", relid);
-	reltup = (Form_pg_class) GETSTRUCT(tp);
-	relname = NameStr(reltup->relname);
-
-	/* Check for conflicting CTE name */
-	need_qual = false;
-	foreach(nslist, namespaces)
-	{
-		deparse_namespace *dpns = (deparse_namespace *) lfirst(nslist);
-		ListCell   *ctlist;
-
-		foreach(ctlist, dpns->ctes)
-		{
-			CommonTableExpr *cte = (CommonTableExpr *) lfirst(ctlist);
-
-			if (strcmp(cte->ctename, relname) == 0)
-			{
-				need_qual = true;
-				break;
-			}
-		}
-		if (need_qual)
-			break;
+	// SPANGRES BEGIN
+	char* table_name = GetTableNameC(relid);
+	char* namespace_name = GetNamespaceNameC(relid);
+	// Temporary fix: drop "public" since it is assumed in the search path.
+	// TODO: Replace this with a more PG-faithful version when
+	// adding search path.
+	if (strcmp(namespace_name, "public") == 0) {
+		namespace_name = NULL;
 	}
-
-	/* Otherwise, qualify the name if not visible in search path */
-	if (!need_qual)
-		need_qual = !RelationIsVisible(relid);
-
-	if (need_qual)
-		nspname = get_namespace_name_or_temp(reltup->relnamespace);
-	else
-		nspname = NULL;
-
-	result = quote_qualified_identifier(nspname, relname);
-
-	ReleaseSysCache(tp);
-
-	return result;
+	if (table_name == NULL) {
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("There is no table name with oid %s in the catalog adapter",
+								relid)));
+	}
+	// TODO : `quote_qualified_identifier` uses
+	// `quote_all_identifiers`, a PostgreSQL configuration parameter. We need to
+	// properly handle its uses.
+	return quote_qualified_identifier(namespace_name, table_name);
+	// SPANGRES END
 }
 
 /*
@@ -12042,16 +12912,22 @@ generate_qualified_relation_name(Oid relid)
  * the output.  For non-FuncExpr cases, has_variadic should be false and
  * use_variadic_p can be NULL.
  *
+ * inGroupBy must be true if we're deparsing a GROUP BY clause.
+ *
  * The result includes all necessary quoting and schema-prefixing.
+ *
+ * SPANGRES: Use bootstrap catalog instead of syscache.
  */
-static char *
-generate_function_name_UNUSED_SPANGRES(Oid funcid, int nargs, List *argnames, Oid *argtypes,
-					   bool has_variadic, bool *use_variadic_p,
-					   ParseExprKind special_exprkind)
+char *
+generate_function_name(Oid funcid, int nargs, List *argnames, Oid *argtypes,
+					   bool has_variadic, bool *use_variadic_p, bool inGroupBy)
 {
 	char	   *result;
-	HeapTuple	proctup;
-	Form_pg_proc procform;
+	// SPANGRES BEGIN
+	// Unused variables
+	// HeapTuple	proctup;
+	// Form_pg_proc procform;
+	// SPANGRES END
 	char	   *proname;
 	bool		use_variadic;
 	char	   *nspname;
@@ -12064,17 +12940,20 @@ generate_function_name_UNUSED_SPANGRES(Oid funcid, int nargs, List *argnames, Oi
 	Oid		   *p_true_typeids;
 	bool		force_qualify = false;
 
-	proctup = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
-	if (!HeapTupleIsValid(proctup))
-		elog(ERROR, "cache lookup failed for function %u", funcid);
-	procform = (Form_pg_proc) GETSTRUCT(proctup);
-	proname = NameStr(procform->proname);
+	// SPANGRES BEGIN
+	const FormData_pg_proc* procform = GetProcByOid(funcid);
+	if (procform == NULL) {
+		elog(ERROR, "bootstrap catalog lookup failed for function %u", funcid);
+	}
+	/* Make a non-const copy of proname */
+	proname = pstrdup(NameStr(procform->proname));
+	// SPANGRES END
 
 	/*
 	 * Due to parser hacks to avoid needing to reserve CUBE, we need to force
-	 * qualification in some special cases.
+	 * qualification of some function names within GROUP BY.
 	 */
-	if (special_exprkind == EXPR_KIND_GROUP_BY)
+	if (inGroupBy)
 	{
 		if (strcmp(proname, "cube") == 0 || strcmp(proname, "rollup") == 0)
 			force_qualify = true;
@@ -12129,11 +13008,15 @@ generate_function_name_UNUSED_SPANGRES(Oid funcid, int nargs, List *argnames, Oi
 		p_funcid == funcid)
 		nspname = NULL;
 	else
-		nspname = get_namespace_name_or_temp(procform->pronamespace);
+		// SPANGRES BEGIN
+		nspname = GetNamespaceNameByOidFromBootstrapCatalog(procform->pronamespace);
+		// SPANGRES END
 
 	result = quote_qualified_identifier(nspname, proname);
 
-	ReleaseSysCache(proctup);
+	// SPANGRES BEGIN
+	// ReleaseSysCache(proctup);
+	// SPANGRES END
 
 	return result;
 }
@@ -12148,24 +13031,32 @@ generate_function_name_UNUSED_SPANGRES(Oid funcid, int nargs, List *argnames, Oi
  * The result includes all necessary quoting and schema-prefixing,
  * plus the OPERATOR() decoration needed to use a qualified operator name
  * in an expression.
+ *
+ * SPANGRES: Use bootstrap catalog instead of syscache.
  */
 static char *
-generate_operator_name_UNUSED_SPANGRES(Oid operid, Oid arg1, Oid arg2)
+generate_operator_name(Oid operid, Oid arg1, Oid arg2)
 {
 	StringInfoData buf;
-	HeapTuple	opertup;
-	Form_pg_operator operform;
+	// SPANGRES BEGIN
+	const	   FormData_pg_operator* operform;
+	// SPANGRES END
 	char	   *oprname;
 	char	   *nspname;
 	Operator	p_result;
 
 	initStringInfo(&buf);
 
-	opertup = SearchSysCache1(OPEROID, ObjectIdGetDatum(operid));
-	if (!HeapTupleIsValid(opertup))
-		elog(ERROR, "cache lookup failed for operator %u", operid);
-	operform = (Form_pg_operator) GETSTRUCT(opertup);
-	oprname = NameStr(operform->oprname);
+	// SPANGRES BEGIN
+	operform = GetOperatorFromBootstrapCatalog(operid);
+	if (operform == NULL) {
+		// Should not happen.
+		elog(ERROR, "bootstrap catalog lookup failed for operator %u",
+			 operid);
+	}
+	// Make a non-const copy of oprname.
+	oprname = pstrdup(NameStr(operform->oprname));
+	// SPANGRES END
 
 	/*
 	 * The idea here is to schema-qualify only if the parser would fail to
@@ -12192,8 +13083,10 @@ generate_operator_name_UNUSED_SPANGRES(Oid operid, Oid arg1, Oid arg2)
 		nspname = NULL;
 	else
 	{
-		nspname = get_namespace_name_or_temp(operform->oprnamespace);
-		appendStringInfo(&buf, "OPERATOR(%s.", quote_identifier(nspname));
+		// SPANGRES BEGIN
+		// TODO : Support namespaces.
+		elog(ERROR, "namespaces and schemas are not supported in Spangres.");
+		// SPANGRES END
 	}
 
 	appendStringInfoString(&buf, oprname);
@@ -12201,10 +13094,12 @@ generate_operator_name_UNUSED_SPANGRES(Oid operid, Oid arg1, Oid arg2)
 	if (nspname)
 		appendStringInfoChar(&buf, ')');
 
-	if (p_result != NULL)
-		ReleaseSysCache(p_result);
+	// SPANGRES BEGIN
+	// if (p_result != NULL)
+	// 	ReleaseSysCache(p_result);
 
-	ReleaseSysCache(opertup);
+	// ReleaseSysCache(opertup);
+	// SPANGRES END
 
 	return buf.data;
 }

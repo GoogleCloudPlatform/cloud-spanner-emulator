@@ -44,13 +44,10 @@ extern PGDLLIMPORT char *locale_numeric;
 extern PGDLLIMPORT char *locale_time;
 
 /* lc_time localization cache */
-// SPANGRES BEGIN
-// Defined in `shims/pg_locale.h`
-extern PGDLLIMPORT char *localized_abbrev_days_UNUSED_SPANGRES[];
-extern PGDLLIMPORT char *localized_full_days_UNUSED_SPANGRES[];
-extern PGDLLIMPORT char *localized_abbrev_months_UNUSED_SPANGRES[];
-extern PGDLLIMPORT char *localized_full_months_UNUSED_SPANGRES[];
-// SPANGRES END
+extern PGDLLIMPORT char *localized_abbrev_days[];
+extern PGDLLIMPORT char *localized_full_days[];
+extern PGDLLIMPORT char *localized_abbrev_months[];
+extern PGDLLIMPORT char *localized_full_months[];
 
 /* is the databases's LC_CTYPE the C locale? */
 extern PGDLLIMPORT bool	database_ctype_is_c;
@@ -75,12 +72,9 @@ extern bool lc_ctype_is_c(Oid collation);
  * Return the POSIX lconv struct (contains number/money formatting
  * information) with locale information for all categories.
  */
-// SPANGRES BEGIN
-// Implemented in `shims/pg_locale_shim`.
-extern struct lconv *PGLC_localeconv_UNUSED_SPANGRES(void);
+extern struct lconv *PGLC_localeconv(void);
 
-extern void cache_locale_time_UNUSED_SPANGRES(void);
-// SPANGRES END
+extern void cache_locale_time(void);
 
 
 /*
