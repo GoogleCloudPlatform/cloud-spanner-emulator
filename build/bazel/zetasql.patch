@@ -1,3 +1,70 @@
+diff --git a/zetasql/public/functions/date_time_util.h b/zetasql/public/functions/date_time_util.h
+index e4b0b34..5e9327c 100644
+--- a/zetasql/public/functions/date_time_util.h
++++ b/zetasql/public/functions/date_time_util.h
+@@ -412,6 +412,11 @@ absl::Status ConvertStringToTimestamp(absl::string_view str,
+                                       TimestampScale scale,
+                                       bool allow_tz_in_str, int64_t* timestamp);
+
++absl::Status ConvertStringToTimestamp(absl::string_view str,
++                                      absl::string_view default_timezone_string,
++                                      TimestampScale scale,
++                                      bool allow_tz_in_str, absl::Time* output);
++
+ // Populate the <output> with the values from input if the values on all fields
+ // are valid, return error otherwise.
+ absl::Status ConstructDate(int year, int month, int day, int32_t* output);
+diff --git a/zetasql/public/functions/date_time_util.cc b/zetasql/public/functions/date_time_util.cc
+index b579d10..753de44 100644
+--- a/zetasql/public/functions/date_time_util.cc
++++ b/zetasql/public/functions/date_time_util.cc
+@@ -2348,6 +2348,17 @@ absl::Status ConvertStringToTimestamp(absl::string_view str,
+   return ConvertStringToTimestamp(str, timezone, scale, timestamp);
+ }
+
++absl::Status ConvertStringToTimestamp(absl::string_view str,
++                                      absl::string_view default_timezone_string,
++                                      TimestampScale scale,
++                                      bool allow_tz_in_str,
++                                      absl::Time* output) {
++  absl::TimeZone timezone;
++  ZETASQL_RETURN_IF_ERROR(MakeTimeZone(default_timezone_string, &timezone));
++  return ConvertStringToTimestamp(str, timezone, scale, allow_tz_in_str,
++                                  output);
++}
++
+ absl::Status ConvertStringToTimestamp(absl::string_view str,
+                                       absl::TimeZone default_timezone,
+                                       TimestampScale scale,
+diff --git a/zetasql/reference_impl/function.cc b/zetasql/reference_impl/function.cc
+index b258838..f54e6af 100644
+--- a/zetasql/reference_impl/function.cc
++++ b/zetasql/reference_impl/function.cc
+@@ -9231,19 +9231,20 @@ absl::StatusOr<Value> TimestampConversionFunction::Eval(
+     }
+     return Value::Timestamp(timestamp);
+   } else if (!args.empty() && args[0].type()->IsString()) {
+-    int64_t timestamp_micros;
++    absl::Time timestamp;
+     if (args.size() == 2 && args[1].type()->IsString()) {
+       ZETASQL_RETURN_IF_ERROR(functions::ConvertStringToTimestamp(
+           args[0].string_value(), args[1].string_value(),
+-          functions::kMicroseconds, false, &timestamp_micros));
++          GetTimestampScale(context->GetLanguageOptions()), false, &timestamp));
+     } else if (args.size() == 1) {
+       ZETASQL_RETURN_IF_ERROR(functions::ConvertStringToTimestamp(
+           args[0].string_value(), context->GetDefaultTimeZone(),
+-          functions::kMicroseconds, true, &timestamp_micros));
++          GetTimestampScale(context->GetLanguageOptions()), true, &timestamp));
+     } else {
+       return MakeEvalError() << "Unsupported function: " << debug_name();
+     }
+-    return Value::TimestampFromUnixMicros(timestamp_micros);
++    ZETASQL_RETURN_IF_ERROR(ValidateMicrosPrecision(Value::Timestamp(timestamp), context));
++    return Value::Timestamp(timestamp);
+   } else if (!args.empty() && args[0].type()->IsDate()) {
+     int64_t timestamp_micros;
+     if (args.size() == 2 && args[1].type()->IsString()) {
 diff --git a/zetasql/analyzer/BUILD b/zetasql/analyzer/BUILD
 index 590f1be1..3ca15df4 100644
 --- a/zetasql/analyzer/BUILD
