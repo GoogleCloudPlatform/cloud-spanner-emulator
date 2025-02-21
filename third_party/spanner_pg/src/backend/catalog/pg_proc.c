@@ -46,8 +46,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 typedef struct
 {
 	char	   *proname;

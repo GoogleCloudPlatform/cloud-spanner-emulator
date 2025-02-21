@@ -31,8 +31,6 @@
 #include "utils/relmapper.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /* Divide by two and round away from zero */
 #define half_rounded(x)   (((x) + ((x) < 0 ? -1 : 1)) / 2)
 

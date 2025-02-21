@@ -29,7 +29,7 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
 
 #include <cstring>
 #include <string>
@@ -48,8 +48,6 @@
 #include "third_party/spanner_pg/catalog/udf_support.h"
 #include "third_party/spanner_pg/errors/error_catalog.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/catalog_shim_transforms.h"
 #include "third_party/spanner_pg/transformer/transformer.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "zetasql/base/ret_check.h"
@@ -88,7 +86,7 @@ void ereport_helper(const absl::Status& status, int desired_error_code,
 // If the relation does not already have an assigned Oid, the transformer will
 // ask the Catalog Adapter to generate one.
 // Arguments are intended to be passed through directly from the
-// PostgreSQL function `addRangeTableEntrySpangres()`.
+// PostgreSQL function `addRangeTableEntry()`.
 absl::StatusOr<RangeTblEntry*> AddRangeTableEntryCpp(ParseState* pstate,
                                                      RangeVar* relation,
                                                      Alias* alias, bool inh,
@@ -648,6 +646,27 @@ static bool GetArgInfoForTVF(Oid tvf_oid, std::vector<Oid>& argument_types,
   }
   // TVF not found.
   return false;
+}
+
+absl::StatusOr<TableName> TableNameFromRangeVar(RangeVar& relation) {
+  // Build the lookup path from name qualifiers.
+  std::vector<std::string> path;
+  if (relation.catalogname != nullptr) {
+    path.push_back(relation.catalogname);
+  }
+
+  if (relation.schemaname != nullptr) {
+    path.push_back(relation.schemaname);
+  }
+
+  if (relation.relname == nullptr) {
+    // We need at least a relation name to do lookup in the ZetaSQL catalog.
+    return absl::InternalError(
+        "'relname' is required. Make sure to provide a relation name.");
+  } else {
+    path.push_back(relation.relname);
+  }
+  return TableName(path);
 }
 
 }  // namespace postgres_translator

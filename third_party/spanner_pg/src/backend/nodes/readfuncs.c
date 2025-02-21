@@ -38,8 +38,6 @@
 #include "nodes/plannodes.h"
 #include "nodes/readfuncs.h"
 
-#include "third_party/spanner_pg/shims/parser_shim.h"
-
 /*
  * Macros to simplify reading of different kinds of fields.  Use these
  * wherever possible to reduce the chance for silly typos.  Note that these

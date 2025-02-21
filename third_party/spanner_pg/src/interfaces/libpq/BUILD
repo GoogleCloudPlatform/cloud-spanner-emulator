@@ -32,6 +32,7 @@
 package(
     default_visibility = [
         "//:__subpackages__",
+        "//analysis/dremel/core/federation/server/cloudspanner/postgresql:__subpackages__",
         "//spanner/tests/spangres_end_to_end_test:__subpackages__",
     ],
     # Disable layering_check because the Postgres binary is one giant component.

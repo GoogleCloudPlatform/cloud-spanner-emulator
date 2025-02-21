@@ -41,7 +41,6 @@
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
-#include "third_party/spanner_pg/shims/regex_shim.h"
 #include "third_party/spanner_pg/src/backend/catalog/pg_type_d.h"
 #include "zetasql/base/status_macros.h"
 

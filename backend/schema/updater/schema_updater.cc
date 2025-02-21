@@ -30,6 +30,7 @@
 #include "zetasql/base/logging.h"
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
 #include "zetasql/public/function.pb.h"
 #include "zetasql/public/function_signature.h"
@@ -3148,7 +3149,8 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateSearchIndex(
       /*is_unique=*/false, is_null_filtered, interleave_in_table, table_pk,
       ddl_index.stored_column_definition(),
       /*is_search_index=*/true, &ddl_index.partition_by(),
-      &ddl_index.order_by(), &ddl_index.null_filtered_column(), indexed_table);
+      &ddl_index.order_by(), &ddl_index.null_filtered_column(),
+      indexed_table);
 }
 
 absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
@@ -4683,7 +4685,7 @@ absl::Status SchemaUpdaterImpl::AlterProtoColumnTypes(
       }
       if (!column_type->IsProto() && !column_type->IsEnum()) continue;
       // Types not in alter proto bundle do not require edits
-      std::string type_name =
+      absl::string_view type_name =
           column_type->IsProto()
               ? column_type->AsProto()->descriptor()->full_name()
               : column_type->AsEnum()->enum_descriptor()->full_name();
@@ -5218,6 +5220,9 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
         .enable_change_streams_ttl_deletes_filter_option = true,
         .enable_sequence = true,
         .enable_virtual_generated_column = true,
+        .enable_serial_types = EmulatorFeatureFlags::instance()
+                                   .flags()
+                                   .enable_serial_auto_increment,
     };
     ZETASQL_ASSIGN_OR_RETURN(ddl::DDLStatementList ddl_statement_list,
                      translator->TranslateForEmulator(parser_output, options));

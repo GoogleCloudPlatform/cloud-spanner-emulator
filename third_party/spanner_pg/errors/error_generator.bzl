@@ -105,7 +105,7 @@ def spangres_error_catalog(
             "@com_google_absl//absl/strings",
             "@com_google_absl//absl/strings:str_format",
             "@com_google_absl//absl/time",
-            "//third_party/spanner_pg/shims:ereport_shim",
+            "//third_party/spanner_pg/interface:ereport",
             "//third_party/spanner_pg/postgres_includes",
             "//third_party/spanner_pg/errors:errors",
             "//third_party/spanner_pg/errors:errors_cc_proto",

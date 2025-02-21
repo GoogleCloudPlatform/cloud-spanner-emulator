@@ -18,7 +18,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 cc_library(
     name = "keys",
@@ -144,7 +144,9 @@ cc_test(
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:interval_value",
         "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:uuid_value",
         "@com_google_zetasql//zetasql/public:value",
     ],
 )
@@ -293,8 +295,11 @@ cc_library(
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
         "@com_google_protobuf//:cc_wkt_protos",
+        "@com_google_zetasql//zetasql/public:interval_value",
         "@com_google_zetasql//zetasql/public:options_cc_proto",
         "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:type_cc_proto",
+        "@com_google_zetasql//zetasql/public:uuid_value",
         "@com_google_zetasql//zetasql/public:value",
         "@com_google_zetasql//zetasql/public/functions:date_time_util",
     ],
@@ -321,7 +326,11 @@ cc_test(
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:interval_value",
+        "@com_google_zetasql//zetasql/public:json_value",
+        "@com_google_zetasql//zetasql/public:numeric_value",
         "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:uuid_value",
         "@com_google_zetasql//zetasql/public:value",
     ],
 )

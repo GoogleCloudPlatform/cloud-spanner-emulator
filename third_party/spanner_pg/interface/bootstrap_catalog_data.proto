@@ -84,6 +84,7 @@ message PgProcData {
 message PgTypeData {
   optional uint32 oid = 1;
   optional string typname = 2;
+  optional uint32 typnamespace = 12;
   optional int32 typlen = 3;
   optional bool typbyval = 4;
   optional string typtype = 5;

@@ -38,8 +38,6 @@
 #include "utils/timestamp.h"
 #include "utils/tuplestore.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Store label file and tablespace map during backups.
  */

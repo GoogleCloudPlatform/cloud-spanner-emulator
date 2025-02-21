@@ -187,26 +187,6 @@ TEST_F(SearchTest, TokenWrongArguments) {
                                  "SPANNER:TOKEN")));
 }
 
-TEST_F(SearchTest, TokenizeNumberWrongArguments) {
-  EXPECT_THAT(UpdateSchema({
-                  R"sql(
-          ALTER TABLE Albums
-          ADD COLUMN Length_Token2 TOKENLIST
-              AS (TOKENIZE_NUMBER(
-                   Length,
-                  comparison_type=>"ALL",
-                  algorithm=>"auto",
-                  min=>-1000,
-                  max=>1000,
-                  granularity=>1,
-                  tree_base=>2,
-                  precision=>7,
-                  "extra-arg")) STORED HIDDEN)sql"}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("No matching signature for function "
-                                 "SPANNER:TOKENIZE_NUMBER")));
-}
-
 TEST_F(SearchTest, TokenizeNumberNotAcceptPositionalOptionalArguments) {
   EXPECT_THAT(UpdateSchema({
                   R"sql(
@@ -232,8 +212,7 @@ TEST_F(SearchTest, TokenizeNumberWithOptionalArguments) {
                   min=>-1000,
                   max=>1000,
                   granularity=>1,
-                  tree_base=>2,
-                  precision=>7)) STORED HIDDEN)sql"}));
+                  tree_base=>2)) STORED HIDDEN)sql"}));
   ZETASQL_EXPECT_OK(UpdateSchema({
       R"sql(
       ALTER TABLE Albums DROP COLUMN Length_Tokens2)sql"}));
@@ -251,8 +230,7 @@ TEST_F(SearchTest, TokenizeNumberOptionalArgumentsNoOrder) {
                   comparison_type=>"ALL",
                   algorithm=>"auto",
                   granularity=>1,
-                  tree_base=>2,
-                  precision=>7)) STORED HIDDEN)sql"}));
+                  tree_base=>2)) STORED HIDDEN)sql"}));
   ZETASQL_EXPECT_OK(UpdateSchema({
       R"sql(
       ALTER TABLE Albums DROP COLUMN Length_Tokens3)sql"}));

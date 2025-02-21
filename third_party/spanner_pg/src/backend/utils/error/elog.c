@@ -98,7 +98,7 @@
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
 
-#include "third_party/spanner_pg/shims/ereport_shim.h"
+#include "third_party/spanner_pg/interface/ereport.h"
 
 
 /* In this module, access gettext() via err_gettext() */

@@ -53,8 +53,6 @@
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * No more than this many tuples per CopyMultiInsertBuffer
  *

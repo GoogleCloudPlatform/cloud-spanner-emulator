@@ -29,8 +29,6 @@
 #include "utils/builtins.h"
 #include "utils/memutils.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Runtime data for each function being scanned.
  */

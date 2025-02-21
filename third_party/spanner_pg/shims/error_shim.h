@@ -38,7 +38,6 @@
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/interface/parser_output.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
-#include "third_party/spanner_pg/shims/parser_shim.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -46,7 +45,7 @@ namespace postgres_translator {
 
 inline constexpr Datum NULL_DATUM = (Datum)0;
 
-// Error-handling verions of the PostgreSQL parser and analyzer.
+// Error-handling versions of the PostgreSQL parser and analyzer.
 absl::StatusOr<interfaces::ParserOutput> CheckedPgRawParserFullOutput(
     const char* sql);
 absl::StatusOr<List*> CheckedPgRawParser(const char* sql);

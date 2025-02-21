@@ -185,7 +185,7 @@ absl::Status GeneratedColumnEffector::Effect(
     if (!generated_column->has_default_value() &&
         !IsKeyColumn(generated_column)) {
       // skip non-key columns except default columns since generated key columns
-      // may depend on default columns values of which would need to be
+      // may be depended by default columns values of which would need to be
       // evaluated.
       continue;
     }
@@ -199,8 +199,9 @@ absl::Status GeneratedColumnEffector::Effect(
       if (is_user_supplied_value) {
         continue;
       }
-      if (op.type == MutationOpType::kUpdate ||
-          op.type == MutationOpType::kDelete) {
+      if (IsKeyColumn(generated_column) &&
+          (op.type == MutationOpType::kUpdate ||
+           op.type == MutationOpType::kDelete)) {
         return error::DefaultPKNeedsExplicitValue(generated_column->FullName(),
                                                   "Update/Delete");
       }

@@ -398,6 +398,83 @@ INSTANTIATE_TEST_SUITE_P(
                                "Dy-YY", "",
                                absl::StatusCode::kInvalidArgument}));
 
+struct IntervalRoundPrecisonTestCase {
+  std::string input_interval;
+  std::string expected_interval;
+  absl::StatusCode expected_status = absl::StatusCode::kOk;
+};
+
+class RoundIntervalPrecisionTest
+    : public IntervalTestBase<IntervalRoundPrecisonTestCase> {};
+
+TEST_P(RoundIntervalPrecisionTest, RoundIntervalPrecision) {
+  const IntervalRoundPrecisonTestCase& testcase = GetParam();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::IntervalValue input_interval,
+                       zetasql::IntervalValue::ParseFromString(
+                           testcase.input_interval, /*allow_nanos=*/true));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::IntervalValue expected_interval,
+                       zetasql::IntervalValue::ParseFromString(
+                           testcase.expected_interval, /*allow_nanos=*/true));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::IntervalValue actual_interval,
+                       PgRoundIntervalPrecision(input_interval));
+  EXPECT_EQ(actual_interval, expected_interval);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    RoundIntervalPrecisionTestSuite, RoundIntervalPrecisionTest,
+    testing::ValuesIn(std::vector<IntervalRoundPrecisonTestCase>{
+        // No rounding required.
+        {.input_interval = "0-0 0 0:0:0", .expected_interval = "0-0 0 0:0:0"},
+        {.input_interval = "10000-0 3660000 0:0:316224000000",
+         .expected_interval = "10000-0 3660000 0:0:316224000000"},
+        {.input_interval = "-10000-0 -3660000 -0:0:316224000000",
+         .expected_interval = "-10000-0 -3660000 -0:0:316224000000"},
+        {.input_interval = "-10000-0 -3660000 -0:0:216224000000.123456",
+         .expected_interval = "-10000-0 -3660000 -0:0:216224000000.123456"},
+        {.input_interval = "8659-10 1458596 77000058:43:5.586105",
+         .expected_interval = "8659-10 1458596 77000058:43:5.586105"},
+        {.input_interval = "8659-10 1458596 -77000058:43:5.586105",
+         .expected_interval = "8659-10 1458596 -77000058:43:5.586105"},
+
+        // Rounding positive nanoseconds.
+        {.input_interval = "0-0 0 0:0:1.199999999",
+         .expected_interval = "0-0 0 0:0:1.2"},
+        {.input_interval = "0-0 0 0:0:1.199999399",
+         .expected_interval = "0-0 0 0:0:1.199999"},
+        {.input_interval = "0-0 0 0:0:316223999999.999999399",
+         .expected_interval = "0-0 0 0:0:316223999999.999999"},
+        {.input_interval = "0-0 0 0:0:316223999999.999999999",
+         .expected_interval = "0-0 0 0:0:316224000000"},
+        {.input_interval = "8659-10 1458596 77000058:43:5.586105199",
+         .expected_interval = "8659-10 1458596 77000058:43:5.586105"},
+        {.input_interval = "8659-10 -1458596 77000058:43:5.586105699",
+         .expected_interval = "8659-10 -1458596 77000058:43:5.586106"},
+        {.input_interval = "8659-10 -1458596 77000058:43:5.5861055",
+         .expected_interval = "8659-10 -1458596 77000058:43:5.586106"},
+        {.input_interval = "0-0 0 0:0:0.0000005",
+         .expected_interval =
+             "0-0 0 0:0:0.000001"},  // Native PG returns "0-0 0 0:0:0.000000"
+
+        // Rounding negative nanoseconds.
+        {.input_interval = "0-0 0 -0:0:1.199999999",
+         .expected_interval = "0-0 0 -0:0:1.2"},
+        {.input_interval = "0-0 0 -0:0:1.199999399",
+         .expected_interval = "0-0 0 -0:0:1.199999"},
+        {.input_interval = "0-0 0 -0:0:316223999999.999999399",
+         .expected_interval = "0-0 0 -0:0:316223999999.999999"},
+        {.input_interval = "0-0 0 -0:0:316223999999.999999999",
+         .expected_interval = "0-0 0 -0:0:316224000000"},
+        {.input_interval = "8659-10 1458596 -77000058:43:5.586105199",
+         .expected_interval = "8659-10 1458596 -77000058:43:5.586105"},
+        {.input_interval = "8659-10 -1458596 -77000058:43:5.586105699",
+         .expected_interval = "8659-10 -1458596 -77000058:43:5.586106"},
+        {.input_interval = "8659-10 -1458596 -77000058:43:5.5861055",
+         .expected_interval = "8659-10 -1458596 -77000058:43:5.586106"},
+        {.input_interval = "0-0 0 -0:1:0.0000005",
+         .expected_interval =
+             "0-0 0 -0:1:0.000001"},  // Native PG returns "0-0 0 0:0:0.000000"
+    }));
+
 }  // namespace
 
 }  // namespace postgres_translator::function_evaluators

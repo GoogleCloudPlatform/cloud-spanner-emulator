@@ -21,9 +21,6 @@
 #include "utils/array.h"
 #include "utils/builtins.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * This must match enum LockTagType!  Also, be sure to document any changes
  * in the docs for the pg_locks view and for wait event types.

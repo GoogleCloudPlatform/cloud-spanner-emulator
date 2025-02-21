@@ -60,7 +60,6 @@
 #include "third_party/spanner_pg/interface/parser_output.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
-#include "third_party/spanner_pg/shims/parser_shim.h"
 #include "third_party/spanner_pg/util/interval_helpers.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
@@ -365,6 +364,7 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   // Converts extended type into Spanner type, honoring all the extra options.
   absl::Status ProcessExtendedType(absl::string_view type_name,
                                    const TypeName& type,
+                                   const TranslationOptions& options,
                                    google::spanner::emulator::backend::ddl::ColumnDefinition& out) const;
 
   // Take a Ttl node and apply it to the provided RowDeletionPolicy proto.
@@ -552,12 +552,12 @@ GetTypeMap() {
       // These 6 variants of SERIAL types are pseudo types supported in
       // transformColumnDefinition()
       // third_party/spanner_pg/src/backend/parser/parse_utilcmd.c
-      {"bigserial", absl::nullopt},
-      {"serial8", absl::nullopt},
-      {"serial", absl::nullopt},
-      {"serial4", absl::nullopt},
-      {"smallserial", absl::nullopt},
-      {"serial2", absl::nullopt},
+      {"bigserial", google::spanner::emulator::backend::ddl::ColumnDefinition::INT64},
+      {"serial8", google::spanner::emulator::backend::ddl::ColumnDefinition::INT64},
+      {"serial", google::spanner::emulator::backend::ddl::ColumnDefinition::INT64},
+      {"serial4", google::spanner::emulator::backend::ddl::ColumnDefinition::INT64},
+      {"smallserial", google::spanner::emulator::backend::ddl::ColumnDefinition::INT64},
+      {"serial2", google::spanner::emulator::backend::ddl::ColumnDefinition::INT64},
   };
 
   return *map;
@@ -1312,12 +1312,13 @@ PostgreSQLToSpannerDDLTranslatorImpl::ProcessColumnTypeWithAttributes(
   if (schema_name == "spanner") {
     // Extended type. Currently only commit_timestamp is supported.
 
-    if (!IsListEmpty(type.arrayBounds)) {
+    if (!options.enable_arrays_type && !IsListEmpty(type.arrayBounds)) {
       return UnsupportedTranslationError(absl::StrCat(
           "Arrays are not supported for the type <", type_name, ">."));
     }
-    return ProcessExtendedType(type_name, type, out);
+    return ProcessExtendedType(type_name, type, options, out);
   }
+
   return UnsupportedTranslationError(absl::StrCat(
       "Types from namespace <", schema_name, "> are not supported."));
 }
@@ -1358,6 +1359,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessPostgresType(
         absl::StrCat("Type <", type_name, "> does not exist."));
   }
   if (!type_it->second.has_value()
+      || (!options.enable_serial_types && IsSerialType(type_name))
   ) {
     // type not supported
     auto suggested_type_it = GetSuggestedTypeMap().find(type_name);
@@ -1425,23 +1427,29 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessPostgresType(
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessExtendedType(
     const absl::string_view type_name, const TypeName& type,
+    const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::ColumnDefinition& out) const {
-  if (type_name != "commit_timestamp") {
-    return UnsupportedTranslationError(
-        absl::StrCat("Type <", type_name, "> does not exist."));
-  }
   if (!IsListEmpty(type.typmods)) {
     return UnsupportedTranslationError(absl::StrCat(
         "Type modifiers are not supported for the type <", type_name, ">."));
   }
 
-  out.set_type(google::spanner::emulator::backend::ddl::ColumnDefinition::TIMESTAMP);
-  google::spanner::emulator::backend::ddl::SetOption* commit_ts_option = out.add_set_options();
-  commit_ts_option->set_option_name(
-      PGConstants::kInternalCommitTimestampOptionName);
-  commit_ts_option->set_bool_value(true);
+  if (type_name == "commit_timestamp") {
+    if (!IsListEmpty(type.arrayBounds)) {
+      return UnsupportedTranslationError(
+          absl::StrCat(
+              "Arrays are not supported for the type <", type_name, ">."));
+    }
+    out.set_type(google::spanner::emulator::backend::ddl::ColumnDefinition::TIMESTAMP);
+    google::spanner::emulator::backend::ddl::SetOption* commit_ts_option = out.add_set_options();
+    commit_ts_option->set_option_name(
+        PGConstants::kInternalCommitTimestampOptionName);
+    commit_ts_option->set_bool_value(true);
+    return absl::OkStatus();
+  }
 
-  return absl::OkStatus();
+  return UnsupportedTranslationError(
+      absl::StrCat("Type <", type_name, "> does not exist."));
 }
 
 const int kDefaultRowDeletionInterval = 3;

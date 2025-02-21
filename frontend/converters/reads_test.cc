@@ -22,7 +22,10 @@
 #include "google/spanner/v1/mutation.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
+#include "zetasql/public/interval_value.h"
 #include "zetasql/public/type.h"
+#include "zetasql/public/types/type_factory.h"
+#include "zetasql/public/uuid_value.h"
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -35,7 +38,6 @@
 #include "tests/common/proto_matchers.h"
 #include "tests/common/row_cursor.h"
 #include "tests/common/schema_constructor.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -695,7 +697,6 @@ TEST_F(AccessProtosTest, ReadIndex) {
             zetasql::values::String("789"));
   EXPECT_TRUE(key_range.limit_key().IsColumnDescending(0));
 }
-
 }  // namespace
 
 }  // namespace frontend

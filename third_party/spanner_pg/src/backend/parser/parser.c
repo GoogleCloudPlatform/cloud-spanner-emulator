@@ -30,9 +30,6 @@ static bool check_uescapechar(unsigned char escape);
 static char *str_udeescape(const char *str, char escape,
 						   int position, core_yyscan_t yyscanner);
 
-#include "third_party/spanner_pg/shims/parser_shim.h"
-
-
 /*
  * raw_parser
  *		Given a query in string form, do lexical and grammatical analysis.

@@ -128,7 +128,6 @@ cc_library(
     ],
     deps = [
         ":d2s",
-        "//third_party/spanner_pg/shims:parser_shim",
         "//third_party/spanner_pg/src/include",
         "//third_party/spanner_pg/src/include:kwlist_d_header",
         "//third_party/spanner_pg/src/port:port_srv",
@@ -153,7 +152,6 @@ cc_library(
     ],
     deps = [
         ":d2s",
-        "//third_party/spanner_pg/shims:parser_shim",
         "//third_party/spanner_pg/src/include",
         "//third_party/spanner_pg/src/include:kwlist_d_header",
         "//third_party/spanner_pg/src/port:port_frontend",

@@ -20,7 +20,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 cc_library(
     name = "ddl_type_conversion",
@@ -190,13 +190,17 @@ cc_library(
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_zetasql//zetasql/base:logging",
         "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_zetasql//zetasql/public:analyzer",
         "@com_google_zetasql//zetasql/public:analyzer_options",
+        "@com_google_zetasql//zetasql/public:analyzer_output",
+        "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:function",
         "@com_google_zetasql//zetasql/public:function_cc_proto",
         "@com_google_zetasql//zetasql/public:options_cc_proto",
         "@com_google_zetasql//zetasql/public:simple_catalog",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public/functions:uuid",
+        "@com_google_zetasql//zetasql/resolved_ast",
         "@com_google_zetasql//zetasql/resolved_ast:resolved_node_kind_cc_proto",
     ],
 )

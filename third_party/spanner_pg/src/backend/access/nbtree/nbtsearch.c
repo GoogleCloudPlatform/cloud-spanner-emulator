@@ -24,9 +24,6 @@
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 static void _bt_drop_lock_and_maybe_pin(IndexScanDesc scan, BTScanPos sp);
 static OffsetNumber _bt_binsrch(Relation rel, BTScanInsert key, Buffer buf);
 static int	_bt_binsrch_posting(BTScanInsert key, Page page,

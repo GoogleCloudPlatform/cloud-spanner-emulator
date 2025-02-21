@@ -44,9 +44,8 @@
 #include "third_party/spanner_pg/interface/parser_output.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/postgres_includes/deparser.h"
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/ereport_shim.h"
-#include "third_party/spanner_pg/shims/parser_shim.h"
+#include "third_party/spanner_pg/interface/ereport.h"
+#include "third_party/spanner_pg/src/spangres/parser.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -85,10 +84,10 @@ absl::Status ConvertPostgresError(
   }
 
   if (exc.error_data().message_id != nullptr) {
-    ABSL_LOG(FATAL) << "PG error is not defined in the error catalog, sqlstate: ["
-                << unpack_sql_state(exc.error_data().sqlerrcode)
-                << "] error message: [" << exc.error_data().message
-                << "] message id: [" << exc.error_data().message_id << "].";
+    ABSL_LOG(WARNING) << "PG error is not defined in the error catalog, sqlstate: ["
+                 << unpack_sql_state(exc.error_data().sqlerrcode)
+                 << "] error message: [" << exc.error_data().message
+                 << "] message id: [" << exc.error_data().message_id << "].";
   }
 
   // TODO: We should throw a Spangres internal error instead of

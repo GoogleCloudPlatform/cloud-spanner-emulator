@@ -38,9 +38,6 @@
 extern char *get_rte_attribute_name(RangeTblEntry *rte, AttrNumber attnum);
 
 // SPANGRES BEGIN
-// This function is replaced by a spangres version via the catalog shim.
-// It are intentionally left here (instead of deleted) becasue it is still
-// present upstream and this will make merging upstream changes simpler.
 // /*
 //  * Given an RTE and an attribute number, return the appropriate
 //  * type and typemod info for that attribute of that RTE.

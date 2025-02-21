@@ -515,13 +515,16 @@ void PGCatalog::FillPGAttributeTable() {
     for (const Column* column : table->columns()) {
       const PostgresTypeMapping* pg_type =
           system_catalog_->GetTypeFromReverseMapping(column->GetType());
+      auto type = pg_type->PostgresTypeOid();
+      type = type == TEXTOID ? VARCHAROID : type;
+      type = type == TEXTARRAYOID ? VARCHARARRAYOID : type;
       rows.push_back({
           // attrelid
           CreatePgOidValue(table->postgresql_oid().value()).value(),
           //  attname
           String(column->Name()),
           // atttypid
-          CreatePgOidValue(pg_type->PostgresTypeOid()).value(),
+          CreatePgOidValue(type).value(),
           // attstattarget
           NullInt64(),
           // attlen
@@ -541,7 +544,7 @@ void PGCatalog::FillPGAttributeTable() {
           // attstorage
           NullString(),
           // attcompression
-          String(std::string("\0")),
+          String(std::string{'\0'}),
           // attnotnull
           Bool(!column->is_nullable()),
           // atthasdef
@@ -549,9 +552,9 @@ void PGCatalog::FillPGAttributeTable() {
           // atthasmissing
           Bool(false),
           // attidentity
-          String(std::string("\0")),
+          String(std::string{'\0'}),
           // attgenerated
-          String(column->is_generated() ? "s" : std::string("\0")),
+          String(column->is_generated() ? "s" : std::string{'\0'}),
           // attisdropped
           Bool(false),
           // attislocal
@@ -573,6 +576,9 @@ void PGCatalog::FillPGAttributeTable() {
       const PostgresTypeMapping* pg_type =
           system_catalog_->GetTypeFromReverseMapping(
               key_column->column()->GetType());
+      auto type = pg_type->PostgresTypeOid();
+      type = type == TEXTOID ? VARCHAROID : type;
+      type = type == TEXTARRAYOID ? VARCHARARRAYOID : type;
       rows.push_back({
           // attrelid
           CreatePgOidValue(table->primary_key_index_postgresql_oid().value())
@@ -580,7 +586,7 @@ void PGCatalog::FillPGAttributeTable() {
           //  attname
           String(key_column->column()->Name()),
           // atttypid
-          CreatePgOidValue(pg_type->PostgresTypeOid()).value(),
+          CreatePgOidValue(type).value(),
           // attstattarget
           NullInt64(),
           // attlen
@@ -600,7 +606,7 @@ void PGCatalog::FillPGAttributeTable() {
           // attstorage
           NullString(),
           // attcompression
-          String(std::string("\0")),
+          String(std::string{'\0'}),
           // attnotnull
           Bool(!key_column->column()->is_nullable()),
           // atthasdef
@@ -608,10 +614,10 @@ void PGCatalog::FillPGAttributeTable() {
           // atthasmissing
           Bool(false),
           // attidentity
-          String(std::string("\0")),
+          String(std::string{'\0'}),
           // attgenerated
           String(key_column->column()->is_generated() ? "s"
-                                                      : std::string("\0")),
+                                                      : std::string{'\0'}),
           // attisdropped
           Bool(false),
           // attislocal
@@ -637,13 +643,16 @@ void PGCatalog::FillPGAttributeTable() {
         const PostgresTypeMapping* pg_type =
             system_catalog_->GetTypeFromReverseMapping(
                 key_column->column()->GetType());
+        auto type = pg_type->PostgresTypeOid();
+        type = type == TEXTOID ? VARCHAROID : type;
+        type = type == TEXTARRAYOID ? VARCHARARRAYOID : type;
         rows.push_back({
             // attrelid
             CreatePgOidValue(index->postgresql_oid().value()).value(),
             //  attname
             String(key_column->column()->Name()),
             // atttypid
-            CreatePgOidValue(pg_type->PostgresTypeOid()).value(),
+            CreatePgOidValue(type).value(),
             // attstattarget
             NullInt64(),
             // attlen
@@ -663,7 +672,7 @@ void PGCatalog::FillPGAttributeTable() {
             // attstorage
             NullString(),
             // attcompression
-            String(std::string("\0")),
+            String(std::string{'\0'}),
             // attnotnull
             Bool(!key_column->column()->is_nullable()),
             // atthasdef
@@ -671,10 +680,10 @@ void PGCatalog::FillPGAttributeTable() {
             // atthasmissing
             Bool(false),
             // attidentity
-            String(std::string("\0")),
+            String(std::string{'\0'}),
             // attgenerated
             String(key_column->column()->is_generated() ? "s"
-                                                        : std::string("\0")),
+                                                        : std::string{'\0'}),
             // attisdropped
             Bool(false),
             // attislocal
@@ -689,16 +698,20 @@ void PGCatalog::FillPGAttributeTable() {
             NullString(),
         });
       }
+      index_ordinal_position++;  // Account for inheritted primary key.
       for (const Column* column : index->stored_columns()) {
         const PostgresTypeMapping* pg_type =
             system_catalog_->GetTypeFromReverseMapping(column->GetType());
+        auto type = pg_type->PostgresTypeOid();
+        type = type == TEXTOID ? VARCHAROID : type;
+        type = type == TEXTARRAYOID ? VARCHARARRAYOID : type;
         rows.push_back({
             // attrelid
             CreatePgOidValue(index->postgresql_oid().value()).value(),
             //  attname
             String(column->Name()),
             // atttypid
-            CreatePgOidValue(pg_type->PostgresTypeOid()).value(),
+            CreatePgOidValue(type).value(),
             // attstattarget
             NullInt64(),
             // attlen
@@ -718,7 +731,7 @@ void PGCatalog::FillPGAttributeTable() {
             // attstorage
             NullString(),
             // attcompression
-            String(std::string("\0")),
+            String(std::string{'\0'}),
             // attnotnull
             Bool(!column->is_nullable()),
             // atthasdef
@@ -726,9 +739,9 @@ void PGCatalog::FillPGAttributeTable() {
             // atthasmissing
             Bool(false),
             // attidentity
-            String(std::string("\0")),
+            String(std::string{'\0'}),
             // attgenerated
-            String(column->is_generated() ? "s" : std::string("\0")),
+            String(column->is_generated() ? "s" : std::string{'\0'}),
             // attisdropped
             Bool(false),
             // attislocal
@@ -755,13 +768,16 @@ void PGCatalog::FillPGAttributeTable() {
     for (const View::Column& column : view->columns()) {
       const PostgresTypeMapping* pg_type =
           system_catalog_->GetTypeFromReverseMapping(column.type);
+      auto type = pg_type->PostgresTypeOid();
+      type = type == TEXTOID ? VARCHAROID : type;
+      type = type == TEXTARRAYOID ? VARCHARARRAYOID : type;
       rows.push_back({
           // attrelid
           CreatePgOidValue(view->postgresql_oid().value()).value(),
           //  attname
           String(column.name),
           // atttypid
-          CreatePgOidValue(pg_type->PostgresTypeOid()).value(),
+          CreatePgOidValue(type).value(),
           // attstattarget
           NullInt64(),
           // attlen
@@ -781,7 +797,7 @@ void PGCatalog::FillPGAttributeTable() {
           // attstorage
           NullString(),
           // attcompression
-          String(std::string("\0")),
+          String(std::string{'\0'}),
           // attnotnull
           Bool(false),
           // atthasdef
@@ -789,9 +805,9 @@ void PGCatalog::FillPGAttributeTable() {
           // atthasmissing
           Bool(false),
           // attidentity
-          String(std::string("\0")),
+          String(std::string{'\0'}),
           // attgenerated
-          String(std::string("\0")),
+          String(std::string{'\0'}),
           // attisdropped
           Bool(false),
           // attislocal
@@ -1711,6 +1727,59 @@ void PGCatalog::FillPGIndexTable() {
           NullString(),
       });
     }
+    // Add primary key index.
+    std::vector<int64_t> key_columns;
+    for (const KeyColumn* key_column : table->primary_key()) {
+      key_columns.push_back(column_name_to_index[key_column->column()->Name()]);
+    }
+    if (!table->primary_key_index_postgresql_oid().has_value()) {
+      ZETASQL_VLOG(1) << "Primary key index for table " << table->Name()
+              << " does not have a PostgreSQL OID.";
+      continue;
+    }
+    rows.push_back({
+        // indexrelid
+        CreatePgOidValue(table->primary_key_index_postgresql_oid().value())
+            .value(),
+        // indrelid
+        CreatePgOidValue(table->postgresql_oid().value()).value(),
+        // indnatts
+        Int64(table->primary_key().size()),
+        // indnkeyatts
+        Int64(table->primary_key().size()),
+        // indisunique
+        Bool(true),
+        // indisprimary
+        Bool(true),
+        // indisexclusion
+        Bool(false),
+        // indimmediate
+        NullBool(),
+        // indisclustered
+        Bool(false),
+        // indisvalid
+        Bool(true),
+        // indcheckxmin
+        Bool(false),
+        // indisready
+        Bool(true),
+        // indislive
+        Bool(true),
+        // indisreplident
+        Bool(false),
+        // indkey
+        Int64Array(key_columns),
+        // indcollation
+        Null(GetPgOidArrayType()),
+        // indclass
+        Null(GetPgOidArrayType()),
+        // indoption
+        Null(Int64ArrayType()),
+        // indexprs
+        NullString(),
+        // indpred
+        NullString(),
+    });
   }
   pg_index->SetContents(rows);
 }
@@ -1980,7 +2049,7 @@ void PGCatalog::FillPGProcTable() {
                << status;
     return;
   }
-  absl::flat_hash_map<absl::string_view, const zetasql::TableValuedFunction*>
+  absl::flat_hash_map<std::string, const zetasql::TableValuedFunction*>
       changestream_tvfs_map;
   for (const zetasql::TableValuedFunction* tvf : changestream_tvfs) {
     changestream_tvfs_map[tvf->Name()] = tvf;

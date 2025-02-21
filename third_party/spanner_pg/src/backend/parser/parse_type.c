@@ -26,15 +26,10 @@
 #include "utils/lsyscache.h"
 #include "utils/syscache.h"
 
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
-
-/* SPANGRES BEGIN */
-// We've made this function non-static to call it from catalog_shim.
-int32 typenameTypeMod(ParseState *pstate, const TypeName *typeName,
-					  Type typ);
-/* SPANGRES END */
+static int32 typenameTypeMod(ParseState *pstate, const TypeName *typeName,
+														 Type typ);
 
 
 /*
@@ -282,11 +277,8 @@ typenameTypeIdAndMod(ParseState *pstate, const TypeName *typeName,
  *
  * pstate is only used for error location info, and may be NULL.
  */
-/* SPANGRES BEGIN */
-// We've made this function non-static to call it from catalog_shim.
-int32
+static int32
 typenameTypeMod(ParseState *pstate, const TypeName *typeName, Type typ)
-/* SPANGRES END */
 {
 	int32		result;
 	Oid			typmodin;

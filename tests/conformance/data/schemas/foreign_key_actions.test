@@ -1,0 +1,95 @@
+# Note that PG databases by default have lower case table and column names. To
+# use uppercase names, you have to quote them. But the GSQL and PG quoting
+# syntax is incompatible so we use lower-case names in both schemas to avoid
+# having to maintain two copies of each query.
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE referencedpk (
+  referenced_pk INT64 NOT NULL,
+) PRIMARY KEY (referenced_pk);
+CREATE TABLE referencingpk_pk (
+  referencing_pk INT64 NOT NULL,
+  FOREIGN KEY (referencing_pk)
+    REFERENCES referencedpk (referenced_pk) ON DELETE CASCADE
+) PRIMARY KEY (referencing_pk);
+CREATE TABLE referencingnonpk_pk (
+  pk INT64 NOT NULL,
+  val INT64,
+  FOREIGN KEY (val)
+    REFERENCES referencedpk (referenced_pk) ON DELETE CASCADE
+) PRIMARY KEY (pk);
+CREATE TABLE referencednonpk (
+  referenced_pk INT64 NOT NULL,
+  referenced_col STRING(MAX),
+) PRIMARY KEY (referenced_pk);
+CREATE TABLE referencingpk_nonpk (
+  referencing_pk STRING(MAX) NOT NULL,
+  val INT64,
+  FOREIGN KEY (referencing_pk)
+    REFERENCES referencednonpk (referenced_col) ON DELETE CASCADE
+) PRIMARY KEY (referencing_pk);
+CREATE TABLE referencingnonpk_nonpk (
+  pk INT64 NOT NULL,
+  val_str STRING(MAX),
+  FOREIGN KEY (val_str)
+    REFERENCES referencednonpk (referenced_col) ON DELETE CASCADE
+) PRIMARY KEY (pk);
+CREATE TABLE referencednonpk_noaction (
+  referenced_pk INT64 NOT NULL,
+  referenced_col STRING(MAX),
+) PRIMARY KEY (referenced_pk);
+CREATE TABLE referencingnonpk_nonpk_noaction (
+  pk INT64 NOT NULL,
+  val_str STRING(MAX),
+  FOREIGN KEY (val_str)
+    REFERENCES referencednonpk_noaction (referenced_col)
+) PRIMARY KEY (pk);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE referencedpk (
+  referenced_pk bigint NOT NULL,
+  PRIMARY KEY (referenced_pk)
+);
+CREATE TABLE referencingpk_pk (
+  referencing_pk bigint NOT NULL,
+  FOREIGN KEY (referencing_pk)
+    REFERENCES referencedpk (referenced_pk) ON DELETE CASCADE,
+  PRIMARY KEY (referencing_pk)
+);
+CREATE TABLE referencingnonpk_pk (
+  pk bigint NOT NULL,
+  val bigint,
+  FOREIGN KEY (val)
+    REFERENCES referencedpk (referenced_pk) ON DELETE CASCADE,
+  PRIMARY KEY (pk)
+);
+CREATE TABLE referencednonpk (
+  referenced_pk bigint NOT NULL,
+  referenced_col varchar,
+  PRIMARY KEY (referenced_pk)
+);
+CREATE TABLE referencingpk_nonpk (
+  referencing_pk varchar NOT NULL,
+  val bigint,
+  FOREIGN KEY (referencing_pk)
+    REFERENCES referencednonpk (referenced_col) ON DELETE CASCADE,
+  PRIMARY KEY (referencing_pk)
+);
+CREATE TABLE referencingnonpk_nonpk (
+  pk bigint NOT NULL,
+  val_str varchar,
+  FOREIGN KEY (val_str)
+    REFERENCES referencednonpk (referenced_col) ON DELETE CASCADE,
+  PRIMARY KEY (pk)
+);
+CREATE TABLE referencednonpk_noaction (
+  referenced_pk bigint NOT NULL,
+  referenced_col varchar,
+  PRIMARY KEY (referenced_pk)
+);
+CREATE TABLE referencingnonpk_nonpk_noaction (
+  pk bigint NOT NULL,
+  val_str varchar,
+  FOREIGN KEY (val_str)
+    REFERENCES referencednonpk_noaction (referenced_col),
+  PRIMARY KEY (pk)
+);

@@ -48,8 +48,6 @@
 #include "utils/pg_lsn.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Options that can be specified by the user in CREATE/ALTER SUBSCRIPTION
  * command.

@@ -124,6 +124,7 @@ cc_library(
         "//third_party/spanner_pg/catalog:type",
         "@com_google_zetasql//zetasql/public:analyzer_options",
         "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:options_cc_proto",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )

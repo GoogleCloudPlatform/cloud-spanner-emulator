@@ -43,8 +43,6 @@
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Represents the different dest cases we need to worry about at
  * the bottom level

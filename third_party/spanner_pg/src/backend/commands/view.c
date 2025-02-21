@@ -35,8 +35,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/parser_shim.h"
-
 static void checkViewTupleDesc(TupleDesc newdesc, TupleDesc olddesc);
 
 /*---------------------------------------------------------------------

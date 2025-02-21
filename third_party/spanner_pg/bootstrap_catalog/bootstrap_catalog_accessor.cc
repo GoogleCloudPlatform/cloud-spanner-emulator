@@ -30,6 +30,7 @@
 //------------------------------------------------------------------------------
 
 #include "third_party/spanner_pg/interface/bootstrap_catalog_accessor.h"
+#include <cstdint>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -57,6 +58,7 @@ absl::StatusOr<PgTypeData> GetPgTypeDataFromBootstrap(
   PgTypeData type_data;
   type_data.set_oid(type->oid);
   type_data.set_typname(type->typname.data);
+  type_data.set_typnamespace(type->typnamespace);
   type_data.set_typlen(type->typlen);
   type_data.set_typbyval(type->typbyval);
   type_data.set_typtype(absl::StrFormat("%c", type->typtype));
@@ -75,6 +77,7 @@ absl::StatusOr<PgTypeData> GetPgTypeDataFromBootstrap(
   PgTypeData type_data;
   type_data.set_oid(type->oid);
   type_data.set_typname(type->typname.data);
+  type_data.set_typnamespace(type->typnamespace);
   type_data.set_typlen(type->typlen);
   type_data.set_typbyval(type->typbyval);
   type_data.set_typtype(absl::StrFormat("%c", type->typtype));

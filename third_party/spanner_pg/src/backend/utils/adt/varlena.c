@@ -40,9 +40,6 @@
 #include "utils/sortsupport.h"
 #include "utils/varlena.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /* GUC variable */
 int			bytea_output = BYTEA_OUTPUT_HEX;
 

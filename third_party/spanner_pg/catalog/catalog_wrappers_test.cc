@@ -29,7 +29,7 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
 
 #include <memory>
 
@@ -44,8 +44,7 @@
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter_holder.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/ereport_shim.h"
+#include "third_party/spanner_pg/interface/ereport.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
 #include "third_party/spanner_pg/util/postgres.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
@@ -64,7 +63,7 @@ using ::testing::HasSubstr;
 using ::testing::UnorderedElementsAre;
 using ::zetasql_base::testing::StatusIs;
 
-using CatalogShimCcWrappersTest = ValidMemoryContext;
+using CatalogWrappersTest = ValidMemoryContext;
 
 // Helper function for tests using RangeVars as input. Strings are copied to a
 // PostgreSQL MemoryContext.
@@ -109,7 +108,7 @@ std::vector<const FormData_pg_amop*> GetAmopsByOprOid(const Oid& opid) {
 }
 
 // Failed table lookups.
-TEST_F(CatalogShimCcWrappersTest, FailedTableLookup) {
+TEST_F(CatalogWrappersTest, FailedTableLookup) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -131,7 +130,7 @@ TEST_F(CatalogShimCcWrappersTest, FailedTableLookup) {
   free_parsestate(parse_state);
 }
 
-TEST_F(CatalogShimCcWrappersTest, SuccessfulTableLookup) {
+TEST_F(CatalogWrappersTest, SuccessfulTableLookup) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -151,7 +150,7 @@ TEST_F(CatalogShimCcWrappersTest, SuccessfulTableLookup) {
   free_parsestate(parse_state);
 }
 
-TEST_F(CatalogShimCcWrappersTest, FailedTableLookupInvalidSchema) {
+TEST_F(CatalogWrappersTest, FailedTableLookupInvalidSchema) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -174,7 +173,7 @@ TEST_F(CatalogShimCcWrappersTest, FailedTableLookupInvalidSchema) {
   free_parsestate(parse_state);
 }
 
-TEST_F(CatalogShimCcWrappersTest, AddRangeTableEntryCSucceeds) {
+TEST_F(CatalogWrappersTest, AddRangeTableEntryCSucceeds) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -198,7 +197,7 @@ TEST_F(CatalogShimCcWrappersTest, AddRangeTableEntryCSucceeds) {
   free_parsestate(parse_state);
 }
 
-TEST_F(CatalogShimCcWrappersTest, FailedTableLookupValidSchema) {
+TEST_F(CatalogWrappersTest, FailedTableLookupValidSchema) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -221,7 +220,7 @@ TEST_F(CatalogShimCcWrappersTest, FailedTableLookupValidSchema) {
   free_parsestate(parse_state);
 }
 
-TEST_F(CatalogShimCcWrappersTest, SuccessfulTableLookupWithSchema) {
+TEST_F(CatalogWrappersTest, SuccessfulTableLookupWithSchema) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -240,7 +239,7 @@ TEST_F(CatalogShimCcWrappersTest, SuccessfulTableLookupWithSchema) {
   free_parsestate(parse_state);
 }
 
-TEST_F(CatalogShimCcWrappersTest, TableLookupDatabase) {
+TEST_F(CatalogWrappersTest, TableLookupDatabase) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -262,7 +261,7 @@ TEST_F(CatalogShimCcWrappersTest, TableLookupDatabase) {
   free_parsestate(parse_state);
 }
 
-TEST_F(CatalogShimCcWrappersTest, AddRangeTableEntryByOidCInvalidOid) {
+TEST_F(CatalogWrappersTest, AddRangeTableEntryByOidCInvalidOid) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -289,7 +288,7 @@ TEST_F(CatalogShimCcWrappersTest, AddRangeTableEntryByOidCInvalidOid) {
   free_parsestate(parse_state);
 }
 
-TEST_F(CatalogShimCcWrappersTest, AddRangeTableEntryByOidCNoTableWithOid) {
+TEST_F(CatalogWrappersTest, AddRangeTableEntryByOidCNoTableWithOid) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -315,7 +314,7 @@ TEST_F(CatalogShimCcWrappersTest, AddRangeTableEntryByOidCNoTableWithOid) {
   free_parsestate(parse_state);
 }
 
-TEST_F(CatalogShimCcWrappersTest, AddRangeTableEntryByOidCSucceeds) {
+TEST_F(CatalogWrappersTest, AddRangeTableEntryByOidCSucceeds) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -341,7 +340,7 @@ TEST_F(CatalogShimCcWrappersTest, AddRangeTableEntryByOidCSucceeds) {
   free_parsestate(parse_state);
 }
 
-TEST_F(CatalogShimCcWrappersTest, addRangeTableEntry) {
+TEST_F(CatalogWrappersTest, addRangeTableEntry) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -383,7 +382,7 @@ TEST_F(CatalogShimCcWrappersTest, addRangeTableEntry) {
 
 // Test that without setting up a thread-local catalog, we fail any table
 // translation.
-TEST_F(CatalogShimCcWrappersTest, NoCatalogTest) {
+TEST_F(CatalogWrappersTest, NoCatalogTest) {
   ASSERT_THAT(GetCatalogAdapter(), StatusIs(absl::StatusCode::kInternal,
                                             HasSubstr("not initialized")));
   RangeVar* relation = makeNode(RangeVar);
@@ -406,7 +405,7 @@ TEST_F(CatalogShimCcWrappersTest, NoCatalogTest) {
 }
 
 // Test that translating with no input table specified fails.
-TEST_F(CatalogShimCcWrappersTest, NoRelationTranslateTest) {
+TEST_F(CatalogWrappersTest, NoRelationTranslateTest) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -430,7 +429,7 @@ TEST_F(CatalogShimCcWrappersTest, NoRelationTranslateTest) {
 }
 
 // Test the attribute name lookup wrapper.
-TEST_F(CatalogShimCcWrappersTest, AttributeNameLookupTest) {
+TEST_F(CatalogWrappersTest, AttributeNameLookupTest) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -456,7 +455,7 @@ TEST_F(CatalogShimCcWrappersTest, AttributeNameLookupTest) {
   EXPECT_EQ(invalid_col, nullptr);
 }
 
-TEST_F(CatalogShimCcWrappersTest, AttributeNameFailedLookupTest) {
+TEST_F(CatalogWrappersTest, AttributeNameFailedLookupTest) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -467,7 +466,7 @@ TEST_F(CatalogShimCcWrappersTest, AttributeNameFailedLookupTest) {
       postgres_translator::PostgresEreportException);
 }
 
-TEST_F(CatalogShimCcWrappersTest, TableNameLookupTest) {
+TEST_F(CatalogWrappersTest, TableNameLookupTest) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -484,7 +483,7 @@ TEST_F(CatalogShimCcWrappersTest, TableNameLookupTest) {
   EXPECT_STREQ(table_name, "KeyValue");
 }
 
-TEST_F(CatalogShimCcWrappersTest, ColumnsNameLookupTest) {
+TEST_F(CatalogWrappersTest, ColumnsNameLookupTest) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -515,7 +514,7 @@ TEST_F(CatalogShimCcWrappersTest, ColumnsNameLookupTest) {
 }
 
 // Test the attribute type lookup wrapper.
-TEST_F(CatalogShimCcWrappersTest, AttributeTypeLookupTest) {
+TEST_F(CatalogWrappersTest, AttributeTypeLookupTest) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -648,7 +647,7 @@ TEST(GetOperatorList, FailedOperator) {
   EXPECT_EQ(oidlist, nullptr);
 }
 
-TEST_F(CatalogShimCcWrappersTest, BoolInProc) {
+TEST_F(CatalogWrappersTest, BoolInProc) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> holder =
@@ -658,7 +657,7 @@ TEST_F(CatalogShimCcWrappersTest, BoolInProc) {
   EXPECT_THAT(oidlist, UnorderedElementsAre(F_BOOLIN));
 }
 
-TEST_F(CatalogShimCcWrappersTest, Int8Proc) {
+TEST_F(CatalogWrappersTest, Int8Proc) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> holder =
@@ -671,7 +670,7 @@ TEST_F(CatalogShimCcWrappersTest, Int8Proc) {
                                    F_INT8_JSONB, F_INT8_BIT));
 }
 
-TEST_F(CatalogShimCcWrappersTest, FailedProc) {
+TEST_F(CatalogWrappersTest, FailedProc) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> holder =
@@ -749,7 +748,7 @@ constexpr int kRTIndex = 4;
 constexpr int kSublevelsUp = 2;
 
 // Basic ExpandRelation test: no column aliases, verify both out args.
-TEST_F(CatalogShimCcWrappersTest, ExpandRelationBasicTest) {
+TEST_F(CatalogWrappersTest, ExpandRelationBasicTest) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -795,7 +794,7 @@ TEST_F(CatalogShimCcWrappersTest, ExpandRelationBasicTest) {
 }
 
 // ExpandRelation test with column aliases.
-TEST_F(CatalogShimCcWrappersTest, ExpandRelationColumnAliasesTest) {
+TEST_F(CatalogWrappersTest, ExpandRelationColumnAliasesTest) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -832,7 +831,7 @@ TEST_F(CatalogShimCcWrappersTest, ExpandRelationColumnAliasesTest) {
 }
 
 // ExpandRelation test with no requested out args.
-TEST_F(CatalogShimCcWrappersTest, ExpandRelationNullOutargsTest) {
+TEST_F(CatalogWrappersTest, ExpandRelationNullOutargsTest) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -929,7 +928,7 @@ TEST(GetAccessMethodProcedure, Failure) {
   EXPECT_EQ(amproc, nullptr);
 }
 
-TEST_F(CatalogShimCcWrappersTest, GetsTableName) {
+TEST_F(CatalogWrappersTest, GetsTableName) {
   const TableName kTableName({"my_table"});
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
@@ -948,7 +947,7 @@ TEST_F(CatalogShimCcWrappersTest, GetsTableName) {
   EXPECT_STREQ(GetNamespaceNameC(my_oid), "public");
 }
 
-TEST_F(CatalogShimCcWrappersTest, GetsTableNameInNamespace) {
+TEST_F(CatalogWrappersTest, GetsTableNameInNamespace) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -1037,7 +1036,7 @@ absl::StatusOr<ParseNamespaceItem*> BuildPartialJoinNSItem(
 // ParseNamespaceItem for that Join, then calls ExpandNSItemVarsForJoinC on the
 // ParseNamespaceItem verifies that pseudo columns in the underlying tables are
 // excluded when asked.
-TEST_F(CatalogShimCcWrappersTest, ExpandJoinTableToTable) {
+TEST_F(CatalogWrappersTest, ExpandJoinTableToTable) {
   // Teach CatalogAdapter about our table (keyvalue).
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
@@ -1068,7 +1067,7 @@ TEST_F(CatalogShimCcWrappersTest, ExpandJoinTableToTable) {
 }
 
 // Verify we can look up (by name) a UDF and get a reasonable-looking proc.
-TEST_F(CatalogShimCcWrappersTest, LooksUpUdfProcByName) {
+TEST_F(CatalogWrappersTest, LooksUpUdfProcByName) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -1093,7 +1092,7 @@ TEST_F(CatalogShimCcWrappersTest, LooksUpUdfProcByName) {
 }
 
 // Verify we can look up (by oid) a UDF and get a reasonable-looking proc.
-TEST_F(CatalogShimCcWrappersTest, LooksUpUdfProcByOid) {
+TEST_F(CatalogWrappersTest, LooksUpUdfProcByOid) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -1118,7 +1117,7 @@ TEST_F(CatalogShimCcWrappersTest, LooksUpUdfProcByOid) {
 }
 
 // Verify UDF lookup is case-sensitive.
-TEST_F(CatalogShimCcWrappersTest, UdfLookUpCaseSensitive) {
+TEST_F(CatalogWrappersTest, UdfLookUpCaseSensitive) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -1139,7 +1138,7 @@ TEST_F(CatalogShimCcWrappersTest, UdfLookUpCaseSensitive) {
   EXPECT_EQ(proc_count, 0);
 }
 
-TEST_F(CatalogShimCcWrappersTest, GetFunctionArgInfo) {
+TEST_F(CatalogWrappersTest, GetFunctionArgInfo) {
   zetasql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =

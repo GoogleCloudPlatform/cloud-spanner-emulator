@@ -36,7 +36,6 @@ py_library(
 py_test(
     name = "instance_admin_test",
     srcs = ["instance_admin_test.py"],
-    python_version = "PY3",
     deps = [
         ":emulator",
     ],
@@ -48,7 +47,6 @@ py_test(
     data = [
         "//tests/common:testproto",
     ],
-    python_version = "PY3",
     deps = [
         ":emulator",
         "@bazel_tools//tools/python/runfiles",
@@ -58,7 +56,6 @@ py_test(
 py_test(
     name = "session_test",
     srcs = ["session_test.py"],
-    python_version = "PY3",
     deps = [
         ":emulator",
     ],
@@ -67,7 +64,6 @@ py_test(
 py_test(
     name = "read_write_test",
     srcs = ["read_write_test.py"],
-    python_version = "PY3",
     deps = [
         ":emulator",
     ],
@@ -76,7 +72,6 @@ py_test(
 py_test(
     name = "database_ddl_test",
     srcs = ["database_ddl_test.py"],
-    python_version = "PY3",
     deps = [
         ":emulator",
     ],
@@ -85,7 +80,6 @@ py_test(
 py_test(
     name = "operation_test",
     srcs = ["operation_test.py"],
-    python_version = "PY3",
     deps = [
         ":emulator",
     ],

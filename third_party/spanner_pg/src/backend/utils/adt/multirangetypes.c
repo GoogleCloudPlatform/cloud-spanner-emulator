@@ -46,8 +46,6 @@
 #include "utils/array.h"
 #include "utils/memutils.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /* fn_extra cache entry for one of the range I/O functions */
 typedef struct MultirangeIOData
 {

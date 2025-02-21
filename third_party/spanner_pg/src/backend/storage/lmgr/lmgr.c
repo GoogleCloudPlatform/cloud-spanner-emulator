@@ -28,8 +28,6 @@
 #include "storage/sinvaladt.h"
 #include "utils/inval.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Per-backend counter for generating speculative insertion tokens.
  *

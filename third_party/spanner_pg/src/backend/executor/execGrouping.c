@@ -21,8 +21,6 @@
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 static int	TupleHashTableMatch(struct tuplehash_hash *tb, const MinimalTuple tuple1, const MinimalTuple tuple2);
 static inline uint32 TupleHashTableHash_internal(struct tuplehash_hash *tb,
 												 const MinimalTuple tuple);

@@ -31,102 +31,8 @@
 
 #include <stdlib.h>
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-// This file defines stubs of catalog-shim wrapper methods.
-// They are intended to be linked against PostgreSQL when we know we don't want
-// to call any methods that will use the catalog, but when untangling the
-// method that we do want to call out of the ball of yarn that is PostgreSQL's
-// linker dependencies would disrupt the code more than it's worth.
-
-ParseNamespaceItem* addRangeTableEntry(ParseState* pstate,
-                                       RangeVar* relation,
-                                       Alias* alias, bool inh,
-                                       bool inFromCl) {
-  abort();
-}
-
-int scanRTEForColumn(ParseState* pstate, RangeTblEntry* rte, Alias* eref,
-                     const char* colname, int location, int fuzzy_rte_penalty,
-                     FuzzyAttrMatchState* fuzzystate) {
-  abort();
-}
-
-void get_oper_expr(OpExpr* expr, deparse_context* context) {
-  abort();
-}
-
-void set_relation_column_names(deparse_namespace* dpns,
-                                        RangeTblEntry* rte,
-                                        deparse_columns* colinfo) {
-  abort();
-}
-
-char* generate_relation_name(Oid relid, List* namespaces) {
-  abort();
-}
-
-char* generate_operator_name(Oid operid, Oid arg1, Oid arg2) {
-  abort();
-}
-
-char*
-generate_function_name(Oid funcid, int nargs, List* argnames,
-                       Oid* argtypes, bool has_variadic,
-                       bool* use_variadic_p,
-                       ParseExprKind special_exprkind) {
-  abort();
-}
-
-OnConflictExpr* transformOnConflictClause(
-    ParseState* pstate, OnConflictClause* onConflictClause) {
-  abort();
-}
-
-TypeCacheEntry* lookup_type_cache(Oid type_id, int flags) {
-  abort();
-}
-
-void assign_record_type_typmod(TupleDesc tupDesc) {
-  abort();
-}
-
-void get_utility_query_def(Query *query, deparse_context *context) {
-  abort();
-}
-
-Oid get_rel_type_id(Oid relid) {
-  abort();
-}
-
-void get_delete_query_def(Query* query, deparse_context* context,
-                          bool colNamesVisible) {
-  abort();
-}
-
-void get_update_query_def(Query* query, deparse_context* context,
-                          bool colNamesVisible) {
-  abort();
-}
-
-bool RecordJoinInputsSpangres(RangeTblEntry* join_rte, Oid left_input,
-                              int left_rtindex, Oid right_input,
-                              int right_rtindex) {
-  abort();
-}
-
-Node* transformSpangresHint(ParseState* pstate, DefElem* elem) {
-  abort();
-}
-
-void get_hint_list_def(List* hints, deparse_context* context, bool statement) {
-  abort();
-}
-
-void get_setop_query(Node *setOp, Query *query, deparse_context *context,
-                     TupleDesc resultDesc, bool colNamesVisible) {
-  abort();
-}
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
+#include "third_party/spanner_pg/postgres_includes/all.h"
 
 const FormData_pg_type* GetTypeFromBootstrapCatalog(Oid type_id) {
   abort();
@@ -212,20 +118,6 @@ List* ExpandNSItemVarsForJoinC(const List* rtable, ParseNamespaceItem* nsitem,
   abort();
 }
 
-Type PgTypeFormHeapTuple(Oid type_id) {
-  abort();
-}
-
-Operator PgOperatorFormHeapTuple(Oid operator_id) {
-  abort();
-}
-
-ParseNamespaceItem* addRangeTableEntryByOid(struct ParseState* pstate,
-                                            Oid relation_oid, Alias* alias,
-                                            bool inh, bool inFromCl) {
-  abort();
-}
-
 const FormData_pg_amop* GetAmopByFamilyFromBootstrapCatalog(Oid opfamily,
                                                             Oid lefttype,
                                                             Oid righttype,
@@ -278,5 +170,28 @@ void GetOperatorsByNameFromBootstrapCatalog(const char* name,
 }
 
 Oid GetCollationOidByNameFromBootstrapCatalog(const char* name) {
+  abort();
+}
+
+char* GetNamespaceNameByOidFromBootstrapCatalog(Oid namespace_oid) {
+  abort();
+}
+
+char* GetNamespaceNameC(Oid relid) {
+  abort();
+}
+
+RangeTblEntry* AddRangeTableEntryC(ParseState* pstate, RangeVar* relation,
+                                   Alias* alias, bool inh, bool inFromCl) {
+  abort();
+}
+
+void GetColumnTypesC(Oid relid, List** coltypes, List** coltypmods,
+                     List** colcollations, int* ncolumns) {
+  abort();
+}
+
+RangeTblEntry* AddRangeTableEntryByOidC(ParseState* pstate, Oid relation_oid,
+                                        Alias* alias, bool inh, bool inFromCl) {
   abort();
 }

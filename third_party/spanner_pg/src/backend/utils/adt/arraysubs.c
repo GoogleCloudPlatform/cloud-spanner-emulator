@@ -24,8 +24,6 @@
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /* SubscriptingRefState.workspace for array subscripting execution */
 typedef struct ArraySubWorkspace
 {

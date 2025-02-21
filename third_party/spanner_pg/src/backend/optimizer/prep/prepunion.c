@@ -45,9 +45,6 @@
 #include "utils/selfuncs.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 static RelOptInfo *recurse_set_operations(Node *setOp, PlannerInfo *root,
 										  List *colTypes, List *colCollations,
 										  bool junkOK,

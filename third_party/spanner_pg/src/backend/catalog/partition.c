@@ -31,7 +31,6 @@
 #include "utils/partcache.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
-#include "third_party/spanner_pg/shims/catalog_shim.h"
 
 static Oid	get_partition_parent_worker(Relation inhRel, Oid relid,
 										bool *detach_pending);

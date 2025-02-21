@@ -23,7 +23,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 cc_library(
     name = "ddl_parser",

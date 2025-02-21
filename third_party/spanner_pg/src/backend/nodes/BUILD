@@ -70,8 +70,6 @@ cc_library(
         "-fexceptions",
     ],
     deps = [
-        "//third_party/spanner_pg/shims:catalog_shim_header",
-        "//third_party/spanner_pg/shims:parser_shim",
         "//third_party/spanner_pg/src/include",
         "//third_party/spanner_pg/util:nodetag_to_string",
     ],

@@ -30,7 +30,7 @@
 #include "utils/memdebug.h"
 #include "utils/memutils.h"
 
-#include "third_party/spanner_pg/shims/memory_shim.h"
+#include "third_party/spanner_pg/src/spangres/memory.h"
 
 
 /*****************************************************************************

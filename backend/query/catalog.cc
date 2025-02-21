@@ -57,6 +57,7 @@
 #include "third_party/spanner_pg/catalog/pg_catalog.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "google/protobuf/descriptor.h"
 #include "zetasql/base/status_macros.h"
 
@@ -67,6 +68,7 @@ namespace backend {
 
 using postgres_translator::spangres::datatypes::GetPgJsonbType;
 using postgres_translator::spangres::datatypes::GetPgNumericType;
+using postgres_translator::spangres::datatypes::GetPgOidType;
 
 // A sub-catalog used for resolving NET function lookups.
 class NetCatalog : public zetasql::Catalog {
@@ -111,6 +113,7 @@ class PGFunctionCatalog : public zetasql::Catalog {
   static constexpr char kName[] = "PG";
   static constexpr char kPgNumericTypeName[] = "PG.NUMERIC";
   static constexpr char kPgJsonbTypeName[] = "PG.JSONB";
+  static constexpr char kPgOidTypeName[] = "PG.OID";
 
   std::string FullName() const final {
     std::string name = root_catalog_->FullName();
@@ -146,6 +149,9 @@ class PGFunctionCatalog : public zetasql::Catalog {
         return absl::OkStatus();
       } else if (absl::EqualsIgnoreCase(full_name, kPgJsonbTypeName)) {
         *type = GetPgJsonbType();
+        return absl::OkStatus();
+      } else if (absl::EqualsIgnoreCase(full_name, kPgOidTypeName)) {
+        *type = GetPgOidType();
         return absl::OkStatus();
       }
     }
@@ -361,7 +367,6 @@ absl::Status Catalog::GetModel(const std::string& name,
 }
 
 absl::Status Catalog::FindTableValuedFunction(
-
     const absl::Span<const std::string>& path,
     const zetasql::TableValuedFunction** function,
     const FindOptions& options) {

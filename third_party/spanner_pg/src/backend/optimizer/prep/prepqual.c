@@ -37,10 +37,6 @@
 #include "optimizer/prep.h"
 #include "utils/lsyscache.h"
 
-
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 static List *pull_ands(List *andlist);
 static List *pull_ors(List *orlist);
 static Expr *find_duplicate_ors(Expr *qual, bool is_check);

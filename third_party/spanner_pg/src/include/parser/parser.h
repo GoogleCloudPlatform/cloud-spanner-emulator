@@ -65,4 +65,22 @@ extern List *raw_parser(const char *str, RawParseMode mode);
 extern List *SystemFuncName(char *name);
 extern TypeName *SystemTypeName(char *name);
 
+
+// SPANGRES BEGIN
+// Defined in src/spangres/parser.h because we need C++ (not C)
+struct SpangresTokenLocations;
+
+// Like raw_parser from PostgreSQL, but also fills in token locations.
+struct List* raw_parser_spangres(const char* str,
+                                 RawParseMode mode,
+                                 struct SpangresTokenLocations* locations);
+
+// If locations is non-null, add location as both the (exclusive) end of the
+// previous token (if any) and the start of the next one.  Defined in
+// parser_shim.cc.
+void add_token_end_start_spangres(int location,
+                                  struct SpangresTokenLocations* locations);
+
+// SPANGRES END
+
 #endif							/* PARSER_H */

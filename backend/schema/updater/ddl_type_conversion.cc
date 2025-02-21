@@ -16,7 +16,6 @@
 
 #include "backend/schema/updater/ddl_type_conversion.h"
 
-#include <memory>
 #include <vector>
 
 #include "zetasql/public/types/struct_type.h"

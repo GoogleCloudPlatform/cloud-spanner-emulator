@@ -39,8 +39,6 @@
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 static Datum ExecHashSubPlan(SubPlanState *node,
 							 ExprContext *econtext,
 							 bool *isNull);

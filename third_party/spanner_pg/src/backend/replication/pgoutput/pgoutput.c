@@ -33,8 +33,6 @@
 #include "utils/syscache.h"
 #include "utils/varlena.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 PG_MODULE_MAGIC;
 
 extern void _PG_output_plugin_init(OutputPluginCallbacks *cb);

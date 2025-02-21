@@ -35,9 +35,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * CreateConstraintEntry
  *	Create a constraint table entry.
@@ -1106,6 +1103,16 @@ get_domain_constraint_oid(Oid typid, const char *conname, bool missing_ok)
  *
  * *constraintOid is set to the OID of the pkey constraint, or InvalidOid
  * on failure.
+ *
+ * SPANGRES: We don't support this feature and always return as if there are no
+ * primary keys. This means certain queries that depend on primary keys for
+ * validity will be rejected such as:
+ *
+ * SELECT value FROM keyvalue GROUP BY key;
+ *
+ * Here "key" being a primary key would functionally determine the whole row and
+ * save us from having to group on "value" as well. Someday we could add primary
+ * key lookup to support this.
  */
 Bitmapset *
 get_primary_key_attnos(Oid relid, bool deferrableOk, Oid *constraintOid)

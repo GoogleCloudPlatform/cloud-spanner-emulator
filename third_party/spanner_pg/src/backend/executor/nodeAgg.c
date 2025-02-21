@@ -265,7 +265,6 @@
 #include "optimizer/optimizer.h"
 #include "parser/parse_agg.h"
 #include "parser/parse_coerce.h"
-#include "third_party/spanner_pg/shims/catalog_shim.h"
 #include "utils/acl.h"
 #include "utils/builtins.h"
 #include "utils/datum.h"
@@ -277,8 +276,6 @@
 #include "utils/syscache.h"
 #include "utils/tuplesort.h"
 #include "utils/datum.h"
-
-#include "third_party/spanner_pg/shims/catalog_shim.h"
 
 /*
  * Control how many partitions are created when spilling HashAgg to

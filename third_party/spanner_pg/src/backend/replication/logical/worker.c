@@ -196,8 +196,6 @@
 #include "utils/syscache.h"
 #include "utils/timeout.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 #define NAPTIME_PER_CYCLE 1000	/* max sleep time between cycles (1s) */
 
 typedef struct FlushPosition

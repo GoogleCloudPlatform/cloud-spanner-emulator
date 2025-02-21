@@ -46,13 +46,13 @@ TEST(PostgresUtilsTest, ArrayUnnestProcOid) {
   // Verify that the returned OID maps to the expected proc.
   ZETASQL_ASSERT_OK_AND_ASSIGN(Oid array_unnest_oid, GetArrayUnnestProcOid());
   ZETASQL_ASSERT_OK_AND_ASSIGN(
-      const FormData_pg_proc* proc,
-      PgBootstrapCatalog::Default()->GetProc(array_unnest_oid));
-  EXPECT_EQ(proc->pronamespace, PG_CATALOG_NAMESPACE);
-  EXPECT_STREQ(NameStr(proc->proname), "unnest");
-  EXPECT_EQ(proc->proargtypes.values[0], ANYARRAYOID);
-  EXPECT_EQ(proc->proargtypes.dim1, 1);  // Single arg.
-  EXPECT_EQ(proc->prorettype, ANYELEMENTOID);
+      const PgProcData* proc_proto,
+      PgBootstrapCatalog::Default()->GetProcProto(array_unnest_oid));
+  EXPECT_EQ(proc_proto->pronamespace(), PG_CATALOG_NAMESPACE);
+  EXPECT_EQ(proc_proto->proname(), "unnest");
+  EXPECT_EQ(proc_proto->proargtypes(0), ANYARRAYOID);
+  EXPECT_EQ(proc_proto->proargtypes().size(), 1);  // Single arg.
+  EXPECT_EQ(proc_proto->prorettype(), ANYELEMENTOID);
 }
 
 }  // namespace

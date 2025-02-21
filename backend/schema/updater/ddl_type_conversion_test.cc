@@ -22,6 +22,7 @@
 
 #include "google/protobuf/descriptor.pb.h"
 #include "zetasql/public/type.h"
+#include "zetasql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -55,6 +56,14 @@ class DDLColumnTypeToGoogleSqlTypeTest : public ::testing::Test {
     return ddl_type;
   }
 
+  ddl::ColumnDefinition MakeColumnDefinitionForArrayType(
+      ddl::ColumnDefinition::Type arr_element_type) {
+    ddl::ColumnDefinition ddl_type;
+    ddl_type.set_type(ddl::ColumnDefinition::ARRAY);
+    *(ddl_type.mutable_array_subtype()) =
+        MakeColumnDefinitionForType(arr_element_type);
+    return ddl_type;
+  }
 
   std::string GenerateProtoDescriptorBytesAsString() {
     const google::protobuf::FileDescriptorProto file_descriptor = PARSE_TEXT_PROTO(R"pb(
@@ -104,10 +113,8 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Float32) {
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, ArrayOfFloat32) {
-  auto array_element_type =
-      MakeColumnDefinitionForType(ddl::ColumnDefinition::FLOAT);
-  auto array_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::ARRAY);
-  *(array_type.mutable_array_subtype()) = array_element_type;
+  auto array_type =
+      MakeColumnDefinitionForArrayType(ddl::ColumnDefinition::FLOAT);
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       const zetasql::Type* converted_type,
       DDLColumnTypeToGoogleSqlType(array_type, &type_factory_));
@@ -345,10 +352,8 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, ArrayOfEnum) {
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Array) {
-  auto array_element_type =
-      MakeColumnDefinitionForType(ddl::ColumnDefinition::STRING);
-  auto array_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::ARRAY);
-  *(array_type.mutable_array_subtype()) = array_element_type;
+  auto array_type =
+      MakeColumnDefinitionForArrayType(ddl::ColumnDefinition::STRING);
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       const zetasql::Type* converted_type,
       DDLColumnTypeToGoogleSqlType(array_type, &type_factory_));
@@ -363,10 +368,8 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Array) {
 }
 
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, ArrayOfArray) {
-  auto array_element_type =
-      MakeColumnDefinitionForType(ddl::ColumnDefinition::STRING);
-  auto array_type1 = MakeColumnDefinitionForType(ddl::ColumnDefinition::ARRAY);
-  *(array_type1.mutable_array_subtype()) = array_element_type;
+  auto array_type1 =
+      MakeColumnDefinitionForArrayType(ddl::ColumnDefinition::STRING);
 
   auto array_type2 = MakeColumnDefinitionForType(ddl::ColumnDefinition::ARRAY);
   *(array_type2.mutable_array_subtype()) = array_type1;

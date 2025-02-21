@@ -45,8 +45,6 @@
 #include "utils/rel.h"
 #include "utils/relmapper.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 uint32		bootstrap_data_checksum_version = 0;	/* No checksum */
 
 

@@ -37,8 +37,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 static char *makeUniqueTypeName(const char *typeName, Oid typeNamespace,
 								bool tryOriginal);
 

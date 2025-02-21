@@ -27,6 +27,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/statusor.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "common/errors.h"
@@ -1790,6 +1791,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_Add_Non_Hidden_Tokenlist_Column) {
       )sql"}),
               StatusIs(error::NonHiddenTokenlistColumn("T", "col_token")));
 }
+
 }  // namespace
 
 }  // namespace test

@@ -29,8 +29,7 @@
 #include "utils/datum.h"
 #include "utils/rel.h"
 
-#include "third_party/spanner_pg/shims/parser_shim.h"
-#include "third_party/spanner_pg/src/include/nodes/nodes.h"
+#include "nodes/nodes.h"
 
 /*
  * Macros to simplify copying of different kinds of fields.  Use these

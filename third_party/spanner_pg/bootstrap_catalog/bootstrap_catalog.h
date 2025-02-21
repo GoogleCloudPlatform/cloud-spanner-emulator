@@ -61,8 +61,8 @@ class PgBootstrapCatalog {
       absl::Span<const FormData_pg_collation> pg_collation_data,
       absl::Span<const FormData_pg_namespace> pg_namespace_data,
       absl::Span<const FormData_pg_type> pg_type_data,
-      absl::Span<const FormData_pg_proc_WithArgTypes> pg_proc_data,
-      std::vector<std::string> pg_proc_textproto_data,
+      absl::Span<const FormData_pg_proc> pg_proc_data,
+      absl::Span<const std::string> pg_proc_textproto_data,
       absl::Span<const FormData_pg_cast> pg_cast_data,
       absl::Span<const FormData_pg_operator> pg_operator_data,
       absl::Span<const FormData_pg_aggregate> pg_aggregate_data,
@@ -262,22 +262,22 @@ class PgBootstrapCatalog {
 
   // Create a copy of original_proc with the updated arg types and return type.
   // Store the updated copy in updated_proc_by_oid_.
-  void UpdateProc(const FormData_pg_proc_WithArgTypes& original_proc,
+  void UpdateProc(const FormData_pg_proc& original_proc,
                   const PgProcSignature* updated_signature,
                   uint16_t updated_default_arg_count);
 
   // Create a copy of original_operator with the updated arg types and return
   // type. Store the updated copy in updated_operator_by_oid_.
   void UpdateOperator(const FormData_pg_operator& original_operator,
-                      const oidvector& updated_arg_types,
+                      const absl::Span<const Oid>& updated_arg_types,
                       Oid updated_return_type);
 
   // Given a proc, return the final version of it. If the proc is unmodified,
   // return its raw pointer. If it's deleted, return a nullptr. If it is
   // modified, use `UpdateProc` to create a modified copy and return a raw
   // pointer to the modified copy.
-  const FormData_pg_proc_WithArgTypes* GetFinalProcFormData(
-      const FormData_pg_proc_WithArgTypes& original_proc);
+  const FormData_pg_proc* GetFinalProcFormData(
+      const FormData_pg_proc& original_proc);
 
   // Given a proc, return the final version of it. If the proc is unmodified,
   // return its raw pointer. If it's deleted, return a nullptr. If it is
@@ -325,9 +325,9 @@ class PgBootstrapCatalog {
 
   absl::flat_hash_map<Oid, std::unique_ptr<PgProcData>> proc_proto_by_oid_;
 
-  // The updated FormData_pg_proc_WithArgTypes and FormData_pg_operator
+  // The updated FormData_pg_proc and FormData_pg_operator
   // objects are owned by the bootstrap catalog.
-  absl::flat_hash_map<Oid, std::unique_ptr<FormData_pg_proc_WithArgTypes>>
+  absl::flat_hash_map<Oid, std::unique_ptr<FormData_pg_proc>>
       updated_proc_by_oid_;
   absl::flat_hash_map<Oid, std::unique_ptr<FormData_pg_operator>>
       updated_operator_by_oid_;

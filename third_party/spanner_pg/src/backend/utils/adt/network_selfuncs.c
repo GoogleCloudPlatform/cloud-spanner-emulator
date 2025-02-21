@@ -28,8 +28,6 @@
 #include "utils/lsyscache.h"
 #include "utils/selfuncs.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /* Default selectivity for the inet overlap operator */
 #define DEFAULT_OVERLAP_SEL 0.01
 

@@ -30,8 +30,6 @@
 #include "utils/selfuncs.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 static double calc_rangesel(TypeCacheEntry *typcache, VariableStatData *vardata,
 							const RangeType *constval, Oid operator);
 static double default_range_selectivity(Oid operator);

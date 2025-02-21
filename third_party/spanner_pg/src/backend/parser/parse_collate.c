@@ -47,8 +47,6 @@
 #include "parser/parse_collate.h"
 #include "utils/lsyscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Collation strength (the SQL standard calls this "derivation").  Order is
  * chosen to allow comparisons to work usefully.  Note: the standard doesn't

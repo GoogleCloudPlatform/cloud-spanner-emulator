@@ -45,8 +45,6 @@
 #include "utils/ruleutils.h"
 #include "utils/timestamp.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Common subroutine for num_nulls() and num_nonnulls().
  * Returns true if successful, false if function should return NULL.

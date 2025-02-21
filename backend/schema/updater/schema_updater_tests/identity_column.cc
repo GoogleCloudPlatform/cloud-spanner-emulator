@@ -444,6 +444,80 @@ TEST_P(IdentityColumnTest, AlterNonIdentityColumn) {
           HasSubstr("Column is not an identity column in table T: value")));
 }
 
+TEST_P(IdentityColumnTest, SerialAutoIncrement) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema(
+                                     {
+                                         R"(
+    ALTER DATABASE db
+      SET spanner.default_sequence_kind = 'bit_reversed_positive'
+                                      )",
+                                         R"(
+    CREATE TABLE T (
+      id serial,
+      value bigint,
+      PRIMARY KEY(id)
+    )
+                                      )"},
+                                     /*proto_descriptor_bytes=*/"",
+                                     /*dialect=*/POSTGRESQL,
+                                     /*use_gsql_to_pg_translation=*/false));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    ALTER DATABASE db SET OPTIONS (
+      default_sequence_kind = 'bit_reversed_positive')
+    )",
+                                               R"(
+    CREATE TABLE T (
+      id INT64 AUTO_INCREMENT,
+      value INT64,
+    ) PRIMARY KEY(id)
+        )"}));
+  }
+
+  const Table* table = schema->FindTable("T");
+  ASSERT_NE(table, nullptr);
+  const Column* col = table->FindColumn("id");
+  ASSERT_NE(col, nullptr);
+  EXPECT_TRUE(col->is_identity_column());
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_EQ(col->is_nullable(), false);
+  } else {
+    EXPECT_EQ(col->is_nullable(), true);
+  }
+}
+
+TEST_P(IdentityColumnTest, SerialAutoIncrementWithoutSettingDatabaseOption) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        CreateSchema({R"(
+    CREATE TABLE T (
+      id serial,
+      value bigint,
+      PRIMARY KEY(id)
+    )
+                                      )"},
+                     /*proto_descriptor_bytes=*/"",
+                     /*dialect=*/POSTGRESQL,
+                     /*use_gsql_to_pg_translation=*/false),
+        StatusIs(absl::StatusCode::kInvalidArgument,
+                 HasSubstr("The sequence kind of an identity column id is not "
+                           "specified.")));
+  } else {
+    EXPECT_THAT(CreateSchema({R"(
+    CREATE TABLE T (
+      id INT64 AUTO_INCREMENT,
+      value INT64,
+    ) PRIMARY KEY(id)
+        )"}),
+                StatusIs(absl::StatusCode::kInvalidArgument,
+                         HasSubstr("The sequence kind of an identity column id "
+                                   "is not specified.")));
+  }
+}
+
 }  // namespace test
 }  // namespace backend
 }  // namespace emulator

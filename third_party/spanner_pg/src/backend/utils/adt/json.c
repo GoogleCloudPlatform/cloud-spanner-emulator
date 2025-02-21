@@ -28,8 +28,6 @@
 #include "utils/typcache.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 typedef enum					/* type categories for datum_to_json */
 {
 	JSONTYPE_NULL,				/* null, so we didn't bother to identify */

@@ -43,9 +43,6 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 static void checkRuleResultList(List *targetList, TupleDesc resultDesc,
 								bool isSelect, bool requireColumnNameMatch);
 static bool setRuleCheckAsUser_walker(Node *node, Oid *context);

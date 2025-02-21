@@ -20,7 +20,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 go_binary(
     name = "fix_grpc_gateway",

@@ -36,8 +36,6 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Computes size of a serialized MCV item, depending on the number of
  * dimensions (columns) the statistic is defined on. The datum values are

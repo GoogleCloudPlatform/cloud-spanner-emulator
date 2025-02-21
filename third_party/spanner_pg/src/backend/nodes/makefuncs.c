@@ -21,8 +21,6 @@
 #include "nodes/nodeFuncs.h"
 #include "utils/lsyscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * makeA_Expr -
  *		makes an A_Expr node

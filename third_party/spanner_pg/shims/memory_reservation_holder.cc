@@ -33,7 +33,7 @@
 
 #include "zetasql/base/logging.h"
 #include "third_party/spanner_pg/interface/memory_reservation_manager.h"
-#include "third_party/spanner_pg/shims/memory_shim_cc.h"
+#include "third_party/spanner_pg/src/spangres/memory_cc.h"
 #include "zetasql/base/status_builder.h"
 
 namespace postgres_translator {

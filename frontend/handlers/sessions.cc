@@ -61,9 +61,9 @@ absl::Status CreateSession(RequestContext* ctx,
   // Create a session.
   Labels labels(request->session().labels().begin(),
                 request->session().labels().end());
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::shared_ptr<Session> session,
-      ctx->env()->session_manager()->CreateSession(labels, database));
+  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+                   ctx->env()->session_manager()->CreateSession(
+                       labels, request->session().multiplexed(), database));
 
   // Return details about the newly created session.
   return session->ToProto(response, /*include_labels=*/true);
@@ -101,8 +101,10 @@ absl::Status BatchCreateSessions(
   Labels labels(request->session_template().labels().begin(),
                 request->session_template().labels().end());
   for (int i = 0; i < sessions.size(); ++i) {
-    ZETASQL_ASSIGN_OR_RETURN(sessions[i], ctx->env()->session_manager()->CreateSession(
-                                      labels, database));
+    ZETASQL_ASSIGN_OR_RETURN(
+        sessions[i],
+        ctx->env()->session_manager()->CreateSession(
+            labels, request->session_template().multiplexed(), database));
   }
 
   // Return details about the newly created session.

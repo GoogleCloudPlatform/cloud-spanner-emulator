@@ -104,6 +104,7 @@ absl::Status Session::ToProto(spanner_api::Session* session,
                    TimestampToProto(create_time_));
   ZETASQL_ASSIGN_OR_RETURN(*session->mutable_approximate_last_use_time(),
                    TimestampToProto(approximate_last_use_time_));
+  session->set_multiplexed(multiplexed_);
   return absl::OkStatus();
 }
 

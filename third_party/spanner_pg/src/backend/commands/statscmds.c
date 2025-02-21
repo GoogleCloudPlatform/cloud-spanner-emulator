@@ -41,9 +41,6 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 static char *ChooseExtendedStatisticName(const char *name1, const char *name2,
 										 const char *label, Oid namespaceid);
 static char *ChooseExtendedStatisticNameAddition(List *exprs);

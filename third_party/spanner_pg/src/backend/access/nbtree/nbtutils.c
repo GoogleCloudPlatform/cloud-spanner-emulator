@@ -30,9 +30,6 @@
 #include "utils/memutils.h"
 #include "utils/rel.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 typedef struct BTSortArrayContext
 {
 	FmgrInfo	flinfo;

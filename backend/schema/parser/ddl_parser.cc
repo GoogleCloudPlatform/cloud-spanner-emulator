@@ -864,6 +864,17 @@ void VisitColumnNode(const SimpleNode* node, absl::string_view ddl_text,
       case JJTIDENTITY_COLUMN_CLAUSE:
         VisitIdentityColumnClauseNode(child, column, errors);
         break;
+      case JJTAUTO_INCREMENT: {
+        if (!EmulatorFeatureFlags::instance()
+                 .flags()
+                 .enable_serial_auto_increment) {
+          errors->push_back("AUTO_INCREMENT is not supported.");
+          return;
+        }
+        // Basically, AUTO_INCREMENT is a syntax sugar for IDENTITY COLUMN.
+        column->mutable_identity_column();
+        break;
+      }
       default:
         ABSL_LOG(FATAL) << "Unexpected column info: " << child->toString();
     }

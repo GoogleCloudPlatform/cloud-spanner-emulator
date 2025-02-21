@@ -41,9 +41,6 @@
 #include "utils/resowner_private.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
  /* #define CACHEDEBUG */	/* turns DEBUG elogs on */
 
 /*
@@ -1457,6 +1454,11 @@ SearchCatCacheMiss(CatCache *cache,
  *	will be freed as soon as their refcount goes to zero.  In combination
  *	with aset.c's CLOBBER_FREED_MEMORY option, this provides a good test
  *	to catch references to already-released catcache entries.
+ *
+ * SPANGRES: Instead of releasing the tuple back to the cache, just
+ * does nothing since all heap tuples in postgres_translator are
+ * hand-constructed by us and not cache-backed. These tuples are allocated from
+ * the CurrentMemoryContext and memory is freed when the context is cleaned up.
  */
 void
 ReleaseCatCache(HeapTuple tuple)

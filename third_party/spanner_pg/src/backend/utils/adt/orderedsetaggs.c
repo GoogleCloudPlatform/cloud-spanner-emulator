@@ -30,9 +30,6 @@
 #include "utils/timestamp.h"
 #include "utils/tuplesort.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * Generic support for ordered-set aggregates
  *

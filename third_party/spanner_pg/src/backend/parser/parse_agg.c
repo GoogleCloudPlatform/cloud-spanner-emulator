@@ -29,8 +29,6 @@
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 typedef struct
 {
 	ParseState *pstate;

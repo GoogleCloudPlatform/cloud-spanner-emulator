@@ -33,8 +33,6 @@
 #include "utils/inet.h"
 #include "utils/timestamp.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 #define UINT32_ACCESS_ONCE(var)		 ((uint32)(*((volatile uint32 *)&(var))))
 
 #define HAS_PGSTAT_PERMISSIONS(role)	 (has_privs_of_role(GetUserId(), ROLE_PG_READ_ALL_STATS) || has_privs_of_role(GetUserId(), role))

@@ -384,7 +384,7 @@ absl::Status CouldNotParseStringAsTimestamp(absl::string_view str,
       absl::StrCat(
           "Could not parse ", str, " as a TIMESTAMP: ", error,
           ". For details on the TIMESTAMP type encoding, see "
-          "https://cloud.google.com/spanner/docs/data-types#timestamp-type"));
+          "https://cloud.google.com/spanner/docs/data-types#timestamp_type"));
 }
 
 absl::Status TimestampMustBeInUTCTimeZone(absl::string_view str) {

@@ -53,8 +53,6 @@
 #include "utils/syscache.h"
 #include "utils/varlena.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Information used to validate the columns in the row filter expression. See
  * contain_invalid_rfcolumn_walker for details.

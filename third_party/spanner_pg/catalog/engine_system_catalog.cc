@@ -64,6 +64,7 @@
 #include "third_party/spanner_pg/catalog/function.h"
 #include "third_party/spanner_pg/catalog/function_identifier.h"
 #include "third_party/spanner_pg/catalog/type.h"
+#include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 #include "third_party/spanner_pg/util/nodetag_to_string.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
@@ -704,7 +705,7 @@ EngineSystemCatalog::BuildGsqlFunctionArgumentType(
 
 absl::StatusOr<zetasql::FunctionSignature>
 EngineSystemCatalog::BuildGsqlFunctionSignature(
-    const oidvector& postgres_input_types, Oid postgres_output_type,
+    const absl::Span<const Oid>& postgres_input_types, Oid postgres_output_type,
     Oid postgres_variadic_type, bool postgres_retset) {
   ZETASQL_ASSIGN_OR_RETURN(
       zetasql::FunctionArgumentType pg_return_type,
@@ -726,8 +727,8 @@ EngineSystemCatalog::BuildGsqlFunctionSignature(
   }
 
   zetasql::FunctionArgumentTypeList arguments;
-  for (int i = 0; i < postgres_input_types.vl_len_; i++) {
-    Oid input_type_oid = postgres_input_types.values[i];
+  for (int i = 0; i < postgres_input_types.size(); i++) {
+    Oid input_type_oid = postgres_input_types[i];
     auto cardinality = input_type_oid == postgres_variadic_type
                            ? zetasql::FunctionEnums::REPEATED
                            : zetasql::FunctionEnums::REQUIRED;
@@ -766,29 +767,30 @@ EngineSystemCatalog::BuildGsqlInputTypeList(
 }
 
 absl::StatusOr<Oid> EngineSystemCatalog::FindMatchingPgProcOid(
-    absl::Span<const FormData_pg_proc* const> procs,
+    absl::Span<const PgProcData* const> procs,
     const std::vector<zetasql::InputArgumentType>& input_argument_types,
     const zetasql::Type* return_type,
     const zetasql::LanguageOptions& language_options) {
   bool srf_ret_type_mismatch = false;
-  for (const FormData_pg_proc* pg_proc : procs) {
+  for (const PgProcData* proc_proto : procs) {
     // Convert the proc from a PostgreSQL signature into a ZetaSQL signature
     absl::StatusOr<const zetasql::FunctionSignature> postgres_signature =
-        BuildGsqlFunctionSignature(pg_proc->proargtypes, pg_proc->prorettype,
-                                   pg_proc->provariadic, pg_proc->proretset);
+        BuildGsqlFunctionSignature(
+            proc_proto->proargtypes(), proc_proto->prorettype(),
+            proc_proto->provariadic(), proc_proto->proretset());
 
     // If there is a problem transforming the postgres signature, potentially
     // due to unsupported types, just skip the proc.
     if (!postgres_signature.ok()) {
-      srf_ret_type_mismatch = pg_proc->proretset;
+      srf_ret_type_mismatch = proc_proto->proretset();
       continue;
     }
 
     // If the return type doesn't match, skip it, but permit pseudo ANYARRAY
     // type to match any particular array type.
     if (!TypesMatch(postgres_signature->result_type().type(), return_type)) {
-      if ((pg_proc->prorettype != ANYARRAYOID &&
-           pg_proc->prorettype != ANYCOMPATIBLEARRAYOID) ||
+      if ((proc_proto->prorettype() != ANYARRAYOID &&
+           proc_proto->prorettype() != ANYCOMPATIBLEARRAYOID) ||
           !return_type->IsArray()) {
         continue;
       }
@@ -798,7 +800,7 @@ absl::StatusOr<Oid> EngineSystemCatalog::FindMatchingPgProcOid(
     std::unique_ptr<zetasql::FunctionSignature> result_signature;
     if (SignatureMatches(input_argument_types, *postgres_signature,
                          &result_signature, language_options)) {
-      return pg_proc->oid;
+      return proc_proto->oid();
     }
   }
   return absl::UnimplementedError(
@@ -903,10 +905,12 @@ absl::Status EngineSystemCatalog::AddFunction(
   ZETASQL_ASSIGN_OR_RETURN(absl::Span<const FormData_pg_proc* const> proc_data,
                    PgBootstrapCatalog::Default()->GetProcsByName(
                        function_arguments.postgres_function_name()));
-  std::vector<const FormData_pg_proc*> procs;
+  std::vector<const PgProcData*> procs;
   for (const FormData_pg_proc* proc : proc_data) {
     if (proc->pronamespace == namespace_oid) {
-      procs.push_back(proc);
+      ZETASQL_ASSIGN_OR_RETURN(const PgProcData* proc_proto,
+                       PgBootstrapCatalog::Default()->GetProcProto(proc->oid));
+      procs.push_back(proc_proto);
     }
   }
 

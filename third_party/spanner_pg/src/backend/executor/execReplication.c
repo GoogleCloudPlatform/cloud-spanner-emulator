@@ -36,9 +36,6 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * Setup a ScanKey for a search in the relation 'rel' for a tuple 'key' that
  * is setup to match 'rel' (*NOT* idxrel!).

@@ -68,9 +68,6 @@
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /* Per-index data for ANALYZE */
 typedef struct AnlIndexData
 {

@@ -8,7 +8,7 @@
   prosrc => 'bit_reverse' },
 
 { oid => '50007', proname => 'get_internal_sequence_state', pronamespace => 'spanner',
-  prorettype => 'int8', proargtypes => 'varchar',
+  prorettype => 'int8', proargtypes => 'text',
   prosrc => 'get_internal_sequence_state' },
 
 { oid => '50008', proname => 'generate_uuid', pronamespace => 'spanner',

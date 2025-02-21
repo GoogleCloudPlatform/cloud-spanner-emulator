@@ -20,7 +20,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 proto_library(
     name = "operations_proto",

@@ -77,8 +77,6 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  *	 Examine the RETURNS clause of the CREATE FUNCTION statement
  *	 and return information about it as *prorettype_p and *returnsSet.

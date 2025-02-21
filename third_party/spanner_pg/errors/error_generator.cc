@@ -482,7 +482,7 @@ void WriteHeader(FILE* f, const ErrorFile& file,
 
   std::set<std::string> includes_cc = {
       "absl/status/status.h",
-      "third_party/spanner_pg/shims/ereport_shim.h"
+      "third_party/spanner_pg/interface/ereport.h"
   };
   WriteIncludes(f, includes_cc);
   NewLine(f);
@@ -549,7 +549,7 @@ void WriteSource(FILE* f, const ErrorFile& file, const std::string& h_filename,
       "third_party/spanner_pg/errors/errors.h",
       "third_party/spanner_pg/errors/errors.pb.h",
       "third_party/spanner_pg/postgres_includes/all.h",
-      "third_party/spanner_pg/shims/ereport_shim.h",
+      "third_party/spanner_pg/interface/ereport.h",
   };
   WriteIncludes(f, includes);
   NewLine(f);

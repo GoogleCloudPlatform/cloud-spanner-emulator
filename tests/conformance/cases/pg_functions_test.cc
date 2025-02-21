@@ -1720,12 +1720,14 @@ TEST_F(PGFunctionsTest, JsonBArrayElementText) {
               IsOkAndHoldsRows({"1"}));
   EXPECT_THAT(Query("select jsonb_array_element_text('[1,2]', 1)"),
               IsOkAndHoldsRows({"2"}));
+  EXPECT_THAT(Query("select jsonb_array_element_text('[1,2]', -2)"),
+              IsOkAndHoldsRows({"1"}));
+  EXPECT_THAT(Query("select jsonb_array_element_text('[1,2]', -1)"),
+              IsOkAndHoldsRows({"2"}));
 
   EXPECT_THAT(Query("select jsonb_array_element_text('[]', 0)"),
               IsOkAndHoldsRows({Null<std::string>()}));
   EXPECT_THAT(Query("select jsonb_array_element_text('[1,2]', 2)"),
-              IsOkAndHoldsRows({Null<std::string>()}));
-  EXPECT_THAT(Query("select jsonb_array_element_text('[1,2]', -1)"),
               IsOkAndHoldsRows({Null<std::string>()}));
   EXPECT_THAT(Query("select jsonb_array_element_text('null', 0)"),
               IsOkAndHoldsRows({Null<std::string>()}));

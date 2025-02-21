@@ -35,9 +35,6 @@
 #include "utils/rls.h"
 #include "utils/ruleutils.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*-----------------------
  * PartitionTupleRouting - Encapsulates all information required to
  * route a tuple inserted into a partitioned table to one of its leaf

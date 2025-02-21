@@ -78,9 +78,6 @@ zetasql::FunctionEvaluator PGFunctionEvaluator(
 
 absl::StatusOr<zetasql::Value> EmulatorJsonbArrayElementText(
     absl::string_view jsonb, int32_t element) {
-  if (element < 0) {
-    return zetasql::Value::NullString();
-  }
   ZETASQL_ASSIGN_OR_RETURN(
       Datum jsonb_in_datum,
       postgres_translator::CheckedNullableOidFunctionCall1(

@@ -39,8 +39,6 @@
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /* Potentially set by pg_upgrade_support functions */
 Oid			binary_upgrade_next_pg_authid_oid = InvalidOid;
 

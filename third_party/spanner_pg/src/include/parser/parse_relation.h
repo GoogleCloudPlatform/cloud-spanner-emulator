@@ -15,6 +15,12 @@
 #define PARSE_RELATION_H
 
 #include "parser/parse_node.h"
+// SPANGRES BEGIN
+// Includes required for new Spangres functions.
+#include "parser/parse_type.h"
+#include "parser/parse_oper.h"
+#include "utils/ruleutils.h"
+// SPANGRES END
 
 
 extern ParseNamespaceItem *refnameNamespaceItem(ParseState *pstate,
@@ -45,15 +51,51 @@ extern void markVarForSelectPriv(ParseState *pstate, Var *var);
 extern Relation parserOpenTable(ParseState *pstate, const RangeVar *relation,
 								int lockmode);
 // SPANGRES BEGIN
-// This function is replaced by addRangeTableEntrySpangres via the catalog shim.
-// It is intentionally left here (instead of deleted) becasue they are still
-// present upstream and this will make merging upstream changes simpler.
-// extern RangeTblEntry *addRangeTableEntry(ParseState *pstate,
-// 				   RangeVar *relation,
-// 				   Alias *alias,
-// 				   bool inh,
-// 				   bool inFromCl);
+// Performs a lookup in googlesql's Catalog and translates a looked-up
+// zetasql::Table into an RTE.
+ParseNamespaceItem* addRangeTableEntry(struct ParseState* pstate,
+                                       RangeVar* relation, Alias* alias,
+                                       bool inh, bool inFromCl);
+
+// Like addRangeTableEntry, except looks up the table name in the catalog
+// adapter instead of reading it off of the RangeVar*.
+extern ParseNamespaceItem* addRangeTableEntryByOid(ParseState* pstate,
+                                            Oid relation_oid,
+                                            Alias* alias, bool inh,
+                                            bool inFromCl);
+
+// Gets a constructed HeapTuple for a given type id. This can substitute for
+// calls like SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_id)).
+// Returns NULL when type_id is unknown.
+Type PgTypeFormHeapTuple(Oid type_id);
+
+// Gets a constructed HeapTuple for a given operator id. This can substitute for
+// calls like SearchSysCache1(OPEROID, ObjectIdGetDatum(opno)).
+// Returns NULL when operator_id is unknown.
+Operator PgOperatorFormHeapTuple(Oid operator_id);
+
+// Analyzer transform for Spangres Hints (List of DefElem nodes), similar to the
+// transformXXX() set of functions in parse_expr.c.
+//
+// Spangres needs a separate transform function here because hints have the
+// special property that identifiers are converted to string constants (no
+// catalog lookups) and becasue the hint value can be an arbitrary expression,
+// not just Value/TypeName. This throws on error.
+//
+// `pstate`: information on current state of parse used for error reporting.
+// `elem`: Spangres hint to be transformed.
+//
+// Note: Like many transformXXX functions in PostgreSQL transformation is done
+// in-place.
+Node* transformSpangresHint(ParseState* pstate, DefElem* elem);
+
+// Additional deparser helper function for lists of hints. Intended to mimic
+// other deparser helper functions. If adding the `statement` hint, add a
+// trailing space. Otherwise add a leading space. This is to conform to existing
+// deparser behavior.
+void get_hint_list_def(List* hints, deparse_context* context, bool statement);
 // SPANGRES END
+
 extern ParseNamespaceItem *addRangeTableEntryForRelation(ParseState *pstate,
 														 Relation rel,
 														 int lockmode,

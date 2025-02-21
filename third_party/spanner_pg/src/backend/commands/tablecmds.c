@@ -104,9 +104,6 @@
 #include "utils/timestamp.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/parser_shim.h"
-
 /*
  * ON COMMIT action list
  */

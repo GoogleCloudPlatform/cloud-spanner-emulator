@@ -65,7 +65,6 @@ cc_binary(
     linkstatic = 1,
     deps = [
         ":exports.ld",
-        "//third_party/spanner_pg/shims:catalog_shim_header",
         "//third_party/spanner_pg/src/include",
         "//third_party/spanner_pg/src/interfaces/libpq",
     ],

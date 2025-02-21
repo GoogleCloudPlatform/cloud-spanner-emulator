@@ -38,8 +38,6 @@
 #include "utils/lsyscache.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 typedef struct convert_testexpr_context
 {
 	PlannerInfo *root;

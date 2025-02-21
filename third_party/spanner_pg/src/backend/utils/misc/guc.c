@@ -115,8 +115,6 @@
 #include "utils/varlena.h"
 #include "utils/xml.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 #ifndef PG_KRB_SRVTAB
 #define PG_KRB_SRVTAB ""
 #endif
@@ -5836,6 +5834,10 @@ check_GUC_name_for_parameter_acl(const char *name)
  *
  * Note that we cannot read the config file yet, since we have not yet
  * processed command-line switches.
+ *
+ * SPANGRES: This function replaces the PostgreSQL GUC (Global Unified
+ * Configuration) setup with an error to guarantee that Spangres does not
+ * create this global, mutable state management subsystem.
  */
 void
 InitializeGUCOptions(void)

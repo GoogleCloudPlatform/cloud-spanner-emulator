@@ -35,9 +35,6 @@
 #include "utils/lsyscache.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * SP-GiST handler function: return IndexAmRoutine with access method parameters
  * and callbacks.

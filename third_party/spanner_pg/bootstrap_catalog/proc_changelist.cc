@@ -44,180 +44,110 @@ namespace {
 
 #define TOKENLISTOID 50001
 
-// The proc name and signature uniquely identify a proc.
-// Used as a member of procs_to_remove and the key of procs_to_update.
-struct PgProcId {
-  std::string name;
-  PgProcSignature signature;
-
-  // Define the == operator and hashing function so that the PgProcId can be
-  // used in an absl container.
-  bool operator==(const PgProcId& other) const {
-    return name == other.name && signature == other.signature;
-  }
-
-  template <typename H>
-  friend H AbslHashValue(H state, const PgProcId& proc_id) {
-    return H::combine(std::move(state), proc_id.name, proc_id.signature);
-  }
-};
-
-static PgProcId MakePgProcId(const FormData_pg_proc& proc) {
-  std::vector<Oid> args;
-  args.reserve(proc.proargtypes.dim1);
-  for (int i = 0; i < proc.proargtypes.dim1; ++i) {
-    args.push_back(proc.proargtypes.values[i]);
-  }
-  PgProcSignature signature{.arg_types = args, .return_type = proc.prorettype};
-  PgProcId id{.name = NameStr(proc.proname), .signature = signature};
-  return id;
-}
-
-// Metadata to unique identify procs to remove from the bootstrap catalog.
+// Metadata to identify procs to remove from the bootstrap catalog.
 // Initially populated with all casts to int4.
-absl::flat_hash_set<PgProcId> procs_to_remove = {
-    {"int4", {{BITOID}, INT4OID}},
-    {"int4", {{BOOLOID}, INT4OID}},
-    {"int4", {{CHAROID}, INT4OID}},
-    {"int4", {{FLOAT4OID}, INT4OID}},
-    {"int4", {{FLOAT8OID}, INT4OID}},
-    {"int4", {{INT2OID}, INT4OID}},
-    {"int4", {{INT8OID}, INT4OID}},
-    {"int4", {{JSONBOID}, INT4OID}},
-    {"int4", {{NUMERICOID}, INT4OID}},
-    {"float48pl", {{FLOAT4OID, FLOAT8OID}, FLOAT8OID}},
-    {"float84pl", {{FLOAT8OID, FLOAT4OID}, FLOAT8OID}},
-    {"float48mi", {{FLOAT4OID, FLOAT8OID}, FLOAT8OID}},
-    {"float84mi", {{FLOAT8OID, FLOAT4OID}, FLOAT8OID}},
-    {"float48div", {{FLOAT4OID, FLOAT8OID}, FLOAT8OID}},
-    {"float84div", {{FLOAT8OID, FLOAT4OID}, FLOAT8OID}},
-    {"float48mul", {{FLOAT4OID, FLOAT8OID}, FLOAT8OID}},
-    {"float84mul", {{FLOAT8OID, FLOAT4OID}, FLOAT8OID}},
+absl::flat_hash_set<Oid> procs_to_remove = {
+    F_INT4_BIT,   F_INT4_BOOL,  F_INT4_CHAR,  F_INT4_FLOAT4,  F_INT4_FLOAT8,
+    F_INT4_INT2,  F_INT4_INT8,  F_INT4_JSONB, F_INT4_NUMERIC, F_FLOAT48PL,
+    F_FLOAT84PL,  F_FLOAT48MI,  F_FLOAT84MI,  F_FLOAT48DIV,   F_FLOAT84DIV,
+    F_FLOAT48MUL, F_FLOAT84MUL,
 };
 
-// Metadata to unique identify procs to update in the bootstrap catalog, along
-// with the new signature for each proc.
-absl::flat_hash_map<PgProcId, PgProcSignature> proc_signatures_to_update = {
-    {{"substr", {{TEXTOID, INT4OID}, TEXTOID}}, {{TEXTOID, INT8OID}, TEXTOID}},
-    {{"substr", {{TEXTOID, INT4OID, INT4OID}, TEXTOID}},
-     {{TEXTOID, INT8OID, INT8OID}, TEXTOID}},
-    {{"substring", {{TEXTOID, INT4OID}, TEXTOID}},
-     {{TEXTOID, INT8OID}, TEXTOID}},
-    {{"substring", {{TEXTOID, INT4OID, INT4OID}, TEXTOID}},
-     {{TEXTOID, INT8OID, INT8OID}, TEXTOID}},
-    {{"substr", {{BYTEAOID, INT4OID}, BYTEAOID}},
-     {{BYTEAOID, INT8OID}, BYTEAOID}},
-    {{"substr", {{BYTEAOID, INT4OID, INT4OID}, BYTEAOID}},
-     {{BYTEAOID, INT8OID, INT8OID}, BYTEAOID}},
-    {{"substring", {{BYTEAOID, INT4OID}, BYTEAOID}},
-     {{BYTEAOID, INT8OID}, BYTEAOID}},
-    {{"substring", {{BYTEAOID, INT4OID, INT4OID}, BYTEAOID}},
-     {{BYTEAOID, INT8OID, INT8OID}, BYTEAOID}},
-    {{"int8shl", {{INT8OID, INT4OID}, INT8OID}}, {{INT8OID, INT8OID}, INT8OID}},
-    {{"int8shr", {{INT8OID, INT4OID}, INT8OID}}, {{INT8OID, INT8OID}, INT8OID}},
-    {{"jsonb_array_element", {{JSONBOID, INT4OID}, JSONBOID}},
-     {{JSONBOID, INT8OID}, JSONBOID}},
-    {{"jsonb_array_element_text", {{JSONBOID, INT4OID}, TEXTOID}},
-     {{JSONBOID, INT8OID}, TEXTOID}},
-    {{"strpos", {{TEXTOID, TEXTOID}, INT4OID}}, {{TEXTOID, TEXTOID}, INT8OID}},
-    {{"length", {{TEXTOID}, INT4OID}}, {{TEXTOID}, INT8OID}},
-    {{"length", {{BYTEAOID}, INT4OID}}, {{BYTEAOID}, INT8OID}},
-    {{"lpad", {{TEXTOID, INT4OID}, TEXTOID}}, {{TEXTOID, INT8OID}, TEXTOID}},
-    {{"lpad", {{TEXTOID, INT4OID, TEXTOID}, TEXTOID}},
-     {{TEXTOID, INT8OID, TEXTOID}, TEXTOID}},
-    {{"rpad", {{TEXTOID, INT4OID}, TEXTOID}}, {{TEXTOID, INT8OID}, TEXTOID}},
-    {{"rpad", {{TEXTOID, INT4OID, TEXTOID}, TEXTOID}},
-     {{TEXTOID, INT8OID, TEXTOID}, TEXTOID}},
-    {{"left", {{TEXTOID, INT4OID}, TEXTOID}}, {{TEXTOID, INT8OID}, TEXTOID}},
-    {{"right", {{TEXTOID, INT4OID}, TEXTOID}}, {{TEXTOID, INT8OID}, TEXTOID}},
-    {{"repeat", {{TEXTOID, INT4OID}, TEXTOID}}, {{TEXTOID, INT8OID}, TEXTOID}},
-    {{"ascii", {{TEXTOID}, INT4OID}}, {{TEXTOID}, INT8OID}},
-    {{"chr", {{INT4OID}, TEXTOID}}, {{INT8OID}, TEXTOID}},
-    {{"to_timestamp", {{FLOAT8OID}, TIMESTAMPTZOID}},
-     {{INT8OID}, TIMESTAMPTZOID}},
-    {{"make_date", {{INT4OID, INT4OID, INT4OID}, DATEOID}},
-     {{INT8OID, INT8OID, INT8OID}, DATEOID}},
-    {{"trunc", {{NUMERICOID, INT4OID}, NUMERICOID}},
-     {{NUMERICOID, INT8OID}, NUMERICOID}},
-    {{"nextval", {{REGCLASSOID}, INT8OID}}, {{TEXTOID}, INT8OID}},
-    {{"array_length", {{ANYARRAYOID, INT4OID}, INT4OID}},
-     {{ANYARRAYOID, INT8OID}, INT8OID}},
-    {{"array_upper", {{ANYARRAYOID, INT4OID}, INT4OID}},
-     {{ANYARRAYOID, INT8OID}, INT8OID}},
-    {{"date_mi", {{DATEOID, DATEOID}, INT4OID}}, {{DATEOID, DATEOID}, INT8OID}},
-    {{"date_mii", {{DATEOID, INT4OID}, DATEOID}},
-     {{DATEOID, INT8OID}, DATEOID}},
-    {{"date_pli", {{DATEOID, INT4OID}, DATEOID}},
-     {{DATEOID, INT8OID}, DATEOID}},
-    {{"make_interval",
-      {{INT4OID, INT4OID, INT4OID, INT4OID, INT4OID, INT4OID, FLOAT8OID},
-       INTERVALOID}},
-     {{INT8OID, INT8OID, INT8OID, INT8OID, INT8OID, INT8OID, FLOAT8OID},
-      INTERVALOID}},
+// Metadata to identify procs in the bootstrap catalog whose signatures should
+// be updated.
+absl::flat_hash_map<Oid, PgProcSignature> proc_signatures_to_update = {
+    {F_SUBSTR_TEXT_INT4, {{TEXTOID, INT8OID}, TEXTOID}},
+    {F_SUBSTR_TEXT_INT4_INT4, {{TEXTOID, INT8OID, INT8OID}, TEXTOID}},
+    {F_SUBSTRING_TEXT_INT4, {{TEXTOID, INT8OID}, TEXTOID}},
+    {F_SUBSTRING_TEXT_INT4_INT4, {{TEXTOID, INT8OID, INT8OID}, TEXTOID}},
+    {F_SUBSTR_BYTEA_INT4, {{BYTEAOID, INT8OID}, BYTEAOID}},
+    {F_SUBSTR_BYTEA_INT4_INT4, {{BYTEAOID, INT8OID, INT8OID}, BYTEAOID}},
+    {F_SUBSTRING_BYTEA_INT4, {{BYTEAOID, INT8OID}, BYTEAOID}},
+    {F_SUBSTRING_BYTEA_INT4_INT4, {{BYTEAOID, INT8OID, INT8OID}, BYTEAOID}},
+    {F_INT8SHL, {{INT8OID, INT8OID}, INT8OID}},
+    {F_INT8SHR, {{INT8OID, INT8OID}, INT8OID}},
+    {F_JSONB_ARRAY_ELEMENT, {{JSONBOID, INT8OID}, JSONBOID}},
+    {F_JSONB_ARRAY_ELEMENT_TEXT, {{JSONBOID, INT8OID}, TEXTOID}},
+    {F_STRPOS, {{TEXTOID, TEXTOID}, INT8OID}},
+    {F_LENGTH_TEXT, {{TEXTOID}, INT8OID}},
+    {F_LENGTH_BYTEA, {{BYTEAOID}, INT8OID}},
+    {F_LPAD_TEXT_INT4, {{TEXTOID, INT8OID}, TEXTOID}},
+    {F_LPAD_TEXT_INT4_TEXT, {{TEXTOID, INT8OID, TEXTOID}, TEXTOID}},
+    {F_RPAD_TEXT_INT4, {{TEXTOID, INT8OID}, TEXTOID}},
+    {F_RPAD_TEXT_INT4_TEXT, {{TEXTOID, INT8OID, TEXTOID}, TEXTOID}},
+    {F_LEFT, {{TEXTOID, INT8OID}, TEXTOID}},
+    {F_RIGHT, {{TEXTOID, INT8OID}, TEXTOID}},
+    {F_REPEAT, {{TEXTOID, INT8OID}, TEXTOID}},
+    {F_ASCII, {{TEXTOID}, INT8OID}},
+    {F_CHR, {{INT8OID}, TEXTOID}},
+    {F_TO_TIMESTAMP_FLOAT8, {{INT8OID}, TIMESTAMPTZOID}},
+    {F_MAKE_DATE, {{INT8OID, INT8OID, INT8OID}, DATEOID}},
+    {F_TRUNC_NUMERIC_INT4, {{NUMERICOID, INT8OID}, NUMERICOID}},
+    {F_NEXTVAL, {{TEXTOID}, INT8OID}},
+    {F_ARRAY_LENGTH, {{ANYARRAYOID, INT8OID}, INT8OID}},
+    {F_ARRAY_UPPER, {{ANYARRAYOID, INT8OID}, INT8OID}},
+    {F_DATE_MI, {{DATEOID, DATEOID}, INT8OID}},
+    {F_DATE_MII, {{DATEOID, INT8OID}, DATEOID}},
+    {F_DATE_PLI, {{DATEOID, INT8OID}, DATEOID}},
+    {F_JSONB_DELETE_JSONB_INT4, {{JSONBOID, INT8OID}, JSONBOID}},
 };
 
-// Metadata to unique identify procs to update in the bootstrap catalog, along
-// with the new signature for each proc.
-absl::flat_hash_map<PgProcId, std::vector<std::string>>
-proc_default_args_to_update = {
+// Metadata to identify procs in the boostrap catalog with default arguments.
+absl::flat_hash_map<Oid, std::vector<std::string>> proc_default_args_to_update =
+    {
+};
+
+// Metadata to identify procs in the bootstrap catalog whose argument names
+// should be updated.
+absl::flat_hash_map<Oid, std::vector<std::string>> proc_arg_names_to_update = {
+    {F_JSONB_SET_LAX,
+     {"jsonb_in", "path", "replacement", "create_if_missing",
+      "null_value_treatment"}},
+    {F_JSONB_SET, {"jsonb_in", "path", "replacement", "create_if_missing"}},
+    {F_JSONB_INSERT, {"jsonb_in", "path", "replacement", "insert_after"}},
 };
 
 }  // namespace
 
-bool ProcIsRemoved(const FormData_pg_proc& proc) {
-  return procs_to_remove.contains(MakePgProcId(proc));
-}
+bool ProcIsRemoved(Oid proc_oid) { return procs_to_remove.contains(proc_oid); }
 
-bool ProcIsModified(const FormData_pg_proc& proc) {
-  return (proc_signatures_to_update.find(MakePgProcId(proc)) !=
+bool ProcIsModified(Oid proc_oid) {
+  return (proc_signatures_to_update.find(proc_oid) !=
           proc_signatures_to_update.end()) ||
-      (proc_default_args_to_update.find(MakePgProcId(proc)) !=
-       proc_default_args_to_update.end());
+         (proc_default_args_to_update.find(proc_oid) !=
+          proc_default_args_to_update.end()) ||
+         (proc_arg_names_to_update.find(proc_oid) !=
+          proc_arg_names_to_update.end());
 }
 
-const PgProcSignature* GetUpdatedProcSignature(const FormData_pg_proc& proc) {
-  if (proc_signatures_to_update.find(MakePgProcId(proc)) ==
-      proc_signatures_to_update.end()) {
-    return nullptr;
-  }
-  return &proc_signatures_to_update.find(MakePgProcId(proc))->second;
-}
-
-const PgProcSignature* GetUpdatedProcSignature(const PgProcData& proc) {
-  const PgProcId proc_id = {
-    .name = proc.proname(),
-    .signature = {
-    .arg_types = std::vector<Oid>(
-        proc.proargtypes().begin(),
-        proc.proargtypes().end()),
-                  .return_type = proc.prorettype()}};
-  if (proc_signatures_to_update.find(proc_id) !=
-      proc_signatures_to_update.end()) {
-    return &proc_signatures_to_update.find(proc_id)->second;
+const PgProcSignature* GetUpdatedProcSignature(Oid proc_oid) {
+  auto it = proc_signatures_to_update.find(proc_oid);
+  if (it != proc_signatures_to_update.end()) {
+    return &it->second;
   }
   return nullptr;
 }
 
-uint16_t GetProcDefaultArgumentCount(const FormData_pg_proc& proc) {
-  if (proc_default_args_to_update.find(MakePgProcId(proc)) ==
-      proc_default_args_to_update.end()) {
-    return 0;
+uint16_t GetProcDefaultArgumentCount(Oid proc_oid) {
+  auto it = proc_default_args_to_update.find(proc_oid);
+  if (it != proc_default_args_to_update.end()) {
+    return it->second.size();
   }
-  return proc_default_args_to_update.find(MakePgProcId(proc))->second.size();
+  return 0;
 }
 
-const std::vector<std::string>*
-GetProcDefaultArguments(const PgProcData& proc) {
-  const PgProcId proc_id = {
-    .name = proc.proname(),
-    .signature = {
-    .arg_types = std::vector<Oid>(
-        proc.proargtypes().begin(),
-        proc.proargtypes().end()),
-                  .return_type = proc.prorettype()}};
-  if (proc_default_args_to_update.find(proc_id) !=
-      proc_default_args_to_update.end()) {
-    return &proc_default_args_to_update.find(proc_id)->second;
+const std::vector<std::string>* GetProcDefaultArguments(Oid proc_oid) {
+  auto it = proc_default_args_to_update.find(proc_oid);
+  if (it != proc_default_args_to_update.end()) {
+    return &it->second;
+  }
+  return nullptr;
+}
+
+const std::vector<std::string>* GetUpdatedProcArgNames(Oid proc_oid) {
+  auto it = proc_arg_names_to_update.find(proc_oid);
+  if (it != proc_arg_names_to_update.end()) {
+    return &it->second;
   }
   return nullptr;
 }

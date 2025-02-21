@@ -81,6 +81,7 @@ ForwardTransformer::BuildGsqlFunctionArgumentList(
       // the inner expression.
       TargetEntry* target_entry_arg =
           internal::PostgresCastNode(TargetEntry, arg);
+
       ZETASQL_ASSIGN_OR_RETURN(arg_expr,
                        BuildGsqlResolvedExpr(*target_entry_arg->expr,
                                              expr_transformer_info));
@@ -110,13 +111,8 @@ ForwardTransformer::BuildGsqlFunctionArgumentList(
   size_t positional_index = 0;
   for (Expr* arg : StructList<Expr*>(args)) {
     if (arg->type == T_TargetEntry) {
-      // This is an aggregate function argument. Build the argument from
-      // the inner expression.
-      TargetEntry* target_entry_arg =
-          internal::PostgresCastNode(TargetEntry, arg);
-      ZETASQL_ASSIGN_OR_RETURN(arg_index_to_expr[positional_index++],
-                       BuildGsqlResolvedExpr(*target_entry_arg->expr,
-                                             expr_transformer_info));
+      return absl::InvalidArgumentError(
+          "TargetEntry is not supported in this context");
     } else if (arg->type == T_NamedArgExpr) {
       NamedArgExpr* named_arg_expr =
           internal::PostgresCastNode(NamedArgExpr, arg);
@@ -349,8 +345,11 @@ ForwardTransformer::BuildGsqlResolvedAggregateFunctionCall(
                      expr_transformer_info->clause_name));
   }
 
-  ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(agg_function.aggorder,
-                                            "Aggregate functions", "ORDER BY"));
+  bool enable_order_by_in_aggregate = false;
+  if (!enable_order_by_in_aggregate) {
+    ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(
+        agg_function.aggorder, "Aggregate functions", "ORDER BY"));
+  }
   ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(
       agg_function.aggfilter, "Aggregate functions", "FILTER clauses"));
 
@@ -392,6 +391,7 @@ ForwardTransformer::BuildGsqlResolvedAggregateFunctionCall(
           zetasql::ResolvedNonScalarFunctionCallBase::DEFAULT_NULL_HANDLING;
   std::vector<std::unique_ptr<const zetasql::ResolvedOrderByItem>>
       order_by_item_list;
+
   auto resolved_function_call = zetasql::MakeResolvedAggregateFunctionCall(
       function_and_signature.signature().result_type().type(),
       function_and_signature.function(), function_and_signature.signature(),
@@ -851,6 +851,9 @@ ForwardTransformer::BuildGsqlInFunctionCall(
     return absl::InvalidArgumentError(
         "ANY, SOME, and IN expressions with function or operator arguments are "
         "not supported");
+  } else if (IsA(array_argument, CoalesceExpr)) {
+    return absl::InvalidArgumentError(
+        "ANY/SOME expressions with COALESCE arguments are not supported");
   }
 
   // Build the argument list for the googlesql function. The argument list is
@@ -940,6 +943,9 @@ ForwardTransformer::BuildGsqlAllFunctionCall(
     return absl::InvalidArgumentError(
         "ALL expressions with function or operator arguments are not "
         "supported");
+  } else if (IsA(array_argument, CoalesceExpr)) {
+    return absl::InvalidArgumentError(
+        "ALL expressions with COALESCE arguments are not supported");
   }
 
   // Build the argument list for the googlesql function. The argument list is

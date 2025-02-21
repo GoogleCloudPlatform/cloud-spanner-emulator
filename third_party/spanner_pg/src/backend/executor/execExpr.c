@@ -50,9 +50,6 @@
 #include "utils/lsyscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 typedef struct ExprSetupInfo
 {
 	/* Highest attribute numbers fetched from inner/outer/scan tuple slots: */

@@ -761,7 +761,8 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 
 	SAVEPOINT SCHEMA SCHEMAS SCROLL SEARCH SECOND_P SECURITY SELECT SEQUENCE SEQUENCES
 	SERIALIZABLE SERVER SESSION SESSION_USER SET SETS SETOF SHARE SHOW
-	SIMILAR SIMPLE SKIP SMALLINT SNAPSHOT SOME SQL_P STABLE STANDALONE_P
+	SIMILAR SIMPLE SKIP SMALLINT SNAPSHOT SOME SQL_P
+	STABLE STANDALONE_P
 	START STATEMENT STATISTICS STDIN STDOUT STORAGE STORED STREAM STREAMS STRICT_P STRIP_P
 	SUBSCRIPTION SUBSTRING SUPPORT SYMMETRIC SYNONYM SYSID SYSTEM_P
 
@@ -3668,7 +3669,8 @@ OptTtl: TTL ConstInterval Sconst opt_interval ON ColId
 
 CreateStmt:	CREATE OptTemp TABLE qualified_name '(' OptTableElementList ')'
 			OptInherit OptPartitionSpec table_access_method_clause OptWith
-            OnCommitOption OptTableSpace OptInterleave OptTtl
+      OnCommitOption OptTableSpace
+			OptInterleave OptTtl
 				{
 					CreateStmt *n = makeNode(CreateStmt);
 
@@ -3684,13 +3686,14 @@ CreateStmt:	CREATE OptTemp TABLE qualified_name '(' OptTableElementList ')'
 					n->oncommit = $12;
 					n->tablespacename = $13;
 					n->interleavespec = $14;
-					n->if_not_exists = false;
 					n->ttl = $15;
+					n->if_not_exists = false;
 					$$ = (Node *) n;
 				}
 		| CREATE OptTemp TABLE IF_P NOT EXISTS qualified_name '('
 			OptTableElementList ')' OptInherit OptPartitionSpec table_access_method_clause
-			OptWith OnCommitOption OptTableSpace OptInterleave OptTtl
+			OptWith OnCommitOption OptTableSpace
+			OptInterleave OptTtl
 				{
 					CreateStmt *n = makeNode(CreateStmt);
 
@@ -3705,8 +3708,8 @@ CreateStmt:	CREATE OptTemp TABLE qualified_name '(' OptTableElementList ')'
 					n->options = $14;
 					n->oncommit = $15;
 					n->tablespacename = $16;
-					n->interleavespec = $17;
 					n->if_not_exists = true;
+					n->interleavespec = $17;
 					n->ttl = $18;
 					$$ = (Node *) n;
 				}
@@ -8218,7 +8221,8 @@ defacl_privilege_target:
 
 IndexStmt:	CREATE opt_unique INDEX opt_concurrently opt_index_name
 			ON relation_expr access_method_clause '(' index_params ')'
-			opt_include opt_unique_null_treatment opt_reloptions OptTableSpace OptInterleaveIndex where_clause
+			opt_include opt_unique_null_treatment opt_reloptions OptTableSpace
+			OptInterleaveIndex where_clause
 				{
 					IndexStmt *n = makeNode(IndexStmt);
 
@@ -8251,7 +8255,8 @@ IndexStmt:	CREATE opt_unique INDEX opt_concurrently opt_index_name
 				}
 			| CREATE opt_unique INDEX opt_concurrently IF_P NOT EXISTS name
 			ON relation_expr access_method_clause '(' index_params ')'
-			opt_include opt_unique_null_treatment opt_reloptions OptTableSpace OptInterleaveIndex where_clause
+			opt_include opt_unique_null_treatment opt_reloptions OptTableSpace
+			OptInterleaveIndex where_clause
 				{
 					IndexStmt *n = makeNode(IndexStmt);
 

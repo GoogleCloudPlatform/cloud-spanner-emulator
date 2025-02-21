@@ -57,8 +57,7 @@ cc_binary(
         "-Wl,-E",
     ],
     deps = [
-        "//third_party/spanner_pg/shims:catalog_shim",
-        "//third_party/spanner_pg/shims:memory_shim",
         "//third_party/spanner_pg/src/backend:backend_with_stub_shims",
+        "//third_party/spanner_pg/src/spangres:memory",
     ],
 )

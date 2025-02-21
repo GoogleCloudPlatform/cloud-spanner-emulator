@@ -32,11 +32,6 @@ ALTER INDEX "Schema_a"."Firstname_idx" DROP INCLUDE COLUMN IF EXISTS "Address"
 ERROR: <IF [NOT] EXISTS> is not supported in <ALTER> statement operations.
 ==
 
-ALTER INDEX "Schema_a"."Firstname_idx" SET (param = 1)
---
-ERROR: syntax error at or near "SET"
-==
-
 ALTER INDEX "Schema_a"."Firstname_idx" RESET param
 --
 ERROR: syntax error at or near "RESET"

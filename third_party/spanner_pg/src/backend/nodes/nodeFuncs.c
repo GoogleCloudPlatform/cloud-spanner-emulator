@@ -24,9 +24,6 @@
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/parser_shim.h"
-
 static bool expression_returns_set_walker(Node *node, void *context);
 static int	leftmostLoc(int loc1, int loc2);
 static bool fix_opfuncids_walker(Node *node, void *context);

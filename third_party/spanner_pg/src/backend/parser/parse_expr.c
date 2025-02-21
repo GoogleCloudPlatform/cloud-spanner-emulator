@@ -38,9 +38,7 @@
 #include "utils/timestamp.h"
 #include "utils/xml.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
-
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
 
 /* GUC parameters */
 bool		Transform_null_equals = false;

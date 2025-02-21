@@ -48,9 +48,6 @@
 #include "utils/syscache.h"
 #include "utils/varlena.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * We don't want to log each fetching of a value from a sequence,
  * so we pre-log a few fetches in advance. In the event of

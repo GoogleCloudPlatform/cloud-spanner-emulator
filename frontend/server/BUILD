@@ -18,7 +18,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 cc_library(
     name = "request_context",
@@ -40,6 +40,7 @@ cc_test(
     deps = [
         ":request_context",
         "//frontend/common:uris",
+        "//frontend/entities:session",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/strings",

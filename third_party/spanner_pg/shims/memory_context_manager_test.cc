@@ -41,7 +41,7 @@
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/memory_reservation_holder.h"
-#include "third_party/spanner_pg/shims/memory_shim_cc.h"
+#include "third_party/spanner_pg/src/spangres/memory_cc.h"
 #include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"
 
 namespace postgres_translator {

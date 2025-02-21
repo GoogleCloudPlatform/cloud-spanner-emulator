@@ -451,30 +451,10 @@ foreach my $catname (@catnames)
 	# enabling us to access compiled data for this catalog
  	my $catalog = $catalogs{$catname};
 	print $header "#include \"catalog/${catname}.h\"\n";
-
-	if ($catname eq "pg_proc")
-	{
-		print $header "typedef struct { ";
-		print $header "FormData_${catname} data; ";
-		print $header "Oid do_not_access_directly__flexible_array_storage[$max_proc_args]; ";
-		print $header "} FormData_${catname}_WithArgTypes;\n";
-		print $header "extern const FormData_${catname}_WithArgTypes ${catname}_data[];\n";
-	}
-	else
- 	{
-		print $header "extern const FormData_${catname} ${catname}_data[];\n";
- 	}
+	print $header "extern const FormData_${catname} ${catname}_data[];\n";
 	print $header "extern const size_t ${catname}_data_size;\n";
 	print $header "\n";
-
-	if ($catname eq 'pg_proc')
-	{
-		print $cc "const FormData_${catname}_WithArgTypes ${catname}_data[] = {\n";
-	}
-	else
-	{
-		print $cc "const FormData_${catname} ${catname}_data[] = {\n";
-	}
+	print $cc "const FormData_${catname} ${catname}_data[] = {\n";
 	print $textproto "const std::vector<std::string> ";
 	print $textproto "${catname}_textproto_data = {\n";
 
@@ -573,7 +553,7 @@ foreach my $catname (@catnames)
 				}
 			}
 		}
-		output_oid_record($cc, \%bki_values, $catalog, $catname);
+		output_struct($cc, \%bki_values, $catalog, $catname);
 		output_textproto($textproto, \%bki_values, $catalog, $catname);
 	}
 
@@ -794,28 +774,26 @@ sub morph_row_for_pgattr
 }
 
 # Output one record of a FormData_* struct
-sub output_oid_record
+sub output_struct
 {
 	my ($cc, $values, $catalog, $catname) = @_;
-	if ($catname eq "pg_proc") {
-		# pg_proc data is wrapped in a special struct with an additional field
-		# for the argtypes
-		print $cc "  { .data = ";
+
+	print $cc "{";
+	for my $i (0..$#{ $catalog->{columns} })
+ 	{
+		my $column = $catalog->{columns}[$i];
+		# Skip non-C columns
+		if ($column->{is_varlen}) {
+			next;
+		}
+
+ 		my $attname = $column->{name};
+		my $val = $values->{$attname};
+		my $coltype = $column->{type};
+		output_field($cc, $attname, $val, $coltype, $catname);
 	}
-	my $pg_proc_proargtypes_data = output_record_helper($cc, $values, $catalog, $catname);
-	if ($catname eq "pg_proc")
-	{
-		die "Missing argtypes for pg_proc.\n" unless $pg_proc_proargtypes_data;
-		# "Do as I say, not as I do" :-)
-		# Values written here will be accessible at `data.values` on this struct
-		# as well, because it's a flexible array and this is its backing store.
-		# However, C won't let us initialize `data.values` directly;
-		# initializer lists don't work with flexible arrays.
-		# So we populate the backing store directly.
-		print $cc " .do_not_access_directly__flexible_array_storage = $pg_proc_proargtypes_data";
-		$pg_proc_proargtypes_data = undef;
-		print $cc "},";
- 	}
+
+	print $cc "},";
  	print $cc "\n";
 }
 
@@ -958,47 +936,6 @@ sub output_field_for_textproto
 	print $cc ", ";
 }
 
-# Output one record of a regular FormData struct
-sub output_record
-{
-	my ($cc, $values, $catalog, $catname) = @_;
-	output_record_helper($cc, $values, $catalog, $catname);
-	print $cc "\n";
-}
-
-# Output the body of a FormData struct
-sub output_record_helper
-{
-	my ($cc, $values, $catalog, $catname) = @_;
-
-	my $pg_proc_proargtypes_data = undef;
-
-	print $cc "{";
-
-	for my $i (0..$#{ $catalog->{columns} })
- 	{
-		my $column = $catalog->{columns}[$i];
-		# Skip non-C columns
-		if ($column->{is_varlen}) {
-			next;
-		}
-
- 		my $attname = $column->{name};
-		my $val = $values->{$attname};
-		my $coltype = $column->{type};
-		my $res = output_field($cc, $attname, $val, $coltype, $catname);
-		if ($res)
- 		{
-			# Capture pg_proc_proargtypes_data if this field has any.
-			# We're guaranteed to only have this for at most one field per row.
-			$pg_proc_proargtypes_data = $res;
- 		}
-	}
-
-	print $cc "},";
-	return $pg_proc_proargtypes_data;
-}
-
 # Output a single field for a FormData struct.
 # The field looks like ".fieldname = Value, ".
 # Most of the logic of this function is dedicated to figuring out how to
@@ -1006,7 +943,6 @@ sub output_record_helper
 sub output_field
 {
 	my ($cc, $attname, $val, $coltype, $catname) = @_;
-	my $pg_proc_proargtypes_data = undef;
 
 	# Skip anything inside the CATALOG_VARLEN blocks in the struct
 	# definitions.
@@ -1043,29 +979,7 @@ sub output_field
 	}
 	elsif ($coltype eq "oidvector")
 	{
-		# Most oidvectors are VARLEN.
-		# pgproc.proargtypes is a special case -- an inportant value that
-		# is stored as a flexible array member so we can, with some
-		# hackery, store it here as well.
-		if ($catname eq "pg_proc" && $attname eq "proargtypes")
-		{
-			if ($val =~ /^"[0-9 ]*"$/)
-			{
-				# Strip leading and trailing quotes
-				$val = substr($val, 1, -1);
-			}
-
-			my @vals = split(/ /, $val);
-			@vals <= $max_proc_args || die "Update max_proc_args to at least @vals";
-
-			$val = join(", ", @vals);
-			# Stash the oids here.  They will be written onto the parent struct.
-			$pg_proc_proargtypes_data = "{$val}";
-		}
-		else
-		{
-			return;
-		}
+		return;
 	}
 
 	print $cc ".$attname = ";
@@ -1119,11 +1033,6 @@ sub output_field
 			print $cc "'$val'";
 		}
 	}
-	elsif ($coltype eq "oidvector")
-	{
-		my $num_vals = scalar(split(/ /, $val));
-		print $cc "{.vl_len_ = $num_vals, .ndim = 1, .dataoffset = 0, .elemtype = OIDOID, .dim1 = $num_vals}";
-	}
 	elsif ($coltype eq "bool")
 	{
 		# Convert SQL bool syntax to C bool syntax.
@@ -1150,8 +1059,6 @@ sub output_field
 	}
 
 	print $cc ", ";
-
-	return $pg_proc_proargtypes_data;
 }
 
 # Given a system catalog name and a reference to a key-value pair corresponding

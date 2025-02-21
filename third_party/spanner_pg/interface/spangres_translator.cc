@@ -271,9 +271,9 @@ absl::Status SpangresTranslator::RewriteTranslatedTree(
     zetasql::AnalyzerOutput* analyzer_output,
     interfaces::TranslateParsedQueryParams& params) {
   auto analyzer_options = params.googlesql_analyzer_options();
-  // Enable relevant rewriters only.
-  analyzer_options.set_enabled_rewrites(
-      {zetasql::REWRITE_BUILTIN_FUNCTION_INLINER});
+  analyzer_options.set_enabled_rewrites({
+      zetasql::REWRITE_BUILTIN_FUNCTION_INLINER,
+  });
   return zetasql::RewriteResolvedAst(
       analyzer_options, params.sql_expression(),
       params.engine_provided_catalog(), GetTypeFactory(), *analyzer_output);

@@ -31,8 +31,6 @@
 #include "utils/rel.h"
 #include "utils/relcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 static void setNamespaceForMergeWhen(ParseState *pstate,
 									 MergeWhenClause *mergeWhenClause,
 									 Index targetRTI,

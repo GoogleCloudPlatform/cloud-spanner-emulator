@@ -21,7 +21,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 generate_grpc_gateway(
     name = "spanner_gateway",

@@ -50,9 +50,6 @@
 #include "utils/ps_status.h"
 #include "utils/resowner_private.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /* This configuration variable is used to set the lock table size */
 int			max_locks_per_xact; /* set by guc.c */
 
@@ -756,6 +753,9 @@ LockAcquire(const LOCKTAG *locktag,
  *
  * If locallockp isn't NULL, *locallockp receives a pointer to the LOCALLOCK
  * table entry if a lock is successfully acquired, or NULL if not.
+ *
+ * SPANGRES: We don't support PostgreSQL's locking model and don't intend to
+ * support it.
  */
 LockAcquireResult
 LockAcquireExtended(const LOCKTAG *locktag,

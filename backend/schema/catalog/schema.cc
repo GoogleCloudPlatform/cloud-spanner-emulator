@@ -186,7 +186,6 @@ const Model* Schema::FindModel(const std::string& model_name) const {
   }
   return itr->second;
 }
-
 const NamedSchema* Schema::FindNamedSchema(
     const std::string& named_schema_name) const {
   auto itr = named_schemas_map_.find(named_schema_name);

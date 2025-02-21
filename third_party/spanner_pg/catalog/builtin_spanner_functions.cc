@@ -675,6 +675,10 @@ static void AddFloatSignaturesForExistingFunctions(
           {"to_jsonb",
            {{{gsql_pg_jsonb, {gsql_float}, /*context_ptr=*/nullptr}}}});
 
+        existing_float_functions_with_signature.push_back(
+            {"to_jsonb",
+             {{{gsql_pg_jsonb, {gsql_float_arr}, /*context_ptr=*/nullptr}}}});
+
   AddNewSignaturesForExistingFunctions(functions,
                                        existing_float_functions_with_signature);
 }

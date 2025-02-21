@@ -32,8 +32,6 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * Entry of a hash table used in find_all_inheritors. See below.
  */

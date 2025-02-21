@@ -174,7 +174,7 @@ typedef struct DomainConstraintRef
 
 typedef struct SharedRecordTypmodRegistry SharedRecordTypmodRegistry;
 
-extern TypeCacheEntry *lookup_type_cache_UNUSED_SPANGRES(Oid type_id, int flags);
+extern TypeCacheEntry *lookup_type_cache(Oid type_id, int flags);
 
 extern void InitDomainConstraintRef(Oid type_id, DomainConstraintRef *ref,
 									MemoryContext refctx, bool need_exprstate);
@@ -193,7 +193,7 @@ extern TupleDesc lookup_rowtype_tupdesc_copy(Oid type_id, int32 typmod);
 extern TupleDesc lookup_rowtype_tupdesc_domain(Oid type_id, int32 typmod,
 											   bool noError);
 
-extern void assign_record_type_typmod_UNUSED_SPANGRES(TupleDesc tupDesc);
+extern void assign_record_type_typmod(TupleDesc tupDesc);
 
 extern uint64 assign_record_type_identifier(Oid type_id, int32 typmod);
 

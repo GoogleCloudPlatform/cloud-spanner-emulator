@@ -55,9 +55,6 @@
 #include "utils/selfuncs.h"
 #include "utils/varlena.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 typedef enum
 {
 	Pattern_Type_Like,

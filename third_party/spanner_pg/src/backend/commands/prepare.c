@@ -37,8 +37,6 @@
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * The hash table in which prepared queries are stored. This is
  * per-backend: query plans are not shared between backends.

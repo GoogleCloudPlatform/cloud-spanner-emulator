@@ -321,7 +321,8 @@ sts_puttuple(SharedTuplestoreAccessor *accessor, void *meta_data,
 
 	/* Do we have space? */
 	size = accessor->sts->meta_data_size + tuple->t_len;
-	if (accessor->write_pointer + size > accessor->write_end)
+	/* SPECKLE_POSTGRES: ubsan pointer-overflow */
+	if (accessor->write_end - accessor->write_pointer < (ptrdiff_t)size)
 	{
 		if (accessor->write_chunk == NULL)
 		{

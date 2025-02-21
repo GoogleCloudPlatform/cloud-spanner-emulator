@@ -90,9 +90,6 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 #define RELCACHE_INIT_FILEMAGIC		0x573266	/* version ID value */
 
 /*

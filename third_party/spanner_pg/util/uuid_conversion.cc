@@ -53,7 +53,7 @@ absl::StatusOr<Const*> UuidStringToPgConst(absl::string_view uuid_string) {
       /*constbyval=*/false);
 }
 
-absl::StatusOr<absl::string_view> PgConstToUuidString(Const* pg_const) {
+absl::StatusOr<absl::string_view> PgConstToUuidString(const Const* pg_const) {
   ZETASQL_ASSIGN_OR_RETURN(Datum datum, postgres_translator::CheckedDirectFunctionCall1(
                                     /*func=*/uuid_out,
                                     /*arg1=*/pg_const->constvalue));

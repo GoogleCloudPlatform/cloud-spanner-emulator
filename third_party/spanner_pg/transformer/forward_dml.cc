@@ -501,9 +501,9 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
   // assert_rows_modified is not a supported feature in PostgreSQL.
   // INSERT...RETURNING is not supported.
   // Construct a ResolvedInsertStmt.
-      return zetasql::MakeResolvedInsertStmt(
+  return zetasql::MakeResolvedInsertStmt(
       std::move(table_scan), insert_mode,
-      nullptr, std::move(returning_clause),
+      /*assert_rows_modified=*/nullptr, std::move(returning_clause),
       insert_column_list, std::move(query_parameter_list),
       std::move(insert_select_query), query_output_column_list,
       std::move(row_list));

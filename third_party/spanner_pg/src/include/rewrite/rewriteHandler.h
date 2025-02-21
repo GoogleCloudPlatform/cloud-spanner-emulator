@@ -18,7 +18,7 @@
 #include "utils/relcache.h"
 
 extern List *QueryRewrite(Query *parsetree);
-extern void AcquireRewriteLocks_UNUSED_SPANGRES(Query *parsetree,
+extern void AcquireRewriteLocks(Query *parsetree,
 					bool forExecute,
 					bool forUpdatePushedDown);
 extern Node *build_column_default(Relation rel, int attrno);

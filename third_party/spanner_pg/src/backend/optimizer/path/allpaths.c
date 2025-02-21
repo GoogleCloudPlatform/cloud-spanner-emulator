@@ -50,8 +50,6 @@
 #include "rewrite/rewriteManip.h"
 #include "utils/lsyscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /* Bitmask flags for pushdown_safety_info.unsafeFlags */
 #define UNSAFE_HAS_VOLATILE_FUNC		(1 << 0)
 #define UNSAFE_HAS_SET_FUNC				(1 << 1)

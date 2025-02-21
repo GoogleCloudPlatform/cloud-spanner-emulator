@@ -26,8 +26,6 @@
 #include "utils/lsyscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /* Enumeration of contexts in which a self-reference is disallowed */
 typedef enum
 {

@@ -1,0 +1,55 @@
+# Note that PG databases by default have lower case table and column names. To
+# use uppercase names, you have to quote them. But the GSQL and PG quoting
+# syntax is incompatible so we use lower-case names in both schemas to avoid
+# having to maintain two copies of each query.
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE t(
+  k INT64,
+  d1 INT64 DEFAULT (1),
+  g1 INT64 AS (d1 + 1) STORED,
+  d2 INT64 NOT NULL DEFAULT (2),
+) PRIMARY KEY (k);
+CREATE TABLE t2(
+  k INT64,
+  d1 INT64,
+  d2 INT64 NOT NULL DEFAULT (NULL),
+) PRIMARY KEY (k);
+CREATE TABLE type_coercion(
+  k_i INT64,
+  d_n NUMERIC DEFAULT (CAST(1 AS NUMERIC)),
+  d_f FLOAT64 DEFAULT (CAST(1 AS FLOAT64)),
+) PRIMARY KEY (k_i);
+CREATE UNIQUE INDEX tbyd2 ON t(d2);
+CREATE TABLE fk(
+  k INT64,
+  d INT64 DEFAULT (3),
+  FOREIGN KEY (d) REFERENCES t(d2),
+) PRIMARY KEY (k);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE t(
+  k bigint,
+  d1 bigint DEFAULT (1::bigint),
+  g1 bigint GENERATED ALWAYS AS (d1 + 1) STORED,
+  d2 bigint NOT NULL DEFAULT (2::bigint),
+  PRIMARY KEY (k)
+);
+CREATE TABLE t2(
+  k bigint,
+  d1 bigint,
+  d2 bigint NOT NULL DEFAULT (null::bigint),
+  PRIMARY KEY (k)
+);
+CREATE TABLE type_coercion(
+  k_i bigint,
+  d_n numeric DEFAULT (1::numeric),
+  d_f double precision DEFAULT (1::double precision),
+  PRIMARY KEY (k_i)
+);
+CREATE UNIQUE INDEX tbyd2 ON t(d2);
+CREATE TABLE fk(
+  k bigint,
+  d bigint DEFAULT (3::bigint),
+  FOREIGN KEY (d) REFERENCES t(d2),
+  PRIMARY KEY (k)
+);

@@ -56,9 +56,6 @@
 #include "utils/array.h"
 #include "utils/lsyscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * Information about a clause matched with a partition key.
  */

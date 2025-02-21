@@ -1,0 +1,31 @@
+# Note that PG databases by default have lower case table and column names. To
+# use uppercase names, you have to quote them. But the GSQL and PG quoting
+# syntax is incompatible so we use lower-case names in both schemas to avoid
+# having to maintain two copies of each query.
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE t1(
+  k1 INT64,
+  k2 INT64 NOT NULL DEFAULT (2),
+  a INT64,
+) PRIMARY KEY (k1, k2);
+CREATE TABLE t2(
+  id1 INT64 DEFAULT (100),
+  id2 INT64,
+  g1 INT64 AS (id1*2) STORED,
+  a INT64,
+) PRIMARY KEY (id1, id2);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE t1(
+  k1 bigint,
+  k2 bigint NOT NULL DEFAULT (2::bigint),
+  a bigint,
+  PRIMARY KEY (k1, k2)
+);
+CREATE TABLE t2(
+  id1 bigint DEFAULT (100::bigint),
+  id2 bigint,
+  g1 bigint GENERATED ALWAYS AS (id1*2) STORED,
+  a bigint,
+  PRIMARY KEY (id1, id2)
+);

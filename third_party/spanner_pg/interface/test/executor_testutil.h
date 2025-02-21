@@ -29,40 +29,25 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#ifndef SHIMS_PG_LOCALE_SHIM_H_
-#define SHIMS_PG_LOCALE_SHIM_H_
+#ifndef INTERFACE_TEST_EXECUTOR_TESTUTIL_H_
+#define INTERFACE_TEST_EXECUTOR_TESTUTIL_H_
 
-#include <locale.h>
+#include <string>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "absl/strings/string_view.h"
 
-// Localized months and days cache. These are initialized when the user calls
-// `cache_locale_time`. This adheres to the existing native PostgreSQL
-// behaviour.
-extern char* localized_abbrev_days[];
-extern char* localized_full_days[];
-extern char* localized_abbrev_months[];
-extern char* localized_full_months[];
+namespace postgres_translator {
 
-// Returns the POSIX lconv struct (containing number/money formatting
-// information) with locale information for all categories.
-//
-// This function returns a result based on the hardcoded `en_US.UTF-8` locale.
-// This is because locale is not dynamic in Cloud Spanner. This function is
-// thread safe.
-extern struct lconv* PGLC_localeconv(void);
+// Performs stripping functionality on the AST strings that are written to the
+// golden files.
+std::string StripPgAstString(absl::string_view pg_ast_string);
+std::string StripGsqlAstString(absl::string_view gsql_ast_string);
 
-// Initializes and caches the localized time days and months.
-//
-// This function returns a result based on the hardcoded `en_US.UTF-8` locale.
-// This is because locale is not dynamic in Cloud Spanner. This function is
-// thread safe.
-extern void cache_locale_time(void);
+// Performs stripping functionality on the AST strings before comparing them.
+// These transformed strings are not written to the golden files.
+std::string StripPgDebugString(absl::string_view pg_debug_string);
+std::string StripGsqlDebugString(absl::string_view gsql_debug_string);
 
-#ifdef __cplusplus
-}  // extern "C"
-#endif
+}  // namespace postgres_translator
 
-#endif  // SHIMS_PG_LOCALE_SHIM_H_
+#endif  // INTERFACE_TEST_EXECUTOR_TESTUTIL_H_

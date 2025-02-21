@@ -22,9 +22,6 @@
 #include "utils/memutils.h"
 #include "utils/rel.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * Pairing heap comparison function for the GISTSearchItem queue
  */

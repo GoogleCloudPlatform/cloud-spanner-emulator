@@ -18,7 +18,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 cc_library(
     name = "queryable_change_stream_tvf",

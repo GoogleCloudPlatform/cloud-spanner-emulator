@@ -83,6 +83,13 @@ static void printJsonPathItem(StringInfo buf, JsonPathItem *v, bool inKey,
 							  bool printBracketes);
 static int	operationPriority(JsonPathItemType op);
 
+// SPANGRES BEGIN
+// Inlines implementation of jsonpath helper functions that need to be defined.
+
+JsonPathParseResult *parsejsonpath(const char *str, int len) {
+	return NULL;
+}
+// SPANGRES END
 
 /**************************** INPUT/OUTPUT ********************************/
 

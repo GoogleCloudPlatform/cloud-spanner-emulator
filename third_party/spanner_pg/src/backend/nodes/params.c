@@ -25,8 +25,6 @@
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 static void paramlist_parser_setup(ParseState *pstate, void *arg);
 static Node *paramlist_param_ref(ParseState *pstate, ParamRef *pref);
 

@@ -730,7 +730,6 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
       "array_length", "pg.array_length", {ANYARRAYOID, INT8OID},
       {zetasql::InputArgumentType(gsql_pg_jsonb_array),
        zetasql::InputArgumentType(gsql_int64)});
-
   AssertPGFunctionIsRegistered("array_upper", "pg.array_upper",
                                {ANYARRAYOID, INT8OID},
                                {zetasql::InputArgumentType(gsql_int64_array),
@@ -767,7 +766,6 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
       "array_upper", "pg.array_upper", {ANYARRAYOID, INT8OID},
       {zetasql::InputArgumentType(gsql_pg_jsonb_array),
        zetasql::InputArgumentType(gsql_int64)});
-
   AssertPGFunctionIsRegistered(
       "arraycontained", "pg.array_contained", {ANYARRAYOID, ANYARRAYOID},
       {zetasql::InputArgumentType(gsql_int64_array),
@@ -796,7 +794,6 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
       "arraycontained", "pg.array_contained", {ANYARRAYOID, ANYARRAYOID},
       {zetasql::InputArgumentType(gsql_pg_numeric_array),
        zetasql::InputArgumentType(gsql_pg_numeric_array)});
-
   AssertPGFunctionIsRegistered(
       "arraycontains", "pg.array_contains", {ANYARRAYOID, ANYARRAYOID},
       {zetasql::InputArgumentType(gsql_int64_array),
@@ -825,7 +822,6 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
       "arraycontains", "pg.array_contains", {ANYARRAYOID, ANYARRAYOID},
       {zetasql::InputArgumentType(gsql_pg_numeric_array),
        zetasql::InputArgumentType(gsql_pg_numeric_array)});
-
   AssertPGFunctionIsRegistered(
       "arrayoverlap", "pg.array_overlap", {ANYARRAYOID, ANYARRAYOID},
       {zetasql::InputArgumentType(gsql_int64_array),
@@ -854,7 +850,6 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
       "arrayoverlap", "pg.array_overlap", {ANYARRAYOID, ANYARRAYOID},
       {zetasql::InputArgumentType(gsql_pg_numeric_array),
        zetasql::InputArgumentType(gsql_pg_numeric_array)});
-
   // Comparison functions
   AssertPGFunctionIsRegistered("textregexne", "pg.textregexne",
                                {TEXTOID, TEXTOID},

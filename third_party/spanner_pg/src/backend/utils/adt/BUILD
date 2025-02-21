@@ -174,15 +174,22 @@ cc_library(
         "jsonpath_gram.h",
     ],
     deps = [
-        "//third_party/spanner_pg/shims:catalog_shim_cc_wrappers_header",
-        "//third_party/spanner_pg/shims:catalog_shim_header",
-        "//third_party/spanner_pg/shims:json_shim",
-        "//third_party/spanner_pg/shims:pg_locale_shim",
-        "//third_party/spanner_pg/shims:regex_shim_header",
+        "//third_party/spanner_pg/interface:catalog_wrappers",
         "//third_party/spanner_pg/src/backend/utils:generated_headers",
         "//third_party/spanner_pg/src/include",
+        "//third_party/spanner_pg/util:nodetag_to_string",
     ],
     alwayslink = 1,
+)
+
+cc_test(
+    name = "pg_locale_test",
+    srcs = ["pg_locale_test.cc"],
+    deps = [
+        "//third_party/spanner_pg/src/backend:backend_with_stub_shims",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
 )
 
 genlex(

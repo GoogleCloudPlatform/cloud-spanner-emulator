@@ -51,9 +51,7 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
-
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
 
 static int	extractRemainingColumns(ParseNamespaceColumn *src_nscolumns,
 									List *src_colnames,

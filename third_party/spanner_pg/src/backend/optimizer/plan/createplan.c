@@ -43,9 +43,6 @@
 #include "tcop/tcopprot.h"
 #include "utils/lsyscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * Flag bits that can appear in the flags argument of create_plan_recurse().
  * These can be OR-ed together.

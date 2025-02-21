@@ -28,9 +28,6 @@
 #include "utils/lsyscache.h"
 #include "utils/typcache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /*
  * structure to cache metadata needed for record I/O
  */

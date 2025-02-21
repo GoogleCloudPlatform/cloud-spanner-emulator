@@ -64,7 +64,6 @@
 #include "funcapi.h"
 #include "nodes/nodeFuncs.h"
 #include "storage/bufmgr.h"
-#include "third_party/spanner_pg/shims/catalog_shim.h"
 #include "utils/builtins.h"
 #include "utils/expandeddatum.h"
 #include "utils/lsyscache.h"

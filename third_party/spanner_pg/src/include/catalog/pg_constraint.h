@@ -259,7 +259,7 @@ extern Oid	get_domain_constraint_oid(Oid typid, const char *conname, bool missin
 extern Oid	get_relation_idx_constraint_oid(Oid relationId, Oid indexId);
 
 
-extern Bitmapset *get_primary_key_attnos_UNUSED_SPANGRES(Oid relid, bool deferrableOk,
+extern Bitmapset *get_primary_key_attnos(Oid relid, bool deferrableOk,
  					   Oid *constraintOid);
 extern void DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 									   AttrNumber *conkey, AttrNumber *confkey,

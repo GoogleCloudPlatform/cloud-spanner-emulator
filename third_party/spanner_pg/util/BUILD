@@ -32,7 +32,9 @@
 # Utility libraries for Spangres
 
 package(
-    default_visibility = ["//:__subpackages__"],
+    default_visibility = [
+        "//:__subpackages__",
+    ],
 )
 
 licenses(["notice"])
@@ -76,7 +78,6 @@ cc_test(
     deps = [
         ":pg_list_iterators",
         "//third_party/spanner_pg/postgres_includes:placeholder_progname",
-        "//third_party/spanner_pg/shims:catalog_shim",
         "//third_party/spanner_pg/src/backend:backend_with_stub_shims",
         "//third_party/spanner_pg/util:valid_memory_context_fixture",
         "@com_google_googletest//:gtest_main",
@@ -256,8 +257,8 @@ cc_library(
         "//third_party/spanner_pg/interface/test:postgres_transformer",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:error_shim",
-        "//third_party/spanner_pg/shims:memory_shim",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "//third_party/spanner_pg/src/spangres:memory",
         "//third_party/spanner_pg/test_catalog",
         "//third_party/spanner_pg/test_catalog:spanner_test_catalog",
         "//third_party/spanner_pg/transformer",

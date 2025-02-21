@@ -33,8 +33,6 @@
 #include "utils/resowner_private.h"
 #include "utils/snapmgr.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /*
  * All resource IDs managed by this code are required to fit into a Datum,
  * which is fine since they are generally pointers or integers.

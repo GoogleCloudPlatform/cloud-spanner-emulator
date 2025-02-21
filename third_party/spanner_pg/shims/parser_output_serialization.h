@@ -35,7 +35,6 @@
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/interface/parser_output.h"
 #include "third_party/spanner_pg/shims/parser_output.pb.h"
-#include "third_party/spanner_pg/shims/parser_shim.h"
 
 namespace postgres_translator {
 namespace spangres {

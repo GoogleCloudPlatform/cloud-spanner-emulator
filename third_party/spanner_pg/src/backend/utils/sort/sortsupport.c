@@ -23,9 +23,6 @@
 #include "utils/rel.h"
 #include "utils/sortsupport.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
-
 /* Info needed to use an old-style comparison function as a sort comparator */
 typedef struct
 {

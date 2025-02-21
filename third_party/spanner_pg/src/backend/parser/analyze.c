@@ -54,9 +54,7 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-#include "third_party/spanner_pg/shims/catalog_shim_cc_wrappers.h"
-
+#include "third_party/spanner_pg/interface/catalog_wrappers.h"
 
 /* Hook for plugins to get control at end of parse analysis */
 post_parse_analyze_hook_type post_parse_analyze_hook = NULL;
@@ -1381,7 +1379,7 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 				 parser_errposition(pstate,
 									exprLocation((Node *) stmt->intoClause))));
 
-	/* make FOR UPDATE/FOR SHARE info available to addRangeTableEntrySpangres */
+	/* make FOR UPDATE/FOR SHARE info available to addRangeTableEntry */
 	pstate->p_locking_clause = stmt->lockingClause;
 
 	/* make WINDOW info available for window functions, too */

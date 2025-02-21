@@ -63,8 +63,6 @@
 #include "utils/syscache.h"
 #include "utils/tuplestore.h"
 
-#include "third_party/spanner_pg/shims/catalog_shim.h"
-
 /* GUC variables */
 int			SessionReplicationRole = SESSION_REPLICATION_ROLE_ORIGIN;
 
