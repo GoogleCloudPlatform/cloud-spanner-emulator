@@ -3302,6 +3302,10 @@ transformLockingClause(ParseState *pstate, Query *qry, LockingClause *lc,
 	}
 	else
 	{
+		/* SPANGRES BEGIN */
+		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				errmsg("tables names in locking clause is not supported")));
+		/* SPANGRES END */
 		/*
 		 * Lock just the named tables.  As above, we allow locking any base
 		 * relation regardless of alias-visibility rules, so we need to

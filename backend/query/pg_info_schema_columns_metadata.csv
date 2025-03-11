@@ -160,6 +160,9 @@ key_column_usage,table_name,YES,character varying
 key_column_usage,column_name,YES,character varying
 key_column_usage,ordinal_position,YES,bigint
 key_column_usage,position_in_unique_constraint,YES,bigint
+locality_group_name,locality_group_name,YES,character varying
+locality_group_options,option_name,YES,character varying
+locality_group_options,option_value,YES,character varying
 parameters,specific_catalog,YES,character varying
 parameters,specific_schema,YES,character varying
 parameters,specific_name,YES,character varying

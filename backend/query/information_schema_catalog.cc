@@ -44,10 +44,12 @@
 #include "backend/query/tables_from_metadata.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/ddl/operations.pb.h"
+#include "backend/schema/parser/ddl_parser.h"
 #include "backend/schema/printer/print_ddl.h"
 #include "backend/schema/updater/ddl_type_conversion.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
@@ -116,6 +118,7 @@ static constexpr char kRowDeletionPolicyExpression[] =
 static constexpr char kTables[] = "TABLES";
 static constexpr char kDatabaseDialect[] = "database_dialect";
 static constexpr char kString[] = "STRING";
+static constexpr char kStringList[] = "STRING_LIST";
 static constexpr char kCharacterVarying[] = "character varying";
 static constexpr char kPublic[] = "public";
 static constexpr char kBaseTable[] = "BASE TABLE";
@@ -199,6 +202,8 @@ static constexpr char kModels[] = "MODELS";
 static constexpr char kModelOptions[] = "MODEL_OPTIONS";
 static constexpr char kModelColumns[] = "MODEL_COLUMNS";
 static constexpr char kModelColumnOptions[] = "MODEL_COLUMN_OPTIONS";
+static constexpr char kLocalityGroupOptions[] = "LOCALITY_GROUP_OPTIONS";
+static constexpr char kLocalityGroup[] = "locality_group";
 
 static int kFloatNumericPrecision = 24;
 static int kDoubleNumericPrecision = 53;
@@ -227,6 +232,7 @@ static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
         kIndexes,
         kIndexColumns,
         kKeyColumnUsage,
+        kLocalityGroupOptions,
         kModels,
         kModelOptions,
         kModelColumns,
@@ -261,6 +267,7 @@ static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
         absl::AsciiStrToLower(kIndexColumns),
         absl::AsciiStrToLower(kKeyColumnUsage),
         absl::AsciiStrToLower(kReferentialConstraints),
+        absl::AsciiStrToLower(kLocalityGroupOptions),
         absl::AsciiStrToLower(kSchemata),
         absl::AsciiStrToLower(kSequences),
         absl::AsciiStrToLower(kSequenceOptions),
@@ -534,6 +541,7 @@ InformationSchemaCatalog::InformationSchemaCatalog(
   FillChangeStreamTablesTable();
   FillSequencesTable();
   FillSequenceOptionsTable();
+  FillLocalityGroupOptionsTable();
   FillModelsTable();
   FillModelOptionsTable();
   FillModelColumnsTable();
@@ -597,16 +605,27 @@ void InformationSchemaCatalog::FillSchemataTable() {
 
 void InformationSchemaCatalog::FillDatabaseOptionsTable() {
   auto table = tables_by_name_.at(GetNameForDialect(kDatabaseOptions)).get();
-
+  std::vector<std::vector<zetasql::Value>> rows;
   absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+
   specific_kvs[kSchemaName] = DialectDefaultSchema();
   specific_kvs[kOptionType] = String(
       dialect_ == DatabaseDialect::POSTGRESQL ? kCharacterVarying : kString);
   specific_kvs[kOptionName] = String(kDatabaseDialect);
   specific_kvs[kOptionValue] = String(DatabaseDialect_Name(dialect_));
-
-  std::vector<std::vector<zetasql::Value>> rows;
   rows.push_back(GetRowFromRowKVs(table, specific_kvs));
+
+  if (default_schema_->options() != nullptr &&
+      default_schema_->options()->default_sequence_kind().has_value()) {
+    specific_kvs.clear();
+    specific_kvs[kSchemaName] = DialectDefaultSchema();
+    specific_kvs[kOptionType] = String(
+        dialect_ == DatabaseDialect::POSTGRESQL ? kCharacterVarying : kString);
+    specific_kvs[kOptionName] = String(ddl::kDefaultSequenceKindOptionName);
+    specific_kvs[kOptionValue] =
+        String(default_schema_->options()->default_sequence_kind().value());
+    rows.push_back(GetRowFromRowKVs(table, specific_kvs));
+  }
 
   table->SetContents(rows);
 }
@@ -849,13 +868,37 @@ void InformationSchemaCatalog::FillColumnsTable() {
       } else {
         specific_kvs[kIsStored] = NullString();
       }
+      // Identity column fields.
+      specific_kvs[kIsIdentity] =
+          String(column->is_identity_column() ? kYes : kNo);
       specific_kvs[kSpannerState] = String(kCommitted);
-      specific_kvs[kIsIdentity] = String(kNo);
       specific_kvs[kIdentityGeneration] = NullString();
       specific_kvs[kIdentityKind] = NullString();
       specific_kvs[kIdentityStartWithCounter] = NullString();
       specific_kvs[kIdentitySkipRangeMin] = NullString();
       specific_kvs[kIdentitySkipRangeMax] = NullString();
+      if (column->is_identity_column()) {
+        specific_kvs[kIdentityGeneration] = String(kByDefault);
+        if (!column->sequences_used().empty()) {
+          const Sequence* seq =
+              static_cast<const Sequence*>(column->sequences_used().at(0));
+          if (!seq->use_default_sequence_kind_option()) {
+            specific_kvs[kIdentityKind] = String(kBitReversedPositiveSequence);
+          }
+          specific_kvs[kIdentityStartWithCounter] =
+              seq->start_with_counter().has_value()
+                  ? String(absl::StrCat(*seq->start_with_counter()))
+                  : NullString();
+          specific_kvs[kIdentitySkipRangeMin] =
+              seq->skip_range_min().has_value()
+                  ? String(absl::StrCat(*seq->skip_range_min()))
+                  : NullString();
+          specific_kvs[kIdentitySkipRangeMax] =
+              seq->skip_range_max().has_value()
+                  ? String(absl::StrCat(*seq->skip_range_max()))
+                  : NullString();
+        }
+      }
 
       rows.push_back(GetRowFromRowKVs(columns, specific_kvs));
       specific_kvs.clear();
@@ -1331,6 +1374,20 @@ void InformationSchemaCatalog::FillColumnOptionsTable() {
                         String(kAllowCommitTimestamp), String(kBool),
                         // option_value
                         String(kTrue)});
+      }
+      if (column->locality_group()) {
+        rows.push_back({// table_catalog
+                        String(""),
+                        // table_schema
+                        String(""),
+                        // table_name
+                        String(table->Name()),
+                        // column_name
+                        String(column->Name()),
+                        // option_name
+                        String(kLocalityGroup), String(kString),
+                        // option_value
+                        String(column->locality_group()->Name())});
       }
     }
   }
@@ -2422,11 +2479,7 @@ void InformationSchemaCatalog::FillChangeStreamTablesTable() {
 void InformationSchemaCatalog::FillSequencesTable() {
   auto sequences = tables_by_name_.at(GetNameForDialect(kSequences)).get();
   std::vector<std::vector<zetasql::Value>> rows;
-  for (const Sequence* sequence : default_schema_->sequences()) {
-    if (absl::StartsWith(sequence->Name(), "_")) {
-      // Skip internal sequences.
-      continue;
-    }
+  for (const Sequence* sequence : default_schema_->user_visible_sequences()) {
     const auto& [sequence_schema_part, sequence_name_part] =
         GetSchemaAndNameForInformationSchema(sequence->Name());
     if (dialect_ == DatabaseDialect::POSTGRESQL) {
@@ -2494,11 +2547,7 @@ void InformationSchemaCatalog::FillSequenceOptionsTable() {
   auto sequences =
       tables_by_name_.at(GetNameForDialect(kSequenceOptions)).get();
   std::vector<std::vector<zetasql::Value>> rows;
-  for (const Sequence* sequence : default_schema_->sequences()) {
-    if (sequence->is_internal_use()) {
-      // Skip internal sequences.
-      continue;
-    }
+  for (const Sequence* sequence : default_schema_->user_visible_sequences()) {
     const auto& [sequence_schema_part, sequence_name_part] =
         GetSchemaAndNameForInformationSchema(sequence->Name());
     rows.push_back(
@@ -2741,6 +2790,40 @@ void InformationSchemaCatalog::FillModelColumnOptionsTable(
       // option_value
       String(column.is_required.value_or(true) ? kTrue : kFalse),
   });
+}
+
+zetasql::Value InformationSchemaCatalog::ParseLocalityGroupOptions(
+    ddl::SetOption option) {
+  if (option.has_bool_value()) {
+    return String(option.bool_value() ? kTrue : kFalse);
+  } else if (!option.string_list_value().empty()) {
+    return String(absl::StrCat(
+        "[", absl::StrJoin(option.string_list_value(), ", "), "]"));
+  }
+  return String("");
+}
+
+void InformationSchemaCatalog::FillLocalityGroupOptionsTable() {
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const LocalityGroup* locality_group :
+       default_schema_->locality_groups()) {
+    for (const auto& option : locality_group->options()) {
+      rows.push_back({
+          // The name of the locality group.
+          String(locality_group->Name()),
+          // A SQL identifier that uniquely identifies the option. This is the
+          // key of the OPTIONS clause in SDL.
+          String(option.option_name()),
+          // A data type name that is the type of this option value.
+          String(option.has_bool_value() ? kBool : kStringList),
+          // A SQL literal describing the value of this option. The value of
+          // this column should be re-parseable as part of a query.
+          ParseLocalityGroupOptions(option),
+      });
+    }
+  }
+  tables_by_name_.at(GetNameForDialect(kLocalityGroupOptions))
+      ->SetContents(rows);
 }
 
 }  // namespace backend

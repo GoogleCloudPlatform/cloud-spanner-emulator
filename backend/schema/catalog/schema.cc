@@ -27,14 +27,17 @@
 #include "absl/log/check.h"
 #include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
+#include "absl/strings/strip.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/database_options.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/named_schema.h"
+#include "backend/schema/catalog/property_graph.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
@@ -186,6 +189,16 @@ const Model* Schema::FindModel(const std::string& model_name) const {
   }
   return itr->second;
 }
+
+const PropertyGraph* Schema::FindPropertyGraph(
+    const std::string& graph_name) const {
+  auto itr = property_graphs_map_.find(graph_name);
+  if (itr == property_graphs_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
+}
+
 const NamedSchema* Schema::FindNamedSchema(
     const std::string& named_schema_name) const {
   auto itr = named_schemas_map_.find(named_schema_name);
@@ -214,6 +227,15 @@ const Index* Schema::FindManagedIndex(const std::string& index_name) const {
     }
   }
   return nullptr;
+}
+
+const LocalityGroup* Schema::FindLocalityGroup(
+    const std::string& locality_group_name) const {
+  auto itr = locality_groups_map_.find(locality_group_name);
+  if (itr == locality_groups_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
 }
 
 ddl::ForeignKey::Action FindForeignKeyOnDeleteAction(const ForeignKey* fk) {
@@ -482,6 +504,12 @@ void DumpModel(const Model* model, ddl::CreateModel& create_model) {
   }
 }
 
+void DumpPropertyGraph(const PropertyGraph* graph,
+                       ddl::CreatePropertyGraph& create_property_graph) {
+  create_property_graph.set_name(graph->Name());
+  create_property_graph.set_ddl_body(graph->DdlBody());
+}
+
 void DumpDatabaseOptions(const DatabaseOptions* database_option,
                          ddl::AlterDatabase& alter_database) {
   alter_database.set_db_name(database_option->Name());
@@ -490,6 +518,32 @@ void DumpDatabaseOptions(const DatabaseOptions* database_option,
         alter_database.mutable_set_options()->add_options();
     set_option->set_option_name(option.option_name());
     set_option->set_string_value(option.string_value());
+  }
+}
+
+void DumpLocalityGroup(const LocalityGroup* locality_group,
+                       ddl::CreateLocalityGroup& create_locality_group) {
+  create_locality_group.set_locality_group_name(locality_group->Name());
+  for (const auto& option : locality_group->options()) {
+    if (option.option_name() == ddl::kInternalLocalityGroupStorageOptionName) {
+      ddl::SetOption* set_option = create_locality_group.add_set_options();
+      set_option->set_option_name(ddl::kLocalityGroupStorageOptionName);
+      if (option.has_bool_value()) {
+        set_option->set_string_value(
+            option.bool_value() ? ddl::kLocalityGroupStorageOptionSSDVal
+                                : ddl::kLocalityGroupStorageOptionHDDVal);
+      }
+    } else if (option.option_name() ==
+               ddl::kInternalLocalityGroupSpillTimeSpanOptionName) {
+      for (const auto& time_span : option.string_list_value()) {
+        ddl::SetOption* set_option = create_locality_group.add_set_options();
+        set_option->set_option_name(ddl::kLocalityGroupSpillTimeSpanOptionName);
+        absl::string_view raw_time_span = time_span;
+        if (absl::ConsumePrefix(&raw_time_span, "disk:")) {
+          set_option->set_string_value(raw_time_span);
+        }
+      }
+    }
   }
 }
 
@@ -564,6 +618,12 @@ ddl::DDLStatementList Schema::Dump() const {
     DumpModel(model, *ddl_statements.add_statement()->mutable_create_model());
   }
 
+  for (const PropertyGraph* graph : property_graphs_) {
+    DumpPropertyGraph(
+        graph,
+        *ddl_statements.add_statement()->mutable_create_property_graph());
+  }
+
   for (const View* view : views_) {
     ddl::CreateFunction* create_function =
         ddl_statements.add_statement()->mutable_create_function();
@@ -605,6 +665,12 @@ ddl::DDLStatementList Schema::Dump() const {
         *ddl_statements.add_statement()->mutable_alter_database());
   }
 
+  for (const LocalityGroup* locality_group : locality_groups_) {
+    DumpLocalityGroup(
+        locality_group,
+        *ddl_statements.add_statement()->mutable_create_locality_group());
+  }
+
   return ddl_statements;
 }
 
@@ -629,6 +695,8 @@ Schema::Schema(const SchemaGraph* graph,
   udfs_map_.clear();
   synonyms_.clear();
   synonyms_map_.clear();
+  locality_groups_.clear();
+  locality_groups_map_.clear();
   for (const SchemaNode* node : graph_->GetSchemaNodes()) {
     const View* view = node->As<const View>();
     if (view != nullptr) {
@@ -675,6 +743,13 @@ Schema::Schema(const SchemaGraph* graph,
       continue;
     }
 
+    const PropertyGraph* property_graph = node->As<PropertyGraph>();
+    if (property_graph != nullptr) {
+      property_graphs_.push_back(property_graph);
+      property_graphs_map_[property_graph->Name()] = property_graph;
+      continue;
+    }
+
     const NamedSchema* named_schema = node->As<NamedSchema>();
     if (named_schema != nullptr) {
       named_schemas_.push_back(named_schema);
@@ -686,6 +761,13 @@ Schema::Schema(const SchemaGraph* graph,
     if (udf != nullptr) {
       udfs_.push_back(udf);
       udfs_map_[udf->Name()] = udf;
+      continue;
+    }
+
+    const LocalityGroup* locality_group = node->As<LocalityGroup>();
+    if (locality_group != nullptr) {
+      locality_groups_.push_back(locality_group);
+      locality_groups_map_[locality_group->Name()] = locality_group;
       continue;
     }
 

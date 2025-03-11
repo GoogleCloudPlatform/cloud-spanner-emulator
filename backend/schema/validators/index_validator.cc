@@ -16,9 +16,11 @@
 
 #include "backend/schema/validators/index_validator.h"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
+#include "zetasql/public/types/type.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
@@ -114,7 +116,7 @@ absl::Status IndexValidator::Validate(const Index* index,
       keys_set.insert(column_name);
       continue;
     }
-    if (!IsSupportedKeyColumnType(column_type)) {
+    if (!IsSupportedKeyColumnType(column_type, index->is_vector_index())) {
       return error::IndexRefsUnsupportedColumn(index->name_,
                                                ToString(column_type));
     }
@@ -176,6 +178,49 @@ absl::Status IndexValidator::Validate(const Index* index,
     }
   }
 
+  if (index->is_vector_index()) {
+    if (!index->partition_by_.empty()) {
+      return error::VectorIndexPartitionByUnsupported(index->name_);
+    }
+
+    ZETASQL_RET_CHECK(index->key_columns_.size() == 1);
+    const KeyColumn* key_column = index->key_columns_[0];
+    if (!key_column->column()->GetType()->IsArray()) {
+      return error::VectorIndexNonArrayKey(key_column->column()->Name(),
+                                           index->name_);
+    }
+
+    const zetasql::Type* element_type =
+        key_column->column()->GetType()->AsArray()->element_type();
+    if (!element_type->IsFloat() && !element_type->IsDouble()) {
+      return error::VectorIndexArrayKeyMustBeFloatOrDouble(
+          key_column->column()->Name(), index->name_);
+    }
+
+    if (!key_column->column()->has_vector_length()) {
+      return error::VectorIndexArrayKeyMustHaveVectorLength(
+          key_column->column()->Name(), index->name_);
+    }
+
+    const int32_t max_vector_length = 8000;
+    if (key_column->column()->vector_length() > max_vector_length) {
+      return error::VectorIndexArrayKeyVectorLengthTooLarge(
+          key_column->column()->Name(), index->name_,
+          key_column->column()->vector_length().value(), max_vector_length);
+    }
+
+    bool is_key_null_filtered = false;
+    for (const auto* column : index->null_filtered_columns_) {
+      if (key_column->column()->Name() == column->Name()) {
+        is_key_null_filtered = true;
+        break;
+      }
+    }
+    if (key_column->column()->is_nullable() && !is_key_null_filtered) {
+      return error::VectorIndexKeyNotNullFiltered(key_column->column()->Name(),
+                                                  index->name_);
+    }
+  }
   return absl::OkStatus();
 }
 

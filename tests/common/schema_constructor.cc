@@ -267,6 +267,48 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneModel(
   return std::move(maybe_schema.value());
 }
 
+std::unique_ptr<const backend::Schema> CreateSchemaWithOnePropertyGraph(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect) {
+  std::string node_table =
+      R"(
+          CREATE TABLE node_table (
+            id INT64 NOT NULL,
+          ) PRIMARY KEY (id)
+      )";
+  std::string edge_table =
+      R"(
+        CREATE TABLE edge_table (
+          from_id INT64 NOT NULL,
+          to_id INT64 NOT NULL,
+        ) PRIMARY KEY(from_id, to_id)
+      )";
+  std::string property_graph =
+      R"(
+          CREATE PROPERTY GRAPH test_graph
+              NODE TABLES(
+                node_table KEY(id)
+                  LABEL Test PROPERTIES(id))
+              EDGE TABLES(
+                edge_table
+                  KEY(from_id, to_id)
+                  SOURCE KEY(from_id) REFERENCES node_table(id)
+                  DESTINATION KEY(to_id) REFERENCES node_table(id)
+                  DEFAULT LABEL PROPERTIES ALL COLUMNS)
+          )";
+  auto maybe_schema = CreateSchemaFromDDL(
+      {
+          node_table,
+          edge_table,
+          property_graph,
+      },
+      type_factory, "" /*proto_descriptor_bytes*/
+      ,
+      dialect);
+  ABSL_CHECK_OK(maybe_schema.status());  // Crash OK
+  return std::move(maybe_schema.value());
+}
+
 std::unique_ptr<const backend::Schema> CreateSimpleDefaultValuesSchema(
     zetasql::TypeFactory* type_factory) {
   auto maybe_schema = CreateSchemaFromDDL(

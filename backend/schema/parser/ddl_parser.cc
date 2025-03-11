@@ -17,9 +17,11 @@
 
 #include "backend/schema/parser/ddl_parser.h"
 
+#include <cstdint>
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -52,6 +54,7 @@
 #include "common/errors.h"
 #include "common/feature_flags.h"
 #include "common/limits.h"
+#include "google/protobuf/repeated_ptr_field.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -89,7 +92,24 @@ const char kWitnessLocationOptionName[] = "witness_location";
 const char kDefaultLeaderOptionName[] = "default_leader";
 const char kVersionRetentionPeriodOptionName[] = "version_retention_period";
 const char kDefaultSequenceKindOptionName[] = "default_sequence_kind";
+const char kVectorIndexTreeDepth[] = "tree_depth";
+const char kVectorIndexNumberOfLeaves[] = "num_leaves";
+const char kVectorIndexNumberOfBranches[] = "num_branches";
+const char kVectorIndexDistanceType[] = "distance_type";
+const char kVectorIndexLeafScatterFactor[] = "leaf_scatter_factor";
+const char kVectorIndexMinBranchSplits[] = "min_branch_splits";
+const char kVectorIndexMinLeafSplits[] = "min_leaf_splits";
 
+const char kLocalityGroupOptionName[] = "locality_group";
+const char kLocalityGroupStorageOptionName[] = "storage";
+const char kLocalityGroupStorageOptionSSDVal[] = "ssd";
+const char kLocalityGroupStorageOptionHDDVal[] = "hdd";
+const char kLocalityGroupSpillTimeSpanOptionName[] =
+    "ssd_to_hdd_spill_timespan";
+const char kInternalLocalityGroupStorageOptionName[] = "inflash";
+const char kInternalLocalityGroupSpillTimeSpanOptionName[] =
+    "age_based_spill_policy";
+const char kDefaultLocalityGroupName[] = "default";
 typedef google::protobuf::RepeatedPtrField<SetOption> OptionList;
 typedef google::protobuf::RepeatedPtrField<Grantee> Grantees;
 typedef google::protobuf::RepeatedPtrField<Privilege> Privileges;
@@ -307,6 +327,86 @@ std::string CheckOptionKeyValNodeAndGetName(const SimpleNode* node) {
   return key->image();
 }
 
+void VisitLocalityGroupName(const SimpleNode* node, OptionList* options,
+                            std::vector<std::string>* errors) {
+  std::string option_name = kLocalityGroupOptionName;
+  SetOption* option = options->Add();
+  option->set_option_name(option_name);
+
+  const SimpleNode* child = GetChildNode(node, 1);
+  if (child->getId() == JJTSTR_VAL &&
+      ValidateStringLiteralImage(child->image(), /*force=*/true, nullptr)
+          .ok()) {
+    std::string string_value;
+    std::string error = "";
+    if (!UnescapeStringLiteral(child->image(), &string_value, &error)) {
+      errors->push_back(error);
+      return;
+    }
+    if (string_value.empty()) {
+      errors->push_back("Empty string is an invalid value for locality_group.");
+      return;
+    }
+    option->set_string_value(string_value);
+  }
+  /* NULL locality group name implies inheriting from parent locality group */
+  if (child->getId() == JJTNULLL) {
+    option->set_null_value(true);
+  }
+}
+
+void VisitTableOptionKeyValNode(const SimpleNode* node, OptionList* options,
+                                std::vector<std::string>* errors) {
+  const std::string option_name = CheckOptionKeyValNodeAndGetName(node);
+
+  // If this is an invalid option, return error.
+  if (option_name != kLocalityGroupOptionName) {
+    errors->push_back(
+        absl::StrCat("Option: ", option_name, " is unknown in Table Options."));
+    return;
+  }
+  if (option_name == kLocalityGroupOptionName) {
+    VisitLocalityGroupName(node, options, errors);
+  }
+}
+
+void VisitTableOptionListNode(const SimpleNode* node, int option_list_offset,
+                              OptionList* options,
+                              std::vector<std::string>* errors) {
+  CheckNode(node, JJTOPTIONS_CLAUSE);
+  // The children of this node are OPTION_KEY_VALs.
+  for (int i = option_list_offset; i < node->jjtGetNumChildren(); ++i) {
+    VisitTableOptionKeyValNode(GetChildNode(node, i, JJTOPTION_KEY_VAL),
+                               options, errors);
+  }
+}
+
+void VisitIndexOptionKeyValNode(const SimpleNode* node, OptionList* options,
+                                std::vector<std::string>* errors) {
+  const std::string option_name = CheckOptionKeyValNodeAndGetName(node);
+
+  // If this is an invalid option, return error.
+  if (option_name != kLocalityGroupOptionName) {
+    errors->push_back(
+        absl::StrCat("Option: ", option_name, " is unknown in Index Options."));
+    return;
+  }
+  if (option_name == kLocalityGroupOptionName) {
+    VisitLocalityGroupName(node, options, errors);
+  }
+}
+
+void VisitIndexOptionListNode(const SimpleNode* node, int option_list_offset,
+                              OptionList* options,
+                              std::vector<std::string>* errors) {
+  CheckNode(node, JJTOPTIONS_CLAUSE);
+  // The children of this node are OPTION_KEY_VALs.
+  for (int i = option_list_offset; i < node->jjtGetNumChildren(); ++i) {
+    VisitIndexOptionKeyValNode(GetChildNode(node, i, JJTOPTION_KEY_VAL),
+                               options, errors);
+  }
+}
+
 void VisitColumnOptionKeyValNode(const SimpleNode* node, OptionList* options,
                                  std::vector<std::string>* errors) {
   std::string option_name = CheckOptionKeyValNodeAndGetName(node);
@@ -314,6 +414,12 @@ void VisitColumnOptionKeyValNode(const SimpleNode* node, OptionList* options,
   // If this is an invalid option, return error. Later during schema
   // change, we will verify the valid option against the
   // column type.
+
+  if (option_name == kLocalityGroupOptionName) {
+    VisitLocalityGroupName(node, options, errors);
+    return;
+  }
+
   if (option_name != kCommitTimestampOptionName &&
       option_name != kModelColumnRequiredOptionName) {
     errors->push_back(absl::StrCat("Option: ", option_name, " is unknown."));
@@ -1200,6 +1306,10 @@ void VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
         VisitTableRowDeletionPolicyNode(
             child, table->mutable_row_deletion_policy(), errors);
         break;
+      case JJTOPTIONS_CLAUSE:
+        VisitTableOptionListNode(child, 0 /* option_list_offset */,
+                                 table->mutable_set_options(), errors);
+        break;
       default:
         ABSL_LOG(FATAL) << "Unexpected table info: " << child->toString();
     }
@@ -1338,6 +1448,10 @@ void VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index,
       case JJTIF_NOT_EXISTS:
         index->set_existence_modifier(IF_NOT_EXISTS);
         break;
+      case JJTOPTIONS_CLAUSE:
+        VisitIndexOptionListNode(child, 0 /* option_list_offset */,
+                                 index->mutable_set_options(), errors);
+        break;
       default:
         ABSL_LOG(FATAL) << "Unexpected index info: " << child->toString();
     }
@@ -1401,6 +1515,116 @@ void VisitSearchIndexOptionsClause(const SimpleNode* node, OptionList* options,
     }
     options_names.insert(option_name);
     VisitSearchIndexOptionKeyValNode(child, option_name, options, errors);
+  }
+}
+
+void VisitVectorIndexOptionKeyValNode(const SimpleNode* node,
+                                      OptionList* options,
+                                      std::vector<std::string>* errors) {
+  std::string option_name = CheckOptionKeyValNodeAndGetName(node);
+
+  // If this is an invalid option, return error. Later during schema
+  // change, we will verify the valid option against the column type.
+  if (option_name == kVectorIndexTreeDepth ||
+      option_name == kVectorIndexNumberOfLeaves ||
+      option_name == kVectorIndexNumberOfBranches ||
+      option_name == kVectorIndexLeafScatterFactor ||
+      option_name == kVectorIndexMinBranchSplits ||
+      option_name == kVectorIndexMinLeafSplits) {
+    SetOption* option = options->Add();
+    option->set_option_name(option_name);
+
+    const SimpleNode* value_node = GetChildNode(node, 1);
+    if (value_node->getId() == JJTINTEGER_VAL) {
+      const int64_t value = value_node->image_as_int64();
+      option->set_int64_value(value);
+    } else {
+      errors->push_back(
+          absl::StrCat("Unexpected value for option: ", option->option_name(),
+                       ". Supported option values are integers."));
+      return;
+    }
+  } else if (option_name == kVectorIndexDistanceType) {
+    SetOption* option = options->Add();
+    option->set_option_name(option_name);
+
+    const SimpleNode* value_node = GetChildNode(node, 1);
+    if (value_node->getId() == JJTSTR_VAL &&
+        ValidateStringLiteralImage(value_node->image(), /*force=*/true, nullptr)
+            .ok()) {
+      std::string string_value;
+      std::string error = "";
+      if (!UnescapeStringLiteral(value_node->image(), &string_value, &error)) {
+        errors->push_back(error);
+        return;
+      }
+      option->set_string_value(string_value);
+    } else {
+      errors->push_back(
+          absl::StrCat("Unexpected value for option: ", option->option_name(),
+                       ". Supported option values are strings."));
+      return;
+    }
+  } else {
+    // Unknown option.
+    errors->push_back(absl::StrCat("Option: ", option_name, " is unknown."));
+    return;
+  }
+}
+
+void VisitVectorIndexOptionsClause(const SimpleNode* node, OptionList* options,
+                                   std::vector<std::string>* errors) {
+  CheckNode(node, JJTOPTIONS_CLAUSE);
+  for (int i = 0; i < node->jjtGetNumChildren(); ++i) {
+    VisitVectorIndexOptionKeyValNode(GetChildNode(node, i, JJTOPTION_KEY_VAL),
+                                     options, errors);
+  }
+}
+
+void VisitCreateVectorIndexNode(const SimpleNode* node,
+                                CreateVectorIndex* index,
+                                std::vector<std::string>* errors) {
+  CheckNode(node, JJTCREATE_VECTOR_INDEX_STATEMENT);
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i);
+    switch (child->getId()) {
+      case JJTNAME:
+        index->set_index_name(GetQualifiedIdentifier(child));
+        break;
+      case JJTINDEX_BASE:
+        index->set_index_base_name(GetQualifiedIdentifier(child));
+        break;
+      case JJTINDEX_KEY: {
+        SimpleNode* key_part_node = GetChildNode(child, 0, JJTKEY_PART);
+        KeyPartClause* key_part = index->mutable_key();
+        key_part->set_key_name(
+            GetChildNode(key_part_node, 0, JJTPATH)->image());
+        SetSortOrder(key_part_node, key_part, errors);
+        break;
+      }
+      case JJTSTORED_COLUMN_LIST:
+        VisitStoredColumnListNode(
+            child, index->mutable_stored_column_definition(), errors);
+        break;
+      case JJTPARTITION_KEY:
+        VisitKeyNode(child, index->mutable_partition_by(), errors);
+        break;
+      case JJTCREATE_INDEX_WHERE_CLAUSE:
+        VisitCreateIndexWhereClause(child,
+                                    index->mutable_null_filtered_column());
+        break;
+      case JJTOPTIONS_CLAUSE:
+        VisitVectorIndexOptionsClause(child, index->mutable_set_options(),
+                                      errors);
+        break;
+      case JJTIF_NOT_EXISTS: {
+        index->set_existence_modifier(IF_NOT_EXISTS);
+        break;
+      }
+      default:
+        ABSL_LOG(FATAL) << "Unexpected index info: "  // Crash OK.
+                   << child->toString();
+    }
   }
 }
 
@@ -2241,6 +2465,12 @@ void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
             GetQualifiedIdentifier(child));
         break;
       }
+      case JJTOPTIONS_CLAUSE: {
+        VisitTableOptionListNode(
+            child, 0 /* option_list_offset */,
+            alter_table->mutable_set_options()->mutable_options(), errors);
+        break;
+      }
       default:
         ABSL_LOG(FATAL) << "Unexpected alter table type: "
                    << GetChildNode(node, 1)->toString();
@@ -2264,6 +2494,12 @@ void VisitAlterIndexNode(const SimpleNode* node, AlterIndex* alter_index,
     case JJTDROP: {
       const SimpleNode* column_name = GetFirstChildNode(node, JJTCOLUMN_NAME);
       alter_index->set_drop_stored_column(column_name->image());
+      break;
+    }
+    case JJTOPTIONS_CLAUSE: {
+      VisitIndexOptionListNode(
+          alter_type, 0 /* option_list_offset */,
+          alter_index->mutable_set_options()->mutable_options(), errors);
       break;
     }
     default: {
@@ -2412,6 +2648,47 @@ void VisitRevokeMembershipNode(const SimpleNode* node, RevokeMembership* revoke,
                     errors);
 }
 
+void VisitCreatePropertyGraphNode(const SimpleNode* node,
+                                  CreatePropertyGraph* property_graph,
+                                  bool is_or_replace, absl::string_view ddl,
+                                  std::vector<std::string>* errors) {
+  CheckNode(node, JJTCREATE_PROPERTY_GRAPH_STATEMENT);
+  if (is_or_replace) {
+    property_graph->set_existence_modifier(OR_REPLACE);
+    property_graph->set_ddl_body(
+        absl::StrCat("CREATE OR REPLACE ", ExtractTextForNode(node, ddl)));
+  } else {
+    property_graph->set_ddl_body(
+        absl::StrCat("CREATE ", ExtractTextForNode(node, ddl)));
+  }
+
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i);
+    switch (child->getId()) {
+      case JJTNAME:
+        property_graph->set_name(GetQualifiedIdentifier(child));
+        break;
+      case JJTIF_NOT_EXISTS:
+        if (property_graph->existence_modifier() != NONE) {
+          errors->push_back(
+              "CREATE PROPERTY GRAPH IF NOT EXISTS cannot "
+              "be used with other existence modifiers such as `OR REPLACE`.");
+          return;
+        }
+        property_graph->set_existence_modifier(IF_NOT_EXISTS);
+        break;
+      case JJTELEMENT_TABLES:
+        // Do nothing: the `element_tables` part is already
+        // captured in `ddl_text`.
+        break;
+      default:
+        ABSL_LOG(FATAL) << "Unexpected CREATE PROPERTY GRAPH statement parts: "
+                   << child->toString();
+        break;
+    }
+  }
+}
+
 void VisitModelOptionKeyValNode(const SimpleNode* node, OptionList* options,
                                 std::vector<std::string>* errors) {
   std::string name = CheckOptionKeyValNodeAndGetName(node);
@@ -2544,6 +2821,134 @@ void VisitCreateProtoBundleNode(const SimpleNode* node,
   }
 }
 
+std::string getLocalityGroupName(const SimpleNode* node, int offset) {
+  const SimpleNode* name_node = GetChildNode(node, offset);
+  if (name_node->getId() == JJTDEFAULTT) {
+    return kDefaultLocalityGroupName;
+  } else {
+    CheckNode(name_node, JJTNAME);
+    return GetQualifiedIdentifier(name_node);
+  }
+}
+
+void VisitLocalityGroupOptionKeyValNode(const SimpleNode* node,
+                                        OptionList* options,
+                                        std::vector<std::string>* errors) {
+  const std::string name = CheckOptionKeyValNodeAndGetName(node);
+  if (absl::c_find_if(*options, [&name](const SetOption& option) {
+        return option.option_name() == name;
+      }) != options->end()) {
+    errors->push_back(absl::StrCat("Duplicate option: ", name));
+    return;
+  }
+  SetOption* option = options->Add();
+  if (name == kLocalityGroupStorageOptionName) {
+    option->set_option_name(kInternalLocalityGroupStorageOptionName);
+  } else if (name == kLocalityGroupSpillTimeSpanOptionName) {
+    option->set_option_name(kInternalLocalityGroupSpillTimeSpanOptionName);
+  } else {
+    errors->push_back(absl::StrCat("Option: ", name, " is unknown."));
+    return;
+  }
+
+  const SimpleNode* value_node = GetChildNode(node, 1);
+
+  if (value_node->getId() == JJTNULLL) {
+    option->set_null_value(true);
+    return;
+  }
+  std::optional<std::string> string_value;
+  if (value_node->getId() == JJTSTR_VAL) {
+    std::string error = "";
+    if (!ValidateStringLiteralImage(value_node->image(), /*force=*/true,
+                                    /*error=*/nullptr)
+             .ok() ||
+        !UnescapeStringLiteral(value_node->image(), &string_value.emplace(),
+                               &error)) {
+      errors->push_back(LogicalError(
+          value_node,
+          absl::StrCat("Cannot parse string literal: ", value_node->image())));
+      return;
+    }
+  }
+
+  if (name == kLocalityGroupStorageOptionName &&
+      value_node->getId() == JJTSTR_VAL) {
+    if (*string_value != kLocalityGroupStorageOptionSSDVal &&
+        *string_value != kLocalityGroupStorageOptionHDDVal) {
+      errors->push_back(absl::StrCat(
+          "Unexpected value for option: ", name,
+          ". Supported option values are \"", kLocalityGroupStorageOptionSSDVal,
+          "\" and \"", kLocalityGroupStorageOptionHDDVal, "\"."));
+      return;
+    }
+    option->set_bool_value(*string_value == kLocalityGroupStorageOptionSSDVal);
+  } else if (name == kLocalityGroupSpillTimeSpanOptionName &&
+             value_node->getId() == JJTSTR_VAL) {
+    // TODO: Move the below if logic to sdl_options.cc.
+    if (ParseSchemaTimeSpec(*string_value) == -1) {
+      errors->push_back(absl::StrCat("Cannot parse ", *string_value,
+                                     " as a valid timestamp"));
+      return;
+    }
+    option->add_string_list_value(absl::StrCat("disk", ":", *string_value));
+  } else {
+    errors->push_back(
+        absl::StrCat("Unexpected value type for option: ", name, "."));
+    return;
+  }
+}
+
+void VisitCreateLocalityGroupNode(const SimpleNode* node,
+                                  CreateLocalityGroup* create_locality_group,
+                                  std::vector<std::string>* errors) {
+  CheckNode(node, JJTCREATE_LOCALITY_GROUP_STATEMENT);
+
+  int offset = 0;
+  // We may have an optional IF NOT EXISTS node before the name.
+  if (GetChildNode(node, offset)->getId() == JJTIF_NOT_EXISTS) {
+    create_locality_group->set_existence_modifier(IF_NOT_EXISTS);
+    offset++;
+  }
+  create_locality_group->set_locality_group_name(
+      getLocalityGroupName(node, offset));
+  offset++;
+  if (node->jjtGetNumChildren() == offset + 1) {
+    const SimpleNode* options_clause =
+        GetChildNode(node, offset, JJTOPTIONS_CLAUSE);
+    OptionList* options = create_locality_group->mutable_set_options();
+    for (int i = 0; i < options_clause->jjtGetNumChildren(); ++i) {
+      VisitLocalityGroupOptionKeyValNode(
+          GetChildNode(options_clause, i, JJTOPTION_KEY_VAL), options, errors);
+    }
+  }
+}
+
+void VisitAlterLocalityGroupNode(const SimpleNode* node,
+                                 AlterLocalityGroup* alter_locality_group,
+                                 std::vector<std::string>* errors) {
+  CheckNode(node, JJTALTER_LOCALITY_GROUP_STATEMENT);
+  int offset = 0;
+  // We may have an optional IF EXISTS node before the name.
+  if (GetChildNode(node, offset)->getId() == JJTIF_EXISTS) {
+    alter_locality_group->set_existence_modifier(IF_EXISTS);
+    offset++;
+  }
+  alter_locality_group->set_locality_group_name(
+      getLocalityGroupName(node, offset));
+  offset++;
+  if (node->jjtGetNumChildren() == offset + 1) {
+    const SimpleNode* options_clause =
+        GetChildNode(node, offset, JJTOPTIONS_CLAUSE);
+    OptionList* options =
+        alter_locality_group->mutable_set_options()->mutable_options();
+    for (int i = 0; i < options_clause->jjtGetNumChildren(); ++i) {
+      VisitLocalityGroupOptionKeyValNode(
+          GetChildNode(options_clause, i, JJTOPTION_KEY_VAL), options, errors);
+    }
+  }
+}
+
 // End Visit functions
 //////////////////////////////////////////////////////////////////////////
 
@@ -2613,6 +3018,10 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
       VisitCreateSearchIndexNode(stmt, statement->mutable_create_search_index(),
                                  errors);
       break;
+    case JJTCREATE_VECTOR_INDEX_STATEMENT:
+      VisitCreateVectorIndexNode(stmt, statement->mutable_create_vector_index(),
+                                 errors);
+      break;
     case JJTCREATE_CHANGE_STREAM_STATEMENT:
       VisitCreateChangeStreamNode(
           stmt, statement->mutable_create_change_stream(), errors);
@@ -2621,11 +3030,20 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
       VisitCreateSequenceNode(stmt, statement->mutable_create_sequence(),
                               errors);
       break;
+    case JJTCREATE_LOCALITY_GROUP_STATEMENT:
+      VisitCreateLocalityGroupNode(
+          stmt, statement->mutable_create_locality_group(), errors);
+      break;
     case JJTDROP_STATEMENT: {
       const SimpleNode* drop_stmt = GetChildNode(stmt, 0);
       const SimpleNode* name_node = GetFirstChildNode(stmt, JJTNAME);
       std::string name;
+      if (drop_stmt->getId() == JJTLOCALITY_GROUP &&
+          GetFirstChildNode(stmt, JJTDEFAULTT) != nullptr) {
+        name = kDefaultLocalityGroupName;
+      } else {
         name = GetQualifiedIdentifier(name_node);
+      }
 
       switch (drop_stmt->getId()) {
         case JJTTABLE:
@@ -2698,6 +3116,21 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
           }
           statement->mutable_drop_schema()->set_schema_name(name);
           break;
+        case JJTGRAPH:
+          if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
+            statement->mutable_drop_property_graph()->set_existence_modifier(
+                IF_EXISTS);
+          }
+          statement->mutable_drop_property_graph()->set_name(name);
+          break;
+        case JJTLOCALITY_GROUP:
+          if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
+            statement->mutable_drop_locality_group()->set_existence_modifier(
+                IF_EXISTS);
+          }
+          statement->mutable_drop_locality_group()->set_locality_group_name(
+              name);
+          break;
         default:
           ABSL_LOG(FATAL) << "Unexpected object type: "
                      << GetChildNode(stmt, 0)->toString();
@@ -2728,6 +3161,10 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
     case JJTALTER_SCHEMA_STATEMENT:
       VisitAlterSchemaNode(stmt, statement->mutable_alter_schema(), errors);
       break;
+    case JJTALTER_LOCALITY_GROUP_STATEMENT:
+      VisitAlterLocalityGroupNode(
+          stmt, statement->mutable_alter_locality_group(), errors);
+      break;
     case JJTANALYZE_STATEMENT:
       CheckNode(stmt, JJTANALYZE_STATEMENT);
       statement->mutable_analyze();
@@ -2753,6 +3190,11 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
           VisitCreateFunctionNode(actual_stmt,
                                   statement->mutable_create_function(),
                                   has_or_replace, ddl_text, errors);
+          break;
+        case JJTCREATE_PROPERTY_GRAPH_STATEMENT:
+          VisitCreatePropertyGraphNode(
+              actual_stmt, statement->mutable_create_property_graph(),
+              has_or_replace, ddl_text, errors);
           break;
         default:
           ABSL_LOG(FATAL) << "Unexpected statement: " << stmt->toString();

@@ -182,7 +182,7 @@ CREATE TABLE Albums (
 ) PRIMARY KEY(UserId DESC),
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 --
-ERROR:.* Table Albums references parent key column UserId with incorrect order ASC.
+ERROR:.* Table Albums references parent key column UserId with incorrect order .*.
 ==
 # Interleaved table references parent key column with incorrect length.
 # --regex
@@ -421,7 +421,7 @@ CREATE TABLE Albums (
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
 CREATE NULL_FILTERED INDEX AlbumsByName ON Albums(UserId DESC, AlbumName), INTERLEAVE IN Users;
 --
-ERROR:.* Index AlbumsByName references parent key column UserId with incorrect order ASC.
+ERROR:.* Index AlbumsByName references parent key column UserId with incorrect order .*.
 ==
 # Index does not specify any key columns.
 # --regex

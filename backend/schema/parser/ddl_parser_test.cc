@@ -1481,6 +1481,60 @@ TEST(ParseCreateIndex, CanUseWhereIsNotNullMultipleColumns) {
                   )pb")));
 }
 
+TEST(ParseCreateIndex, CanParseCreateIndexBasicWithLocalityGroupOption) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE NULL_FILTERED INDEX GlobalAlbumsByName
+                        ON Albums(Name) OPTIONS (locality_group = 'test_locality_group')
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_index {
+                      index_name: "GlobalAlbumsByName"
+                      index_base_name: "Albums"
+                      key { key_name: "Name" }
+                      null_filtered: true
+                      set_options {
+                        option_name: "locality_group"
+                        string_value: "test_locality_group"
+                      }
+                    }
+                  )pb")));
+}
+
+TEST(ParseCreateIndex,
+     CanParseCreateIndexWithLocalityGroupOptionAndWhereClause) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE INDEX Idx ON Users(UserId, Name) WHERE UserId IS NOT NULL AND Name IS NOT NULL
+                      OPTIONS (locality_group = 'test_locality_group')
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_index {
+                      index_name: "Idx"
+                      index_base_name: "Users"
+                      key { key_name: "UserId" }
+                      key { key_name: "Name" }
+                      null_filtered_column: "UserId"
+                      null_filtered_column: "Name"
+                      set_options {
+                        option_name: "locality_group"
+                        string_value: "test_locality_group"
+                      }
+                    }
+                  )pb")));
+}
+
+TEST(ParseCreateIndex, CannotParseCreateIndexWithOtherOption) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE NULL_FILTERED INDEX GlobalAlbumsByName
+                        ON Albums(Name) OPTIONS (test_option = 'test_value')
+                  )sql"),
+              StatusIs(StatusCode::kInvalidArgument));
+}
+
 // DROP TABLE
 
 TEST(ParseDropTable, CanParseDropTableBasic) {
@@ -1948,6 +2002,24 @@ TEST(ParseAlterIndex, CanParseAddStoredColumn) {
                     alter_index {
                       index_name: "index"
                       add_stored_column { column_name: "extra_column" }
+                    }
+                  )pb")));
+}
+
+TEST(ParseAlterIndex, CanParseSetLocalityGroupOption) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+                    ALTER INDEX index SET OPTIONS (locality_group = 'test_locality_group')
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_index {
+                      index_name: "index"
+                      set_options {
+                        options {
+                          option_name: "locality_group"
+                          string_value: "test_locality_group"
+                        }
+                      }
                     }
                   )pb")));
 }
@@ -7255,6 +7327,186 @@ TEST(UserDefinedFunction, DropFunctionNotSupportedWhenFlagOff) {
   EXPECT_THAT(ParseDDLStatement("DROP FUNCTION foo"),
               StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("User defined functions are not supported")));
+}
+
+TEST(CreateLocalityGroup, CanParseCreateLocalityGroup) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(CREATE LOCALITY GROUP LocalityGroup
+          OPTIONS ( storage = 'ssd', ssd_to_hdd_spill_timespan = '10d' ))sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_locality_group {
+                  locality_group_name: "LocalityGroup"
+                  set_options { option_name: "inflash" bool_value: true }
+                  set_options {
+                    option_name: "age_based_spill_policy"
+                    string_list_value: "disk:10d"
+                  }
+                })pb")));
+}
+
+TEST(CreateLocalityGroup, CanParseCreateDefaultLocalityGroup) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(CREATE LOCALITY GROUP default
+          OPTIONS ( storage = 'ssd', ssd_to_hdd_spill_timespan = '10d' ))sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_locality_group {
+                  locality_group_name: "default"
+                  set_options { option_name: "inflash" bool_value: true }
+                  set_options {
+                    option_name: "age_based_spill_policy"
+                    string_list_value: "disk:10d"
+                  }
+                })pb")));
+}
+
+TEST(AlterLocalityGroup, CanParseAlterLocalityGroupSetOptions) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(ALTER LOCALITY GROUP IF EXISTS LocalityGroup
+          SET OPTIONS ( storage = 'hdd', ssd_to_hdd_spill_timespan = '1d' ))sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_locality_group {
+                  locality_group_name: "LocalityGroup"
+                  set_options {
+                    options { option_name: "inflash" bool_value: false }
+                    options {
+                      option_name: "age_based_spill_policy"
+                      string_list_value: "disk:1d"
+                    }
+                  }
+                  existence_modifier: IF_EXISTS
+                })pb")));
+}
+
+TEST(AlterLocalityGroup, CanParseAlterDefaultLocalityGroup) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(ALTER LOCALITY GROUP IF EXISTS default
+          SET OPTIONS ( storage = 'hdd', ssd_to_hdd_spill_timespan = '1d' ))sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_locality_group {
+                  locality_group_name: "default"
+                  set_options {
+                    options { option_name: "inflash" bool_value: false }
+                    options {
+                      option_name: "age_based_spill_policy"
+                      string_list_value: "disk:1d"
+                    }
+                  }
+                  existence_modifier: IF_EXISTS
+                })pb")));
+}
+
+TEST(DropLocalityGroup, CanParseDropLocalityGroup) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(DROP LOCALITY GROUP LocalityGroup)sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        drop_locality_group { locality_group_name: "LocalityGroup" })pb")));
+}
+
+TEST(DropLocalityGroup, CanParseDropLocalityGroupIfExists) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(DROP LOCALITY GROUP IF EXISTS LocalityGroup)sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        drop_locality_group {
+          locality_group_name: "LocalityGroup"
+          existence_modifier: IF_EXISTS
+        })pb")));
+}
+
+TEST(DropLocalityGroup, CanParseDropDefaultLocalityGroup) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(DROP LOCALITY GROUP IF EXISTS default)sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        drop_locality_group {
+          locality_group_name: "default"
+          existence_modifier: IF_EXISTS
+        })pb")));
+}
+
+TEST(ParseCreatePropertyGraph, ParseCreatePropertyGraph) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE PROPERTY GRAPH graph
+      NODE TABLES (nodes)
+      EDGE TABLES (edges KEY (from_id, to_id)
+        SOURCE KEY (from_id) REFERENCES nodes (id)
+        DESTINATION KEY (to_id) REFERENCES nodes (id)
+      )
+    )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_property_graph {
+          name: "graph"
+          ddl_body: "CREATE PROPERTY GRAPH graph\n"
+                    "      NODE TABLES (nodes)\n"
+                    "      EDGE TABLES (edges KEY (from_id, to_id)\n"
+                    "        SOURCE KEY (from_id) REFERENCES nodes (id)\n"
+                    "        DESTINATION KEY (to_id) REFERENCES nodes (id)\n"
+                    "      )"
+        })pb")));
+}
+
+TEST(ParseCreatePropertyGraph, ParseCreateOrReplacePropertyGraph) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE OR REPLACE PROPERTY GRAPH graph
+      NODE TABLES (nodes)
+      EDGE TABLES (edges KEY (from_id, to_id)
+        SOURCE KEY (from_id) REFERENCES nodes (id)
+        DESTINATION KEY (to_id) REFERENCES nodes (id)
+      )
+    )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_property_graph {
+          name: "graph"
+          existence_modifier: OR_REPLACE
+          ddl_body: "CREATE OR REPLACE PROPERTY GRAPH graph\n"
+                    "      NODE TABLES (nodes)\n"
+                    "      EDGE TABLES (edges KEY (from_id, to_id)\n"
+                    "        SOURCE KEY (from_id) REFERENCES nodes (id)\n"
+                    "        DESTINATION KEY (to_id) REFERENCES nodes (id)\n"
+                    "      )"
+        })pb")));
+}
+
+TEST(ParseCreatePropertyGraph, ParseCreateIfNotExistsPropertyGraph) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE PROPERTY GRAPH IF NOT EXISTS graph
+      NODE TABLES (nodes)
+      EDGE TABLES (edges KEY (from_id, to_id)
+        SOURCE KEY (from_id) REFERENCES nodes (id)
+        DESTINATION KEY (to_id) REFERENCES nodes (id)
+      )
+    )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_property_graph {
+          name: "graph"
+          existence_modifier: IF_NOT_EXISTS
+          ddl_body: "CREATE PROPERTY GRAPH IF NOT EXISTS graph\n"
+                    "      NODE TABLES (nodes)\n"
+                    "      EDGE TABLES (edges KEY (from_id, to_id)\n"
+                    "        SOURCE KEY (from_id) REFERENCES nodes (id)\n"
+                    "        DESTINATION KEY (to_id) REFERENCES nodes (id)\n"
+                    "      )"
+        })pb")));
+}
+
+TEST(ParseDropPropertyGraph, ParseDropPropertyGraph) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    DROP PROPERTY GRAPH graph
+    )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                drop_property_graph { name: "graph" })pb")));
+}
+
+TEST(ParseDropPropertyGraph, ParseDropIfExistsPropertyGraph) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    DROP PROPERTY GRAPH IF EXISTS graph
+    )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                drop_property_graph {
+                  name: "graph"
+                  existence_modifier: IF_EXISTS
+                })pb")));
 }
 
 }  // namespace

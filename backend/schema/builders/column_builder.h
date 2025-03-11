@@ -32,6 +32,7 @@
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/validators/column_validator.h"
 
@@ -131,6 +132,7 @@ class Column::Builder {
     instance_->source_column_ = column;
     instance_->type_ = column->type_;
     instance_->declared_max_length_ = column->declared_max_length_;
+    instance_->vector_length_ = column->vector_length_;
     return *this;
   }
 
@@ -168,6 +170,11 @@ class Column::Builder {
     if (postgresql_oid.has_value()) {
       instance_->set_postgresql_oid(postgresql_oid.value());
     }
+    return *this;
+  }
+
+  Builder& set_locality_group(const LocalityGroup* locality_group) {
+    instance_->locality_group_ = locality_group;
     return *this;
   }
 
@@ -252,6 +259,16 @@ class Column::Editor {
       instance_->change_streams_explicitly_tracking_column_.erase(
           itr_tracking_columns);
     }
+    return *this;
+  }
+
+  Editor& set_locality_group(const LocalityGroup* locality_group) {
+    instance_->locality_group_ = locality_group;
+    return *this;
+  }
+
+  Editor& clear_locality_group() {
+    instance_->locality_group_ = nullptr;
     return *this;
   }
 

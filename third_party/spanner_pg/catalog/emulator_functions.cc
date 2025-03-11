@@ -74,7 +74,7 @@
 #include "absl/time/time.h"
 #include "third_party/spanner_pg/catalog/emulator_function_evaluators.h"
 #include "third_party/spanner_pg/catalog/jsonb_array_elements_table_valued_function.h"
-#include "third_party/spanner_pg/datatypes/common/jsonb/jsonb_parse.h"
+#include "third_party/spanner_pg/datatypes/common/jsonb/jsonb_value.h"
 #include "third_party/spanner_pg/datatypes/common/pg_numeric_parse.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_conversion_functions.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"

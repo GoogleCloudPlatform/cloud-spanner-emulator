@@ -475,7 +475,7 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
 absl::Status KeyColumnValidator::Validate(const KeyColumn* key_column,
                                           SchemaValidationContext* context) {
   ZETASQL_RET_CHECK_NE(key_column->column_, nullptr);
-  const std::string type_name =
+  std::string type_name =
       key_column->column_->GetType()->IsArray()
           ? "ARRAY"
           : key_column->column_->GetType()->ShortTypeName(
@@ -486,6 +486,17 @@ absl::Status KeyColumnValidator::Validate(const KeyColumn* key_column,
     if (owner_index != nullptr && owner_index->is_search_index() &&
         key_column->column_->GetType()->IsTokenListType()) {
       return absl::OkStatus();
+    }
+
+    if (owner_index != nullptr && owner_index->is_vector_index() &&
+        key_column->column_->GetType()->IsArray()) {
+      const zetasql::Type* element_type =
+          key_column->column_->GetType()->AsArray()->element_type();
+      if (element_type->IsFloat() || element_type->IsDouble()) {
+        return absl::OkStatus();
+      }
+      type_name = key_column->column_->GetType()->ShortTypeName(
+          zetasql::PRODUCT_EXTERNAL, true);
     }
 
     if (owner_index != nullptr) {

@@ -747,6 +747,72 @@ TEST_P(SequenceReadWriteTest, SequenceFunctionInWhereClause) {
                                        "only be used in a read-write)"));
   }
 }
+
+TEST_P(SequenceReadWriteTest, DropTableShouldNotImpactSequenceInternalState) {
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    ZETASQL_ASSERT_OK(
+        UpdateSchema({"ALTER DATABASE db SET OPTIONS (default_sequence_kind = "
+                      "'bit_reversed_positive')",
+                      "CREATE TABLE test (id INT64 AUTO_INCREMENT primary key, "
+                      "val STRING(MAX))"}));
+    ZETASQL_ASSERT_OK(
+        CommitDml({SqlStatement("INSERT INTO test (val) VALUES ('test-1')"),
+                   SqlStatement("INSERT INTO test (val) VALUES ('test-2')"),
+                   SqlStatement("INSERT INTO test (val) VALUES ('test-3')")}));
+
+    // Check that counter has incremented at least 3 times.
+    EXPECT_THAT(Query("select get_table_column_identity_state('test.id') >= 4"),
+                IsOkAndHoldsRows({{true}}));
+
+    ZETASQL_ASSERT_OK(UpdateSchema(
+        {"CREATE TABLE parents (id INT64 AUTO_INCREMENT PRIMARY KEY,deleted_at "
+         "TIMESTAMP)",
+         "CREATE INDEX IF NOT EXISTS idx_parents_deleted_at ON parents "
+         "(deleted_at)"}));
+
+    // This is expected to fail because the index is not dropped.
+    EXPECT_THAT(UpdateSchema({"drop table parents"}),
+                StatusIs(absl::StatusCode::kFailedPrecondition,
+                         testing::ContainsRegex(
+                             "Cannot drop table parents with indices: "
+                             "idx_parents_deleted_at")));
+
+    EXPECT_THAT(Query("select get_table_column_identity_state('test.id') >= 4"),
+                IsOkAndHoldsRows({{true}}));
+  } else {
+    ZETASQL_ASSERT_OK(UpdateSchema(
+        {"alter database db set spanner.default_sequence_kind = "
+         "'bit_reversed_positive'",
+         R"(create table test (id serial primary key, val text))"}));
+    ZETASQL_ASSERT_OK(
+        CommitDml({SqlStatement("insert into test (val) values ('test-1')"),
+                   SqlStatement("insert into test (val) values ('test-2')"),
+                   SqlStatement("insert into test (val) values ('test-3')")}));
+
+    // Check that counter has incremented at least 3 times.
+    EXPECT_THAT(
+        Query("select spanner.get_table_column_identity_state('test.id') >= 4"),
+        IsOkAndHoldsRows({{true}}));
+
+    ZETASQL_ASSERT_OK(UpdateSchema(
+        {"create table parents (id bigserial,deleted_at timestamptz,primary "
+         "key "
+         "(id))",
+         "create index if not exists idx_parents_deleted_at ON parents "
+         "(deleted_at)"}));
+
+    // This is expected to fail because the index is not dropped.
+    EXPECT_THAT(UpdateSchema({"drop table parents"}),
+                StatusIs(absl::StatusCode::kFailedPrecondition,
+                         testing::ContainsRegex(
+                             "Cannot drop table parents with indices: "
+                             "idx_parents_deleted_at")));
+
+    EXPECT_THAT(
+        Query("select spanner.get_table_column_identity_state('test.id') >= 4"),
+        IsOkAndHoldsRows({{true}}));
+  }
+}
 }  // namespace
 
 }  // namespace test

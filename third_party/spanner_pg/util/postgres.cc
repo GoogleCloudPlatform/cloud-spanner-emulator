@@ -494,6 +494,19 @@ absl::StatusOr<RangeTblFunction*> makeRangeTblFunction(FuncExpr* func_expr,
   return function;
 }
 
+absl::StatusOr<RowMarkClause*> makeRowMarkClause(Index rti,
+                                                 LockClauseStrength strength,
+                                                 LockWaitPolicy wait_policy,
+                                                 bool pushed_down) {
+  RowMarkClause* row_mark_clause;
+  ZETASQL_ASSIGN_OR_RETURN(row_mark_clause, CheckedPgMakeNode(RowMarkClause));
+  row_mark_clause->rti = rti;
+  row_mark_clause->strength = strength;
+  row_mark_clause->waitPolicy = wait_policy;
+  row_mark_clause->pushedDown = pushed_down;
+  return row_mark_clause;
+}
+
 bool IsExpr(const Node& input) {
   switch (nodeTag(&input)) {
     case T_Var:

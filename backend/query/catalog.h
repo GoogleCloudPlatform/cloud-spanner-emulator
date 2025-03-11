@@ -25,6 +25,7 @@
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
+#include "zetasql/public/property_graph.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "absl/base/thread_annotations.h"
@@ -38,6 +39,7 @@
 #include "backend/query/function_catalog.h"
 #include "backend/query/queryable_model.h"
 #include "backend/query/queryable_named_schema.h"
+#include "backend/query/queryable_property_graph.h"
 #include "backend/query/queryable_sequence.h"
 #include "backend/query/queryable_table.h"
 #include "backend/query/queryable_view.h"
@@ -51,6 +53,7 @@ namespace backend {
 
 class NetCatalog;
 class PGFunctionCatalog;
+class PreparePropertyGraphCatalog;
 
 // Implementation of zetasql::Catalog for the root catalog in the catalog
 // hierarchy. For more details, see code of zetasql::Catalog.
@@ -74,6 +77,7 @@ class Catalog : public zetasql::EnumerableCatalog {
  private:
   friend class NetCatalog;
   friend class PGFunctionCatalog;
+  friend class PreparePropertyGraphCatalog;
 
   // These tests needs to access the tvf map and manually add an empty tvf.
   FRIEND_TEST(ChangeStreamQueryValidatorTest,
@@ -101,6 +105,9 @@ class Catalog : public zetasql::EnumerableCatalog {
   absl::Status GetSequence(const std::string& name,
                            const zetasql::Sequence** sequence,
                            const FindOptions& options) override;
+  absl::Status GetPropertyGraph(
+      std::string_view name, const zetasql::PropertyGraph*& graph,
+      const FindOptions& options = FindOptions()) override;
 
   // Implementation of the zetasql::EnumerableCatalog interface.
   absl::Status GetCatalogs(
@@ -161,6 +168,10 @@ class Catalog : public zetasql::EnumerableCatalog {
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableTable>> tables_;
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableView>> views_;
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableModel>> models_;
+
+  // Property graphs available in the default schema.
+  CaseInsensitiveStringMap<std::unique_ptr<const QueryablePropertyGraph>>
+      property_graphs_;
 
   // Types available in the default schema.
   CaseInsensitiveStringMap<const zetasql::Type*> types_;

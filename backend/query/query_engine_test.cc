@@ -236,6 +236,7 @@ class QueryEngineTestBase : public testing::Test {
   const Schema* sequence_schema() { return sequence_schema_.get(); }
   const Schema* gpk_schema() { return gpk_schema_.get(); }
   const Schema* timestamp_date_schema() { return timestamp_date_schema_.get(); }
+  const Schema* property_graph_schema() { return property_graph_schema_.get(); }
   RowReader* change_stream_partition_table_reader() {
     return &change_stream_partition_table_reader_;
   }
@@ -247,6 +248,7 @@ class QueryEngineTestBase : public testing::Test {
     return &timestamp_date_table_reader_;
   }
   RowReader* reader() { return &reader_; }
+  RowReader* property_graph_reader() { return &property_graph_reader_; }
   QueryEngine& query_engine() { return query_engine_; }
   zetasql::TypeFactory* type_factory() { return &type_factory_; }
   const Schema* proto_schema() { return proto_schema_.get(); }
@@ -329,6 +331,7 @@ class QueryEngineTestBase : public testing::Test {
   std::unique_ptr<const Schema> sequence_schema_;
   std::unique_ptr<const Schema> gpk_schema_;
   std::unique_ptr<const Schema> timestamp_date_schema_;
+  std::unique_ptr<const Schema> property_graph_schema_;
 
  private:
   std::unique_ptr<const Schema> views_schema_ =
@@ -344,6 +347,20 @@ class QueryEngineTestBase : public testing::Test {
            Timestamp(absl::FromUnixSeconds(2))},
           {Int64(4), String("four"), Date(4),
            Timestamp(absl::FromUnixSeconds(4))}}}}}};
+
+  test::TestRowReader property_graph_reader_{
+      {{"node_table",
+        {{"id"},
+         {zetasql::types::Int64Type()},
+         {{Int64(1)}, {Int64(2)}, {Int64(4)}}}},
+       {"edge_table",
+        {{"from_id", "to_id"},
+         {zetasql::types::Int64Type(), zetasql::types::Int64Type()},
+         {{Int64(1), Int64(2)},
+          {Int64(2), Int64(4)},
+          {Int64(4), Int64(1)},
+          {Int64(1), Int64(4)}}}}}};
+
   QueryEngine query_engine_{&type_factory_};
   test::ScopedEmulatorFeatureFlagsSetter feature_flags_setter_ =
       test::ScopedEmulatorFeatureFlagsSetter(
@@ -407,6 +424,8 @@ class QueryEngineTest
       change_stream_schema_ =
           test::CreateSchemaWithOneTableAndOneChangeStream(&type_factory_);
       model_schema_ = test::CreateSchemaWithOneModel(&type_factory_);
+      property_graph_schema_ =
+          test::CreateSchemaWithOnePropertyGraph(&type_factory_);
       ZETASQL_ASSERT_OK_AND_ASSIGN(gpk_schema_,
                            test::CreateGpkSchemaWithOneTable(&type_factory_));
       ZETASQL_ASSERT_OK_AND_ASSIGN(sequence_schema_,
@@ -1560,6 +1579,80 @@ TEST_P(QueryEngineTest, TestMlQuery) {
     EXPECT_EQ(ToString(result),
               R"(int64_col,Outcome(INT64,BOOL) : 1,false,2,false,4,true,)");
   }
+}
+
+TEST_P(QueryEngineTest, TestPropertyGraphBasicQuery) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      "GRAPH test_graph "
+      "MATCH (a) "
+      "RETURN a.id AS node_id"};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), R"(node_id(INT64) : 2,1,4,)");
+}
+
+TEST_P(QueryEngineTest, TestPropertyGraphPathAggQuery) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      "GRAPH test_graph "
+      "MATCH (a)-[e]->(b) "
+      "RETURN a.id AS start_node, COUNT(e.from_id) AS paths_from_start "
+      "GROUP BY start_node"};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result),
+            R"(start_node,paths_from_start(INT64,INT64) : 2,1,1,2,4,1,)");
+}
+
+TEST_P(QueryEngineTest, TestPropertyGraphPathFilterQuery) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      "GRAPH test_graph "
+      "MATCH (a)-[e]->(b WHERE b.id > 1) "
+      "WHERE a.id < b.id "
+      "RETURN a.id AS start_node"};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), R"(start_node(INT64) : 1,1,2,)");
+}
+
+TEST_P(QueryEngineTest,
+       TestPropertyGraphQuantifiedPathQueryWithGroupVariables) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      "GRAPH test_graph "
+      "MATCH (x:Test)((a)-[]->(b)){2}(z:Test) "
+      "RETURN x.id AS start_node, ARRAY_LENGTH(a) AS paths_from_start"};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(
+      ToString(result),
+      R"(start_node,paths_from_start(INT64,INT64) : 2,2,1,2,4,2,1,2,4,2,)");
 }
 
 TEST_P(QueryEngineTest, TestJsonbArrayElements) {
@@ -3534,6 +3627,44 @@ TEST_P(QueryEngineTest, IndexUsingUDF) {
   EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
               IsOkAndHolds(ElementsAre(ElementsAre(Int64(1), Int64(2)),
                                        ElementsAre(Int64(5), Int64(6)))));
+}
+
+TEST_P(QueryEngineTest, ForUpdateQueriesValid) {
+  ZETASQL_EXPECT_OK(query_engine().ExecuteSql(
+      Query{"SELECT string_col FROM test_table FOR UPDATE"},
+      QueryContext{
+          .schema = schema(), .reader = reader(), .is_read_only_txn = false}));
+  ZETASQL_EXPECT_OK(query_engine().ExecuteSql(
+      Query{"SELECT string_col FROM test_table WHERE int64_col = 1 FOR UPDATE"},
+      QueryContext{
+          .schema = schema(), .reader = reader(), .is_read_only_txn = false}));
+}
+
+TEST_P(QueryEngineTest, ForUpdateQueriesInvalid) {
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{"SELECT string_col FROM test_table FOR UPDATE"},
+          QueryContext{.schema = schema(),
+                       .reader = reader(),
+                       .is_read_only_txn = true}),
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          HasSubstr("FOR UPDATE is not supported in this transaction type")));
+
+  std::string lock_hint =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "/*@lock_scanned_ranges=exclusive*/"
+          : "@{lock_scanned_ranges=EXCLUSIVE}";
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{absl::Substitute(
+              "$0SELECT string_col FROM test_table FOR UPDATE", lock_hint)},
+          QueryContext{.schema = schema(),
+                       .reader = reader(),
+                       .is_read_only_txn = false}),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("FOR UPDATE cannot be combined with statement-level "
+                         "lock hints")));
 }
 
 class DefaultValuesTest : public QueryEngineTest {

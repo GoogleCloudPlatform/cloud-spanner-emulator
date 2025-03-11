@@ -197,6 +197,13 @@ absl::StatusOr<RangeTblEntry*> makePartialRangeTblEntry(bool inFromCl,
 absl::StatusOr<RangeTblFunction*> makeRangeTblFunction(FuncExpr* func_expr,
                                                        bool ordinality);
 
+// Builds a RowMarkClause to be added to a query if the query specified a
+// locking clause.
+absl::StatusOr<RowMarkClause*> makeRowMarkClause(Index rti,
+                                                 LockClauseStrength strength,
+                                                 LockWaitPolicy wait_policy,
+                                                 bool pushed_down);
+
 // Returns true if the input Node is an expression.
 bool IsExpr(const Node& input);
 

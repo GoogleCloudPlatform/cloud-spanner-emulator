@@ -109,6 +109,8 @@ struct TranslationOptions {
   // enable_change_streams_allow_txn_exclusion_option allows
   // allow_txn_exclusion change stream option.
   bool enable_change_streams_allow_txn_exclusion_option = false;
+  // This enables support for search index in Spangres.
+  bool enable_search_index = true;
   // enable_alter_index allows translation of <ALTER INDEX>.
   bool enable_alter_index = true;
   // enable_role_based_access allows role-based access control, e.g.
@@ -124,6 +126,8 @@ struct TranslationOptions {
   bool enable_virtual_generated_column = false;
   // enable_vector_length allows translation of <VECTOR LENGTH> clause.
   bool enable_vector_length = true;
+  // enable_hidden_column allows translation of the <HIDDEN> constraint.
+  bool enable_hidden_column = true;
   bool enable_serial_types = false;
 };
 

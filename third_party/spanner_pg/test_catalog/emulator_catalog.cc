@@ -140,6 +140,7 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
   //       numeric_value PG.NUMERIC,
   //       jsonb_value PG.JSONB,
   //       float_value FLOAT32,
+  //       uuid_value UUID,
   //     ) PRIMARY KEY(int64_value)
   //   )",
   Table::Builder tb = table_builder("AllSpangresTypes");
@@ -182,6 +183,7 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
 
   std::unique_ptr<const KeyColumn> int64_value_primary =
       KeyColumn::Builder().set_column(int64_value.get()).build();
+
   std::unique_ptr<const Table> table =
       tb.add_column(int64_value.get())
           .add_column(bool_value.get())

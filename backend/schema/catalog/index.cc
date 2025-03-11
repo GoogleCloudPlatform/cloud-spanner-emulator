@@ -25,6 +25,7 @@
 #include "absl/strings/substitute.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/table.h"
 #include "common/errors.h"
 #include "absl/status/status.h"
@@ -122,6 +123,12 @@ absl::Status Index::DeepClone(SchemaGraphEditor* editor,
     if (managing_nodes_.empty()) {
       MarkDeleted();
     }
+  }
+
+  if (locality_group_) {
+    ZETASQL_ASSIGN_OR_RETURN(const auto* locality_group,
+                     editor->Clone(locality_group_));
+    locality_group_ = locality_group->As<const LocalityGroup>();
   }
 
   return absl::OkStatus();

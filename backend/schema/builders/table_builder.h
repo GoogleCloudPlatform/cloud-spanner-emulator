@@ -32,6 +32,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/updater/schema_validation_context.h"
@@ -244,6 +245,16 @@ class Table::Editor {
     if (instance_->synonym_ == synonym) {
       instance_->synonym_ = "";
     }
+    return *this;
+  }
+
+  Editor& set_locality_group(const LocalityGroup* locality_group) {
+    instance_->locality_group_ = locality_group;
+    return *this;
+  }
+
+  Editor& clear_locality_group() {
+    instance_->locality_group_ = nullptr;
     return *this;
   }
 

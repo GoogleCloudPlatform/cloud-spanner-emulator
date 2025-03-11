@@ -141,6 +141,11 @@ absl::Status IndexHintValidator::ValidateIndexesForTables() {
             "queries by default");
       }
 
+      // FOR UPDATE queries are not supported on search indexes.
+      if (in_select_for_update_query_) {
+        return error::ForUpdateUnsupportedInSearchQueries();
+      }
+
       if (in_partition_query_) {
         // Not allowed in batch query.
         return error::SearchIndexNotUsable(

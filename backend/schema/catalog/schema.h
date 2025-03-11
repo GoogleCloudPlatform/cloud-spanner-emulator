@@ -29,8 +29,10 @@
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/database_options.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/named_schema.h"
+#include "backend/schema/catalog/property_graph.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
@@ -128,11 +130,22 @@ class Schema {
   // case-insensitive.
   const Model* FindModel(const std::string& model_name) const;
 
+  // Finds a property graph by its name. Returns a const pointer of the
+  // property graph, or nullptr if the property graph is not found. Name
+  // comparison is case-insensitive.
+  const PropertyGraph* FindPropertyGraph(const std::string& graph_name) const;
+
   // Finds a named schema by its name. Returns a const pointer of the named
   // schema, or a nullptr if the named schema is not found. Name comparison is
   // case-insensitive.
   const NamedSchema* FindNamedSchema(
       const std::string& named_schema_name) const;
+
+  // Finds a locality group by its name. Returns a const pointer of the locality
+  // group, or a nullptr if the locality group is not found. Name comparison is
+  // case-insensitive.
+  const LocalityGroup* FindLocalityGroup(
+      const std::string& locality_group_name) const;
 
   // List all the user-visible tables in this schema.
   absl::Span<const Table* const> tables() const { return tables_; }
@@ -150,15 +163,36 @@ class Schema {
     return change_streams_;
   }
 
-  // List all the user-visible sequences in this schema.
+  // List all user-visible and internal sequences in this schema.
   absl::Span<const Sequence* const> sequences() const { return sequences_; }
+
+  // List all the user-visible sequences in this schema.
+  std::vector<const Sequence*> user_visible_sequences() const {
+    std::vector<const Sequence*> user_sequences;
+    for (const Sequence* sequence : sequences_) {
+      if (!sequence->is_internal_use()) {
+        user_sequences.push_back(sequence);
+      }
+    }
+    return user_sequences;
+  }
 
   // List all the user-visible models in this schema.
   absl::Span<const Model* const> models() const { return models_; }
 
+  // List all the user-visible property graphs in this schema.
+  absl::Span<const PropertyGraph* const> property_graphs() const {
+    return property_graphs_;
+  }
+
   // List all the user-visible named schemas in this schema.
   absl::Span<const NamedSchema* const> named_schemas() const {
     return named_schemas_;
+  }
+
+  // List all the locality groups in this schema.
+  absl::Span<const LocalityGroup* const> locality_groups() const {
+    return locality_groups_;
   }
 
   // Return user-visible options in this schema.
@@ -181,6 +215,9 @@ class Schema {
 
   // Returns the number of table synonyms in the schema.
   int num_table_synonym() const { return synonyms_map_.size(); }
+
+  // Returns the number of locality groups in the schema.
+  int num_locality_groups() const { return locality_groups_map_.size(); }
 
   // Returns the shared pointer to the ProtoBundle holding the proto types.
   std::shared_ptr<const ProtoBundle> proto_bundle() const {
@@ -266,6 +303,20 @@ class Schema {
   // A map that owns all the named schemas. Key is the name of the named
   // schemas. Hash and comparison on the keys are case-insensitive.
   CaseInsensitiveStringMap<const NamedSchema*> named_schemas_map_;
+
+  // A vector that maintains the original order of locality groups in the DDL.
+  std::vector<const LocalityGroup*> locality_groups_;
+
+  // A map that owns all the locality groups. Key is the name of the locality
+  // group. Hash and comparison on the keys are case-insensitive.
+  CaseInsensitiveStringMap<const LocalityGroup*> locality_groups_map_;
+
+  // A vector that maintains the original order of property graphs in the DDL.
+  std::vector<const PropertyGraph*> property_graphs_;
+
+  // A map that owns all the property graphs. Key is the name of the property
+  // graph. Hash and comparison on the keys are case-insensitive.
+  CaseInsensitiveStringMap<const PropertyGraph*> property_graphs_map_;
 
   // Database options in the DDL.
   const DatabaseOptions* database_options_ = nullptr;

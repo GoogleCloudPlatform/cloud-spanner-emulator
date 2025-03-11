@@ -17,6 +17,8 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_QUERY_CONTEXT_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_QUERY_CONTEXT_H_
 
+#include <optional>
+
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/schema/catalog/schema.h"
@@ -45,6 +47,11 @@ struct QueryContext {
   // transactions. E.g. when analyzing a column expression, in partitioned DML,
   // or read-write transactions.
   bool allow_read_write_only_functions = false;
+
+  // nullopt if it hasn't been set, true if the query is executed in the
+  // context of a read-only transaction and false if the query is executed in
+  // the context of a read-write transaction.
+  std::optional<bool> is_read_only_txn = std::nullopt;
 };
 
 }  // namespace backend

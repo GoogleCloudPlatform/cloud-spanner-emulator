@@ -60,6 +60,15 @@ extern const char kWitnessLocationOptionName[];
 extern const char kDefaultLeaderOptionName[];
 extern const char kVersionRetentionPeriodOptionName[];
 extern const char kDefaultSequenceKindOptionName[];
+extern const char kLocalityGroupOptionName[];
+extern const char kLocalityGroupStorageOptionName[];
+extern const char kLocalityGroupStorageOptionSSDVal[];
+extern const char kLocalityGroupStorageOptionHDDVal[];
+extern const char kLocalityGroupSpillTimeSpanOptionName[];
+extern const char kInternalLocalityGroupStorageOptionName[];
+extern const char kInternalLocalityGroupSpillTimeSpanOptionName[];
+extern const char kDefaultLocalityGroupName[];
+
 absl::Status ParseDDLStatement(absl::string_view ddl, DDLStatement* statement);
 
 }  // namespace ddl

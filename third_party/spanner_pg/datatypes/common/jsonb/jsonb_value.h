@@ -30,8 +30,8 @@
 //------------------------------------------------------------------------------
 
 // This file declares the PG.JSONB parsing interface method.
-#ifndef DATATYPES_COMMON_JSONB_JSONB_PARSE_H_
-#define DATATYPES_COMMON_JSONB_JSONB_PARSE_H_
+#ifndef DATATYPES_COMMON_JSONB_JSONB_VALUE_H_
+#define DATATYPES_COMMON_JSONB_JSONB_VALUE_H_
 
 #include <string>
 
@@ -64,4 +64,4 @@ bool IsValidJsonbString(absl::string_view str);
 
 }  // namespace postgres_translator::spangres::datatypes::common::jsonb
 
-#endif  // DATATYPES_COMMON_JSONB_JSONB_PARSE_H_
+#endif  // DATATYPES_COMMON_JSONB_JSONB_VALUE_H_

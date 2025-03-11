@@ -288,6 +288,13 @@ absl::Status IllegalChangeStreamQueryPGSyntax(
 absl::Status ChangeStreamQueriesMustBeSingleUseOnly();
 absl::Status ChangeStreamQueriesMustBeStrongReads();
 absl::Status ChangeStreamQueriesMustBeStreaming();
+absl::Status LocalityGroupNotFound(absl::string_view locality_group_name);
+absl::Status DroppingLocalityGroupWithAssignedTableColumn(
+    absl::string_view locality_group_name);
+absl::Status CreatingDefaultLocalityGroup();
+absl::Status DroppingDefaultLocalityGroup();
+absl::Status InvalidLocalityGroupName(absl::string_view locality_group_name);
+absl::Status AlterLocalityGroupWithoutOptions();
 absl::Status TooManyIndicesPerDatabase(absl::string_view index_name,
                                        int64_t limit);
 absl::Status TooManyColumns(absl::string_view object_type,
@@ -423,6 +430,28 @@ absl::Status ModelColumnGenerated(absl::string_view model_name,
                                   absl::string_view column_name);
 absl::Status ModelColumnDefault(absl::string_view model_name,
                                 absl::string_view column_name);
+
+// Property graph errors.
+absl::Status TooManyPropertyGraphsPerDatabase(absl::string_view graph_name,
+                                              int64_t limit);
+absl::Status PropertyGraphNotFound(absl::string_view property_graph_name);
+absl::Status PropertyGraphDuplicateLabel(absl::string_view property_graph_name,
+                                         std::string_view label_name);
+absl::Status PropertyGraphDuplicatePropertyDeclaration(
+    absl::string_view property_graph_name,
+    absl::string_view property_declaration_name);
+absl::Status GraphElementTableLabelNotFound(
+    absl::string_view property_graph_name, absl::string_view element_table_name,
+    absl::string_view label_name);
+absl::Status GraphElementTablePropertyDefinitionNotFound(
+    absl::string_view property_graph_name, absl::string_view element_table_name,
+    absl::string_view property_definition_name);
+absl::Status GraphEdgeTableSourceNodeTableNotFound(
+    absl::string_view property_graph_name, absl::string_view edge_table_name,
+    absl::string_view node_table_name);
+absl::Status GraphEdgeTableDestinationNodeTableNotFound(
+    absl::string_view property_graph_name, absl::string_view edge_table_name,
+    absl::string_view node_table_name);
 
 // Schema access errors.
 absl::Status TableNotFound(absl::string_view table_name);
@@ -801,6 +830,20 @@ absl::Status SearchIndexNotUsable(absl::string_view index_name,
 absl::Status SearchIndexTokenlistKeyOrderUnsupported(
     absl::string_view column_name, absl::string_view index_name);
 
+// create vector index errors
+absl::Status VectorIndexPartitionByUnsupported(absl::string_view index_name);
+absl::Status VectorIndexNonArrayKey(absl::string_view column_string,
+                                    absl::string_view index_string);
+absl::Status VectorIndexArrayKeyMustBeFloatOrDouble(
+    absl::string_view column_string, absl::string_view index_string);
+absl::Status VectorIndexArrayKeyMustHaveVectorLength(
+    absl::string_view column_string, absl::string_view index_string);
+absl::Status VectorIndexArrayKeyVectorLengthTooLarge(
+    absl::string_view column_string, absl::string_view index_string,
+    int64_t actual_len_num, int64_t max_len_num);
+absl::Status VectorIndexKeyNotNullFiltered(absl::string_view column_string,
+                                           absl::string_view index_string);
+
 absl::Status FpAlgorithmOnlySupportedOnFloats();
 absl::Status NumericIndexingUnsupportedComparisonType(
     absl::string_view function_name, absl::string_view comparison_type);
@@ -969,6 +1012,13 @@ absl::Status CannotAlterColumnToDropIdentity(absl::string_view table_string,
                                              absl::string_view column_string);
 absl::Status CannotAlterIdentityColumnToGeneratedOrDefaultColumn(
     absl::string_view table_string, absl::string_view column_string);
+
+absl::Status OptionsError(absl::string_view error_string);
+
+// FOR UPDATE-related errors
+absl::Status ForUpdateUnsupportedInReadOnlyTransactions();
+absl::Status ForUpdateUnsupportedInSearchQueries();
+absl::Status ForUpdateCannotCombineWithLockScannedRanges();
 
 }  // namespace error
 }  // namespace emulator

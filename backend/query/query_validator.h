@@ -45,6 +45,22 @@ namespace backend {
 bool IsSearchQueryAllowed(const QueryEngineOptions* options,
                           const QueryContext& context);
 
+// Returns true if the given node or any of its descendants is a
+// ResolvedLockMode node which makes this a query that uses SELECT FOR UPDATE.
+bool IsSelectForUpdateQuery(const zetasql::ResolvedNode& node);
+
+// QueryFeatures provides information about features used in a query.
+struct QueryFeatures {
+  // If true, we're in a query with a FOR UPDATE clause. Required for returning
+  // appropriate errors when combined with other features.
+  bool has_for_update = false;
+
+  // If true, it affects errors returned by FOR UPDATE queries. The value of
+  // the hint is ignored even if it was specified since the emulator doesn't
+  // acquire locks.
+  bool has_lock_scanned_ranges = false;
+};
+
 // Implements ResolvedASTVisitor to validate various nodes in an AST and
 // collect information of interest (such as index names).
 class QueryValidator : public zetasql::ResolvedASTVisitor {
@@ -136,14 +152,19 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
       const zetasql::ResolvedNodeKind node_kind,
       const absl::flat_hash_map<absl::string_view, zetasql::Value>& hint_map);
 
+  absl::Status CheckSearchFunctionsAreAllowed(
+      const zetasql::ResolvedFunctionCall& function_call);
+
+  // Validate that the presence of a ResolvedLockMode node (FOR UPDATE in a
+  // SELECT query) is valid in this context.
+  absl::Status CheckTableScanLockModeAllowed(const QueryEngineOptions* options,
+                                             const QueryContext& context) const;
+
   // Check a node's hint map and extracts query engine options from any Spanner
   // hints
   absl::Status ExtractSpannerOptionsForNode(
       const absl::flat_hash_map<absl::string_view, zetasql::Value>&
-          node_hint_map) const;
-
-  absl::Status CheckSearchFunctionsAreAllowed(
-      const zetasql::ResolvedFunctionCall& function_call);
+          node_hint_map);
 
   // Extracts query engine options from any Emulator-specific hints
   // 'node_hint_map' for a node.
@@ -184,6 +205,11 @@ class QueryValidator : public zetasql::ResolvedASTVisitor {
   // Options for the query engine that are extracted through user-specified
   // hints.
   QueryEngineOptions* extracted_options_;
+
+  // Features used by the query. Required to verify if a feature used in one
+  // part of a query can be combined with features used in another part of the
+  // query.
+  QueryFeatures query_features_;
 };
 
 }  // namespace backend

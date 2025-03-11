@@ -27,6 +27,7 @@
 #include "absl/memory/memory.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
@@ -93,6 +94,12 @@ class Index::Builder {
     return *this;
   }
 
+  Builder& set_vector_index_type(bool is_vector_index) {
+    instance_->index_type_ = is_vector_index ? Index::IndexType::kVectorIndex
+                                             : Index::IndexType::kIndex;
+    return *this;
+  }
+
   Builder& add_partition_by_column(const Column* column) {
     instance_->partition_by_.push_back(column);
     return *this;
@@ -112,6 +119,17 @@ class Index::Builder {
     if (postgresql_oid.has_value()) {
       instance_->set_postgresql_oid(postgresql_oid.value());
     }
+    return *this;
+  }
+
+  Builder& set_locality_group(const LocalityGroup* locality_group) {
+    instance_->locality_group_ = locality_group;
+    return *this;
+  }
+
+  Builder& set_vector_index_options(
+      const ddl::VectorIndexOptionsProto& vector_index_options) {
+    instance_->vector_index_options_ = vector_index_options;
     return *this;
   }
 
@@ -138,6 +156,16 @@ class Index::Editor {
 
   Editor& add_stored_column(const Column* column) {
     instance_->stored_columns_.push_back(column);
+    return *this;
+  }
+
+  Editor& set_locality_group(const LocalityGroup* locality_group) {
+    instance_->locality_group_ = locality_group;
+    return *this;
+  }
+
+  Editor& clear_locality_group() {
+    instance_->locality_group_ = nullptr;
     return *this;
   }
 

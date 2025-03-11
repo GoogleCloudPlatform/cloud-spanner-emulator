@@ -95,7 +95,6 @@ TEST_P(DatabaseOptionTest, ValidDefaultSequenceKindOptionName) {
         )"}));
   }
 }
-
 TEST_P(DatabaseOptionTest, InvalidDatabaseOptionName) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {

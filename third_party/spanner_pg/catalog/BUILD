@@ -334,31 +334,6 @@ cc_test(
 )
 
 cc_library(
-    name = "function_catalog",
-    srcs = ["function_catalog.cc"],
-    hdrs = ["function_catalog.h"],
-    deps = [
-        "@com_google_absl//absl/container:btree",
-        "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/public:function",
-        "@com_google_zetasql//zetasql/public:type",
-    ],
-)
-
-cc_test(
-    name = "function_catalog_test",
-    srcs = ["function_catalog_test.cc"],
-    deps = [
-        ":function_catalog",
-        "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-    ],
-)
-
-cc_library(
     name = "catalog_adapter",
     srcs = [
         "catalog_adapter.cc",
@@ -617,7 +592,7 @@ cc_library(
     srcs = ["jsonb_array_elements_table_valued_function.cc"],
     hdrs = ["jsonb_array_elements_table_valued_function.h"],
     deps = [
-        "//third_party/spanner_pg/datatypes/common/jsonb:jsonb_parse",
+        "//third_party/spanner_pg/datatypes/common/jsonb:jsonb_value",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/interface:pg_arena_factory",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -640,7 +615,7 @@ cc_library(
         ":emulator_function_evaluators",
         ":jsonb_array_elements_table_valued_function",
         "//third_party/spanner_pg/datatypes/common:pg_numeric_parse",
-        "//third_party/spanner_pg/datatypes/common/jsonb:jsonb_parse",
+        "//third_party/spanner_pg/datatypes/common/jsonb:jsonb_value",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_conversion_functions",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
@@ -699,6 +674,7 @@ cc_test(
         "@com_google_zetasql//zetasql/public:function",
         "@com_google_zetasql//zetasql/public:interval_value",
         "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:uuid_value",
         "@com_google_zetasql//zetasql/public:value",
         "@com_google_zetasql//zetasql/public/functions:date_time_util",
         "@com_google_zetasql//zetasql/public/types:timestamp_util",

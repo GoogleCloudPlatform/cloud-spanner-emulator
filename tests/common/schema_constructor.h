@@ -76,6 +76,11 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneModel(
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
+std::unique_ptr<const backend::Schema> CreateSchemaWithOnePropertyGraph(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+
 std::unique_ptr<const backend::Schema> CreateSimpleDefaultValuesSchema(
     zetasql::TypeFactory* type_factory);
 

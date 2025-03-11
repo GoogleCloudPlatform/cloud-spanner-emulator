@@ -162,9 +162,11 @@ class SchemaUpdaterTest
       public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
   SchemaUpdaterTest()
-      : feature_flags_({.enable_identity_columns = true,
-                        .enable_serial_auto_increment = true,
-                        .enable_user_defined_functions = true}) {}
+      : feature_flags_({
+            .enable_identity_columns = true,
+            .enable_serial_auto_increment = true,
+            .enable_user_defined_functions = true,
+        }) {}
   absl::StatusOr<std::unique_ptr<const Schema>> CreateSchema(
       absl::Span<const std::string> statements,
       absl::string_view proto_descriptor_bytes = "",

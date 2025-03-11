@@ -897,7 +897,34 @@ INSTANTIATE_TEST_SUITE_P(
                           "array_col from ArrayTypes"),
         TransformTestCase(
             "ArrayConstructorComplexElements",
-            "select array[1+1, key, null] array_col from keyvalue")
+            "select array[1+1, key, null] array_col from keyvalue"),
+        TransformTestCase("SelectForUpdateNoFrom", "SELECT 1 as one FOR UPDATE")
+            .SetGsqlQuery("SELECT 1 as one"),
+        TransformTestCase("SelectForUpdateWithFrom",
+                          "SELECT key, value FROM keyvalue FOR UPDATE"),
+        TransformTestCase("SelectForUpdateWithJoin",
+                          "SELECT kv1.key, kv2.key "
+                          "FROM keyvalue kv1, keyvalue kv2 "
+                          "FOR UPDATE")
+            // We can't compare the original parse tree with the deparsed parse
+            // tree as the original parse tree has two RowMarkClauses (one for
+            // each table in the join) but we don't produce a deparsed parse
+            // tree with two RowMarkClauses here because that leads to a
+            // deparsed query with duplicate FOR UPDATE clauses.
+            .SetPhases(PlanningPhase::kGsqlDeparse),
+        TransformTestCase(
+            "SelectForUpdateWithSubquery",
+            "SELECT kv1.key, kv2.key "
+            "FROM (SELECT key FROM keyvalue) as kv1, keyvalue kv2 "
+            "FOR UPDATE")
+            // We can't compare the original parse tree with the deparsed parse
+            // tree for the following reasons:
+            // 1. The deparsed parse tree has `hasForUpdate true` and
+            //    `pushedDown false` because we lose information about the fact
+            //     that the FOR UPDATE was pushed down from the outer query to
+            //     the subquery.
+            // 2. We don't add the second RowMarkClause as explained above.
+            .SetPhases(PlanningPhase::kGsqlDeparse)
         ),
     [](const testing::TestParamInfo<TransformTestCase>& info) {
       return info.param.name();
@@ -923,10 +950,6 @@ TEST_F(QueryTransformerTest, PgQueryToGsqlResolvedStatementUnimplementedTest) {
               StatusIs(absl::StatusCode::kInternal));
 
   pg_query->commandType = CMD_NOTHING;
-  EXPECT_THAT(forward_transformer_->BuildGsqlResolvedStatement(*pg_query),
-              StatusIs(absl::StatusCode::kInternal));
-
-  pg_query->commandType = (CmdType)-1;
   EXPECT_THAT(forward_transformer_->BuildGsqlResolvedStatement(*pg_query),
               StatusIs(absl::StatusCode::kInternal));
 }
@@ -1630,12 +1653,25 @@ TEST_F(QueryTransformerTest, UnsupportedQueryFields) {
   query->distinctClause = nullptr;
   query->hasDistinctOn = false;
 
-  // ROW MARK clauses.
-  query->rowMarks = list_make1(makeNode(RowMarkClause));
+  // ROW MARK clause with unsupported lock strength.
+  auto row_mark_clause = makeNode(RowMarkClause);
+  row_mark_clause->strength = LockClauseStrength::LCS_FORKEYSHARE;
+  query->rowMarks = list_make1(row_mark_clause);
+  EXPECT_THAT(transformer->BuildGsqlResolvedStatement(*query),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("Statements with locking clauses other than "
+                                 "FOR UPDATE are not supported")));
+  query->rowMarks = nullptr;
+
+  // ROW MARK clause with unsupported lock wait policy.
+  row_mark_clause->strength = LockClauseStrength::LCS_FORUPDATE;
+  row_mark_clause->waitPolicy = LockWaitPolicy::LockWaitSkip;
+  query->rowMarks = list_make1(row_mark_clause);
   EXPECT_THAT(
       transformer->BuildGsqlResolvedStatement(*query),
       StatusIs(absl::StatusCode::kUnimplemented,
-               HasSubstr("ROW MARK clauses are not supported")));
+               HasSubstr("Statements with locking clauses with lock wait "
+                         "policies are not supported")));
   query->rowMarks = nullptr;
 
   // Constraint clauses.

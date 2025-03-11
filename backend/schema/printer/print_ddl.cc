@@ -44,8 +44,10 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/database_options.h"
 #include "backend/schema/catalog/foreign_key.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/named_schema.h"
+#include "backend/schema/catalog/property_graph.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
@@ -375,6 +377,83 @@ std::string PrintModel(const Model* model) {
   return statement;
 }
 
+std::string PrintLabel(const PropertyGraph::Label& label) {
+  std::string result = label.name;
+  if (!label.property_names.empty()) {
+    absl::StrAppend(&result, " PROPERTIES (",
+                    absl::StrJoin(label.property_names, ", "), ")");
+  }
+  return result;
+}
+
+std::string PrintGraphElementTable(
+    const PropertyGraph* property_graph,
+    const PropertyGraph::GraphElementTable& graph_element_table) {
+  std::string statement = absl::Substitute("$0", graph_element_table.name());
+  if (!graph_element_table.key_clause_columns().empty()) {
+    absl::StrAppend(
+        &statement, " KEY(",
+        absl::StrJoin(graph_element_table.key_clause_columns(), ", "), ")");
+  }
+  // Print labels and their properties
+  for (absl::string_view label_name : graph_element_table.label_names()) {
+    const PropertyGraph::Label* label;
+    absl::Status find_status =
+        property_graph->FindLabelByName(label_name, label);
+    ABSL_CHECK_OK(find_status);
+    absl::StrAppend(&statement, " LABEL ", PrintLabel(*label), "\n");
+  }
+  if (graph_element_table.element_kind() ==
+      PropertyGraph::GraphElementKind::EDGE) {
+    absl::StrAppend(
+        &statement, " SOURCE KEY(",
+        absl::StrJoin(
+            graph_element_table.source_node_reference().edge_table_column_names,
+            ", "),
+        ") REFERENCES ",
+        graph_element_table.source_node_reference().node_table_name, "(",
+        absl::StrJoin(
+            graph_element_table.source_node_reference().node_table_column_names,
+            ", "),
+        ")");
+    absl::StrAppend(
+        &statement, " DESTINATION KEY(",
+        absl::StrJoin(
+            graph_element_table.target_node_reference().edge_table_column_names,
+            ", "),
+        ") REFERENCES ",
+        graph_element_table.target_node_reference().node_table_name, "(",
+        absl::StrJoin(
+            graph_element_table.target_node_reference().node_table_column_names,
+            ", "),
+        ")");
+  }
+  return statement;
+}
+
+std::string PrintPropertyGraph(const PropertyGraph* property_graph) {
+  std::string statement =
+      absl::Substitute("CREATE PROPERTY GRAPH $0\n", property_graph->Name());
+
+  absl::StrAppend(&statement, "NODE TABLES(\n");
+  for (const PropertyGraph::GraphElementTable& node_table :
+       property_graph->NodeTables()) {
+    absl::StrAppend(&statement, "  ",
+                    PrintGraphElementTable(property_graph, node_table), ",\n");
+  }
+  absl::StrAppend(&statement, ")\n");
+
+  absl::StrAppend(&statement, "EDGE TABLES(\n");
+  for (const PropertyGraph::GraphElementTable& edge_table :
+       property_graph->EdgeTables()) {
+    absl::StrAppend(&statement, "  ",
+                    PrintGraphElementTable(property_graph, edge_table), ",\n");
+  }
+  absl::StrAppend(&statement, ")\n");
+
+  return statement;
+}
+
 std::string PrintTable(const Table* table) {
   std::string table_string =
       absl::Substitute("CREATE TABLE $0 (\n", PrintName(table->Name()));
@@ -491,6 +570,11 @@ void TopologicalOrderSchemaNodes(
 
   if (const Model* model = node->As<const Model>(); model != nullptr) {
     statements->push_back(PrintModel(model));
+  }
+
+  if (const PropertyGraph* property_graph = node->As<const PropertyGraph>();
+      property_graph != nullptr) {
+    statements->push_back(PrintPropertyGraph(property_graph));
   }
 }
 
@@ -623,6 +707,44 @@ std::string PrintProtoBundle(std::shared_ptr<const ProtoBundle> proto_bundle) {
   return proto_bundle_statement;
 }
 
+std::string PrintLocalityGroup(const LocalityGroup* locality_group) {
+  std::string locality_group_statement = absl::Substitute(
+      "CREATE LOCALITY GROUP $0", PrintName(locality_group->Name()));
+
+  if (!locality_group->options().empty()) {
+    absl::StrAppend(&locality_group_statement, " ", "OPTIONS ( ",
+                    PrintLocalityGroupOptions(locality_group->options()), " )");
+  }
+  return locality_group_statement;
+}
+
+std::string PrintLocalityGroupOptions(
+    ::google::protobuf::RepeatedPtrField<ddl::SetOption> options) {
+  return absl::StrJoin(
+      options, ", ", [](std::string* out, const ddl::SetOption& option) {
+        if (option.option_name() ==
+            ddl::kInternalLocalityGroupStorageOptionName) {
+          absl::StrAppend(out, ddl::kLocalityGroupStorageOptionName, " = ");
+          absl::StrAppend(out,
+                          zetasql::ToSingleQuotedStringLiteral(
+                              option.bool_value()
+                                  ? ddl::kLocalityGroupStorageOptionSSDVal
+                                  : ddl::kLocalityGroupStorageOptionHDDVal));
+        } else if (option.option_name() ==
+                   ddl::kInternalLocalityGroupSpillTimeSpanOptionName) {
+          for (const auto& timeSpan : option.string_list_value()) {
+            absl::string_view raw_time_span = timeSpan;
+            if (absl::ConsumePrefix(&raw_time_span, "disk:")) {
+              absl::StrAppend(out, ddl::kLocalityGroupSpillTimeSpanOptionName,
+                              " = ");
+              absl::StrAppend(
+                  out, zetasql::ToSingleQuotedStringLiteral(raw_time_span));
+            }
+          }
+        }
+      });
+}
+
 absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
     const Schema* schema) {
   std::vector<std::string> statements;
@@ -659,7 +781,7 @@ absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
 
   // Print schema nodes while ensuring that dependencies are printed first.
   absl::flat_hash_set<const SchemaNode*> visited;
-  for (const Sequence* sequence : schema->sequences()) {
+  for (const Sequence* sequence : schema->user_visible_sequences()) {
     TopologicalOrderSchemaNodes(sequence, &visited, &statements);
   }
   for (const Table* table : schema->tables()) {
@@ -676,6 +798,17 @@ absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
   }
   for (const Udf* udf : schema->udfs()) {
     TopologicalOrderSchemaNodes(udf, &visited, &statements);
+  }
+  for (const PropertyGraph* property_graph : schema->property_graphs()) {
+    TopologicalOrderSchemaNodes(property_graph, &visited, &statements);
+  }
+
+  for (auto locality_group : schema->locality_groups()) {
+    // The default locality group will be added to the schema
+    // only when it has been altered by the user.
+    if (!IsSystemLocalityGroup(locality_group->Name())) {
+      statements.push_back(PrintLocalityGroup(locality_group));
+    }
   }
 
   return statements;

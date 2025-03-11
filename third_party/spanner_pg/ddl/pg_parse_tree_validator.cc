@@ -734,7 +734,7 @@ absl::Status ValidateParseTreeNode(const RangeVar& node,
   if (node.schemaname != nullptr) {
     ZETASQL_RET_CHECK(*node.schemaname != '\0');
   }
-  if (absl::StrContains(node.schemaname, ".")) {
+  if (node.schemaname != nullptr && absl::StrContains(node.schemaname, ".")) {
     return UnsupportedTranslationError(absl::Substitute(
         "Dot(.) is not supported in schema name: $0.", node.schemaname));
   }
