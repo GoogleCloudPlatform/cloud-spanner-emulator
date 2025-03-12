@@ -53,6 +53,9 @@ constexpr int kMaxModelDefaultBatchSize = 10;
 constexpr int kMaxStructFieldCount = 10;
 constexpr int kMaxComplexTypeNestingDepth = 5;
 
+// Maximum number of property graphs per database.
+constexpr int kMaxPropertyGraphsPerDatabase = 16;
+
 // Minimum retention duration supported for Change Streams in seconds.
 constexpr int kChangeStreamsMinRetention = 60 * 60 * 24;
 

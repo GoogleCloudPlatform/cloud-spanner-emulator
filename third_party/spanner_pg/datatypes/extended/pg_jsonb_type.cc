@@ -55,7 +55,7 @@
 #include "absl/strings/cord.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "third_party/spanner_pg/datatypes/common/jsonb/jsonb_parse.h"
+#include "third_party/spanner_pg/datatypes/common/jsonb/jsonb_value.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/interface/pg_arena_factory.h"

@@ -29,6 +29,10 @@ namespace backend {
 // Parses the retention period provided in the DDL statement and the returned
 // time is in seconds. Return -1 if the retention period is invalid.
 int64_t ParseSchemaTimeSpec(absl::string_view spec);
+
+// Returns true if the given name is a system locality group.
+bool IsSystemLocalityGroup(absl::string_view name);
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

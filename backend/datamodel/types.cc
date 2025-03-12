@@ -76,9 +76,13 @@ bool IsSupportedColumnType(const zetasql::Type* type) {
   }
 }
 
-bool IsSupportedKeyColumnType(const zetasql::Type* type) {
+bool IsSupportedKeyColumnType(const zetasql::Type* type,
+                              bool is_vector_index) {
   // According to https://cloud.google.com/spanner/docs/data-types
-  if (type->IsArray() || type->IsJson()) {
+  if (type->IsJson()) {
+    return false;
+  }
+  if (type->IsArray() && !is_vector_index) {
     return false;
   }
   // PG.NUMERIC and JSONB do not support Primary/Foreign Key according to

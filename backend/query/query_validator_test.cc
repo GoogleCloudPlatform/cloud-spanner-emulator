@@ -69,6 +69,50 @@ TEST_F(QueryValidatorTest, ValidateUnsupportedHintReturnsError) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
+
+TEST_F(QueryValidatorTest, ValidateScanMethodHintWithBatchValueReturnsOk) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<zetasql::ResolvedTableScan> resolved_table_scan =
+      zetasql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+  resolved_table_scan->add_hint_list(zetasql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"scan_method",
+      zetasql::MakeResolvedLiteral(zetasql::Value::String("batch"))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  ZETASQL_ASSERT_OK(resolved_table_scan->Accept(&validator));
+}
+
+TEST_F(QueryValidatorTest, ValidateScanMethodHintWithRowValueReturnsOk) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<zetasql::ResolvedTableScan> resolved_table_scan =
+      zetasql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+  resolved_table_scan->add_hint_list(zetasql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"scan_method",
+      zetasql::MakeResolvedLiteral(zetasql::Value::String("row"))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  ZETASQL_ASSERT_OK(resolved_table_scan->Accept(&validator));
+}
+
+TEST_F(QueryValidatorTest, ValidateScanMethodHintWithInvalidValueReturnsError) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<zetasql::ResolvedTableScan> resolved_table_scan =
+      zetasql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+  resolved_table_scan->add_hint_list(zetasql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"scan_method",
+      zetasql::MakeResolvedLiteral(zetasql::Value::String("invalid"))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  ASSERT_THAT(resolved_table_scan->Accept(&validator),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
 TEST_F(QueryValidatorTest, ValidateHintWithUnmatchedValueTypeReturnsError) {
   QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
   std::unique_ptr<zetasql::ResolvedTableScan> resolved_table_scan =

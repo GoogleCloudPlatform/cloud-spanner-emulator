@@ -16,6 +16,7 @@
 
 #include "backend/query/query_validator.h"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -130,6 +131,9 @@ constexpr absl::string_view kHintAllowSearchIndexesInTransaction =
 
 constexpr absl::string_view kRequireEnhanceQuery = "require_enhance_query";
 constexpr absl::string_view kEnhanceQueryTimeoutMs = "enhance_query_timeout_ms";
+constexpr absl::string_view kScanMethod = "scan_method";
+constexpr absl::string_view kScanMethodBatch = "batch";
+constexpr absl::string_view kScanMethodRow = "row";
 
 absl::Status CollectHintsForNode(
     const zetasql::ResolvedOption* hint,
@@ -159,6 +163,13 @@ bool IsSearchQueryAllowed(const QueryEngineOptions* options,
   }
 
   return true;
+}
+
+bool IsSelectForUpdateQuery(const zetasql::ResolvedNode& node) {
+  std::vector<const zetasql::ResolvedNode*> scan_nodes;
+  node.GetDescendantsSatisfying(
+      &zetasql::ResolvedNode::Is<zetasql::ResolvedLockMode>, &scan_nodes);
+  return !scan_nodes.empty();
 }
 
 absl::Status QueryValidator::ValidateHints(
@@ -210,7 +221,7 @@ absl::Status QueryValidator::CheckSpannerHintName(
                           zetasql_base::StringViewCaseEqual>>{
       {zetasql::RESOLVED_TABLE_SCAN,
        {kHintForceIndex, kHintTableScanGroupByScanOptimization,
-        kHintIndexStrategy}},
+        kHintIndexStrategy, kScanMethod}},
       {zetasql::RESOLVED_JOIN_SCAN,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
         kHintJoinForceOrder, kHashJoinExecution}},
@@ -236,6 +247,7 @@ absl::Status QueryValidator::CheckSpannerHintName(
            kHintAllowSearchIndexesInTransaction,
            kRequireEnhanceQuery,
            kEnhanceQueryTimeoutMs,
+           kScanMethod,
        }},
       {zetasql::RESOLVED_SUBQUERY_EXPR,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
@@ -298,6 +310,7 @@ absl::Status QueryValidator::CheckHintValue(
           {kHintAllowSearchIndexesInTransaction, zetasql::types::BoolType()},
           {kRequireEnhanceQuery, zetasql::types::BoolType()},
           {kEnhanceQueryTimeoutMs, zetasql::types::Int64Type()},
+          {kScanMethod, zetasql::types::StringType()},
       }};
 
   const auto& iter = supported_hint_types->find(name);
@@ -393,13 +406,19 @@ absl::Status QueryValidator::CheckHintValue(
                                 kHintIndexStrategyForceIndexUnion)) {
       return error::InvalidHintValue(name, value.DebugString());
     }
+  } else if (absl::EqualsIgnoreCase(name, kScanMethod)) {
+    const std::string& string_value = value.string_value();
+    if (!(absl::EqualsIgnoreCase(string_value, kScanMethodBatch) ||
+          absl::EqualsIgnoreCase(string_value, kScanMethodRow))) {
+      return error::InvalidHintValue(name, value.DebugString());
+    }
   }
   return absl::OkStatus();
 }
 
 absl::Status QueryValidator::ExtractSpannerOptionsForNode(
     const absl::flat_hash_map<absl::string_view, zetasql::Value>&
-        node_hint_map) const {
+        node_hint_map) {
   // Only extract options if they are requested.
   if (extracted_options_ == nullptr) {
     return absl::OkStatus();
@@ -411,6 +430,10 @@ absl::Status QueryValidator::ExtractSpannerOptionsForNode(
       // We already checked the hint type in CheckHintValue.
       extracted_options_->allow_search_indexes_in_transaction =
           hint_value.bool_value();
+    }
+    if (absl::EqualsIgnoreCase(hint_name, kHintLockScannedRange)) {
+      // We already checked the hint type in CheckHintValue.
+      query_features_.has_lock_scanned_ranges = true;
     }
   }
   return absl::OkStatus();
@@ -447,6 +470,22 @@ absl::Status QueryValidator::ExtractEmulatorOptionsForNode(
   return absl::OkStatus();
 }
 
+absl::Status QueryValidator::CheckTableScanLockModeAllowed(
+    const QueryEngineOptions* options, const QueryContext& context) const {
+  // FOR UPDATE can't be run in a read-only transaction.
+  if (context.is_read_only_txn != std::nullopt &&
+      context.is_read_only_txn.value()) {
+    return error::ForUpdateUnsupportedInReadOnlyTransactions();
+  }
+
+  // FOR UPDATE can't be combined with lock_scanned_ranges hints.
+  if (query_features_.has_lock_scanned_ranges) {
+    return error::ForUpdateCannotCombineWithLockScannedRanges();
+  }
+
+  return absl::OkStatus();
+}
+
 namespace {
 
 absl::Status CheckAllowedCasts(const zetasql::Type* from_type,
@@ -474,7 +513,18 @@ absl::Status QueryValidator::VisitResolvedQueryStmt(
       return error::UnsupportedReturnStructAsColumn();
   }
 
-  return DefaultVisit(node);
+  if (IsSelectForUpdateQuery(*node)) {
+    query_features_.has_for_update = true;
+  }
+
+  ZETASQL_RETURN_IF_ERROR(DefaultVisit(node));
+
+  if (IsSelectForUpdateQuery(*node)) {
+    ZETASQL_RETURN_IF_ERROR(
+        CheckTableScanLockModeAllowed(extracted_options_, context_));
+  }
+
+  return absl::OkStatus();
 }
 
 absl::Status QueryValidator::CheckSearchFunctionsAreAllowed(
@@ -496,6 +546,9 @@ absl::Status QueryValidator::CheckSearchFunctionsAreAllowed(
           "SQL Search functions are not supported for transactional "
           "queries by default");
     };
+    if (query_features_.has_for_update) {
+      return error::ForUpdateUnsupportedInSearchQueries();
+    }
   }
 
   return absl::OkStatus();

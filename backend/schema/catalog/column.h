@@ -33,6 +33,7 @@
 #include "backend/common/case.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/change_stream.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/udf.h"
 #include "backend/schema/graph/schema_node.h"
@@ -147,6 +148,9 @@ class Column : public SchemaNode {
   absl::Span<const SchemaNode* const> udf_dependencies() const {
     return udf_dependencies_;
   }
+
+  // The locality group this column belongs to.
+  const LocalityGroup* locality_group() const { return locality_group_; }
 
   // Returns the source column.
   const Column* source_column() const { return source_column_; }
@@ -293,6 +297,9 @@ class Column : public SchemaNode {
   // Indicate if the column is hidden. If true, the column will be excluded from
   // star expansion (SELECT *).
   bool hidden_ = false;
+
+  // The locality group this column belongs to.
+  const LocalityGroup* locality_group_ = nullptr;
 };
 
 // KeyColumn is a single column that is part of the key of a table or an index.

@@ -24,6 +24,7 @@
 #include "zetasql/public/analyzer.h"
 #include "zetasql/public/analyzer_output.h"
 #include "zetasql/public/function.h"
+#include "zetasql/public/property_graph.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "gmock/gmock.h"
@@ -439,6 +440,195 @@ TEST_F(CatalogTest, FindSequence) {
   EXPECT_THAT(catalog().FindSequence({"myseq3"}, &myseq3, {}),
               StatusIs(absl::StatusCode::kNotFound));
   EXPECT_EQ(myseq3, nullptr);
+}
+
+TEST_F(CatalogTest, FindPropertyGraph) {
+  MakeCatalog({
+      R"(
+        CREATE TABLE node_test(
+          Id INT64 NOT NULL,
+        ) PRIMARY KEY(Id)
+      )",
+      R"(
+        CREATE TABLE edge_test(
+          FromId INT64 NOT NULL,
+          ToId INT64 NOT NULL,
+        ) PRIMARY KEY(FromId, ToId)
+      )",
+      R"(
+        CREATE PROPERTY GRAPH test_graph
+            NODE TABLES(
+              node_test KEY(Id)
+                LABEL NodeTest PROPERTIES(Id)
+            )
+            EDGE TABLES(
+              edge_test
+                KEY(FromId, ToId)
+                SOURCE KEY(FromId) REFERENCES node_test(Id)
+                DESTINATION KEY(ToId) REFERENCES node_test(Id)
+                DEFAULT LABEL PROPERTIES ALL COLUMNS EXCEPT (ToId)
+                LABEL EdgeNoPropLabel NO PROPERTIES
+            )
+      )",
+  });
+  // Test property graph.
+  const zetasql::PropertyGraph* graph;
+  ZETASQL_EXPECT_OK(catalog().FindPropertyGraph({"test_graph"}, graph, {}));
+  EXPECT_EQ(graph->FullName(), "test_graph");
+
+  absl::flat_hash_set<const zetasql::GraphElementLabel*> all_graph_labels;
+  ZETASQL_EXPECT_OK(graph->GetLabels(all_graph_labels));
+  EXPECT_EQ(all_graph_labels.size(), 3);
+
+  // Test labels from graph.
+  {
+    const zetasql::GraphElementLabel* graph_label;
+    ZETASQL_EXPECT_OK(graph->FindLabelByName("NodeTest", graph_label));
+    EXPECT_NE(graph_label, nullptr);
+    EXPECT_EQ(graph_label->FullName(), "test_graph.NodeTest");
+
+    absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>
+        property_declarations_from_label;
+    ZETASQL_EXPECT_OK(
+        graph_label->GetPropertyDeclarations(property_declarations_from_label));
+    EXPECT_EQ(property_declarations_from_label.size(), 1);
+    const zetasql::GraphPropertyDeclaration* decl_from_label =
+        *property_declarations_from_label.begin();
+    EXPECT_EQ(decl_from_label->FullName(), "test_graph.Id");
+  }
+  {
+    const zetasql::GraphElementLabel* graph_label;
+    ZETASQL_EXPECT_OK(graph->FindLabelByName("EdgeNoPropLabel", graph_label));
+    EXPECT_NE(graph_label, nullptr);
+    EXPECT_EQ(graph_label->FullName(), "test_graph.EdgeNoPropLabel");
+
+    // Ensure there are NO PROPERTIES
+    absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>
+        property_declarations_from_label;
+    ZETASQL_EXPECT_OK(
+        graph_label->GetPropertyDeclarations(property_declarations_from_label));
+    EXPECT_EQ(property_declarations_from_label.size(), 0);
+  }
+  {
+    const zetasql::GraphElementLabel* graph_label;
+    ZETASQL_EXPECT_OK(graph->FindLabelByName("edge_test", graph_label));
+    EXPECT_NE(graph_label, nullptr);
+    EXPECT_EQ(graph_label->FullName(), "test_graph.edge_test");
+
+    // Ensure all PROPERTIES are linked to this label EXCEPT (ToId)
+    absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>
+        property_declarations_from_label;
+    ZETASQL_EXPECT_OK(
+        graph_label->GetPropertyDeclarations(property_declarations_from_label));
+    EXPECT_EQ(property_declarations_from_label.size(), 1);
+    const zetasql::GraphPropertyDeclaration* decl_from_label =
+        *property_declarations_from_label.begin();
+    EXPECT_EQ(decl_from_label->FullName(), "test_graph.FromId");
+  }
+
+  // Test property declarations from graph.
+  const zetasql::GraphPropertyDeclaration* property_declaration;
+  ZETASQL_EXPECT_OK(graph->FindPropertyDeclarationByName("Id", property_declaration));
+  EXPECT_NE(property_declaration, nullptr);
+  EXPECT_EQ(property_declaration->FullName(), "test_graph.Id");
+  EXPECT_EQ(property_declaration->Type(), zetasql::types::Int64Type());
+
+  // Test node tables from graph.
+  absl::flat_hash_set<const zetasql::GraphNodeTable*> node_tables;
+  ZETASQL_EXPECT_OK(graph->GetNodeTables(node_tables));
+  EXPECT_EQ(node_tables.size(), 1);
+  const zetasql::GraphNodeTable* node_table = *node_tables.begin();
+  EXPECT_EQ(node_table->FullName(), "test_graph.node_test");
+  EXPECT_EQ(node_table->Name(), "node_test");
+  EXPECT_EQ(node_table->kind(), zetasql::GraphNodeTable::Kind::kNode);
+  EXPECT_EQ(absl::StrJoin(node_table->PropertyGraphNamePath(), "."),
+            "test_graph");
+  EXPECT_NE(node_table->GetTable(), nullptr);
+  EXPECT_EQ(node_table->GetKeyColumns().size(), 1);
+  absl::flat_hash_set<const zetasql::GraphPropertyDefinition*> node_prop_defs;
+  ZETASQL_EXPECT_OK(node_table->GetPropertyDefinitions(node_prop_defs));
+  EXPECT_EQ(node_prop_defs.size(), 1);
+  absl::flat_hash_set<const zetasql::GraphElementLabel*> node_labels;
+  ZETASQL_EXPECT_OK(node_table->GetLabels(node_labels));
+  EXPECT_EQ(node_labels.size(), 1);
+
+  const zetasql::GraphElementLabel* node_label;
+  ZETASQL_EXPECT_OK(node_table->FindLabelByName("NodeTest", node_label));
+  EXPECT_NE(node_label, nullptr);
+
+  // Test property declarations from node table's label.
+  absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>
+      property_declarations_from_node_label;
+  ZETASQL_EXPECT_OK(node_label->GetPropertyDeclarations(
+      property_declarations_from_node_label));
+  EXPECT_EQ(property_declarations_from_node_label.size(), 1);
+  const zetasql::GraphPropertyDeclaration* decl_from_node_label =
+      *property_declarations_from_node_label.begin();
+  EXPECT_EQ(decl_from_node_label->FullName(), "test_graph.Id");
+
+  // Test property definitions from node table.
+  const zetasql::GraphPropertyDefinition* property_definition;
+  ZETASQL_EXPECT_OK(
+      node_table->FindPropertyDefinitionByName("Id", property_definition));
+  EXPECT_NE(property_definition, nullptr);
+  EXPECT_EQ(property_definition->expression_sql(), "Id");
+  EXPECT_NE(property_definition->GetValueExpression().value(), nullptr);
+
+  // Test edge tables from graph.
+  absl::flat_hash_set<const zetasql::GraphEdgeTable*> edge_tables;
+  ZETASQL_EXPECT_OK(graph->GetEdgeTables(edge_tables));
+  EXPECT_EQ(edge_tables.size(), 1);
+  const zetasql::GraphEdgeTable* edge_table = *edge_tables.begin();
+  EXPECT_EQ(edge_table->FullName(), "test_graph.edge_test");
+  EXPECT_EQ(edge_table->Name(), "edge_test");
+  EXPECT_EQ(edge_table->kind(), zetasql::GraphEdgeTable::Kind::kEdge);
+
+  // Test source and destination node table references.
+  const zetasql::GraphNodeTableReference* source_node_table_reference =
+      edge_table->GetSourceNodeTable();
+  EXPECT_NE(source_node_table_reference, nullptr);
+  EXPECT_NE(source_node_table_reference->GetReferencedNodeTable(), nullptr);
+  EXPECT_EQ(source_node_table_reference->GetReferencedNodeTable()->FullName(),
+            "test_graph.node_test");
+  EXPECT_GE(source_node_table_reference->GetEdgeTableColumns().size(), 1);
+  EXPECT_GE(source_node_table_reference->GetNodeTableColumns().size(), 1);
+
+  const zetasql::GraphNodeTableReference* dest_node_table_reference =
+      edge_table->GetDestNodeTable();
+  EXPECT_NE(dest_node_table_reference, nullptr);
+  EXPECT_NE(dest_node_table_reference->GetReferencedNodeTable(), nullptr);
+  EXPECT_EQ(dest_node_table_reference->GetReferencedNodeTable()->FullName(),
+            "test_graph.node_test");
+  EXPECT_GE(dest_node_table_reference->GetEdgeTableColumns().size(), 1);
+  EXPECT_GE(dest_node_table_reference->GetNodeTableColumns().size(), 1);
+
+  // Test each public API for the NOT FOUND cases
+  const zetasql::GraphElementTable* not_found_graph_element_table;
+  EXPECT_THAT(graph->FindElementTableByName("NONEXISTENT_ELEMENT",
+                                            not_found_graph_element_table),
+              StatusIs(absl::StatusCode::kNotFound));
+
+  const zetasql::GraphElementLabel* not_found_graph_label;
+  EXPECT_THAT(
+      graph->FindLabelByName("NONEXISTENT_LABEL", not_found_graph_label),
+      StatusIs(absl::StatusCode::kNotFound));
+
+  const zetasql::GraphPropertyDeclaration* not_found_property_declaration;
+  EXPECT_THAT(graph->FindPropertyDeclarationByName(
+                  "NONEXISTENT_PROPERTY_DECL", not_found_property_declaration),
+              StatusIs(absl::StatusCode::kNotFound));
+
+  const zetasql::GraphPropertyDefinition* not_found_property_definition;
+  EXPECT_THAT(node_table->FindPropertyDefinitionByName(
+                  "NONEXISTENT_PROPERTY", not_found_property_definition),
+              StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST_F(CatalogTest, FindPropertyGraphIsNotFound) {
+  const zetasql::PropertyGraph* graph;
+  EXPECT_THAT(catalog().FindPropertyGraph({"BAR"}, graph, {}),
+              StatusIs(absl::StatusCode::kNotFound));
+  EXPECT_EQ(graph, nullptr);
 }
 
 TEST_F(CatalogTest, FindTableWithSynonym) {

@@ -34,6 +34,7 @@
 #include "backend/schema/builders/column_builder.h"
 #include "backend/schema/builders/database_options_builder.h"
 #include "backend/schema/builders/index_builder.h"
+#include "backend/schema/builders/locality_group_builder.h"
 #include "backend/schema/builders/named_schema_builder.h"
 #include "backend/schema/builders/sequence_builder.h"
 #include "backend/schema/builders/table_builder.h"
@@ -44,6 +45,7 @@
 #include "backend/schema/catalog/database_options.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
@@ -118,6 +120,12 @@ class SchemaTest : public testing::Test {
   Sequence::Builder sequence_builder(const std::string& name) {
     Sequence::Builder c;
     c.set_name(name).set_id(name);
+    return c;
+  }
+
+  LocalityGroup::Builder locality_group_builder(const std::string& name) {
+    LocalityGroup::Builder c;
+    c.set_name(name);
     return c;
   }
 
@@ -494,6 +502,18 @@ TEST_F(SchemaTest, DatabaseOptionsBuilderInvalid) {
   auto invalid_cs = database_options_builder(database_name).build();
   EXPECT_EQ(invalid_cs->Validate(&context_),
             error::InvalidSchemaName("Database Options", database_name));
+}
+
+TEST_F(SchemaTest, LocalityGroupBuilderValid) {
+  auto lg = locality_group_builder("LG").build();
+  ZETASQL_EXPECT_OK(lg->Validate(&context_));
+}
+
+TEST_F(SchemaTest, LocalityGroupBuilderInvalid) {
+  const std::string locality_group_name(130, 'L');
+  auto invalid_lg = locality_group_builder(locality_group_name).build();
+  EXPECT_EQ(invalid_lg->Validate(&context_),
+            error::InvalidSchemaName("Locality Group", locality_group_name));
 }
 
 TEST_F(SchemaTest, IndexBuilder) {
@@ -1874,6 +1894,50 @@ TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsSequenceClause) {
   skip_range_min = 1,
   skip_range_max = 1000,
   start_with_counter = 2000))")));
+}
+
+TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestCreateLocalityGroup) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(CREATE LOCALITY GROUP lg OPTIONS ( storage = 'ssd' ))"},
+          type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements,
+              IsOkAndHolds(ElementsAre(
+                  R"(CREATE LOCALITY GROUP lg OPTIONS ( storage = 'ssd' ))")));
+}
+
+TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestAlterLocalityGroup) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(CREATE LOCALITY GROUP lg)",
+           R"(AlTER LOCALITY GROUP lg SET OPTIONS ( storage = 'ssd', ssd_to_hdd_spill_timespan = '10m' ))"},
+          type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(
+      statements,
+      IsOkAndHolds(ElementsAre(
+          R"(CREATE LOCALITY GROUP lg OPTIONS ( storage = 'ssd', ssd_to_hdd_spill_timespan = '10m' ))")));
+}
+
+TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestDropLocalityGroup) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(CREATE LOCALITY GROUP lg)", R"(CREATE LOCALITY GROUP lg2)",
+           R"(DROP LOCALITY GROUP lg)"},
+          type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements,
+              IsOkAndHolds(ElementsAre(R"(CREATE LOCALITY GROUP lg2)")));
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestUDFsWithDependencies) {

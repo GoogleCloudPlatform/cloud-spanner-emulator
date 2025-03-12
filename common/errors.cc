@@ -1115,6 +1115,79 @@ absl::Status TooManyModelsPerDatabase(absl::string_view model_name,
                                        model_name, limit));
 }
 
+absl::Status TooManyPropertyGraphsPerDatabase(absl::string_view graph_name,
+                                              int64_t limit) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::Substitute("Cannot add Property Graph $0 : "
+                                       "because the maximum number "
+                                       "of <Property Graphs> per Database "
+                                       "(limit $1) has been reached.",
+                                       graph_name, limit));
+}
+
+absl::Status PropertyGraphNotFound(absl::string_view property_graph_name) {
+  return absl::Status(
+      absl::StatusCode::kNotFound,
+      absl::StrCat("Property Graph `", property_graph_name, "` not found."));
+}
+
+absl::Status PropertyGraphDuplicateLabel(absl::string_view property_graph_name,
+                                         std::string_view label_name) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::StrCat("Property Graph `", property_graph_name,
+                                   "` has duplicate label name: ", label_name));
+}
+
+absl::Status PropertyGraphDuplicatePropertyDeclaration(
+    absl::string_view property_graph_name,
+    absl::string_view property_declaration_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::StrCat("Property Graph `", property_graph_name,
+                   "` has duplicate property declaration name: ",
+                   property_declaration_name));
+}
+
+absl::Status GraphElementTableLabelNotFound(
+    absl::string_view property_graph_name, absl::string_view element_table_name,
+    absl::string_view label_name) {
+  return absl::Status(
+      absl::StatusCode::kNotFound,
+      absl::StrCat("Graph element table `", element_table_name, "` in ",
+                   "property graph `", property_graph_name, "` does not have ",
+                   "label `", label_name, "`."));
+}
+
+absl::Status GraphElementTablePropertyDefinitionNotFound(
+    absl::string_view property_graph_name, absl::string_view element_table_name,
+    absl::string_view property_definition_name) {
+  return absl::Status(
+      absl::StatusCode::kNotFound,
+      absl::StrCat("Graph element table `", element_table_name, "` in ",
+                   "property graph `", property_graph_name, "` does not have ",
+                   "property definition `", property_definition_name, "`."));
+}
+
+absl::Status GraphEdgeTableSourceNodeTableNotFound(
+    absl::string_view property_graph_name, absl::string_view edge_table_name,
+    absl::string_view node_table_name) {
+  return absl::Status(
+      absl::StatusCode::kNotFound,
+      absl::StrCat("Graph edge table `", edge_table_name, "` in ",
+                   "property graph `", property_graph_name, "` does not have ",
+                   "source node table `", node_table_name, "`."));
+}
+
+absl::Status GraphEdgeTableDestinationNodeTableNotFound(
+    absl::string_view property_graph_name, absl::string_view edge_table_name,
+    absl::string_view node_table_name) {
+  return absl::Status(
+      absl::StatusCode::kNotFound,
+      absl::StrCat("Graph edge table `", edge_table_name, "` in ",
+                   "property graph `", property_graph_name, "` does not have ",
+                   "destination node table `", node_table_name, "`."));
+}
+
 absl::Status UnsupportedChangeStreamOption(absl::string_view option_name) {
   return absl::Status(absl::StatusCode::kFailedPrecondition,
                       absl::Substitute("Invalid Change Stream Option: $0."
@@ -1330,6 +1403,44 @@ absl::Status ChangeStreamQueriesMustBeStreaming() {
       "Change stream queries are not supported for the ExecuteSql API. "
       "Change stream queries must be strong reads executed via single use "
       "transactions using the ExecuteStreamingSql API.");
+}
+
+absl::Status LocalityGroupNotFound(absl::string_view locality_group_name) {
+  return absl::Status(
+      absl::StatusCode::kNotFound,
+      absl::StrCat("Locality group not found: ", locality_group_name));
+}
+
+absl::Status DroppingLocalityGroupWithAssignedTableColumn(
+    absl::string_view locality_group_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Locality group $0 cannot be dropped as it is referenced.",
+          locality_group_name));
+}
+
+absl::Status CreatingDefaultLocalityGroup() {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      "Default locality group cannot be created.");
+}
+
+absl::Status DroppingDefaultLocalityGroup() {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      "Default locality group cannot be dropped.");
+}
+
+absl::Status InvalidLocalityGroupName(absl::string_view locality_group_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Invalid locality group name: $0. The locality group "
+                       "name must not start with `_`.",
+                       locality_group_name));
+}
+
+absl::Status AlterLocalityGroupWithoutOptions() {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      "Alter Locality Group must have options.");
 }
 
 absl::Status TooManyIndicesPerDatabase(absl::string_view index_name,
@@ -3320,6 +3431,59 @@ absl::Status SearchIndexOrderByMustBeIntegerType(
           index_name, column_name, column_type));
 }
 
+absl::Status VectorIndexPartitionByUnsupported(absl::string_view index_name) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("PARTITION BY is not supported in vector index `$0`.",
+                       index_name));
+}
+absl::Status VectorIndexNonArrayKey(absl::string_view column_string,
+                                    absl::string_view index_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "The key column $0 in vector index $1 must be ARRAY type.",
+          column_string, index_string));
+}
+
+absl::Status VectorIndexArrayKeyMustBeFloatOrDouble(
+    absl::string_view column_string, absl::string_view index_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("The key column $0 in vector index $1 must be "
+                       "ARRAY<FLOAT> or ARRAY<DOUBLE>.",
+                       column_string, index_string));
+}
+
+absl::Status VectorIndexArrayKeyMustHaveVectorLength(
+    absl::string_view column_string, absl::string_view index_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("The key column $0 in vector index $1 must have "
+                       "`vector_length=>` set.",
+                       column_string, index_string));
+}
+
+absl::Status VectorIndexArrayKeyVectorLengthTooLarge(
+    absl::string_view column_string, absl::string_view index_string,
+    int64_t actual_len_num, int64_t max_len_num) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "The key column $0 in vector index $1 has vector_length $2, which is "
+          "larger than the maximum allowed vector_length $3.",
+          column_string, index_string, actual_len_num, max_len_num));
+}
+
+absl::Status VectorIndexKeyNotNullFiltered(absl::string_view column_string,
+                                           absl::string_view index_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("The key column $0 in vector index $1 must be NOT NULL, "
+                       "or null filtered by `WHERE $0 IS NOT NULL`.",
+                       column_string, index_string));
+}
+
 absl::Status SearchIndexTokenlistKeyOrderUnsupported(
     absl::string_view column_name, absl::string_view index_name) {
   return absl::Status(
@@ -4011,6 +4175,28 @@ absl::Status CannotAlterIdentityColumnToGeneratedOrDefaultColumn(
       absl::StatusCode::kInvalidArgument,
       absl::StrCat("Cannot alter an identity column `", table_string, ".",
                    column_string, "` to a generated or default column."));
+}
+
+absl::Status OptionsError(absl::string_view error_string) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::StrCat("Bad Index options: ", error_string));
+}
+
+// FOR UPDATE-related errors.
+absl::Status ForUpdateUnsupportedInReadOnlyTransactions() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "FOR UPDATE is not supported in this transaction type.");
+}
+
+absl::Status ForUpdateUnsupportedInSearchQueries() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "FOR UPDATE is not supported in search queries");
+}
+
+absl::Status ForUpdateCannotCombineWithLockScannedRanges() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "FOR UPDATE cannot be combined with statement-level lock hints");
 }
 
 }  // namespace error

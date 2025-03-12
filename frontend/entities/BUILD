@@ -18,7 +18,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 cc_library(
     name = "session",
@@ -139,6 +139,7 @@ cc_library(
         "//backend/common:ids",
         "//backend/common:variant",
         "//backend/database",
+        "//backend/query:query_context",
         "//backend/query:query_engine",
         "//backend/schema/catalog:schema",
         "//backend/transaction:read_only_transaction",

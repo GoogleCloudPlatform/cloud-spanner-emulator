@@ -126,6 +126,8 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
       const Model& model, const Model::ModelColumn& column,
       absl::string_view column_kind,
       std::vector<std::vector<zetasql::Value>>* rows);
+  zetasql::Value ParseLocalityGroupOptions(ddl::SetOption option);
+  void FillLocalityGroupOptionsTable();
 };
 
 }  // namespace backend

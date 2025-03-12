@@ -84,6 +84,7 @@ std::string PopulateInfoSchemaColumnsMetadata(const DatabaseDialect& dialect) {
   options.set_field_separator(kCsvSeparator);
   options.set_required_header(
       {"table_name", "column_name", "is_nullable", "spanner_type"});
+  options.set_comment('#');
   CFileReader file_reader = CFileReader(metadata_file);
   CsvReader csv_reader(&file_reader, options);
   ZETASQL_VLOG(csv_reader.status().ok())
@@ -134,6 +135,7 @@ std::string PopulateInfoSchemaColumnsMetadataForIndex(
   options.set_required_header({"table_name", "column_name", "is_nullable",
                                "column_ordering", "spanner_type",
                                "ordinal_position"});
+  options.set_comment('#');
   CFileReader file_reader = CFileReader(metadata_file);
   CsvReader csv_reader(&file_reader, options);
   ZETASQL_VLOG(csv_reader.status().ok())

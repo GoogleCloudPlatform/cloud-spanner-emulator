@@ -32,12 +32,12 @@
 # jsonb package contains all code files for parsing and binary format of PG.JSONB
 
 cc_library(
-    name = "jsonb_parse",
+    name = "jsonb_value",
     srcs = [
-        "jsonb_parse.cc",
+        "jsonb_value.cc",
     ],
     hdrs = [
-        "jsonb_parse.h",
+        "jsonb_value.h",
     ],
     visibility = [
         "//:__subpackages__",
@@ -68,7 +68,7 @@ cc_test(
         "spanner.datatypes",
     ],
     deps = [
-        ":jsonb_parse",
+        ":jsonb_value",
         ":random_json_creator",
         "//tests/common:file_based_test_util",
         "//third_party/spanner_pg/datatypes/common:numeric_core",

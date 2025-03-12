@@ -829,6 +829,12 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
         return UnsupportedTranslationError(
             "<GENERATED> constraint type is not supported.");
       }
+      if (target_column->has_identity_column()) {
+        return UnsupportedTranslationError(
+            absl::StrFormat("Both identity and generation expression specified "
+                            "for column \"%s\"",
+                            target_column->column_name()));
+      }
       ZETASQL_RETURN_IF_ERROR(
           TranslateGeneratedColumn(constraint, options, *target_column));
       return absl::OkStatus();
@@ -847,6 +853,17 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
             "Both serial and identity specified for column \"%s\"",
             target_column->column_name()));
       }
+      if (target_column->has_column_default()) {
+        return UnsupportedTranslationError(absl::StrFormat(
+            "Both identity and default value specified for column \"%s\"",
+            target_column->column_name()));
+      }
+      if (target_column->has_generated_column()) {
+        return UnsupportedTranslationError(
+            absl::StrFormat("Both identity and generation expression specified "
+                            "for column \"%s\"",
+                            target_column->column_name()));
+      }
       ZETASQL_RETURN_IF_ERROR(
           TranslateIdentityColumn(constraint, options, *target_column));
       return absl::OkStatus();
@@ -856,6 +873,11 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
       if (!options.enable_column_default) {
         return UnsupportedTranslationError(
             "<DEFAULT> constraint type is not supported.");
+      }
+      if (target_column->has_identity_column()) {
+        return UnsupportedTranslationError(absl::StrFormat(
+            "Both identity and default value specified for column \"%s\"",
+            target_column->column_name()));
       }
       ZETASQL_RETURN_IF_ERROR(
           TranslateColumnDefault(constraint, options, *target_column));
@@ -1302,8 +1324,6 @@ PostgreSQLToSpannerDDLTranslatorImpl::ProcessColumnTypeWithAttributes(
 
   std::string schema_name, type_name;
   ZETASQL_RETURN_IF_ERROR(ParseColumnType(type, schema_name, type_name));
-  std::string full_type_name = schema_name.empty() ? "" : schema_name + ".";
-  full_type_name += type_name;
 
   if (schema_name.empty() || schema_name == "pg_catalog") {
     // Postgres integral types

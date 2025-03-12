@@ -15,7 +15,7 @@
 #
 
 #!/bin/bash
-base_SHA=3e80349f74f93ea2891424b1463a58ab4dabcc1d4d157b5a9e7eb0143e1a4e87
+base_SHA=7ae4284a437343ef1b83e7ffbd57dc13b956cb24538428d3a1a6b13ff54c478c
 cpp_SHA=d461425d4ccc3ae980c501eea1c3d60429386acf1346ce5fc251ac19b01f9919
 csharp_SHA=3f9108c182b5d67b9ed0f40ff69a367ad0cbacf1b66aad47914206574fb2ef1f
 go_SHA=1b445f62611768ddee91891fed36b630461a7145643616e1145dcb6ff8e8be74
@@ -105,6 +105,7 @@ container_id=$(docker create $DOCKER_ARGS \
     --volume "${LOG_DIR}:/logs" \
     --workdir "/src" \
     --entrypoint="/bin/bash" \
+    --env PATH="$PATH:/usr/local/bin" \
     ${BASE_DOCKER_IMAGE} ${DOCKER_CMD_BUILD_AND_TEST})
 docker start -a "$container_id"
 docker wait "$container_id"

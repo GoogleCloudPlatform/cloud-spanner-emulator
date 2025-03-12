@@ -552,7 +552,7 @@ void PGCatalog::FillPGAttributeTable() {
           // atthasmissing
           Bool(false),
           // attidentity
-          String(std::string{'\0'}),
+          String(column->is_identity_column() ? "d" : std::string{'\0'}),
           // attgenerated
           String(column->is_generated() ? "s" : std::string{'\0'}),
           // attisdropped
@@ -1072,6 +1072,10 @@ void PGCatalog::FillPGClassTable() {
   }
   // Add sequences.
   for (const Sequence* sequence : default_schema_->sequences()) {
+    if (sequence->is_internal_use()) {
+      // Skip internal sequences.
+      continue;
+    }
     const auto& [sequence_schema_part, sequence_name_part] =
         GetSchemaAndNameForPGCatalog(sequence->Name());
     int namespace_oid = 0;

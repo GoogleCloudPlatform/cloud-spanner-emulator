@@ -36,6 +36,7 @@
 #include "backend/common/ids.h"
 #include "backend/common/variant.h"
 #include "backend/database/database.h"
+#include "backend/query/query_context.h"
 #include "backend/query/query_engine.h"
 #include "backend/transaction/options.h"
 #include "backend/transaction/read_write_transaction.h"
@@ -211,8 +212,10 @@ absl::StatusOr<backend::QueryResult> Transaction::ExecuteSql(
     case kReadOnly: {
       return query_engine_->ExecuteSql(
           query,
-          backend::QueryContext{
-              .schema = schema(), .reader = read_only(), .writer = nullptr},
+          backend::QueryContext{.schema = schema(),
+                                .reader = read_only(),
+                                .writer = nullptr,
+                                .is_read_only_txn = true},
           query_mode);
     }
     case kReadWrite: {
@@ -223,7 +226,8 @@ absl::StatusOr<backend::QueryResult> Transaction::ExecuteSql(
                                 .writer = read_write(),
                                 .commit_timestamp_tracker =
                                     read_write()->commit_timestamp_tracker(),
-                                .allow_read_write_only_functions = true},
+                                .allow_read_write_only_functions = true,
+                                .is_read_only_txn = false},
           query_mode);
     }
     case kPartitionedDml: {
@@ -232,7 +236,8 @@ absl::StatusOr<backend::QueryResult> Transaction::ExecuteSql(
           .reader = read_write(),
           .writer = read_write(),
           .commit_timestamp_tracker = read_write()->commit_timestamp_tracker(),
-          .allow_read_write_only_functions = true};
+          .allow_read_write_only_functions = true,
+          .is_read_only_txn = false};
       ZETASQL_RETURN_IF_ERROR(query_engine_->IsValidPartitionedDML(query, context));
       // PartitionedDml will auto-commit transactions and cannot be reused.
       ZETASQL_ASSIGN_OR_RETURN(backend::QueryResult result,

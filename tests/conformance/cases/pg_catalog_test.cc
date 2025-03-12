@@ -251,6 +251,10 @@ TEST_F(PGCatalogTest, PGAttribute) {
       {"base", "default_timestamp_col_value", "timestamptz", 22, 0, -1,
        std::string{'\0'}, false, true, false, std::string{'\0'},
        std::string{'\0'}, false, true, 0},
+      {"base", "identity_no_params_col", "int8", 23, 0, -1, std::string{'\0'},
+       false, true, false, std::string{'d'}, std::string{'\0'}, false, true, 0},
+      {"base", "identity_col", "int8", 24, 0, -1, std::string{'\0'}, false,
+       true, false, std::string{'d'}, std::string{'\0'}, false, true, 0},
 
       {"cascade_child", "key1", "int8", 1, 0, -1, std::string{'\0'}, true,
        false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
@@ -441,7 +445,7 @@ TEST_F(PGCatalogTest, PGClass) {
 
   auto table_results = Query(absl::StrFormat(query_template, "r"));
   auto expected_table_rows = std::vector<ValueRow>({
-      {"base", "public", PgOid(75001), true, "p", "r", 22, 2, true},
+      {"base", "public", PgOid(75001), true, "p", "r", 24, 2, true},
       {"cascade_child", "public", PgOid(75001), true, "p", "r", 6, 0, true},
       {"no_action_child", "public", PgOid(75001), true, "p", "r", 4, 0, true},
       {"row_deletion_policy", "public", PgOid(75001), false, "p", "r", 2, 0,

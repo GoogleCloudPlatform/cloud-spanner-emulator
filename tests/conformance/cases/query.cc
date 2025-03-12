@@ -937,6 +937,47 @@ TEST_P(QueryTest, ArrayIncluesInGeneratedColumn) {
       IsOkAndHoldsRows({{1, false}, {2, true}, {3, false}}));
 }
 
+TEST_P(QueryTest, OrderByInAggregate) {
+  PopulateDatabase();
+  EXPECT_THAT(Query("SELECT ARRAY(SELECT user_id FROM users ORDER BY user_id)"),
+              IsOkAndHoldsRow(std::vector<int64_t>{1, 2, 3}));
+  EXPECT_THAT(Query("SELECT ARRAY_AGG(user_id ORDER BY user_id) FROM users"),
+              IsOkAndHoldsRow(std::vector<int64_t>{1, 2, 3}));
+  EXPECT_THAT(
+      Query("SELECT ARRAY_AGG(user_id ORDER BY user_id DESC) FROM users"),
+      IsOkAndHoldsRow(std::vector<int64_t>{3, 2, 1}));
+  if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+    // PG doesn't support STRING_AGG without a delimiter.
+    EXPECT_THAT(
+        Query("SELECT STRING_AGG(name ORDER BY name) FROM users"),
+        IsOkAndHoldsRow("Douglas Adams,J.R.R. Tolkien,Suzanne Collins"));
+  }
+  EXPECT_THAT(
+      Query("SELECT STRING_AGG(name, ', ' ORDER BY name) FROM users"),
+      IsOkAndHoldsRow("Douglas Adams, J.R.R. Tolkien, Suzanne Collins"));
+}
+
+TEST_P(QueryTest, LimitInAggregate) {
+  // PG doesn't support LIMIT in aggregate.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  PopulateDatabase();
+  EXPECT_THAT(
+      Query("SELECT ARRAY_AGG(user_id ORDER BY user_id LIMIT 1) FROM users"),
+      IsOkAndHoldsRow(std::vector<int64_t>{1}));
+  EXPECT_THAT(
+      Query(
+          "SELECT ARRAY_AGG(user_id ORDER BY user_id DESC LIMIT 2) FROM users"),
+      IsOkAndHoldsRow(std::vector<int64_t>{3, 2}));
+  EXPECT_THAT(Query("SELECT STRING_AGG(name ORDER BY name LIMIT 2) FROM users"),
+              IsOkAndHoldsRow("Douglas Adams,J.R.R. Tolkien"));
+  EXPECT_THAT(
+      Query("SELECT STRING_AGG(name, ', ' ORDER BY name LIMIT 2) FROM users"),
+      IsOkAndHoldsRow("Douglas Adams, J.R.R. Tolkien"));
+}
+
 }  // namespace
 
 }  // namespace test

@@ -154,6 +154,17 @@ absl::StatusOr<zetasql::AnalyzerOptions> MakeAnalyzerOptionsWithParameters(
   for (const auto& [name, value] : params) {
     ZETASQL_RETURN_IF_ERROR(options.AddQueryParameter(name, value.type()));
   }
+  // Enable SQL Graph language feature.
+  options.mutable_language()->EnableLanguageFeature(
+      zetasql::FEATURE_V_1_4_SQL_GRAPH);
+  options.mutable_language()->EnableLanguageFeature(
+      zetasql::FEATURE_V_1_4_SQL_GRAPH_ADVANCED_QUERY);
+  options.mutable_language()->EnableLanguageFeature(
+      zetasql::FEATURE_V_1_4_SQL_GRAPH_BOUNDED_PATH_QUANTIFICATION);
+  options.mutable_language()->EnableLanguageFeature(
+      zetasql::FEATURE_V_1_4_SQL_GRAPH_PATH_TYPE);
+  options.mutable_language()->EnableLanguageFeature(
+      zetasql::FEATURE_V_1_4_SQL_GRAPH_PATH_MODE);
   return options;
 }
 
@@ -828,11 +839,14 @@ ExtractValidatedResolvedStatementAndOptions(
   // Validate the index hints.
   bool allow_search_indexes_in_transaction =
       IsSearchQueryAllowed(&options, context);
+  bool in_select_for_update_query =
+      IsSelectForUpdateQuery(*(analyzer_output->resolved_statement()));
   IndexHintValidator index_hint_validator{
       context.schema,
       options.disable_query_null_filtered_index_check ||
           config::disable_query_null_filtered_index_check(),
-      allow_search_indexes_in_transaction, in_partition_query};
+      allow_search_indexes_in_transaction, in_partition_query,
+      in_select_for_update_query};
   ZETASQL_RETURN_IF_ERROR(statement->Accept(&index_hint_validator));
 
   // Check the query size limits

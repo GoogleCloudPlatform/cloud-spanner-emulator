@@ -174,6 +174,29 @@ TEST_P(SchemaUpdaterTest, CreateIndex_NoKeys) {
               StatusIs(error::IndexWithNoKeys("Idx")));
 }
 
+TEST_P(SchemaUpdaterTest, CreateIndex_WithLocalityGroup) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  std::unique_ptr<const Schema> schema;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"sql(
+      CREATE TABLE T (
+        k1 INT64,
+        c1 INT64
+      ) PRIMARY KEY (k1)
+    )sql",
+                                             R"sql(
+      CREATE LOCALITY GROUP lg
+      OPTIONS (storage = 'ssd', ssd_to_hdd_spill_timespan = '10m')
+    )sql",
+                                             R"sql(
+      CREATE INDEX Idx ON T(c1) OPTIONS (locality_group = 'lg')
+    )sql"}));
+  const Index* idx = schema->FindIndex("Idx");
+  ASSERT_NOT_NULL(idx);
+
+  ASSERT_NOT_NULL(idx->locality_group());
+  EXPECT_EQ(idx->locality_group()->Name(), "lg");
+}
+
 TEST_P(SchemaUpdaterTest, CreateIndexIfNotExists) {
   // IF NOT EXISTS isn't yet supported on the PG side of the emulator
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
@@ -680,6 +703,35 @@ TEST_P(SchemaUpdaterTest, AlterIndex_DropColumnNotFound) {
       UpdateSchema(schema.get(),
                    {R"sql(ALTER INDEX Idx DROP STORED COLUMN not_existed)sql"}),
       StatusIs(error::ColumnNotFoundInIndex("Idx", "not_existed")));
+}
+
+TEST_P(SchemaUpdaterTest, AlterIndex_WithLocalityGroup) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX) NOT NULL,
+        col3 INT64 NOT NULL,
+      ) PRIMARY KEY (col1)
+    )sql",
+                                        R"sql(
+      CREATE LOCALITY GROUP lg
+      OPTIONS (storage = 'ssd', ssd_to_hdd_spill_timespan = '10m')
+    )sql",
+                                        R"sql(
+      CREATE INDEX Idx ON T(col2)
+    )sql"}));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"sql(
+      ALTER INDEX Idx SET OPTIONS (locality_group = 'lg')
+    )sql"}));
+
+  const Index* idx = new_schema->FindIndex("Idx");
+  ASSERT_NOT_NULL(idx);
+
+  ASSERT_NOT_NULL(idx->locality_group());
+  EXPECT_EQ(idx->locality_group()->Name(), "lg");
 }
 
 TEST_P(SchemaUpdaterTest, DropTable_WithIndex) {
@@ -1239,6 +1291,573 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexTokenColumnOrderNotAllowed) {
     )sql"}),
               StatusIs(error::SearchIndexTokenlistKeyOrderUnsupported(
                   "col3", "SearchIndex")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexTwoLayers) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE Docs(
+        Key STRING(MAX) NOT NULL,
+        Val INT64,
+        Embedding ARRAY<FLOAT32>(vector_length=>2),
+        Embedding2 ARRAY<FLOAT64>(vector_length=>2),
+      ) PRIMARY KEY(Key)
+    )sql",
+                                        R"sql(
+      CREATE VECTOR INDEX VectorIndex
+      ON Docs(Embedding) WHERE Embedding IS NOT NULL
+      OPTIONS(distance_type='DOT_PRODUCT', num_leaves=2)
+    )sql",
+                                        R"sql(
+      CREATE VECTOR INDEX VectorIndex2
+      ON Docs(Embedding2) WHERE Embedding2 IS NOT NULL
+      OPTIONS(distance_type='COSINE', num_leaves=2)
+    )sql",
+                                        R"sql(
+      CREATE VECTOR INDEX VectorIndex3
+      ON Docs(Embedding2) WHERE Embedding2 IS NOT NULL
+      OPTIONS(distance_type='EUCLIDEAN', num_leaves=2)
+    )sql"}));
+
+  auto t = schema->FindTable("Docs");
+  auto col = t->FindColumn("Embedding");
+  auto col2 = t->FindColumn("Embedding2");
+  EXPECT_TRUE(col->GetType()->IsArray());
+
+  auto idx = schema->FindIndex("VectorIndex");
+  EXPECT_NE(idx, nullptr);
+  EXPECT_EQ(idx->key_columns().size(), 1);
+
+  auto idx_data = idx->index_data_table();
+  EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col));
+
+  auto idx2 = schema->FindIndex("VectorIndex2");
+  EXPECT_NE(idx2, nullptr);
+  EXPECT_EQ(idx2->key_columns().size(), 1);
+
+  auto idx_data2 = idx2->index_data_table();
+  EXPECT_THAT(idx_data2->primary_key()[0]->column(), SourceColumnIs(col2));
+
+  auto idx3 = schema->FindIndex("VectorIndex3");
+  EXPECT_NE(idx3, nullptr);
+  EXPECT_EQ(idx3->key_columns().size(), 1);
+
+  auto idx_data3 = idx3->index_data_table();
+  EXPECT_THAT(idx_data3->primary_key()[0]->column(), SourceColumnIs(col2));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexThreelayers) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+      ) PRIMARY KEY(K)
+    )sql",
+                                        R"sql(
+      CREATE VECTOR INDEX VI ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+      OPTIONS(
+        distance_type = 'COSINE',
+        tree_depth = 3,
+        num_branches = 100,
+        num_leaves = 100000,
+        leaf_scatter_factor = 32,
+        min_branch_splits = 5,
+        min_leaf_splits = 6
+      )
+    )sql"}));
+
+  auto t = schema->FindTable("Base");
+  auto col = t->FindColumn("Embeddings");
+  EXPECT_TRUE(col->GetType()->IsArray());
+
+  auto idx = schema->FindIndex("VI");
+  EXPECT_NE(idx, nullptr);
+  EXPECT_EQ(idx->key_columns().size(), 1);
+
+  auto idx_data = idx->index_data_table();
+  EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexNotNullAndStoring) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        V INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128) NOT NULL,
+      ) PRIMARY KEY(K)
+    )sql",
+                                        R"sql(
+      CREATE VECTOR INDEX VI ON Base(Embeddings) STORING (V)
+      OPTIONS(
+        distance_type = 'COSINE',
+        tree_depth = 3,
+        num_branches = 100,
+        leaf_scatter_factor = 0
+      )
+    )sql"}));
+
+  auto t = schema->FindTable("Base");
+  auto col = t->FindColumn("Embeddings");
+  auto stored_col = t->FindColumn("V");
+  EXPECT_TRUE(col->GetType()->IsArray());
+
+  auto idx = schema->FindIndex("VI");
+  EXPECT_NE(idx, nullptr);
+  EXPECT_EQ(idx->key_columns().size(), 1);
+
+  auto idx_data = idx->index_data_table();
+  EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col));
+  EXPECT_THAT(idx->stored_columns()[0], SourceColumnIs(stored_col));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexAlterStoringColumn) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        V INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128) NOT NULL,
+      ) PRIMARY KEY(K)
+    )sql",
+                                        R"sql(
+      CREATE VECTOR INDEX VI ON Base(Embeddings) STORING (V)
+      OPTIONS(
+        distance_type = 'COSINE',
+        tree_depth = 3,
+        num_branches = 100,
+        leaf_scatter_factor = 0
+      )
+    )sql",
+                                        R"sql(
+      ALTER TABLE Base ALTER COLUMN V INT64
+    )sql"}));
+
+  auto t = schema->FindTable("Base");
+  auto col = t->FindColumn("Embeddings");
+  auto stored_col = t->FindColumn("V");
+  EXPECT_TRUE(col->GetType()->IsArray());
+
+  auto idx = schema->FindIndex("VI");
+  EXPECT_NE(idx, nullptr);
+  EXPECT_EQ(idx->key_columns().size(), 1);
+
+  auto idx_data = idx->index_data_table();
+  EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col));
+  EXPECT_THAT(idx->stored_columns()[0], SourceColumnIs(stored_col));
+
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        V INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128) NOT NULL,
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX VI ON Base(Embeddings) STORING (V)
+      OPTIONS(
+        distance_type = 'COSINE',
+        tree_depth = 3,
+        num_branches = 100,
+        leaf_scatter_factor = 0
+      )
+    )sql",
+                  R"sql(
+      ALTER TABLE Base DROP COLUMN Embeddings
+    )sql"}),
+              StatusIs(error::InvalidDropColumnWithDependency("Embeddings",
+                                                              "Base", "VI")));
+
+  EXPECT_THAT(
+      CreateSchema({
+          R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        V INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128) NOT NULL,
+      ) PRIMARY KEY(K)
+    )sql",
+          R"sql(
+      CREATE VECTOR INDEX VI ON Base(Embeddings) STORING (V)
+      OPTIONS(
+        distance_type = 'COSINE',
+        tree_depth = 3,
+        num_branches = 100,
+        leaf_scatter_factor = 0
+      )
+    )sql",
+          R"sql(
+      ALTER TABLE Base DROP COLUMN V
+    )sql"}),
+      StatusIs(error::InvalidDropColumnWithDependency("V", "Base", "VI")));
+
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        V INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128) NOT NULL,
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX VI ON Base(Embeddings) STORING (Embeddings)
+      OPTIONS(
+        distance_type = 'COSINE',
+        tree_depth = 3,
+        num_branches = 100,
+        leaf_scatter_factor = 0
+      )
+    )sql"}),
+              StatusIs(error::IndexRefsKeyAsStoredColumn("VI", "Embeddings")));
+
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        V INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128) NOT NULL,
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX VI ON Base(Embeddings) STORING (NonExistent)
+      OPTIONS(
+        distance_type = 'COSINE',
+        tree_depth = 3,
+        num_branches = 100,
+        leaf_scatter_factor = 0
+      )
+    )sql"}),
+              StatusIs(error::IndexRefsNonExistentColumn("VI", "NonExistent")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexBasicIndexErrors) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE VECTOR INDEX V1 ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(distance_type = 'COSINE')
+    )sql"}),
+              StatusIs(error::TableNotFound("Base")));
+
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX PRIMARY_KEY ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(distance_type = 'COSINE')
+    )sql"}),
+              StatusIs(error::CannotNameIndexPrimaryKey()));
+
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX _Foo ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(distance_type = 'COSINE')
+    )sql"}),
+              StatusIs(error::InvalidSchemaName("Index", "_Foo")));
+
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX Base ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(distance_type = 'COSINE')
+    )sql"}),
+              StatusIs(error::SchemaObjectAlreadyExists("Index", "Base")));
+
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX VI ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(distance_type = 'COSINE')
+    )sql",
+                  R"sql(
+      DROP TABLE Base
+    )sql"}),
+              StatusIs(error::DropTableWithDependentIndices("Base", "VI")));
+
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX VI ON Base(Embeddings) WHERE NonExistent IS NOT NULL
+        OPTIONS(distance_type = 'COSINE')
+    )sql"}),
+              StatusIs(error::IndexRefsNonExistentColumn("VI", "NonExistent")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexNonArrayTypeError) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        V INT64,
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX VI ON Base(V) OPTIONS(distance_type = 'COSINE')
+    )sql"}),
+              StatusIs(error::VectorIndexNonArrayKey("V", "VI")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexKeyMustHaveVectorLengthError) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(
+      CreateSchema({
+          R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        V ARRAY<FLOAT32>,
+      ) PRIMARY KEY(K)
+    )sql",
+          R"sql(
+      CREATE VECTOR INDEX VI ON Base(V) OPTIONS(distance_type = 'COSINE')
+    )sql"}),
+      StatusIs(error::VectorIndexArrayKeyMustHaveVectorLength("V", "VI")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexMustBeNotNullError) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        V ARRAY<FLOAT32>(vector_length=>128),
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX VI ON Base(V) OPTIONS(distance_type = 'COSINE')
+    )sql"}),
+              StatusIs(error::VectorIndexKeyNotNullFiltered("V", "VI")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexVectorLengthTooLargeError) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        V ARRAY<FLOAT32>(vector_length=>1000000),
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX VI ON Base(V) WHERE V IS NOT NULL
+      OPTIONS(distance_type = 'COSINE')
+    )sql"}),
+              StatusIs(error::VectorIndexArrayKeyVectorLengthTooLarge(
+                  "V", "VI", 1000000, 8000)));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexNonFloatSubtypeError) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Docs(
+        Key STRING(MAX) NOT NULL,
+        Val INT64,
+        Embedding ARRAY<INT64>,
+      ) PRIMARY KEY(Key)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX VectorIndex
+      ON Docs(Embedding) WHERE Embedding IS NOT NULL
+      OPTIONS(distance_type='COSINE', num_leaves=2)
+    )sql"}),
+              StatusIs(error::CannotCreateIndexOnColumn(
+                  "VectorIndex", "Embedding", "ARRAY<INT64>")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexPartitionedByNotSupportedError) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        V ARRAY<FLOAT32>(vector_length=>10),
+        Data STRING(MAX),
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX VI ON Base(V) PARTITION BY Data
+        OPTIONS(distance_type = 'COSINE')
+    )sql"}),
+              StatusIs(error::VectorIndexPartitionByUnsupported("VI")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexInvalidTreeDepthError) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(
+      CreateSchema({
+          R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+        Data STRING(MAX),
+      ) PRIMARY KEY(K)
+    )sql",
+          R"sql(
+      CREATE VECTOR INDEX VI ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(tree_depth = 1, distance_type = 'COSINE')
+    )sql"}),
+      StatusIs(error::OptionsError("vector index tree depth must be 2 or 3.")));
+
+  EXPECT_THAT(
+      CreateSchema({
+          R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+        Data STRING(MAX),
+      ) PRIMARY KEY(K)
+    )sql",
+          R"sql(
+      CREATE VECTOR INDEX VI ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(tree_depth = 4, distance_type = 'COSINE')
+    )sql"}),
+      StatusIs(error::OptionsError("vector index tree depth must be 2 or 3.")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexInvalidNonPositiveNumLeavesError) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(
+      CreateSchema({
+          R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+        Data STRING(MAX),
+      ) PRIMARY KEY(K)
+    )sql",
+          R"sql(
+      CREATE VECTOR INDEX VI ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(num_leaves = 0, distance_type = 'COSINE')
+    )sql"}),
+      StatusIs(error::OptionsError("vector index num_leaves must be > 0.")));
+
+  EXPECT_THAT(
+      CreateSchema({
+          R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+        Data STRING(MAX),
+      ) PRIMARY KEY(K)
+    )sql",
+          R"sql(
+      CREATE VECTOR INDEX VI ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(num_leaves = -10, distance_type = 'COSINE')
+    )sql"}),
+      StatusIs(error::OptionsError("vector index num_leaves must be > 0.")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexNonPositiveNumBranchesError) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(
+      CreateSchema({
+          R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+      ) PRIMARY KEY(K)
+    )sql",
+          R"sql(
+      CREATE VECTOR INDEX V1 ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(num_leaves = 1, num_branches = 0, distance_type = 'EUCLIDEAN')
+    )sql"}),
+      StatusIs(error::OptionsError("vector index num_branches must be > 0.")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexInvalidTreeShapeError) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX V1 ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(num_leaves = 1, num_branches = 2, distance_type = 'EUCLIDEAN')
+    )sql"}),
+              StatusIs(error::OptionsError(
+                  "num_leaves cannot be fewer than num_branches.")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexInvalidDistanceTypeError) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(
+      CreateSchema({
+          R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+      ) PRIMARY KEY(K)
+    )sql",
+          R"sql(
+      CREATE VECTOR INDEX V1 ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(distance_type = 'invalid')
+    )sql"}),
+      StatusIs(error::OptionsError("The distance_type of V1 is invalid.")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexInvalidLeafScatterFactorError) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX V1 ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(leaf_scatter_factor = -1, distance_type = 'EUCLIDEAN')
+    )sql"}),
+              StatusIs(error::OptionsError(
+                  "vector index leaf_scatter_factor must be >= 0.")));
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Base(
+        K INT64,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+      ) PRIMARY KEY(K)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX V1 ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(leaf_scatter_factor = 33, distance_type = 'EUCLIDEAN')
+    )sql"}),
+              StatusIs(error::OptionsError(
+                  "vector index leaf_scatter_factor must be <= 32.")));
 }
 
 }  // namespace

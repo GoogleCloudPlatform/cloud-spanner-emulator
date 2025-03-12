@@ -150,6 +150,7 @@ cc_library(
         "//backend/query:analyzer_options",
         "//backend/query:catalog",
         "//backend/query:function_catalog",
+        "//backend/query:prepare_property_graph_catalog",
         "//backend/schema/backfills:schema_backfillers",
         "//backend/schema/builders:schema_builders",
         "//backend/schema/catalog:proto_bundle",

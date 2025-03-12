@@ -16,11 +16,18 @@
 
 workspace(name = "com_google_cloud_spanner_emulator")
 
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "google_bazel_common",
+    sha256 = "82a49fb27c01ad184db948747733159022f9464fc2e62da996fa700594d9ea42",
+    strip_prefix = "bazel-common-2a6b6406e12208e02b2060df0631fb30919080f3",
+    urls = ["https://github.com/google/bazel-common/archive/2a6b6406e12208e02b2060df0631fb30919080f3.zip"],
+)
+
 ################################################################################
 # Generic Bazel Support                                                        #
 ################################################################################
-
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
     name = "rules_proto",
@@ -30,12 +37,15 @@ http_archive(
 )
 
 load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies")
+
 rules_proto_dependencies()
 
 load("@rules_proto//proto:setup.bzl", "rules_proto_setup")
+
 rules_proto_setup()
 
 load("@rules_proto//proto:toolchains.bzl", "rules_proto_toolchains")
+
 rules_proto_toolchains()
 
 ################################################################################
@@ -81,6 +91,7 @@ switched_rules_by_language(
 ################################################################################
 # Go Build Support                                                             #
 ################################################################################
+
 _rules_go_version = "v0.48.1"
 
 http_archive(
@@ -114,23 +125,22 @@ gazelle_dependencies()
 ################################################################################
 # GRPC Gateway                                                                 #
 ################################################################################
-
 go_repository(
     name = "org_golang_google_grpc",
     build_file_proto_mode = "disable_global",
     importpath = "google.golang.org/grpc",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
     sum = "h1:LKtvyfbX3UGVPFcGqJ9ItpVWW6oN/2XqTxfAnwRRXiA=",
     version = "v1.64.1",
-    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 go_repository(
     name = "org_golang_google_genproto",
     build_file_proto_mode = "disable_global",
     importpath = "google.golang.org/genproto",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
     sum = "h1:F6qOa9AZTYJXOUEr4jDysRDLrm4PHePlge4v4TGAlxY=",
     version = "v0.0.0-20240227224415-6ceb2ff114de",
-    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 go_repository(
@@ -139,9 +149,9 @@ go_repository(
     importpath = "google.golang.org/protobuf",
     patch_args = ["-p1"],
     patches = ["//build/bazel:golang_protobuf.patch"],
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
     sum = "h1:6xV6lTsCfpGD21XK49h7MhtcApnLqkfYgPcdHftf6hg=",
     version = "v1.34.2",
-    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 go_repository(
@@ -162,12 +172,12 @@ go_repository(
     name = "grpc_ecosystem_grpc_gateway",
     build_file_proto_mode = "disable_global",
     importpath = "github.com/grpc-ecosystem/grpc-gateway/v2",
-    sum = "h1:bkypFPDjIYGfCYD5mRBvpqxfYX1YCS1PXdKYWi8FsN0=",
-    version = "v2.20.0",
     repo_mapping = {
         "@go_googleapis": "@com_google_googleapis",
         "@googleapis": "@com_google_googleapis",
     },
+    sum = "h1:bkypFPDjIYGfCYD5mRBvpqxfYX1YCS1PXdKYWi8FsN0=",
+    version = "v2.20.0",
 )
 
 go_rules_dependencies()
@@ -176,55 +186,54 @@ go_repository(
     name = "com_github_golang_protobuf",
     build_file_proto_mode = "disable_global",
     importpath = "github.com/golang/protobuf",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
     sum = "h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek=",
     version = "v1.5.4",
-    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
-
 
 go_repository(
     name = "in_gopkg_yaml_v3",
     build_file_proto_mode = "disable_global",
     importpath = "gopkg.in/yaml.v3",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
     sum = "h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=",
     version = "v3.0.1",
-    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 go_repository(
     name = "com_github_golang_glog",
     build_file_proto_mode = "disable_global",
     importpath = "github.com/golang/glog",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
     sum = "h1:uCdmnmatrKCgMBlM4rMuJZWOkPDqdbZPnrMXDY4gI68=",
     version = "v1.2.0",
-    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 go_repository(
     name = "org_golang_x_net",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/net",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
     sum = "h1:soB7SVo0PWrY4vPW/+ay0jKDNScG2X9wFeYlXIvJsOQ=",
     version = "v0.26.0",
-    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 go_repository(
     name = "org_golang_x_sys",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/sys",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
     sum = "h1:rF+pYz3DAGSQAxAu1CbC7catZg4ebC4UIeIhKxBZvws=",
     version = "v0.21.0",
-    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 go_repository(
     name = "org_golang_x_text",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/text",
+    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
     sum = "h1:a94ExnEXNtEwYLGJSIUxnWoxoRz/ZcCsV63ROupILh4=",
     version = "v0.16.0",
-    repo_mapping = {"@go_googleapis": "@com_google_googleapis"},
 )
 
 ################################################################################
@@ -247,9 +256,9 @@ http_archive(
 
 http_archive(
     name = "com_google_protobuf",
-    sha256 = "21fcb4b0df6a8e6279e5843af8c9f2245919cf0d3ec2021c76fccc4fc4bf9aca",
-    strip_prefix = "protobuf-4.23.3",
-    url = "https://github.com/protocolbuffers/protobuf/archive/v4.23.3.tar.gz",
+    sha256 = "8ff511a64fc46ee792d3fe49a5a1bcad6f7dc50dfbba5a28b0e5b979c17f9871",
+    strip_prefix = "protobuf-25.2",
+    urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v25.2/protobuf-25.2.tar.gz"],
 )
 
 load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
@@ -258,9 +267,9 @@ protobuf_deps()
 
 http_archive(
     name = "com_google_absl",
-    sha256 = "3439843ac7d7b9cc354dd6735b6790fa7589b73429bbda77976e0db61e92f1fd",
-    strip_prefix = "abseil-cpp-0697762c62cdb51ead8d9c2f0d299c5d4a4ff9db",
-    url = "https://github.com/abseil/abseil-cpp/archive/0697762c62cdb51ead8d9c2f0d299c5d4a4ff9db.tar.gz",
+    sha256 = "df8b3e0da03567badd9440377810c39a38ab3346fa89df077bb52e68e4d61e74",
+    strip_prefix = "abseil-cpp-4447c7562e3bc702ade25105912dce503f0c4010",
+    url = "https://github.com/abseil/abseil-cpp/archive/4447c7562e3bc702ade25105912dce503f0c4010.tar.gz",
 )
 
 http_archive(
@@ -276,9 +285,9 @@ http_archive(
     # - Adding implicit conversion between grpc::Status and absl::Status
     patch_args = ["-p1"],
     patches = ["//build/bazel:grpc.patch"],
-    sha256 = "e034992a0b464042021f6d440f2090acc2422c103a322b0844e3921ccea981dc",
-    strip_prefix = "grpc-1.56.0",
-    urls = ["https://github.com/grpc/grpc/archive/v1.56.0.tar.gz"],
+    sha256 = "c682fc39baefc6e804d735e6b48141157b7213602cc66dbe0bf375b904d8b5f9",
+    strip_prefix = "grpc-1.64.2",
+    urls = ["https://github.com/grpc/grpc/archive/refs/tags/v1.64.2.tar.gz"],
 )
 
 http_archive(
@@ -308,10 +317,6 @@ cc_library(
     ],
 )
 
-load("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_deps")
-
-grpc_deps()
-
 ################################################################################
 # ZetaSQL                                                                      #
 ################################################################################
@@ -322,9 +327,9 @@ http_archive(
     patches = ["//build/bazel:zetasql.patch"],
     # Patches applied:
     # - Give visibility to ZetaSQL's base library to reuse some utilities
-    sha256 = "8457b6795d7143e4d63324b827a07fbb0651362fcb263babea5c0db15c47861b",
-    strip_prefix = "zetasql-f6df6971a205790966e73eda0134f05a022d0e6a",
-    url = "https://github.com/google/zetasql/archive/f6df6971a205790966e73eda0134f05a022d0e6a.tar.gz",
+    sha256 = "1afc2210d4aad371eff0a6bfdd8417ba99e02183a35dff167af2fa6097643f26",
+    strip_prefix = "zetasql-a516c6b26d183efc4f56293256bba92e243b7a61",
+    url = "https://github.com/google/zetasql/archive/a516c6b26d183efc4f56293256bba92e243b7a61.tar.gz",
 )
 
 http_archive(
@@ -337,9 +342,9 @@ http_archive(
 # gRPC Java
 http_archive(
     name = "io_grpc_grpc_java",
-    sha256 = "4af5ecbaed16455fcda9fdab36e131696f5092858dd130f026069fcf11817a21",
-    strip_prefix = "grpc-java-1.56.0",
-    url = "https://github.com/grpc/grpc-java/archive/v1.56.0.tar.gz",
+    sha256 = "301e0de87c7659cc790bd2a7265970a71632d55773128c98768385091c0a1a97",
+    strip_prefix = "grpc-java-1.61.0",
+    url = "https://github.com/grpc/grpc-java/archive/v1.61.0.zip",
 )
 
 load("@rules_jvm_external//:repositories.bzl", "rules_jvm_external_deps")

@@ -169,6 +169,18 @@ class ForwardTransformer {
       const Node* limit_clause, const Node* offset_clause,
       std::unique_ptr<const zetasql::ResolvedScan> current_scan);
 
+  // Builds a `ResolvedLockMode` object. `row_mark_clause` is taken from
+  // query.rowMarks. Currently we only support FOR UPDATE as the only lock
+  // strength. If support for other lock strengths or associated options are
+  // supported later, this function can be modified to populate the LockMode
+  // node appropriately.
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedLockMode>>
+  BuildGsqlResolvedLockMode(const RowMarkClause* row_mark_clause);
+
+  // Same as above, except creates a copy of the given lock mode.
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedLockMode>>
+  BuildGsqlResolvedLockMode(const zetasql::ResolvedLockMode* lock_mode);
+
   // Builds a nested `ResolvedScan` object for the FROM clause of this query.
   // Returns a SingleRowScan if there is no FROM  clause.
   // Modeled after the ZetaSQL ResolveFromClauseAndCreateScan function.
@@ -856,6 +868,15 @@ class ForwardTransformer {
   absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
   BuildGsqlFunctionArgumentList(const PgProcData& proc_data, List* args,
                                 ExprTransformerInfo* expr_transformer_info);
+
+  // Construct a list of order by items for an aggregate function call. For
+  // example, `y DESC` in `ARRAY_AGG(x ORDER BY y DESC)`.
+  absl::StatusOr<
+      std::vector<std::unique_ptr<const zetasql::ResolvedOrderByItem>>>
+  BuildGsqlAggregateOrderByList(
+      List* sortClause,
+      const std::vector<std::unique_ptr<zetasql::ResolvedExpr>>& arguments,
+      ExprTransformerInfo* expr_transformer_info);
 
   std::vector<zetasql::InputArgumentType> GetInputArgumentTypes(
       const std::vector<std::unique_ptr<zetasql::ResolvedExpr>>&

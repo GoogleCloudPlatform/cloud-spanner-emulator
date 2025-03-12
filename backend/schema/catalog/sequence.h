@@ -43,8 +43,6 @@ class Sequence : public SchemaNode {
   std::optional<int64_t> skip_range_max() const { return skip_range_max_; }
   bool is_internal_use() const { return is_internal_use_; }
 
-  ~Sequence() { RemoveSequenceFromLastValuesMap(); }
-
   // Returns a unique id of this sequence.
   const SequenceID id() const { return id_; }
 
@@ -83,6 +81,10 @@ class Sequence : public SchemaNode {
   // Reset the sequence's last value to the schema's current start_with_.
   void ResetSequenceLastValue() const ABSL_LOCKS_EXCLUDED(SequenceMutex);
 
+  // Remove the sequence from the last values map.
+  void RemoveSequenceFromLastValuesMap() const
+      ABSL_LOCKS_EXCLUDED(SequenceMutex);
+
   // SchemaNode interface implementation.
   // ------------------------------------
   std::optional<SchemaNameInfo> GetSchemaNameInfo() const override {
@@ -109,9 +111,6 @@ class Sequence : public SchemaNode {
       : validate_(validate), validate_update_(validate_update) {}
 
   Sequence(const Sequence&) = default;
-
-  void RemoveSequenceFromLastValuesMap() const
-      ABSL_LOCKS_EXCLUDED(SequenceMutex);
 
   std::unique_ptr<SchemaNode> ShallowClone() const override {
     return absl::WrapUnique(new Sequence(*this));

@@ -31,6 +31,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/schema.h"
@@ -89,6 +90,13 @@ std::string ColumnTypeToString(const zetasql::Type* type,
 
 // Converts proto_bundle types to its string representation.
 std::string PrintProtoBundle(std::shared_ptr<const ProtoBundle> proto_bundle);
+
+// Prints the DDL statements for a locality group.
+std::string PrintLocalityGroup(const LocalityGroup* locality_group);
+
+// Prints the DDL statements for a locality group options.
+std::string PrintLocalityGroupOptions(
+    ::google::protobuf::RepeatedPtrField<ddl::SetOption> options);
 
 // Prints the DDL statements for all tables and indexes within the given schema.
 absl::StatusOr<std::vector<std::string>> PrintDDLStatements(

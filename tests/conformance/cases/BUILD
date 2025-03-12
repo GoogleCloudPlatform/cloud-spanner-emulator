@@ -69,6 +69,7 @@ cc_library(
         "read_your_writes.cc",
         "schema_changes.cc",
         "search_test.cc",
+        "select_for_update.cc",
         "sequence_read_write.cc",
         "sessions.cc",
         "single_row_writes.cc",

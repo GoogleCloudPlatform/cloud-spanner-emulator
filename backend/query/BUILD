@@ -363,6 +363,7 @@ cc_library(
         ":tables_from_metadata",
         "//backend/schema/catalog:schema",
         "//backend/schema/ddl:operations_cc_proto",
+        "//backend/schema/parser:ddl_parser",
         "//backend/schema/printer:print_ddl",
         "//backend/schema/updater:ddl_type_conversion",
         "//third_party/spanner_pg/catalog:spangres_type",
@@ -411,6 +412,7 @@ cc_library(
         ":information_schema_catalog",
         ":queryable_model",
         ":queryable_named_schema",
+        ":queryable_property_graph",
         ":queryable_sequence",
         ":queryable_table",
         ":queryable_udf",
@@ -633,6 +635,24 @@ cc_test(
 )
 
 cc_library(
+    name = "prepare_property_graph_catalog",
+    hdrs = [
+        "prepare_property_graph_catalog.h",
+    ],
+    deps = [
+        ":analyzer_options",
+        ":catalog",
+        ":function_catalog",
+        "//backend/schema/catalog:schema",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/public:analyzer_options",
+        "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:type",
+    ],
+)
+
+cc_library(
     name = "function_catalog",
     srcs = [
         "function_catalog.cc",
@@ -773,6 +793,31 @@ cc_library(
     deps = [
         "//backend/schema/catalog:schema",
         "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:type",
+    ],
+)
+
+cc_library(
+    name = "queryable_property_graph",
+    srcs = ["queryable_property_graph.cc"],
+    hdrs = ["queryable_property_graph.h"],
+    deps = [
+        ":analyzer_options",
+        "//backend/common:case",
+        "//backend/schema/catalog:schema",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_zetasql//zetasql/public:analyzer",
+        "@com_google_zetasql//zetasql/public:analyzer_options",
+        "@com_google_zetasql//zetasql/public:analyzer_output",
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:type",
     ],

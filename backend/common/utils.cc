@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <limits>
 
+#include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
 #include "re2/re2.h"
 
@@ -54,6 +55,11 @@ int64_t ParseSchemaTimeSpec(absl::string_view spec) {
 
   return num;
 }
+
+bool IsSystemLocalityGroup(absl::string_view name) {
+  return absl::StartsWith(name, "_");
+}
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

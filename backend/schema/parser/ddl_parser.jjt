@@ -108,11 +108,12 @@ void create_statement() #void :
     | create_table_statement()
     | create_index_statement()
     | create_search_index_statement()
+    | create_vector_index_statement()
     | create_or_replace_statement()
     | create_change_stream_statement()
     | create_sequence_statement()
     | create_role_statement()
-
+    | create_locality_group_statement()
   )
 }
 
@@ -158,7 +159,7 @@ void create_or_replace_statement() :
     | create_model_statement()
     | create_schema_statement()
     | create_function_statement()
-
+    | LOOKAHEAD(2) create_property_graph_statement()
   )
 }
 
@@ -231,10 +232,12 @@ void alter_index_statement() :
 {
   <INDEX>
   ( qualified_identifier() #name )
-
+  [
     (<ADD> #add | <DROP> #drop)
     <STORED> <COLUMN>
     ( identifier() #column_name )
+  ]
+  [ <SET> options_clause() ]
 }
 
 void options_clause() :
@@ -261,6 +264,7 @@ void create_table_statement() :
   [ primary_key() ]
   [ LOOKAHEAD(2) "," table_interleave_clause() ]
   [ LOOKAHEAD(2) "," row_deletion_policy_clause() ]
+  [ LOOKAHEAD(2) "," options_clause() ]
 }
 
 void table_element() #void :
@@ -486,7 +490,7 @@ void create_index_statement() :
   [ <STORING> stored_column_list() ]
   [ <WHERE> create_index_where_clause() ]
   [ LOOKAHEAD(2) "," index_interleave_clause() ]
-
+  [ options_clause() ]
 }
 
 void create_search_index_statement() :
@@ -500,6 +504,22 @@ void create_search_index_statement() :
   [ <ORDER> <BY> order_by_key() ]
   [ <WHERE> create_index_where_clause() ]
   [ LOOKAHEAD(2) "," index_interleave_clause() ]
+  [ options_clause() ]
+}
+
+void create_vector_index_statement() :
+{}
+{
+  <VECTOR><INDEX>
+  [ if_not_exists() ]
+  qualified_identifier() #name
+  <ON> qualified_identifier() #index_base
+  "("
+  key_part() #index_key
+  ")"
+  [ <STORING> stored_column_list() ]
+  [ <PARTITION> <BY> partition_key() ]
+  [ <WHERE> create_index_where_clause() ]
   [ options_clause() ]
 }
 
@@ -582,6 +602,25 @@ void create_role_statement() :
   <ROLE> identifier() #name
 }
 
+
+void create_locality_group_statement() :
+{}
+{
+  <LOCALITY> <GROUP>
+  [ if_not_exists() ]
+  (<DEFAULTT> #defaultt | qualified_identifier() #name)
+  [ options_clause() ]
+}
+
+void alter_locality_group_statement() :
+{}
+{
+  <LOCALITY> <GROUP>
+  [ if_exists() ]
+  (<DEFAULTT> #defaultt | qualified_identifier() #name)
+  [<SET> options_clause()]
+}
+
 void privilege() :
 {}
 {
@@ -605,7 +644,7 @@ void target_type():
   | <CHANGE> <STREAM> #change_stream
   | <VIEW> #view
   | <SEQUENCE> #sequence
-
+  | <LOCALITY> <GROUP> #locality_group
 }
 
 void privilege_target():
@@ -736,6 +775,21 @@ void statement_tokens() :
   | ")" )+
 }
 
+void create_property_graph_statement() :
+{}
+{
+ <PROPERTY> <GRAPH>
+[ if_not_exists() #if_not_exists ]
+(qualified_identifier() #name) element_tables() #element_tables
+}
+
+void element_tables() :
+{}
+{
+  ( googlesql_statement_token_no_paren()
+  | "("
+  | ")" )*
+}
 
 void if_not_exists() :
 {}
@@ -787,10 +841,10 @@ void drop_statement() :
       | <SEQUENCE> #sequence [ if_exists() ]
       | <MODEL> #model [ if_exists() ]
       | <SCHEMA> #schema [ if_exists() ]
-
+      | LOOKAHEAD(2) <PROPERTY> <GRAPH> #graph [ if_exists() ]
     ) qualified_identifier() #name
     | <PROTO> #proto_bundle <BUNDLE> #name
-
+    | <LOCALITY> <GROUP> #locality_group [ if_exists() ] (<DEFAULTT> #defaultt |  qualified_identifier() #name)
   )
 }
 
@@ -807,7 +861,7 @@ void alter_statement() #void :
     | alter_sequence_statement()
     | alter_model_statement()
     | alter_schema_statement()
-
+    | alter_locality_group_statement()
   )
 }
 
@@ -829,6 +883,7 @@ void alter_table_statement() :
     | LOOKAHEAD(1) <ALTER> #alter_column [LOOKAHEAD(2) <COLUMN>]
         (identifier() #name) column_def_alter()
     | LOOKAHEAD(2) <SET> #set_on_delete on_delete_clause()
+    | LOOKAHEAD(2) <SET> options_clause()
     | LOOKAHEAD(2) <RENAME> <TO> qualified_identifier() #rename_to
         ["," <ADD> <SYNONYM> qualified_identifier() #synonym]
     | LOOKAHEAD(4) <ADD> foreign_key()

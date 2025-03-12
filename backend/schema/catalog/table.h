@@ -34,6 +34,7 @@
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
@@ -77,6 +78,9 @@ class Table : public SchemaNode {
   const ChangeStream* owner_change_stream() const {
     return owner_change_stream_;
   }
+
+  // Returns the locality group this column belongs to.
+  const LocalityGroup* locality_group() const { return locality_group_; }
 
   // Returns the Index that owns this table, or nullptr if this table is not
   // owned by an Index.
@@ -329,6 +333,9 @@ class Table : public SchemaNode {
   // Additional PG oids.
   std::optional<uint32_t> interleave_in_parent_postgresql_oid_ = std::nullopt;
   std::optional<uint32_t> primary_key_index_postgresql_oid_ = std::nullopt;
+
+  // The locality group this table belongs to.
+  const LocalityGroup* locality_group_ = nullptr;
 };
 
 // Returns the name of the schema declared owning object (index or table) of

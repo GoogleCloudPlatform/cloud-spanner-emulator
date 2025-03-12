@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include "backend/schema/catalog/table.h"
+
 #include <algorithm>
 #include <iterator>
 #include <memory>
@@ -54,7 +56,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_SingleKey) {
       col2 STRING(MAX)
     ) PRIMARY KEY(col1))"}));
 
-  auto t = schema->FindTable("T");
+  const Table* t = schema->FindTable("T");
   EXPECT_NE(t, nullptr);
   EXPECT_EQ(t->columns().size(), 2);
   EXPECT_EQ(t->primary_key().size(), 1);
@@ -75,7 +77,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_SingleKeyInline) {
       col2 STRING(MAX)
     ))"}));
 
-  auto t = schema->FindTable("T");
+  const Table* t = schema->FindTable("T");
   EXPECT_NE(t, nullptr);
   EXPECT_EQ(t->columns().size(), 2);
   EXPECT_EQ(t->primary_key().size(), 1);
@@ -111,7 +113,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_MultiKey) {
       ) PRIMARY KEY(col1 DESC, col2))"}));
   }
 
-  auto t = schema->FindTable("T");
+  const Table* t = schema->FindTable("T");
   EXPECT_NE(t, nullptr);
   EXPECT_EQ(t->columns().size(), 2);
   EXPECT_EQ(t->primary_key().size(), 2);
@@ -137,7 +139,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_NoKey) {
       col1 INT64
     ) PRIMARY KEY())"}));
 
-  auto t = schema->FindTable("T");
+  const Table* t = schema->FindTable("T");
   EXPECT_NE(t, nullptr);
   EXPECT_EQ(t->columns().size(), 1);
   EXPECT_EQ(t->primary_key().size(), 0);
@@ -154,7 +156,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_NoColumns) {
     CREATE TABLE T(
     ) PRIMARY KEY())"}));
 
-  auto t = schema->FindTable("T");
+  const Table* t = schema->FindTable("T");
   EXPECT_NE(t, nullptr);
   EXPECT_EQ(t->columns().size(), 0);
   EXPECT_EQ(t->primary_key().size(), 0);
@@ -168,7 +170,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_ColumnLength) {
       col1 BYTES(10)
     ) PRIMARY KEY())"}));
 
-  auto t = schema->FindTable("T");
+  const Table* t = schema->FindTable("T");
   EXPECT_NE(t, nullptr);
   EXPECT_EQ(t->columns().size(), 1);
 
@@ -209,7 +211,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_AllowCommitTimestamp) {
       ) PRIMARY KEY(col1))"}));
   }
 
-  auto t = schema->FindTable("T");
+  const Table* t = schema->FindTable("T");
   auto col2 = t->columns()[1];
   EXPECT_THAT(col2, ColumnIs("col2", types::TimestampType()));
   EXPECT_TRUE(col2->allows_commit_timestamp());
@@ -284,7 +286,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_ColumnNullability) {
       col2 INT64
     ) PRIMARY KEY())"}));
 
-  auto t = schema->FindTable("T");
+  const Table* t = schema->FindTable("T");
   EXPECT_NE(t, nullptr);
   EXPECT_EQ(t->columns().size(), 2);
 
@@ -342,9 +344,9 @@ TEST_P(SchemaUpdaterTest, CreateTable_Interleave) {
         INTERLEAVE IN PARENT `Parent` ON DELETE CASCADE
     )"}));
 
-  auto p = schema->FindTable("Parent");
+  const Table* p = schema->FindTable("Parent");
   EXPECT_NE(p, nullptr);
-  auto c = schema->FindTable("Child");
+  const Table* c = schema->FindTable("Child");
   EXPECT_NE(c, nullptr);
   EXPECT_THAT(c, IsInterleavedIn(p, Table::OnDeleteAction::kCascade));
 }
@@ -519,9 +521,9 @@ TEST_P(SchemaUpdaterTest, CreateTable_CreateChildTable) {
       ) PRIMARY KEY (k1, k2),
         INTERLEAVE IN PARENT `Parent` ON DELETE CASCADE
     )"}));
-  auto parent_table = schema->FindTable("Parent");
+  const Table* parent_table = schema->FindTable("Parent");
   EXPECT_NE(parent_table, nullptr);
-  auto child_table = schema->FindTable("Child");
+  const Table* child_table = schema->FindTable("Child");
   EXPECT_NE(child_table, nullptr);
 }
 
@@ -533,15 +535,15 @@ TEST_P(SchemaUpdaterTest, CreateTable_WithSynonym) {
       SYNONYM(S),
     ) PRIMARY KEY(col1))"}));
 
-  auto t = schema->FindTable("T");
+  const Table* t = schema->FindTable("T");
   EXPECT_NE(t, nullptr);
-  auto s = schema->FindTable("S");
+  const Table* s = schema->FindTable("S");
   EXPECT_NE(s, nullptr);
   EXPECT_EQ(t, s);
 
-  auto t1 = schema->FindTableUsingSynonym("T");
+  const Table* t1 = schema->FindTableUsingSynonym("T");
   EXPECT_EQ(t1, nullptr);
-  auto s1 = schema->FindTableUsingSynonym("S");
+  const Table* s1 = schema->FindTableUsingSynonym("S");
   EXPECT_NE(s1, nullptr);
 
   t1 = schema->FindTableCaseSensitive("T");
@@ -614,10 +616,10 @@ TEST_P(SchemaUpdaterTest, AlterTable_Rename) {
       ALTER TABLE T RENAME TO S
     )"}));
 
-  auto t_new = new_schema->FindTable("T");
+  const Table* t_new = new_schema->FindTable("T");
   EXPECT_EQ(t_new, nullptr);
 
-  auto s_new = new_schema->FindTable("S");
+  const Table* s_new = new_schema->FindTable("S");
   EXPECT_NE(s_new, nullptr);
 }
 
@@ -632,10 +634,10 @@ TEST_P(SchemaUpdaterTest, AlterTable_RenameWithSynonym) {
       ALTER TABLE T RENAME TO S, ADD SYNONYM T
     )"}));
 
-  auto t_new = new_schema->FindTable("T");
+  const Table* t_new = new_schema->FindTable("T");
   EXPECT_NE(t_new, nullptr);
 
-  auto s_new = new_schema->FindTable("S");
+  const Table* s_new = new_schema->FindTable("S");
   EXPECT_NE(s_new, nullptr);
 
   // The two table objects should be the same.
@@ -663,14 +665,14 @@ TEST_P(SchemaUpdaterTest, AlterTable_RenameWithDependencies) {
       ALTER TABLE T RENAME TO S
     )"}));
 
-  auto t_new = new_schema->FindTable("T");
+  const Table* t_new = new_schema->FindTable("T");
   EXPECT_EQ(t_new, nullptr);
 
-  auto s_new = new_schema->FindTable("S");
+  const Table* s_new = new_schema->FindTable("S");
   EXPECT_NE(s_new, nullptr);
 
   // Child table must be interleaved in the new parent table name.
-  auto t_child = new_schema->FindTable("T2");
+  const Table* t_child = new_schema->FindTable("T2");
   EXPECT_NE(t_child, nullptr);
   EXPECT_EQ(t_child->parent()->Name(), "S");
 
@@ -690,14 +692,14 @@ TEST_P(SchemaUpdaterTest, AlterTable_AddColumn) {
       ) PRIMARY KEY (k1)
     )"}));
 
-  auto t_old = schema->FindTable("T");
+  const Table* t_old = schema->FindTable("T");
   EXPECT_EQ(t_old->FindColumn("c2"), nullptr);
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T ADD COLUMN c2 BYTES(100)
     )"}));
 
-  auto t_new = new_schema->FindTable("T");
+  const Table* t_new = new_schema->FindTable("T");
   EXPECT_NE(t_old, t_new);
   auto c2 = t_new->FindColumn("c2");
   EXPECT_NE(c2, nullptr);
@@ -716,7 +718,7 @@ TEST_P(SchemaUpdaterTest, AlterTableAddColumnIfNotExists) {
       ) PRIMARY KEY (k1)
     )"}));
 
-  auto t_old = schema->FindTable("T");
+  const Table* t_old = schema->FindTable("T");
   EXPECT_EQ(t_old->FindColumn("c2"), nullptr);
 
   // Add a column, make sure it goes in right.
@@ -724,7 +726,7 @@ TEST_P(SchemaUpdaterTest, AlterTableAddColumnIfNotExists) {
       ALTER TABLE T ADD COLUMN c2 BYTES(100)
     )"}));
 
-  auto t_new = new_schema->FindTable("T");
+  const Table* t_new = new_schema->FindTable("T");
   EXPECT_NE(t_old, t_new);
   auto c2 = t_new->FindColumn("c2");
   EXPECT_NE(c2, nullptr);
@@ -772,7 +774,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_ChangeColumnType_StaticCheckValid) {
       ) PRIMARY KEY (k1)
     )"}));
 
-  auto t = schema->FindTable("T");
+  const Table* t = schema->FindTable("T");
   auto c1 = t->FindColumn("c1");
   EXPECT_THAT(c1, ColumnIs("c1", types::StringType()));
   EXPECT_EQ(c1->declared_max_length(), 100);
@@ -795,7 +797,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_ChangeColumnType_Invalid) {
       ) PRIMARY KEY (k1)
     )"}));
 
-  auto t = schema->FindTable("T");
+  const Table* t = schema->FindTable("T");
   auto c1 = t->FindColumn("c1");
   EXPECT_THAT(c1, ColumnIs("c1", types::StringType()));
   EXPECT_EQ(c1->declared_max_length(), 100);
@@ -837,7 +839,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_NotNullToNullable) {
       ) PRIMARY KEY (k1)
     )"}));
 
-  auto t = schema->FindTable("T");
+  const Table* t = schema->FindTable("T");
   auto c2 = t->FindColumn("c2");
   EXPECT_FALSE(c2->is_nullable());
 
@@ -864,7 +866,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnType) {
       CREATE INDEX Idx1 ON T(c1)
     )"}));
 
-  auto t = schema->FindTable("T");
+  const Table* t = schema->FindTable("T");
   auto c1 = t->FindColumn("c1");
   EXPECT_THAT(c1, ColumnIs("c1", types::StringType()));
 
@@ -876,7 +878,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnType) {
       ALTER TABLE T ALTER COLUMN c1 BYTES(40)
     )"}));
 
-  auto t_new = new_schema->FindTable("T");
+  const Table* t_new = new_schema->FindTable("T");
   auto c1_new = t_new->FindColumn("c1");
   EXPECT_THAT(c1_new, ColumnIs("c1", types::BytesType()));
 
@@ -937,7 +939,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_KeyColumnType) {
       ALTER TABLE T ALTER COLUMN k1 BYTES(MAX) NOT NULL
     )"}));
 
-  auto t = new_schema->FindTable("T");
+  const Table* t = new_schema->FindTable("T");
   auto c1 = t->FindColumn("k1");
   EXPECT_THAT(c1, ColumnIs("k1", types::BytesType()));
   EXPECT_FALSE(c1->declared_max_length().has_value());
@@ -994,7 +996,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_DropColumn) {
       ALTER TABLE T DROP COLUMN c1
     )"}));
 
-  auto t = new_schema->FindTable("T");
+  const Table* t = new_schema->FindTable("T");
   auto c1 = t->FindColumn("c1");
   EXPECT_EQ(c1, nullptr);
 }
@@ -1055,7 +1057,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_ChangeOnDelete) {
       ) PRIMARY KEY (k1, c1), INTERLEAVE IN PARENT T1
     )"}));
 
-  auto t2 = schema->FindTable("T2");
+  const Table* t2 = schema->FindTable("T2");
   EXPECT_NE(t2, nullptr);
   EXPECT_EQ(t2->on_delete_action(), Table::OnDeleteAction::kNoAction);
 
@@ -1085,15 +1087,15 @@ TEST_P(SchemaUpdaterTest, AlterTable_AddSynonym) {
       ) PRIMARY KEY (k1)
     )"}));
 
-  auto t_old = schema->FindTable("T");
+  const Table* t_old = schema->FindTable("T");
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T ADD SYNONYM S
     )"}));
 
-  auto t_new = new_schema->FindTable("T");
+  const Table* t_new = new_schema->FindTable("T");
   EXPECT_NE(t_old, t_new);
 
-  auto s_new = new_schema->FindTable("S");
+  const Table* s_new = new_schema->FindTable("S");
   EXPECT_EQ(t_new, s_new);
 }
 
@@ -1137,15 +1139,15 @@ TEST_P(SchemaUpdaterTest, AlterTable_DropSynonym) {
       ) PRIMARY KEY (k1)
     )"}));
 
-  auto t_old = schema->FindTable("T");
+  const Table* t_old = schema->FindTable("T");
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T DROP SYNONYM S
     )"}));
 
-  auto t_new = new_schema->FindTable("T");
+  const Table* t_new = new_schema->FindTable("T");
   EXPECT_NE(t_old, t_new);
 
-  auto s_new = new_schema->FindTable("S");
+  const Table* s_new = new_schema->FindTable("S");
   EXPECT_EQ(s_new, nullptr);
 
   // S is now available for reuse.
@@ -1201,7 +1203,7 @@ TEST_P(SchemaUpdaterTest, DropTableNonexistentIfExists) {
       ) PRIMARY KEY (k2)
     )"}));
 
-  auto t1 = schema->FindTable("T1");
+  const Table* t1 = schema->FindTable("T1");
   EXPECT_NE(t1, nullptr);
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
@@ -1222,7 +1224,7 @@ TEST_P(SchemaUpdaterTest, DropTableNonexistentIfExists) {
   EXPECT_EQ(t1, nullptr);
 
   // Make sure the other table is still there.
-  auto t2 = new_schema2->FindTable("T2");
+  const Table* t2 = new_schema2->FindTable("T2");
   EXPECT_NE(t2, nullptr);
 }
 
@@ -1242,7 +1244,7 @@ TEST_P(SchemaUpdaterTest, DropTableIfExists) {
       ) PRIMARY KEY (k2)
     )"}));
 
-  auto t1 = schema->FindTable("T1");
+  const Table* t1 = schema->FindTable("T1");
   EXPECT_NE(t1, nullptr);
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
@@ -1269,7 +1271,7 @@ TEST_P(SchemaUpdaterTest, DropTable) {
       ) PRIMARY KEY (k2)
     )"}));
 
-  auto t1 = schema->FindTable("T1");
+  const Table* t1 = schema->FindTable("T1");
   EXPECT_NE(t1, nullptr);
   EXPECT_EQ(schema->GetSchemaGraph()->GetSchemaNodes().size(), 8);
 
@@ -1284,7 +1286,7 @@ TEST_P(SchemaUpdaterTest, DropTable) {
   EXPECT_EQ(new_schema->GetSchemaGraph()->GetSchemaNodes().size(), 4);
 
   // The other table is still there.
-  auto t2 = new_schema->FindTable("T2");
+  const Table* t2 = new_schema->FindTable("T2");
   EXPECT_NE(t2, nullptr);
 }
 
@@ -1314,7 +1316,7 @@ TEST_P(SchemaUpdaterTest, DropTable_CanDropChildTable) {
       DROP TABLE T2
     )"}));
 
-  auto t1 = new_schema->FindTable("T1");
+  const Table* t1 = new_schema->FindTable("T1");
   EXPECT_EQ(t1->children().size(), 0);
   EXPECT_EQ(new_schema->FindTable("T2"), nullptr);
 }
@@ -1363,7 +1365,7 @@ TEST_P(SchemaUpdaterTest, DropTable_Recreate) {
       ) PRIMARY KEY (k1)
     )"}));
 
-  auto t1 = new_schema->FindTable("T1");
+  const Table* t1 = new_schema->FindTable("T1");
   EXPECT_NE(t1, nullptr);
 }
 
@@ -1375,9 +1377,9 @@ TEST_P(SchemaUpdaterTest, DropTableWithSynonym) {
       ) PRIMARY KEY (k1)
     )"}));
 
-  auto t1 = schema->FindTable("T1");
+  const Table* t1 = schema->FindTable("T1");
   EXPECT_NE(t1, nullptr);
-  auto s1 = schema->FindTable("S1");
+  const Table* s1 = schema->FindTable("S1");
   EXPECT_NE(s1, nullptr);
   EXPECT_EQ(t1, s1);
 
@@ -1423,7 +1425,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_NumericColumns) {
         col2 PG.NUMERIC,
         col3 ARRAY<PG.NUMERIC>
       ) PRIMARY KEY(col1))"}));
-    auto t = schema->FindTable("T");
+    const Table* t = schema->FindTable("T");
     EXPECT_NE(t, nullptr);
     EXPECT_EQ(t->columns().size(), 3);
     EXPECT_EQ(t->primary_key().size(), 1);
@@ -1454,7 +1456,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_NumericColumns) {
         col2 NUMERIC,
         col3 ARRAY<NUMERIC>
       ) PRIMARY KEY(col1))"}));
-    auto t = schema->FindTable("T");
+    const Table* t = schema->FindTable("T");
     EXPECT_NE(t, nullptr);
     EXPECT_EQ(t->columns().size(), 3);
     EXPECT_EQ(t->primary_key().size(), 1);
@@ -1482,7 +1484,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_NumericAsPK) {
       ) PRIMARY KEY (k1)
     )"}));
 
-  auto t = schema->FindTable("T");
+  const Table* t = schema->FindTable("T");
   EXPECT_NE(t, nullptr);
   EXPECT_EQ(t->columns().size(), 1);
   EXPECT_EQ(t->primary_key().size(), 1);
@@ -1499,7 +1501,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_JsonColumns) {
       col3 ARRAY<PG.JSONB>
     ) PRIMARY KEY(col1))"}));
 
-    auto t = schema->FindTable("T");
+    const Table* t = schema->FindTable("T");
     EXPECT_NE(t, nullptr);
     EXPECT_EQ(t->columns().size(), 3);
     EXPECT_EQ(t->primary_key().size(), 1);
@@ -1533,7 +1535,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_JsonColumns) {
       col3 ARRAY<JSON>
     ) PRIMARY KEY(col1))"}));
 
-    auto t = schema->FindTable("T");
+    const Table* t = schema->FindTable("T");
     EXPECT_NE(t, nullptr);
     EXPECT_EQ(t->columns().size(), 3);
     EXPECT_EQ(t->primary_key().size(), 1);
@@ -1686,7 +1688,7 @@ TEST_P(SchemaUpdaterTest, CreateTableIfNotExists) {
       col1 STRING(MAX),
       col3 INT64
     ) PRIMARY KEY(col3))"}));
-  auto t = new_schema->FindTable("T");
+  const Table* t = new_schema->FindTable("T");
   // If the new table was *not* created (it shouldn't be) then this will be
   // null.
   ASSERT_EQ(t->FindColumn("col3"), nullptr);

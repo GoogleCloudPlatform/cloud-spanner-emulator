@@ -29,7 +29,7 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include "third_party/spanner_pg/datatypes/common/jsonb/jsonb_parse.h"
+#include "third_party/spanner_pg/datatypes/common/jsonb/jsonb_value.h"
 
 #include <string.h>
 

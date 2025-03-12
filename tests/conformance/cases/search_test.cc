@@ -1508,6 +1508,42 @@ INSTANTIATE_TEST_SUITE_P(
     SearchInBatchQuery, SearchInTransactionTest,
     testing::ValuesIn(SearchInTransactionTest::GetTransactionTests()));
 
+class SearchInTransactionWithForUpdateTest : public SearchInTransactionTest {
+ public:
+  static std::vector<SearchInTransactionQuery> GetTransactionTests() {
+    return {
+        {.has_index_hint = false,
+         .has_search = true,
+         .with_allow_search_in_transaction_hint = true},
+        {.has_index_hint = true,
+         .has_search = true,
+         .with_allow_search_in_transaction_hint = true},
+        {.has_index_hint = true,
+         .has_search = false,
+         .with_allow_search_in_transaction_hint = true},
+    };
+  }
+};
+
+TEST_P(SearchInTransactionWithForUpdateTest, SearchInTransactionalQuery) {
+  Transaction txn{Transaction::ReadWriteOptions{}};
+
+  std::string query =
+      absl::Substitute(absl::StrCat(kAllowSearchInTransactionHint,
+                                    kSearchQueryFormat, " FOR UPDATE"),
+                       kSearchIndexHint, kSearchPredicate);
+  auto query_result = QueryTransaction(txn, query);
+  EXPECT_THAT(
+      query_result,
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("FOR UPDATE is not supported in search queries")));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    SearchInTransactionalQuery, SearchInTransactionWithForUpdateTest,
+    testing::ValuesIn(
+        SearchInTransactionWithForUpdateTest::GetTransactionTests()));
+
 static constexpr char kQueryWithoutSearch[] = R"sql(
       SELECT a.Name
       FROM SqlSearchCountries a
@@ -1551,14 +1587,22 @@ class TokenizeNumberParametersTest
     return {
         {.query = "SELECT TOKENIZE_NUMBER(999, comparison_type=>'compare')",
          .expected_error =
-             HasSubstr("TOKENIZE_NUMBER: Unsupported comparison type: "
-                       "'compare'")},
+             AnyOf(HasSubstr("TOKENIZE_NUMBER: unsupported comparison type: "
+                             "'compare'"),
+                   HasSubstr("TOKENIZE_NUMBER: Unsupported comparison type: "
+                             "'compare'"))},
         {.query = "SELECT TOKENIZE_NUMBER(999, algorithm=>'linear')",
-         .expected_error = ContainsRegex(
-             "TOKENIZE_NUMBER: Algorithm is not supported: 'linear'; "
-             "supported algorithms are: 'auto', 'logtree', 'prefixtree', "
-             "'floatingpoint' \\(floatingpoint is supported only for floating "
-             "point types\\)")},
+         .expected_error = AnyOf(
+             ContainsRegex(
+                 "TOKENIZE_NUMBER: Algorithm is not supported: 'linear'; "
+                 "supported algorithms are: 'auto', 'logtree', 'prefixtree', "
+                 "'floatingpoint' \\(floatingpoint is supported only for "
+                 "floating point types\\)"),
+             ContainsRegex(
+                 "TOKENIZE_NUMBER: unsupported algorithm 'linear'; "
+                 "supported algorithms are 'auto', 'logtree', 'prefixtree', or "
+                 "'floatingpoint' \\(floatingpoint is supported only for "
+                 "floating point types\\)"))},
         {.query = "SELECT TOKENIZE_NUMBER(999, tree_base=>11)",
          .expected_error =
              HasSubstr("TOKENIZE_NUMBER: tree_base must be in the range "
@@ -1578,9 +1622,13 @@ class TokenizeNumberParametersTest
              HasSubstr("TOKENIZE_NUMBER: granularity must be finite and "
                        "positive, got: inf")},
         {.query = "SELECT TOKENIZE_NUMBER(5, min=>1, max=>10, granularity=>11)",
-         .expected_error = HasSubstr(
-             "TOKENIZE_NUMBER: granularity (11) must be less than or equal "
-             "to the difference between min and max (1, 10)")},
+         .expected_error = AnyOf(
+             HasSubstr(
+                 "TOKENIZE_NUMBER: granularity (11) must be less than or equal "
+                 "to the difference (9) between min and max (1, 10)"),
+             HasSubstr(
+                 "TOKENIZE_NUMBER: granularity (11) must be less than or equal "
+                 "to the difference between min and max (1, 10)"))},
         {.query = "SELECT TOKENIZE_NUMBER(2.567, min=>-1.0, max=>5.0, "
                   "algorithm=>'floatingpoint', precision=>16)",
          .expected_error = ContainsRegex("TOKENIZE_NUMBER: precision must be "

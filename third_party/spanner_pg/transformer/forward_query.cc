@@ -235,6 +235,13 @@ ForwardTransformer::BuildGsqlResolvedTableScan(
                                        std::string(table_alias));
   table_scan->set_column_index_list(column_index_list);
 
+  if (transformer_info->has_lock_mode()) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<const zetasql::ResolvedLockMode> lock_mode,
+        BuildGsqlResolvedLockMode(transformer_info->get_lock_mode()));
+    table_scan->set_lock_mode(std::move(lock_mode));
+  }
+
   if (rte.tableHints) {
     ZETASQL_ASSIGN_OR_RETURN(
         std::vector<std::unique_ptr<const zetasql::ResolvedOption>> hint_list,
@@ -1518,6 +1525,29 @@ ForwardTransformer::BuildGsqlResolvedTVFScan(
       std::move(resolved_tvf_args), column_index_list, alias);
 }
 
+absl::StatusOr<std::unique_ptr<zetasql::ResolvedLockMode>>
+ForwardTransformer::BuildGsqlResolvedLockMode(
+    const RowMarkClause* row_mark_clause) {
+  zetasql::ResolvedLockModeEnums::LockStrengthType strength;
+  switch (row_mark_clause->strength) {
+    case LockClauseStrength::LCS_FORUPDATE:
+      strength = zetasql::ResolvedLockModeEnums::UPDATE;
+      break;
+    default:
+      // Shouldn't get here.
+      ZETASQL_RET_CHECK_FAIL() << "Unsupported lock mode strength: "
+                       << row_mark_clause->strength;
+  }
+  return MakeResolvedLockMode(strength);
+}
+
+absl::StatusOr<std::unique_ptr<zetasql::ResolvedLockMode>>
+ForwardTransformer::BuildGsqlResolvedLockMode(
+    const zetasql::ResolvedLockMode* lock_mode) {
+  ZETASQL_RET_CHECK(lock_mode != nullptr);
+  return MakeResolvedLockMode(lock_mode->strength());
+}
+
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
 ForwardTransformer::BuildGsqlResolvedScanForSelect(
     const Query& query, bool is_top_level_query,
@@ -1533,6 +1563,28 @@ ForwardTransformer::BuildGsqlResolvedScanForSelect(
 
   VarIndexScope from_scan_output_scope;
   auto transformer_info = std::make_unique<TransformerInfo>();
+  if (query.rowMarks != nullptr && list_length(query.rowMarks) != 0) {
+    // There can be multiple rowMarkClauses, e.g. for joins, there is one for
+    // each rtable. But we just pick the first one because in Spanner we don't
+    // allow setting locking clauses for individual tables. In fact, we have
+    // updated the PG parser to not allow locking clauses at a table-level. In
+    // the CheckForUnsupportedFeatures, we also reject queries that have
+    // locking clauses or options other than FOR UPDATE. So at this point in
+    // the code, we would never see inconsistent locking clauses if there were
+    // multiples specified in the query. For joins, Spanner will explicitly add
+    // a LockMode node for each table scanned. This logic needs to be updated
+    // if other kinds of locking clauses and options are supported in Spanner
+    // in the future.
+    auto row_mark_clause =
+        *(StructList<RowMarkClause*>(query.rowMarks).begin());
+    // Verify that the query had a locking clause at this level or it was
+    // pushed down from above.
+    ZETASQL_RET_CHECK(query.hasForUpdate || row_mark_clause->pushedDown);
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<const zetasql::ResolvedLockMode> lock_mode,
+        BuildGsqlResolvedLockMode(row_mark_clause));
+    transformer_info->set_lock_mode(std::move(lock_mode));
+  }
   // Postgres Query corresponds to nested ResolvedScan in ZetaSQL AST.
   std::unique_ptr<zetasql::ResolvedScan> current_scan = nullptr;
   ZETASQL_ASSIGN_OR_RETURN(current_scan, BuildGsqlResolvedScanForFromClause(
@@ -3282,8 +3334,20 @@ absl::Status ForwardTransformer::CheckForUnsupportedFeatures(
                                             "GROUPING SET clauses"));
   ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(query.windowClause, feature_name,
                                             "WINDOW clauses"));
-    ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(query.rowMarks, feature_name,
-                                              "ROW MARK clauses"));
+  if (query.rowMarks != nullptr && list_length(query.rowMarks) != 0) {
+    for (auto row_mark_clause : StructList<RowMarkClause*>(query.rowMarks)) {
+      if (row_mark_clause->strength != LockClauseStrength::LCS_FORUPDATE) {
+        return absl::UnimplementedError(
+            "Statements with locking clauses other than FOR UPDATE are not "
+            "supported");
+      }
+      if (row_mark_clause->waitPolicy != LockWaitPolicy::LockWaitBlock) {
+        return absl::UnimplementedError(
+            "Statements with locking clauses with lock wait policies are not "
+            "supported");
+      }
+    }
+  }
   ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(query.constraintDeps, feature_name,
                                             "constraint clauses"));
   ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(

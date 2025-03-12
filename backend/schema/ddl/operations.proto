@@ -47,6 +47,7 @@ message DDLStatement {
     AlterIndex alter_index = 15;
     DropIndex drop_index = 16;
     CreateSearchIndex create_search_index = 76;
+    CreateVectorIndex create_vector_index = 92;
 
     // Change Stream statements.
     CreateChangeStream create_change_stream = 56;
@@ -67,11 +68,19 @@ message DDLStatement {
     AlterModel alter_model = 72;
     DropModel drop_model = 73;
 
+    // Property Graph statements.
+    CreatePropertyGraph create_property_graph = 85;
+    DropPropertyGraph drop_property_graph = 86;
 
     // Schema statements.
     CreateSchema create_schema = 68;
     AlterSchema alter_schema = 69;
     DropSchema drop_schema = 70;
+
+    // Locality Group statements.
+    CreateLocalityGroup create_locality_group = 17;
+    AlterLocalityGroup alter_locality_group = 18;
+    DropLocalityGroup drop_locality_group = 19;
 
     // Statistics statements.
     Analyze analyze = 75;
@@ -459,7 +468,7 @@ message CreateTable {
   repeated ForeignKey foreign_key = 10;
   repeated CheckConstraint check_constraint = 11;
   optional InterleaveClause interleave_clause = 7;
-
+  repeated SetOption set_options = 8;
   optional RowDeletionPolicy row_deletion_policy = 9;
   // How to handle creation if the table already exists.
   optional ExistenceModifier existence_modifier = 13;
@@ -594,6 +603,9 @@ message AlterTable {
     // True, if skip_range_min and skip_range_max is altered.
     optional bool identity_alter_skip_range = 4;
   }
+  message SetOptions {
+    repeated SetOption options = 1;
+  }
   message SetInterleaveClause {
     optional InterleaveClause interleave_clause = 1;
   }
@@ -621,7 +633,7 @@ message AlterTable {
     AddColumn add_column = 3;
     string drop_column = 4;
     AlterColumn alter_column = 5;
-
+    SetOptions set_options = 7;
     SetInterleaveClause set_interleave_clause = 18;
     SetOnDelete set_on_delete = 10;
     RowDeletionPolicy add_row_deletion_policy = 11;
@@ -722,6 +734,26 @@ message DropSchema {
   optional bool if_exists = 2;
 }
 
+message CreateLocalityGroup {
+  optional string locality_group_name = 1;
+  repeated SetOption set_options = 2;
+  optional ExistenceModifier existence_modifier = 3;
+}
+
+message AlterLocalityGroup {
+  optional string locality_group_name = 1;
+  message SetOptions {
+    repeated SetOption options = 1;
+  }
+  optional SetOptions set_options = 2;
+  optional ExistenceModifier existence_modifier = 3;
+}
+
+message DropLocalityGroup {
+  optional string locality_group_name = 1;
+  optional ExistenceModifier existence_modifier = 2;
+}
+
 // ANALYZE is a special DDL operation that doesn't trigger a schema change in
 // emulator. The emulator will accept it but perform no-op. This allows the same
 // script to run in both emulator and production.
@@ -814,6 +846,8 @@ message CreateIndex {
   // Not present for standard "global" indexes.
   optional string interleave_in_table = 6;
 
+  repeated SetOption set_options = 8;
+
   optional bool unique = 10;
 
   // List of columns stored in the index.
@@ -828,11 +862,14 @@ message CreateIndex {
 
 message AlterIndex {
   optional string index_name = 1;
+  message SetOptions {
+    repeated SetOption options = 1;
+  }
   message AddStoredColumn {
     optional string column_name = 1;
   }
   oneof alter_type {
-
+    SetOptions set_options = 2;
     AddStoredColumn add_stored_column = 3;
     string drop_stored_column = 4;
   }
@@ -869,6 +906,48 @@ message CreateSearchIndex {
   optional bool null_filtered = 10;
 }
 
+message CreateVectorIndex {
+  // Required.
+  optional string index_name = 1;
+  // Required.
+  optional string index_base_name = 2;
+  // Required.
+  optional KeyPartClause key = 3;
+  repeated StoredColumnDefinition stored_column_definition = 4;
+  repeated KeyPartClause partition_by = 5;
+  repeated SetOption set_options = 6;
+  // Columns that are being null filtered using the WHERE IS NOT NULL syntax.
+  repeated string null_filtered_column = 7;
+  // Handle creation if the vector index already exists.
+  optional ExistenceModifier existence_modifier = 8;
+}
+
+message VectorIndexOptionsProto {
+  // The user defined spec of the search tree.
+  optional int64 tree_depth = 2 [default = 2];
+  optional int64 num_leaves = 3;
+  optional int64 num_branches = 4;
+  // Controls how leaf clusters are distributed across the index.
+  // Valid values are [0, 32].
+  //  0 - leaves are grouped by their branch.
+  // 32 - leaves are randomly distributed.
+  optional int64 leaf_scatter_factor = 6;
+  // The minimum number of branch table splits.
+  optional int64 min_branch_splits = 7;
+  // The minimum number of leaf index splits.
+  optional int64 min_leaf_splits = 8;
+
+  enum DistanceType {
+    DISTANCE_TYPE_UNSPECIFIED = 0;
+    COSINE = 1;
+    EUCLIDEAN = 2;
+    DOT_PRODUCT = 3;
+  }
+  // The distance metric used to compare vectors.
+  // Valid values correspond to the `DistanceType` enum except for unspecified.
+  optional string distance_type = 5;
+}
+
 message DDLTimeLengthProto {
   enum Unit {
     DAYS = 86400;  // 24 HOURS
@@ -878,3 +957,15 @@ message DDLTimeLengthProto {
   optional Unit unit = 2;
 }
 
+// Operation definition for "CREATE PROPERTY GRAPH".
+message CreatePropertyGraph {
+  optional string name = 1;
+  optional ExistenceModifier existence_modifier = 2;
+  optional string ddl_body = 3;
+}
+
+// Operation definition for "DROP PROPERTY GRAPH".
+message DropPropertyGraph {
+  optional string name = 1;
+  optional ExistenceModifier existence_modifier = 2;
+}

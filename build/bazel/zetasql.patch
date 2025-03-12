@@ -38,19 +38,18 @@ index b9a3176f..c1cf274a 100644
  
    auto wrapper_name_list = std::make_shared<NameList>();
    ZETASQL_RETURN_IF_ERROR(
-diff --git a/zetasql/analyzer/resolver_expr.cc b/zetasql/analyzer/resolver_expr.cc
-index 6116b4f7..fa594774 100644
---- a/zetasql/analyzer/resolver_expr.cc
-+++ b/zetasql/analyzer/resolver_expr.cc
-@@ -4957,7 +4957,7 @@ absl::Status Resolver::ResolveAggregateFunctionGroupingModifiers(
-   ExprResolutionInfo multi_level_agg_expr_resolution_info(
-       expr_resolution_info->query_resolution_info,
-       expr_resolution_info->aggregate_name_scope,
--      {
-+      ExprResolutionInfoOptions{
-           .allows_aggregation = false,
-           .allows_analytic = false,
-           .clause_name = "GROUP BY inside aggregate",
+# diff --git a/bazel/zetasql_deps_step_2.bzl b/bazel/zetasql_deps_step_2.bzl
+# index 6873dbe9..872ffd5e 100644
+# --- a/bazel/zetasql_deps_step_2.bzl
+# +++ b/bazel/zetasql_deps_step_2.bzl
+# @@ -477,7 +477,6 @@ alias(
+#          flex_register_toolchains(version = "2.6.4")
+#          bison_register_toolchains(version = "3.3.2")
+#          go_rules_dependencies()
+# -        go_register_toolchains(version = "1.21.6")
+#          gazelle_dependencies()
+#          textmapper_dependencies()
+ 
 diff --git a/zetasql/analyzer/resolver_expr.cc b/zetasql/analyzer/resolver_expr.cc
 index 6116b4f7..70e8c9fd 100644
 --- a/zetasql/analyzer/resolver_expr.cc
@@ -65,81 +64,7 @@ index 6116b4f7..70e8c9fd 100644
           .allows_analytic = expr_resolution_info->allows_analytic,
           .clause_name = expr_resolution_info->clause_name});
      ZETASQL_RETURN_IF_ERROR(ResolveExpressionArguments(
-diff --git a/zetasql/analyzer/resolver_query.cc b/zetasql/analyzer/resolver_query.cc
-index d9362bbf..d72cca3b 100644
---- a/zetasql/analyzer/resolver_query.cc
-+++ b/zetasql/analyzer/resolver_query.cc
-@@ -624,8 +624,9 @@ static absl::Status UpdateNameListForTableAlias(
-       // If the value table has an existing range variable, then it has to be
-       // renamed to the new name.
-       ZETASQL_RETURN_IF_ERROR(
--          new_name_list->MergeFrom(*input_name_list, ast_location,
--                                   {.rename_value_table_to_name = &alias}));
-+          new_name_list->MergeFrom(
-+            *input_name_list, ast_location,
-+            NameList::MergeOptions{.rename_value_table_to_name = &alias}));
-     } else {
-       // If the value table was anonymous and didn't have an existing range
-       // variable, this function will create one, using `alias` as the name.
-@@ -641,8 +642,9 @@ static absl::Status UpdateNameListForTableAlias(
-   // to drop existing range variables and convert value tables to columns,
-   // and then make the new range variables pointing at the remaining columns.
-   auto new_name_list = std::make_shared<NameList>();
--  ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(*input_name_list, ast_location,
--                                           {.flatten_to_table = true}));
-+  ZETASQL_RETURN_IF_ERROR(new_name_list->MergeFrom(
-+      *input_name_list, ast_location,
-+      NameList::MergeOptions{.flatten_to_table = true}));
  
-   ZETASQL_ASSIGN_OR_RETURN(*output_name_list,
-                    NameList::AddRangeVariableInWrappingNameList(
-diff --git a/zetasql/analyzer/resolver_stmt.cc b/zetasql/analyzer/resolver_stmt.cc
-index 86e3cf09..64379885 100644
---- a/zetasql/analyzer/resolver_stmt.cc
-+++ b/zetasql/analyzer/resolver_stmt.cc
-@@ -2325,7 +2325,8 @@ absl::Status Resolver::ResolveCreateTablePartitionByList(
-                                                             : "CLUSTER BY";
- 
-   ExprResolutionInfo resolution_info(query_info, &name_scope,
--                                     {.allows_aggregation = false,
-+                                     ExprResolutionInfoOptions{
-+                                      .allows_aggregation = false,
-                                       .allows_analytic = false,
-                                       .clause_name = clause_name});
- 
-@@ -4345,7 +4346,8 @@ absl::Status Resolver::ResolveCreateFunctionStatement(
-         // inside the function body.
-         QueryResolutionInfo query_info(this);
-         ExprResolutionInfo expr_info(&query_info, empty_name_scope_.get(),
--                                     {.allows_aggregation = true,
-+                                     ExprResolutionInfoOptions{
-+                                      .allows_aggregation = true,
-                                       .allows_analytic = false,
-                                       .clause_name = "SQL function body"});
- 
-@@ -7131,7 +7133,8 @@ absl::Status Resolver::ResolveExecuteImmediateStatement(
-       absl::flat_hash_set<IdString, IdStringCaseHash, IdStringCaseEqualFunc>;
-   QueryResolutionInfo query_info(this);
-   ExprResolutionInfo expr_info(&query_info, empty_name_scope_.get(),
--                               {.allows_aggregation = false,
-+                               ExprResolutionInfoOptions{
-+                                .allows_aggregation = false,
-                                 .allows_analytic = false,
-                                 .clause_name = "SQL EXECUTE IMMEDIATE"});
-   std::unique_ptr<const ResolvedExpr> sql;
-diff --git a/zetasql/analyzer/rewriters/anonymization_helper.cc b/zetasql/analyzer/rewriters/anonymization_helper.cc
-index 5f0e4534..ea68c177 100644
---- a/zetasql/analyzer/rewriters/anonymization_helper.cc
-+++ b/zetasql/analyzer/rewriters/anonymization_helper.cc
-@@ -724,7 +724,7 @@ absl::StatusOr<std::unique_ptr<ResolvedExpr>> ResolveFunctionCall(
-   QueryResolutionInfo query_resolution_info(resolver);
-   ExprResolutionInfo expr_resolution_info(&query_resolution_info,
-                                           &empty_name_scope,
--                                          {
-+                                          ExprResolutionInfoOptions{
-                                               .allows_aggregation = true,
-                                               .allows_analytic = false,
-                                           });
 diff --git a/zetasql/base/BUILD b/zetasql/base/BUILD
 index aa1f00da..7d4c3b3a 100644
 --- a/zetasql/base/BUILD
@@ -218,102 +143,7 @@ index 2b42fdcb..19ff2a4e 100644
  
  cc_library(
      name = "types",
-diff --git a/zetasql/public/types/type.h b/zetasql/public/types/type.h
-index 40ceaa24..c405d6a1 100644
---- a/zetasql/public/types/type.h
-+++ b/zetasql/public/types/type.h
-@@ -622,45 +622,6 @@ class Type {
-     std::optional<int64_t> file_descriptor_sets_max_size_bytes = std::nullopt;
-   };
  
-- protected:
--  // Types can only be created and destroyed by TypeFactory.
--  Type(const TypeFactory* factory, TypeKind kind);
--  virtual ~Type() = default;
--
--  bool EqualsImpl(const Type* other_type, bool equivalent) const {
--    if (this == other_type) {
--      return true;
--    }
--    if (kind() != other_type->kind()) {
--      return false;
--    }
--    return EqualsForSameKind(other_type, equivalent);
--  }
--
--  // Hashes the type. Hash is generated based on a type's kind and (if type is
--  // not built-in simple type) on a type's parameter.
--  absl::HashState Hash(absl::HashState state) const;
--
--  // Hashes the type's parameter of non-simple (parameterized) types. Simple
--  // built-in types should not update the hash state.
--  virtual absl::HashState HashTypeParameter(absl::HashState state) const = 0;
--
--  // Internal implementation for Serialize methods.  This will append
--  // Type information to <type_proto>, so the caller should make sure
--  // that <type_proto> has been initialized properly before invoking.
--  // <options> controls whether FileDescriptors are deep-scanned and
--  // FileDescriptorSets are generated, and also whether there are any limits
--  // placed on the size of the FileDescriptorSets.
--  virtual absl::Status SerializeToProtoAndDistinctFileDescriptorsImpl(
--      const BuildFileDescriptorSetMapOptions& options, TypeProto* type_proto,
--      FileDescriptorSetMap* file_descriptor_set_map) const = 0;
--
--  // Returns estimated size of memory owned by this type. Note: type can never
--  // own another type, only reference (all types are owned by TypeFactory). So,
--  // this function never calls GetEstimatedOwnedMemoryBytesSize for other types
--  // (such as element types of arrays or field types of structs).
--  virtual int64_t GetEstimatedOwnedMemoryBytesSize() const = 0;
--
-   // Formatting options that can be provided to FormatValueContent.
-   struct FormatValueContentOptions {
-     enum class Mode {
-@@ -712,6 +673,45 @@ class Type {
-     static const int kIndentStep = 2;
-   };
- 
-+ protected:
-+  // Types can only be created and destroyed by TypeFactory.
-+  Type(const TypeFactory* factory, TypeKind kind);
-+  virtual ~Type() = default;
-+
-+  bool EqualsImpl(const Type* other_type, bool equivalent) const {
-+    if (this == other_type) {
-+      return true;
-+    }
-+    if (kind() != other_type->kind()) {
-+      return false;
-+    }
-+    return EqualsForSameKind(other_type, equivalent);
-+  }
-+
-+  // Hashes the type. Hash is generated based on a type's kind and (if type is
-+  // not built-in simple type) on a type's parameter.
-+  absl::HashState Hash(absl::HashState state) const;
-+
-+  // Hashes the type's parameter of non-simple (parameterized) types. Simple
-+  // built-in types should not update the hash state.
-+  virtual absl::HashState HashTypeParameter(absl::HashState state) const = 0;
-+
-+  // Internal implementation for Serialize methods.  This will append
-+  // Type information to <type_proto>, so the caller should make sure
-+  // that <type_proto> has been initialized properly before invoking.
-+  // <options> controls whether FileDescriptors are deep-scanned and
-+  // FileDescriptorSets are generated, and also whether there are any limits
-+  // placed on the size of the FileDescriptorSets.
-+  virtual absl::Status SerializeToProtoAndDistinctFileDescriptorsImpl(
-+      const BuildFileDescriptorSetMapOptions& options, TypeProto* type_proto,
-+      FileDescriptorSetMap* file_descriptor_set_map) const = 0;
-+
-+  // Returns estimated size of memory owned by this type. Note: type can never
-+  // own another type, only reference (all types are owned by TypeFactory). So,
-+  // this function never calls GetEstimatedOwnedMemoryBytesSize for other types
-+  // (such as element types of arrays or field types of structs).
-+  virtual int64_t GetEstimatedOwnedMemoryBytesSize() const = 0;
-+
-   // List of DebugStringImpl outputs. Used to serve as a stack in
-   // DebugStringImpl to protect from stack overflows.
-   // Note: SWIG will fail to process this file if we remove a white space
 diff --git a/zetasql/public/value.cc b/zetasql/public/value.cc
 index 7aeffb01..c9f9f9dc 100644
 --- a/zetasql/public/value.cc
@@ -405,3 +235,440 @@ index 1619590a..a18a733f 100644
      } else {
        ZETASQL_RET_CHECK_FAIL() << "Unexpected TVFOpArgument";
      }
+ 
+diff --git a/bazel/zetasql_deps_step_2.bzl b/bazel/zetasql_deps_step_2.bzl
+index 6873dbe9..223f8dbd 100644
+--- a/bazel/zetasql_deps_step_2.bzl
++++ b/bazel/zetasql_deps_step_2.bzl
+@@ -19,7 +19,6 @@
+ load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies", "go_repository")
+ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+ load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
+-load("@llvm_toolchain//:toolchains.bzl", "llvm_register_toolchains")
+ load("@rules_bison//bison:bison.bzl", "bison_register_toolchains")
+ load("@rules_flex//flex:flex.bzl", "flex_register_toolchains")
+ load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
+@@ -29,7 +28,6 @@ load("@rules_proto//proto:setup.bzl", "rules_proto_setup")
+ load("@rules_proto//proto:toolchains.bzl", "rules_proto_toolchains")
+ 
+ def _load_deps_from_step_1():
+-    llvm_register_toolchains()
+     rules_foreign_cc_dependencies()
+ 
+ def textmapper_dependencies():
+@@ -49,21 +47,29 @@ def textmapper_dependencies():
+     go_repository(
+         name = "dev_lsp_go_jsonrpc2",
+         importpath = "go.lsp.dev/jsonrpc2",
++        remote = "https://github.com/go-language-server/jsonrpc2",
++        vcs = "git",
+         commit = "8c68d4fd37cd4bd06b62b3243f0d2292c681d164",
+     )
+     go_repository(
+         name = "dev_lsp_go_protocol",
+         importpath = "go.lsp.dev/protocol",
++        remote = "https://github.com/go-language-server/protocol",
++        vcs = "git",
+         commit = "da30f9ae0326cc45b76adc5cd8920ac1ffa14a15",
+     )
+     go_repository(
+         name = "dev_lsp_go_uri",
+         importpath = "go.lsp.dev/uri",
++        remote = "https://github.com/go-language-server/uri",
++        vcs = "git",
+         commit = "63eaac75cc850f596be19073ff6d4ec198603779",
+     )
+     go_repository(
+         name = "dev_lsp_go_pkg",
+         importpath = "go.lsp.dev/pkg",
++        remote = "https://github.com/go-language-server/pkg",
++        vcs = "git",
+         commit = "384b27a52fb2b5d74d78cfe89c7738e9a3e216a5",
+     )
+     go_repository(
+@@ -477,7 +483,6 @@ alias(
+         flex_register_toolchains(version = "2.6.4")
+         bison_register_toolchains(version = "3.3.2")
+         go_rules_dependencies()
+-        go_register_toolchains(version = "1.21.6")
+         gazelle_dependencies()
+         textmapper_dependencies()
+ 
+ 
+diff --git a/bazel/zetasql_deps_step_1.bzl b/bazel/zetasql_deps_step_1.bzl
+index 825bf8ea..7edd1352 100644
+--- a/bazel/zetasql_deps_step_1.bzl
++++ b/bazel/zetasql_deps_step_1.bzl
+@@ -22,25 +22,11 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+ # but depend on them being something different. So we have to override them both
+ # by defining the repo first.
+ load("@com_google_zetasql//bazel:zetasql_bazel_version.bzl", "zetasql_bazel_version")
+-load("@toolchains_llvm//toolchain:deps.bzl", "bazel_toolchain_dependencies")
+-load("@toolchains_llvm//toolchain:rules.bzl", "llvm_toolchain")
+ 
+ def zetasql_deps_step_1(add_bazel_version = True):
+     if add_bazel_version:
+         zetasql_bazel_version()
+ 
+-    bazel_toolchain_dependencies()
+-    llvm_toolchain(
+-        name = "llvm_toolchain",
+-        llvm_versions = {
+-            "": "16.0.0",
+-            # The LLVM repo stops providing pre-built binaries for the MacOS x86_64
+-            # architecture for versions >= 16.0.0: https://github.com/llvm/llvm-project/releases,
+-            # but our Kokoro MacOS tests are still using x86_64 (ventura).
+-            # TODO: Upgrade the MacOS version to sonoma-slcn.
+-            "darwin-x86_64": "15.0.7",
+-        },
+-    )
+ 
+     http_archive(
+         name = "io_bazel_rules_go",
+ 
+diff --git a/bazel/grpc_extra_deps.patch b/bazel/grpc_extra_deps.patch
+index 771761b3..9c1b1cee 100644
+--- a/bazel/grpc_extra_deps.patch
++++ b/bazel/grpc_extra_deps.patch
+@@ -13,3 +13,41 @@ index 4d8afa3131..b42224501f 100644
+      # Pull-in the go 3rd party dependencies for protoc_gen_validate, which is
+      # needed for building C++ xDS protos
+      go_third_party()
++
++ diff --git a/BUILD b/BUILD
++ index 3b5d7e5e3c..c5d61e6e4c 100644
++ --- a/BUILD
++ +++ b/BUILD
++ @@ -544,6 +544,7 @@ grpc_cc_library(
++      defines = ["GRPC_NO_XDS"],
++      external_deps = [
++          "absl/base:core_headers",
++ +        "absl/status",
++ +        "absl/strings",
++      ],
++      language = "c++",
++      public_hdrs = GRPC_PUBLIC_HDRS,
++
++ diff --git a/include/grpcpp/impl/status.h b/include/grpcpp/impl/status.h
++ index 95436ab8fb..fe9f44adf0 100644
++ --- a/include/grpcpp/impl/status.h
++ +++ b/include/grpcpp/impl/status.h
++ @@ -23,6 +23,7 @@
++
++  #include <grpc/support/port_platform.h>
++
++ +#include "absl/status/status.h"
++  #include <grpc/status.h>
++  #include <grpcpp/support/config.h>
++  #include <grpcpp/support/status_code_enum.h>
++ @@ -99,6 +100,10 @@ class GRPC_MUST_USE_RESULT_WHEN_USE_STRICT_WARNING Status {
++    Status(StatusCode code, const std::string& error_message)
++        : code_(code), error_message_(error_message) {}
++
++ +  operator absl::Status() const& {
++ +    return absl::Status(static_cast<absl::StatusCode>(code_), error_message_);
++ +  }
++ +
++    /// Construct an instance with \a code,  \a error_message and
++    /// \a error_details. It is an error to construct an OK status with non-empty
++    /// \a error_message and/or \a error_details.
++
+ 
+diff --git a/bazel/icu4c-64_2.patch b/bazel/icu4c-64_2.patch
+index 69d12b63..a23bdcaf 100644
+--- a/bazel/icu4c-64_2.patch
++++ b/bazel/icu4c-64_2.patch
+@@ -5,7 +5,7 @@
+  CXX = @CXX@
+  AR = @AR@
+ -ARFLAGS = @ARFLAGS@ r
+-+ARFLAGS = @ARFLAGS@ -crs
+++ARFLAGS = @ARFLAGS@
+  RANLIB = @RANLIB@
+  COMPILE_LINK_ENVVAR = @COMPILE_LINK_ENVVAR@
+  UCLN_NO_AUTO_CLEANUP = @UCLN_NO_AUTO_CLEANUP@
+ 
+ diff --git a/bazel/icu.BUILD b/bazel/icu.BUILD
+index be36d7de..f61d8f3c 100644
+--- a/bazel/icu.BUILD
++++ b/bazel/icu.BUILD
+@@ -35,20 +35,17 @@ filegroup(
+ configure_make(
+     name = "icu",
+     configure_command = "source/configure",
+-    args = select({
+-        # AR is overridden to be libtool by rules_foreign_cc. It does not support ar style arguments
+-        # like "r". We need to prevent the icu make rules from adding unsupported parameters by
+-        # forcing ARFLAGS to keep the rules_foreign_cc value in this parameter
+-        "@platforms//os:macos": [
+-            "ARFLAGS=\"-static -o\"",
+-            "MAKE=gnumake",
+-        ],
+-        "//conditions:default": [],
+-    }),
+-    env = {
+-        "CXXFLAGS": "-fPIC",  # For JNI
+-        "CFLAGS": "-fPIC",  # For JNI
+-    },
++    env = select({
++            "@platforms//os:macos": {
++                "AR": "",
++                "CXXFLAGS": "-fPIC",  # For JNI
++                "CFLAGS": "-fPIC",  # For JNI
++            },
++            "//conditions:default": {
++                "CXXFLAGS": "-fPIC",  # For JNI
++                "CFLAGS": "-fPIC",  # For JNI
++            },
++        }),
+     configure_options = [
+         "--enable-option-checking",
+         "--enable-static",
+ 
+  
+diff --git a/zetasql/public/constant.h b/zetasql/public/constant.h
+index 946183b0..03ac17e0 100644
+--- a/zetasql/public/constant.h
++++ b/zetasql/public/constant.h
+@@ -80,7 +80,7 @@ class Constant {
+   const std::vector<std::string>& name_path() const { return name_path_; }
+ 
+   // Returns the type of this Constant.
+-  virtual const Type* type() const = 0;
++  virtual const zetasql::Type* type() const = 0;
+ 
+   // Returns whether or not this Constant is a specific constant interface or
+   // implementation.
+ 
+diff --git a/zetasql/public/property_graph.h b/zetasql/public/property_graph.h
+index 53ccca23..0eefe780 100644
+--- a/zetasql/public/property_graph.h
++++ b/zetasql/public/property_graph.h
+@@ -348,7 +348,7 @@ class GraphPropertyDeclaration {
+     return ::zetasql::FullName(PropertyGraphNamePath(), Name());
+   }
+ 
+-  virtual const Type* Type() const = 0;
++  virtual const zetasql::Type* Type() const = 0;
+ 
+   // Returns whether or not this GraphPropertyDeclaration is a specific
+   // interface or implementation.
+ 
+diff --git a/zetasql/analyzer/resolver_expr.cc b/zetasql/analyzer/resolver_expr.cc
+index 51d095ab..8ba1eefc 100644
+--- a/zetasql/analyzer/resolver_expr.cc
++++ b/zetasql/analyzer/resolver_expr.cc
+@@ -2996,7 +2996,7 @@ class SystemVariableConstant final : public Constant {
+                          const Type* type)
+       : Constant(name_path), type_(type) {}
+ 
+-  const Type* type() const override { return type_; }
++  const zetasql::Type* type() const override { return type_; }
+   std::string DebugString() const override { return FullName(); }
+   std::string ConstantValueDebugString() const override { return "<N/A>"; }
+ 
+ 
+diff --git a/zetasql/public/coercer.cc b/zetasql/public/coercer.cc
+index dc4961dd..80d26183 100644
+--- a/zetasql/public/coercer.cc
++++ b/zetasql/public/coercer.cc
+@@ -154,7 +154,7 @@ class TypeSuperTypes {
+     return false;
+   }
+ 
+-  const Type* type() const { return type_; }
++  const zetasql::Type* type() const { return type_; }
+   TypeListView supertypes() const { return supertypes_; }
+ 
+   std::vector<const Type*> ToVector() const {
+ 
+diff --git a/zetasql/public/function_signature.h b/zetasql/public/function_signature.h
+index 29886cc2..5436071c 100644
+--- a/zetasql/public/function_signature.h
++++ b/zetasql/public/function_signature.h
+@@ -702,7 +702,7 @@ class FunctionArgumentType {
+   // Returns NULL if kind_ is not ARG_TYPE_FIXED or ARG_TYPE_LAMBDA. If kind_ is
+   // ARG_TYPE_LAMBDA, returns the type of lambda body type, which could be NULL
+   // if the body type is templated.
+-  const Type* type() const { return type_; }
++  const zetasql::Type* type() const { return type_; }
+ 
+   SignatureArgumentKind kind() const { return kind_; }
+ 
+diff --git a/zetasql/public/input_argument_type.h b/zetasql/public/input_argument_type.h
+index f2098787..55b416e3 100644
+--- a/zetasql/public/input_argument_type.h
++++ b/zetasql/public/input_argument_type.h
+@@ -81,7 +81,7 @@ class InputArgumentType {
+   ~InputArgumentType() {}
+ 
+   // This may return nullptr (such as for lambda).
+-  const Type* type() const { return type_; }
++  const zetasql::Type* type() const { return type_; }
+ 
+   const std::vector<InputArgumentType>& field_types() const {
+     return field_types_;
+ 
+diff --git a/zetasql/public/simple_catalog.h b/zetasql/public/simple_catalog.h
+index 76a94d43..a0d81b9d 100644
+--- a/zetasql/public/simple_catalog.h
++++ b/zetasql/public/simple_catalog.h
+@@ -1202,7 +1202,7 @@ class SimpleConstant : public Constant {
+       const SimpleConstantProto& simple_constant_proto,
+       const TypeDeserializer& type_deserializer);
+ 
+-  const Type* type() const override { return value_.type(); }
++  const zetasql::Type* type() const override { return value_.type(); }
+ 
+   const Value& value() const { return value_; }
+ 
+ 
+diff --git a/zetasql/public/sql_constant.h b/zetasql/public/sql_constant.h
+index fa88344f..69defd3b 100644
+--- a/zetasql/public/sql_constant.h
++++ b/zetasql/public/sql_constant.h
+@@ -60,7 +60,7 @@ class SQLConstant : public Constant {
+ 
+   // Returns the Type of the resolved Constant based on its resolved
+   // expression type.
+-  const Type* type() const override {
++  const zetasql::Type* type() const override {
+     return constant_expression()->type();
+   }
+ 
+ 
+diff --git a/zetasql/public/value.h b/zetasql/public/value.h
+index 49b60aec..86688538 100644
+--- a/zetasql/public/value.h
++++ b/zetasql/public/value.h
+@@ -122,7 +122,7 @@ class Value {
+   ~Value();
+ 
+   // Returns the type of the value.
+-  const Type* type() const;
++  const zetasql::Type* type() const;
+ 
+   // Returns the type kind of the value. Same as type()->type_kind() but in some
+   // cases can be a bit more efficient.
+@@ -1152,7 +1152,7 @@ class Value {
+ 
+     // Returns a pointer to Value's Type. Requires is_valid(). If TypeKind is
+     // stored in the Metadata, Type pointer is obtained from static TypeFactory.
+-    const Type* type() const;
++    const zetasql::Type* type() const;
+ 
+     // Returns true, if instance stores pointer to a Type and false if type's
+     // kind.
+ 
+diff --git a/zetasql/public/value_inl.h b/zetasql/public/value_inl.h
+index e917a97a..f324276f 100644
+--- a/zetasql/public/value_inl.h
++++ b/zetasql/public/value_inl.h
+@@ -1077,7 +1077,7 @@ class Value::Metadata::ContentLayout<4> {
+         has_type_(false),
+         value_extended_content_(value_extended_content) {}
+ 
+-  const Type* type() const { return type_; }
++  const zetasql::Type* type() const { return type_; }
+   int32_t value_extended_content() const { return value_extended_content_; }
+   bool is_null() const { return is_null_; }
+   bool preserves_order() const { return preserves_order_; }
+@@ -1157,7 +1157,7 @@ class Value::Metadata::ContentLayout<8> {
+   // TODO: wait for fixed clang-format
+   // clang-format on
+ 
+-  const Type* type() const {
++  const zetasql::Type* type() const {
+     return reinterpret_cast<const Type*>(type_ & kTypeMask);
+   }
+   int32_t value_extended_content() const { return value_extended_content_; }
+ 
+diff --git a/zetasql/reference_impl/operator.h b/zetasql/reference_impl/operator.h
+index 24f0ddac..7adb701d 100644
+--- a/zetasql/reference_impl/operator.h
++++ b/zetasql/reference_impl/operator.h
+@@ -240,7 +240,7 @@ class ExprArg : public AlgebraArg {
+ 
+   ~ExprArg() override = default;
+ 
+-  const Type* type() const { return type_; }
++  const zetasql::Type* type() const { return type_; }
+ 
+  private:
+   const Type* type_;
+ 
+diff --git a/zetasql/resolved_ast/resolved_column.h b/zetasql/resolved_ast/resolved_column.h
+index 912b3ca4..2e613f2a 100644
+--- a/zetasql/resolved_ast/resolved_column.h
++++ b/zetasql/resolved_ast/resolved_column.h
+@@ -119,7 +119,7 @@ class ResolvedColumn {
+   IdString table_name_id() const { return table_name_; }
+   IdString name_id() const { return name_; }
+ 
+-  const Type* type() const { return annotated_type_.type; }
++  const zetasql::Type* type() const { return annotated_type_.type; }
+ 
+   const AnnotationMap* type_annotation_map() const {
+     return annotated_type_.annotation_map;
+ 
+diff --git a/zetasql/testing/test_value.h b/zetasql/testing/test_value.h
+index 0412873e..d2d8c3e8 100644
+--- a/zetasql/testing/test_value.h
++++ b/zetasql/testing/test_value.h
+@@ -106,7 +106,7 @@ class ValueConstructor {
+       : v_(v) {}
+ 
+   const Value& get() const { return v_; }
+-  const Type* type() const { return v_.type(); }
++  const zetasql::Type* type() const { return v_.type(); }
+ 
+   static std::vector<Value> ToValues(absl::Span<const ValueConstructor> slice) {
+     std::vector<Value> values;
+ 
+ 
+diff --git a/zetasql/base/logging.h b/zetasql/base/logging.h
+index 730ccdcb..46fe06b0 100644
+--- a/zetasql/base/logging.h
++++ b/zetasql/base/logging.h
+@@ -59,6 +59,17 @@ inline void ZetaSqlMakeCheckOpValueString(std::ostream *os, const T &v) {
+   (*os) << v;
+ }
+ 
++// This overloading is implemented to address the compilation issue when trying to log unique_ptr types
++// At the moment, we are not providing any specific implementation for handling unique_ptr types.
++template <typename T>
++inline void ZetaSqlMakeCheckOpValueString(std::ostream* os, const std::unique_ptr<T>& v) {
++  if (v == nullptr) {
++    (*os) << "nullptr";
++  } else {
++    (*os) << v.get();
++  }
++}
++
+ // Overrides for char types provide readable values for unprintable
+ // characters.
+ template <>
+ 
+ 
+ 
+diff --git a/zetasql/base/testing/BUILD b/zetasql/base/testing/BUILD
+index 10596497..a9b69be7 100644
+--- a/zetasql/base/testing/BUILD
++++ b/zetasql/base/testing/BUILD
+@@ -55,6 +55,7 @@ cc_library(
+         "@com_google_absl//absl/status:statusor",
+         "@com_google_absl//absl/strings",
+         "@com_google_googletest//:gtest",
++        "@com_github_grpc_grpc//:grpc++",
+     ],
+ )
+ 
+@@ -69,6 +70,7 @@ cc_test(
+         "@com_google_absl//absl/status",
+         "@com_google_absl//absl/status:statusor",
+         "@com_google_googletest//:gtest",
++        "@com_github_grpc_grpc//:grpc++",
+     ],
+ )
+ 
+ 

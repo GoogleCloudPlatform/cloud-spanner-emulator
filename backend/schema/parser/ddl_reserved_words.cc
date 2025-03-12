@@ -159,6 +159,7 @@ static const CaseInsensitiveStringSet* const pseudo_reserved_words =
     "FUNCTION",
     "GENERATED",
     "GRANT",
+    "GRAPH",
     "HIDDEN",
     "IDENTITY",
     "INDEX",
@@ -170,6 +171,7 @@ static const CaseInsensitiveStringSet* const pseudo_reserved_words =
     "JSON",
     "KEY",
     "LAST",
+    "LOCALITY",
     "MAX",
     "MODEL",
     "NULL_FILTERED",
@@ -180,6 +182,7 @@ static const CaseInsensitiveStringSet* const pseudo_reserved_words =
     "PG",
     "POLICY",
     "PRIMARY",
+    "PROPERTY",
     "REMOTE",
     "REFERENCES",
     "RENAME",
@@ -209,6 +212,7 @@ static const CaseInsensitiveStringSet* const pseudo_reserved_words =
     "UPDATE",
     "USAGE",
     "VIEW",
+    "VECTOR",
     "VECTOR_LENGTH",
 };
 

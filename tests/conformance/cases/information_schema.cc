@@ -100,12 +100,11 @@ class InformationSchemaTest
 
   // Information schema constraints not yet supported.
   const std::pair<std::string, Value> kUnsupportedConstraints{
-      "unsupported_constraints",
-      std::vector<std::string>({
-          "CK_IS_NOT_NULL_TABLES_TABLE_TYPE",
-          "CK_IS_NOT_NULL_VIEWS_SECURITY_TYPE",
-          "CK_IS_NOT_NULL_COLUMNS_IS_HIDDEN",
-      })};
+      "unsupported_constraints", std::vector<std::string>({
+                                     "CK_IS_NOT_NULL_TABLES_TABLE_TYPE",
+                                     "CK_IS_NOT_NULL_VIEWS_SECURITY_TYPE",
+                                     "CK_IS_NOT_NULL_COLUMNS_IS_HIDDEN",
+                                 })};
 
   // Returns the given rows, replacing matching string patterns with their
   // actual values from the given results.
@@ -342,6 +341,7 @@ TEST_P(InformationSchemaTest, MetaTables) {
   expected.push_back({"", table_schema, "VIEW", GetNameForDialect("INDEX_COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
   expected.push_back({"", table_schema, "VIEW", GetNameForDialect("INDEXES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
   expected.push_back({"", table_schema, "VIEW", GetNameForDialect("KEY_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("LOCALITY_GROUP_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
   if (GetParam() != POSTGRESQL) {
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODEL_COLUMN_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODEL_COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
@@ -534,6 +534,9 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
     {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "LOCALITY_GROUP_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "MODELS", "IS_REMOTE", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "MODELS", "MODEL_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "MODELS", "MODEL_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
@@ -721,6 +724,7 @@ TEST_P(InformationSchemaTest, MetaIndexes) {
         {"", "INFORMATION_SCHEMA", "INDEXES", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
+        {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "MODELS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
@@ -851,6 +855,8 @@ TEST_P(InformationSchemaTest, MetaIndexColumns) {
       {"INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "PRIMARY_KEY", "PRIMARY_KEY", "CONSTRAINT_SCHEMA", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "PRIMARY_KEY", "PRIMARY_KEY", "CONSTRAINT_NAME", 3, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "PRIMARY_KEY", "PRIMARY_KEY", "COLUMN_NAME", 4, "ASC", "NO", "STRING(MAX)"},  // NOLINT
+      {"INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "LOCALITY_GROUP_NAME", 1, "ASC", "NO", "STRING(MAX)"},  // NOLINT
+      {"INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "OPTION_NAME", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "MODELS", "PRIMARY_KEY", "PRIMARY_KEY", "MODEL_CATALOG", 1, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "MODELS", "PRIMARY_KEY", "PRIMARY_KEY", "MODEL_SCHEMA", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "MODELS", "PRIMARY_KEY", "PRIMARY_KEY", "MODEL_NAME", 3, "ASC", "NO", "STRING(MAX)"},  // NOLINT
@@ -1032,6 +1038,8 @@ TEST_P(InformationSchemaTest, MetaTableConstraints) {
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_KEY_COLUMN_USAGE_TABLE_CATALOG", "", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_KEY_COLUMN_USAGE_TABLE_NAME", "", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_KEY_COLUMN_USAGE_TABLE_SCHEMA", "", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_LOCALITY_GROUP_OPTIONS_LOCALITY_GROUP_NAME", "", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_LOCALITY_GROUP_OPTIONS_OPTION_NAME", "", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODELS_IS_REMOTE", "", "INFORMATION_SCHEMA", "MODELS", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODELS_MODEL_CATALOG", "", "INFORMATION_SCHEMA", "MODELS", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODELS_MODEL_NAME", "", "INFORMATION_SCHEMA", "MODELS", "CHECK", "NO", "NO", "YES"},  // NOLINT
@@ -1108,6 +1116,7 @@ TEST_P(InformationSchemaTest, MetaTableConstraints) {
       {"", "INFORMATION_SCHEMA", "PK_INDEXES", "", "INFORMATION_SCHEMA", "INDEXES", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_INDEX_COLUMNS", "", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_KEY_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PK_LOCALITY_GROUP_OPTIONS", "", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_MODELS", "", "INFORMATION_SCHEMA", "MODELS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_MODEL_COLUMNS", "", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_MODEL_COLUMN_OPTIONS", "", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
@@ -1252,6 +1261,8 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_KEY_COLUMN_USAGE_TABLE_CATALOG", "TABLE_CATALOG IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_KEY_COLUMN_USAGE_TABLE_NAME", "TABLE_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_KEY_COLUMN_USAGE_TABLE_SCHEMA", "TABLE_SCHEMA IS NOT NULL", "COMMITTED"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_LOCALITY_GROUP_OPTIONS_LOCALITY_GROUP_NAME", "LOCALITY_GROUP_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_LOCALITY_GROUP_OPTIONS_OPTION_NAME", "OPTION_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_REFERENTIAL_CONSTRAINTS_CONSTRAINT_CATALOG", "CONSTRAINT_CATALOG IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_REFERENTIAL_CONSTRAINTS_CONSTRAINT_NAME", "CONSTRAINT_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_REFERENTIAL_CONSTRAINTS_CONSTRAINT_SCHEMA", "CONSTRAINT_SCHEMA IS NOT NULL", "COMMITTED"},  // NOLINT
@@ -1443,6 +1454,9 @@ TEST_P(InformationSchemaTest, MetaConstraintTableUsage) {
       {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_KEY_COLUMN_USAGE_TABLE_NAME"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_KEY_COLUMN_USAGE_TABLE_SCHEMA"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "PK_KEY_COLUMN_USAGE"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_LOCALITY_GROUP_OPTIONS_LOCALITY_GROUP_NAME"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_LOCALITY_GROUP_OPTIONS_OPTION_NAME"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "", "INFORMATION_SCHEMA", "PK_LOCALITY_GROUP_OPTIONS"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "MODELS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODELS_IS_REMOTE"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "MODELS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODELS_MODEL_CATALOG"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "MODELS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODELS_MODEL_NAME"},  // NOLINT
@@ -1658,6 +1672,8 @@ TEST_P(InformationSchemaTest, MetaKeyColumnUsage) {
       {"", "INFORMATION_SCHEMA", "PK_KEY_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "CONSTRAINT_SCHEMA", 2, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_KEY_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "CONSTRAINT_NAME", 3, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_KEY_COLUMN_USAGE", "", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "COLUMN_NAME", 4, Ni()},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PK_LOCALITY_GROUP_OPTIONS", "", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "LOCALITY_GROUP_NAME", 1, Ni()},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PK_LOCALITY_GROUP_OPTIONS", "", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "OPTION_NAME", 2, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_MODELS", "", "INFORMATION_SCHEMA", "MODELS", "MODEL_CATALOG", 1, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_MODELS", "", "INFORMATION_SCHEMA", "MODELS", "MODEL_SCHEMA", 2, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_MODELS", "", "INFORMATION_SCHEMA", "MODELS", "MODEL_NAME", 3, Ni()},  // NOLINT
@@ -1905,6 +1921,10 @@ TEST_P(InformationSchemaTest, MetaConstraintColumnUsage) {
       {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "TABLE_CATALOG", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_KEY_COLUMN_USAGE_TABLE_CATALOG"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "TABLE_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_KEY_COLUMN_USAGE_TABLE_NAME"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "TABLE_SCHEMA", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_KEY_COLUMN_USAGE_TABLE_SCHEMA"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "LOCALITY_GROUP_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_LOCALITY_GROUP_OPTIONS_LOCALITY_GROUP_NAME"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "LOCALITY_GROUP_NAME", "", "INFORMATION_SCHEMA", "PK_LOCALITY_GROUP_OPTIONS"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "OPTION_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_LOCALITY_GROUP_OPTIONS_OPTION_NAME"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "OPTION_NAME", "", "INFORMATION_SCHEMA", "PK_LOCALITY_GROUP_OPTIONS"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "MODELS", "IS_REMOTE", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODELS_IS_REMOTE"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "MODELS", "MODEL_CATALOG", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODELS_MODEL_CATALOG"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "MODELS", "MODEL_CATALOG", "", "INFORMATION_SCHEMA", "PK_MODELS"},  // NOLINT
@@ -2143,6 +2163,8 @@ TEST_P(InformationSchemaTest, GSQLDefaultColumns) {
     {"", "", "base", "gen_function_value", 20, Ns(), Ns(), "YES", "INT64", "ALWAYS", "LENGTH(key2)", "NO", "COMMITTED"},  // NOLINT
     {"", "", "base", "default_col_value", 21, "100", Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base", "default_timestamp_col_value", 22, "CURRENT_TIMESTAMP()", Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "identity_no_params_col", 23, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "identity_col", 24, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base_view", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "cascade_child", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "cascade_child", "key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
@@ -2220,6 +2242,8 @@ TEST_P(InformationSchemaTest, PGDefaultColumns) {
     {"public", "base", "gen_function_value", 20, Ns(), "bigint", "YES", "bigint", "ALWAYS", "length(key2)", "NO", "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
     {"public", "base", "default_col_value", 21, "'100'::bigint", "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
     {"public", "base", "default_timestamp_col_value", 22, "CURRENT_TIMESTAMP", "timestamp with time zone", "YES", "timestamp with time zone", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "identity_no_params_col", 23, Ns(), "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
+    {"public", "base", "identity_col", 24, Ns(), "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
     {"public", "base_view", "key1", 1, Ns(), "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
   });
   // clang-format on
@@ -2522,7 +2546,8 @@ TEST_P(InformationSchemaTest, DefaultDatabaseOptions) {
       from
         information_schema.database_options AS t
       where
-        t.option_name = 'database_dialect'
+        t.option_name = 'database_dialect' OR
+        t.option_name = 'default_sequence_kind'
       order by
         t.option_name
     )");
@@ -2532,6 +2557,35 @@ TEST_P(InformationSchemaTest, DefaultDatabaseOptions) {
   // clang-format off
   auto expected = std::vector<ValueRow>({
     {"database_dialect", type, database_api::DatabaseDialect_Name(GetParam())},  // NOLINT
+    {"default_sequence_kind", type, "bit_reversed_positive"},
+  });
+  // clang-format on
+  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+}
+
+TEST_P(InformationSchemaTest, IdentityColumns) {
+  auto results = Query(R"(
+      select
+        t.column_name,
+        t.is_identity,
+        t.identity_generation,
+        t.identity_kind,
+        t.identity_start_with_counter,
+        t.identity_skip_range_min,
+        t.identity_skip_range_max
+      from
+        information_schema.columns AS t
+      where
+        t.table_name = 'base' AND
+        (t.column_name = 'identity_no_params_col' OR t.column_name = 'identity_col')
+      order by
+        t.column_name
+    )");
+  LogResults(results);
+  // clang-format off
+  auto expected = std::vector<ValueRow>({
+    {"identity_col", "YES", "BY DEFAULT", "BIT_REVERSED_POSITIVE_SEQUENCE", "1111", "2222", "3333"},  // NOLINT
+    {"identity_no_params_col", "YES", "BY DEFAULT", Ns(), Ns(), Ns(), Ns()},
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -2552,7 +2606,6 @@ TEST_P(InformationSchemaTest, DefaultColumnOptions) {
       where
         t.table_catalog = ''
         and t.table_schema = ''
-        and t.option_name != 'locality_group'
       order by
         t.table_name,
         t.column_name,

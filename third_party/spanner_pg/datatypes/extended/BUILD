@@ -54,7 +54,7 @@ cc_library(
     hdrs = ["pg_jsonb_type.h"],
     deps = [
         ":spanner_extended_type",
-        "//third_party/spanner_pg/datatypes/common/jsonb:jsonb_parse",
+        "//third_party/spanner_pg/datatypes/common/jsonb:jsonb_value",
         "//third_party/spanner_pg/interface:pg_arena_factory",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/hash",

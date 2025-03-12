@@ -14,11 +14,8 @@
 // limitations under the License.
 //
 
-#include <algorithm>
-#include <iterator>
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
@@ -27,11 +24,11 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/status.h"
 #include "absl/strings/ascii.h"
 #include "backend/schema/printer/print_ddl.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "common/errors.h"
-#include "common/feature_flags.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
@@ -677,6 +674,44 @@ TEST_P(ViewsTest, SqlInlinedFunctionsInViews) {
     EXPECT_THAT(absl::StripAsciiWhitespace(v->body()),
                 StrEq("SELECT ARRAY_INCLUDES(ARRAY[1,2,3], T.col1) AS "
                       "found_match FROM T"));
+  }
+}
+
+TEST_P(ViewsTest, ForUpdateInViewsUnsupported) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(CreateSchema({R"(
+    CREATE TABLE t(
+      col1 bigint primary key,
+      col2 varchar
+    )
+  )",
+                              R"(
+    CREATE OR REPLACE VIEW "MyView" SQL SECURITY INVOKER AS
+      SELECT T.col1, T.col2 FROM T
+      FOR UPDATE
+  )"},
+                             /*proto_descriptor_bytes=*/"",
+                             database_api::DatabaseDialect::POSTGRESQL,
+                             /*use_gsql_to_pg_translation=*/false),
+                ::zetasql_base::testing::StatusIs(
+                    absl::StatusCode::kInvalidArgument,
+                    testing::HasSubstr("Unexpected lock mode in query")));
+  } else {
+    EXPECT_THAT(CreateSchema({R"(
+      CREATE TABLE T(
+        col1 INT64 PRIMARY KEY,
+        col2 STRING(MAX)
+      )
+    )",
+                              R"(
+      CREATE OR REPLACE VIEW `MyView` SQL SECURITY INVOKER AS
+        SELECT T.col1, T.col2 FROM T
+        FOR UPDATE
+    )"}),
+                ::zetasql_base::testing::StatusIs(
+                    absl::StatusCode::kInvalidArgument,
+                    testing::HasSubstr("Unexpected lock mode in query")));
   }
 }
 }  // namespace

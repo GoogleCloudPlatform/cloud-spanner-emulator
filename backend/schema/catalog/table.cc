@@ -31,6 +31,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
@@ -224,6 +225,12 @@ absl::Status Table::DeepClone(SchemaGraphEditor* editor,
     if (owner_change_stream_->is_deleted()) {
       MarkDeleted();
     }
+  }
+
+  if (locality_group_) {
+    ZETASQL_ASSIGN_OR_RETURN(const auto* locality_group_clone,
+                     editor->Clone(locality_group_));
+    locality_group_ = locality_group_clone->As<const LocalityGroup>();
   }
 
   return absl::OkStatus();

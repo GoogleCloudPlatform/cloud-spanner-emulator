@@ -4026,6 +4026,22 @@ _readAlterObjectSchemaStmt(void)
 
 	READ_DONE();
 }
+/* SPANGRES BEGIN */
+/*
+ * _readLockingClause
+ */
+static LockingClause *
+_readLockingClause(void)
+{
+       READ_LOCALS(LockingClause);
+
+       READ_NODE_FIELD(lockedRels);
+       READ_ENUM_FIELD(strength, LockClauseStrength);
+       READ_ENUM_FIELD(waitPolicy, LockWaitPolicy);
+
+       READ_DONE();
+}
+/* SPANGRES END */
 /*
  * parseNodeString
  *
@@ -4448,6 +4464,8 @@ parseNodeString(void)
 		return_value = _readAlterStatsStmt();
 	else if (MATCH("ALTEROBJECTSCHEMASTMT", 21))
 		return_value = _readAlterObjectSchemaStmt();
+	else if (MATCH("LOCKINGCLAUSE", 13))
+		return_value = _readLockingClause();
 	/* SPANGRES END */
 	else
 	{

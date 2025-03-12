@@ -81,6 +81,12 @@ ForwardTransformer::BuildGsqlFunctionArgumentList(
       // the inner expression.
       TargetEntry* target_entry_arg =
           internal::PostgresCastNode(TargetEntry, arg);
+      if (target_entry_arg->resjunk) {
+        // resjunk is set to true for ORDER BY arguments. ORDER BY in functions
+        // is only legal in aggregate functions; this argument is handled by
+        // ForwardTransformer::BuildGsqlResolvedAggregateFunctionCall.
+        continue;
+      }
 
       ZETASQL_ASSIGN_OR_RETURN(arg_expr,
                        BuildGsqlResolvedExpr(*target_entry_arg->expr,
@@ -154,6 +160,51 @@ ForwardTransformer::BuildGsqlFunctionArgumentList(
     argument_list.push_back(std::move(arg_index_to_expr[i]));
   }
   return argument_list;
+}
+
+absl::StatusOr<
+    std::vector<std::unique_ptr<const zetasql::ResolvedOrderByItem>>>
+ForwardTransformer::BuildGsqlAggregateOrderByList(
+    List* sortClause,
+    const std::vector<std::unique_ptr<zetasql::ResolvedExpr>>& arguments,
+    ExprTransformerInfo* expr_transformer_info) {
+  std::vector<OrderByItemTransformInfo> order_by_item_transform_info_list;
+  order_by_item_transform_info_list.reserve(list_length(sortClause));
+  for (SortGroupClause* sort_item : StructList<SortGroupClause*>(sortClause)) {
+    ZETASQL_ASSIGN_OR_RETURN(OrderByItemTransformInfo order_by_item,
+                     BuildGsqlOrderByItem(*sort_item, expr_transformer_info));
+    order_by_item_transform_info_list.emplace_back(std::move(order_by_item));
+  }
+  ZETASQL_RETURN_IF_ERROR(FinalizeOrderByTransformState(
+      &order_by_item_transform_info_list,
+      expr_transformer_info->transformer_info
+          ->select_list_columns_to_compute_before_aggregation()));
+
+  // For each ORDER BY item, wrap it in a ColumnRef and build a
+  // ResolvedOrderByItem.
+  std::vector<std::unique_ptr<const zetasql::ResolvedOrderByItem>>
+      order_by_item_list;
+  for (const OrderByItemTransformInfo& order_by_item :
+       order_by_item_transform_info_list) {
+    zetasql::ResolvedColumn order_by_column;
+    if (order_by_item.select_list_index == 0) {
+      order_by_column = order_by_item.order_column;
+    } else {
+      ZETASQL_RET_CHECK_LT(order_by_item.select_list_index - 1, arguments.size());
+      const auto& expr = arguments[order_by_item.select_list_index - 1];
+      ZETASQL_RET_CHECK(expr->Is<zetasql::ResolvedColumnRef>());
+      order_by_column = expr->GetAs<zetasql::ResolvedColumnRef>()->column();
+    }
+
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<const zetasql::ResolvedColumnRef> resolved_column_ref,
+        BuildGsqlResolvedColumnRef(order_by_column));
+    order_by_item_list.push_back(zetasql::MakeResolvedOrderByItem(
+        std::move(resolved_column_ref), /*collation_name=*/nullptr,
+        order_by_item.is_descending, order_by_item.null_order));
+  }
+
+  return order_by_item_list;
 }
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedLiteral>>
@@ -345,11 +396,6 @@ ForwardTransformer::BuildGsqlResolvedAggregateFunctionCall(
                      expr_transformer_info->clause_name));
   }
 
-  bool enable_order_by_in_aggregate = false;
-  if (!enable_order_by_in_aggregate) {
-    ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(
-        agg_function.aggorder, "Aggregate functions", "ORDER BY"));
-  }
   ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFields(
       agg_function.aggfilter, "Aggregate functions", "FILTER clauses"));
 
@@ -380,6 +426,14 @@ ForwardTransformer::BuildGsqlResolvedAggregateFunctionCall(
           funcid, input_argument_types,
           catalog_adapter_->analyzer_options().language()));
 
+  if (agg_function.aggorder != nullptr &&
+      !function_and_signature.function()->SupportsOrderingArguments()) {
+    return absl::UnimplementedError(
+        absl::StrCat("ORDER BY in aggregate function ",
+                     function_and_signature.function()->Name(),
+                     " which does not support ordering."));
+  }
+
   // Set aggregation to true.
   local_expr_transformer_info.has_aggregation = true;
 
@@ -389,9 +443,15 @@ ForwardTransformer::BuildGsqlResolvedAggregateFunctionCall(
   zetasql::ResolvedNonScalarFunctionCallBase::NullHandlingModifier
       null_handling_modifier =
           zetasql::ResolvedNonScalarFunctionCallBase::DEFAULT_NULL_HANDLING;
-  std::vector<std::unique_ptr<const zetasql::ResolvedOrderByItem>>
-      order_by_item_list;
 
+  auto temporary_index_to_targetentry_map =
+      TemporaryVectorElement(ressortgroupref_to_target_entry_maps_);
+  ZETASQL_RETURN_IF_ERROR(BuildSortGroupIndexToTargetEntryMap(agg_function.args));
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::vector<std::unique_ptr<const zetasql::ResolvedOrderByItem>>
+          order_by_item_list,
+      BuildGsqlAggregateOrderByList(agg_function.aggorder, argument_list,
+                                    &local_expr_transformer_info));
   auto resolved_function_call = zetasql::MakeResolvedAggregateFunctionCall(
       function_and_signature.signature().result_type().type(),
       function_and_signature.function(), function_and_signature.signature(),

@@ -1,8 +1,8 @@
 diff --git a/BUILD b/BUILD
-index 3b5d7e5e3c..c5d61e6e4c 100644
+index 8e036bbc85..76dc6a641c 100644
 --- a/BUILD
 +++ b/BUILD
-@@ -544,6 +544,7 @@ grpc_cc_library(
+@@ -581,6 +581,7 @@ grpc_cc_library(
      defines = ["GRPC_NO_XDS"],
      external_deps = [
          "absl/base:core_headers",
@@ -11,30 +11,33 @@ index 3b5d7e5e3c..c5d61e6e4c 100644
      language = "c++",
      public_hdrs = GRPC_PUBLIC_HDRS,
 diff --git a/bazel/grpc_extra_deps.bzl b/bazel/grpc_extra_deps.bzl
-index 4d8afa3131..b0900364f8 100644
+index a370fe4496..f79e9852a5 100644
 --- a/bazel/grpc_extra_deps.bzl
 +++ b/bazel/grpc_extra_deps.bzl
-@@ -53,7 +53,6 @@ def grpc_extra_deps(ignore_version_differences = False):
+@@ -51,9 +51,6 @@ def grpc_extra_deps(ignore_version_differences = False):
+ 
      api_dependencies()
  
-     go_rules_dependencies()
--    go_register_toolchains(version = "1.18")
-     gazelle_dependencies()
+-    go_rules_dependencies()
+-    go_register_toolchains(version = "1.20")
+-    gazelle_dependencies()
  
      # Pull-in the go 3rd party dependencies for protoc_gen_validate, which is
+     # needed for building C++ xDS protos
+
 diff --git a/include/grpcpp/impl/status.h b/include/grpcpp/impl/status.h
-index 95436ab8fb..fe9f44adf0 100644
+index 94c0e80a9b..266e67ccd2 100644
 --- a/include/grpcpp/impl/status.h
 +++ b/include/grpcpp/impl/status.h
-@@ -23,6 +23,7 @@
+@@ -21,6 +21,7 @@
  
- #include <grpc/support/port_platform.h>
+ // IWYU pragma: private, include <grpcpp/support/status.h>
  
 +#include "absl/status/status.h"
  #include <grpc/status.h>
+ #include <grpc/support/port_platform.h>
  #include <grpcpp/support/config.h>
- #include <grpcpp/support/status_code_enum.h>
-@@ -99,6 +100,10 @@ class GRPC_MUST_USE_RESULT_WHEN_USE_STRICT_WARNING Status {
+@@ -98,6 +99,10 @@ class GRPC_MUST_USE_RESULT_WHEN_USE_STRICT_WARNING GRPCXX_DLL Status {
    Status(StatusCode code, const std::string& error_message)
        : code_(code), error_message_(error_message) {}
  
@@ -45,3 +48,4 @@ index 95436ab8fb..fe9f44adf0 100644
    /// Construct an instance with \a code,  \a error_message and
    /// \a error_details. It is an error to construct an OK status with non-empty
    /// \a error_message and/or \a error_details.
+ 

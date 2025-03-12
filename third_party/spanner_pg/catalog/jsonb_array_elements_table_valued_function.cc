@@ -31,7 +31,7 @@
 
 #include "third_party/spanner_pg/catalog/jsonb_array_elements_table_valued_function.h"
 
-#include "third_party/spanner_pg/datatypes/common/jsonb/jsonb_parse.h"
+#include "third_party/spanner_pg/datatypes/common/jsonb/jsonb_value.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/interface/pg_arena_factory.h"
 #include "third_party/spanner_pg/shims/error_shim.h"

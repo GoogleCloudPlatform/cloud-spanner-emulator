@@ -25,6 +25,7 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
@@ -99,6 +100,12 @@ absl::Status Column::DeepClone(SchemaGraphEditor* editor,
   ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&change_streams_));
   ZETASQL_RETURN_IF_ERROR(
       editor->CloneVector(&change_streams_explicitly_tracking_column_));
+
+  if (locality_group_) {
+    ZETASQL_ASSIGN_OR_RETURN(const auto* locality_group_clone,
+                     editor->Clone(locality_group_));
+    locality_group_ = locality_group_clone->As<const LocalityGroup>();
+  }
 
   for (const Column*& column : dependent_columns_) {
     ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(column));

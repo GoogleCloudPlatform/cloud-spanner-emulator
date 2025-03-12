@@ -201,3 +201,9 @@ CREATE VIEW V SQL SECURITY INVOKER AS
   SELECT T.K FROM T WHERE MOD(T.K, 6) = 0;
 --
 ERROR: Cannot create a View with the same name as builtin function `MOD`. This may be supported in a future release.
+==
+CREATE TABLE t (c STRING(MAX), c1 INT64) PRIMARY KEY ();
+CREATE VIEW foo SQL SECURITY INVOKER
+  AS SELECT t.c1 AS a FROM t FOR UPDATE;
+--
+ERROR: Unexpected lock mode in query

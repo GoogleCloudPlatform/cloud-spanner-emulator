@@ -477,6 +477,20 @@ class TransformerInfo {
   }
   bool is_post_distinct() const { return group_by_info_.is_post_distinct; }
 
+  void set_lock_mode(
+      std::unique_ptr<const zetasql::ResolvedLockMode> lock_mode) {
+    lock_mode_ = std::move(lock_mode);
+  }
+
+  bool has_lock_mode() const { return lock_mode_ != nullptr; }
+
+  const zetasql::ResolvedLockMode* get_lock_mode() const {
+    if (lock_mode_ != nullptr) {
+      return lock_mode_.get();
+    }
+    return nullptr;
+  }
+
  private:
   // SELECT list information.
 
@@ -517,6 +531,10 @@ class TransformerInfo {
   // Columns that need to be computed for ORDER BY (before OrderByScan).
   std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
       order_by_columns_to_compute_;
+
+  // Lock mode information which is recoreded at the query-level then
+  // passed down to the point where a ResolvedTableScan node is created.
+  std::unique_ptr<const zetasql::ResolvedLockMode> lock_mode_ = nullptr;
 };
 
 }  // namespace postgres_translator

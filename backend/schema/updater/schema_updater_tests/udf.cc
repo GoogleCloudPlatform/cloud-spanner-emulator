@@ -1036,6 +1036,19 @@ TEST_P(SchemaUpdaterTest, CreateUDF_InvalidNewSignatureOnSequenceFails) {
       zetasql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
+TEST_P(SchemaUpdaterTest, CreateUDF_WithForUpdateInvalid) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+
+  EXPECT_THAT(
+      CreateSchema(
+          {R"(CREATE TABLE t (col1 INT64, col2 INT64) PRIMARY KEY (col1))",
+           R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY INVOKER
+            AS ((SELECT MAX(t.col1) FROM t FOR UPDATE) + x))"}),
+      ::zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          testing::HasSubstr("Unexpected lock mode in function body query")));
+}
+
 }  // namespace test
 }  // namespace backend
 }  // namespace emulator

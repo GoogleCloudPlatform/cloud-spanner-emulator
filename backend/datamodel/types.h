@@ -28,7 +28,8 @@ namespace backend {
 bool IsSupportedColumnType(const zetasql::Type* type);
 
 // Returns true if 'type' is a supported key column data type.
-bool IsSupportedKeyColumnType(const zetasql::Type* type);
+bool IsSupportedKeyColumnType(const zetasql::Type* type,
+                              bool is_vector_index = false);
 
 // Returns the string representation of the type.
 std::string ToString(const zetasql::Type* type);

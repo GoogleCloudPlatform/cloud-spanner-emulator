@@ -25,6 +25,7 @@
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
 #include "zetasql/public/function_signature.h"
+#include "zetasql/public/property_graph.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "absl/container/flat_hash_map.h"
@@ -46,6 +47,7 @@
 #include "backend/query/information_schema_catalog.h"
 #include "backend/query/queryable_model.h"
 #include "backend/query/queryable_named_schema.h"
+#include "backend/query/queryable_property_graph.h"
 #include "backend/query/queryable_sequence.h"
 #include "backend/query/queryable_table.h"
 #include "backend/query/queryable_udf.h"
@@ -247,6 +249,34 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
     }
   }
 
+  for (const auto* graph : schema->property_graphs()) {
+    std::string name = graph->Name();
+    // Confirm that the property graph is not in a named schema as that is not
+    // supported yet.
+    if (SDLObjectName::IsFullyQualifiedName(name)) {
+      ABSL_LOG(FATAL) << "PropertyGraph not supported in named schemas. " << name;
+    } else {
+      for (const auto& node_table : graph->NodeTables()) {
+        std::string node_table_name = node_table.name();
+        if (SDLObjectName::IsFullyQualifiedName(node_table_name)) {
+          ABSL_LOG(FATAL) << "PropertyGraph not supported in named schemas. "
+                     << "Element table is within a named schema: "
+                     << node_table_name;
+        }
+      }
+      for (const auto& edge_table : graph->EdgeTables()) {
+        std::string edge_table_name = edge_table.name();
+        if (SDLObjectName::IsFullyQualifiedName(edge_table_name)) {
+          ABSL_LOG(FATAL) << "PropertyGraph not supported in named schemas. "
+                     << "Element table is within a named schema: "
+                     << edge_table_name;
+        }
+      }
+      property_graphs_[graph->Name()] =
+          std::make_unique<QueryablePropertyGraph>(this, type_factory, graph);
+    }
+  }
+
   // Pass the query_evaluator to views.
   for (const auto* view : schema->views()) {
     std::string name = view->Name();
@@ -364,6 +394,17 @@ absl::Status Catalog::GetModel(const std::string& name,
     return absl::OkStatus();
   }
   return absl::OkStatus();
+}
+
+absl::Status Catalog::GetPropertyGraph(std::string_view name,
+                                       const zetasql::PropertyGraph*& graph,
+                                       const FindOptions& options) {
+  if (auto it = property_graphs_.find(std::string(name));
+      it != property_graphs_.end()) {
+    graph = it->second.get();
+    return absl::OkStatus();
+  }
+  return error::PropertyGraphNotFound(name);
 }
 
 absl::Status Catalog::FindTableValuedFunction(

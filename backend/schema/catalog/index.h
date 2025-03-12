@@ -28,6 +28,7 @@
 #include "absl/status/status.h"
 #include "absl/types/span.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_node.h"
 
@@ -120,6 +121,10 @@ class Index : public SchemaNode {
     return index_type_ == IndexType::kSearchIndex;
   }
 
+  bool is_vector_index() const {
+    return index_type_ == IndexType::kVectorIndex;
+  }
+
   // Returns the list of partition by column defined in the search index.
   absl::Span<const Column* const> partition_by() const { return partition_by_; }
 
@@ -128,6 +133,9 @@ class Index : public SchemaNode {
 
   // Returns a detailed string which lists information about this index.
   std::string FullDebugString() const;
+
+  // Returns the locality group this index belongs to.
+  const LocalityGroup* locality_group() const { return locality_group_; }
 
   // SchemaNode interface implementation.
   // ------------------------------------
@@ -209,7 +217,7 @@ class Index : public SchemaNode {
   std::vector<const Column*> null_filtered_columns_;
 
   // The type of the index.
-  enum class IndexType { kIndex, kSearchIndex };
+  enum class IndexType { kIndex, kSearchIndex, kVectorIndex };
   IndexType index_type_ = IndexType::kIndex;
 
   // Currently applies only to search index. A list of key parts that the index
@@ -219,6 +227,12 @@ class Index : public SchemaNode {
   // Currently applies only to search index. A list of key parts that the index
   // is ordered by. If this is empty, then the index is unordered.
   std::vector<const Column*> order_by_;
+
+  // Applies only to vector index. The options for the vector index.
+  ddl::VectorIndexOptionsProto vector_index_options_;
+
+  // The locality group this index belongs to.
+  const LocalityGroup* locality_group_ = nullptr;
 };
 
 }  // namespace backend

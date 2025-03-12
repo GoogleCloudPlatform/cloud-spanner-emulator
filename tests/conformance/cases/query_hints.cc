@@ -113,6 +113,12 @@ TEST_F(QueryHintsTest, QueryWithHintsJoinMethod) {
             "Users"));
 }
 
+TEST_F(QueryHintsTest, QueryHintsWithScanMethod) {
+  ZETASQL_EXPECT_OK(Query("@{scan_method=batch} SELECT ID, Name, Age FROM Users"));
+  ZETASQL_EXPECT_OK(Query("@{scan_method=row} SELECT ID, Name, Age FROM Users"));
+  EXPECT_THAT(Query("@{scan_method=invalid} SELECT ID, Name, Age FROM Users"),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
 TEST_F(QueryHintsTest, QueryWithHintsJoinType) {
   ZETASQL_EXPECT_OK(Query("@{join_type=hash_join} SELECT ID, Name, Age FROM Users"));
   ZETASQL_EXPECT_OK(Query("@{join_type=apply_join} SELECT ID, Name, Age FROM Users"));

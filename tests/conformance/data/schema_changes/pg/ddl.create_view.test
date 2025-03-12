@@ -91,3 +91,13 @@ CREATE VIEW "UpperCase" SQL SECURITY INVOKER AS SELECT name FROM users WHERE (va
 # CREATE OR REPLACE VIEW comedies AS SELECT name FROM films WHERE category = 10;
 # --
 # CREATE OR REPLACE VIEW comedies SQL SECURITY DEFINER AS SELECT name FROM films WHERE category = 10
+
+CREATE TABLE users (
+  id bigint PRIMARY KEY,
+  name varchar NOT NULL,
+  val bigint NOT NULL
+);
+CREATE OR REPLACE VIEW comedies SECURITY INVOKER AS SELECT name FROM users WHERE val > 18 FOR UPDATE;
+--
+ERROR: Unexpected lock mode in query
+==
