@@ -31,6 +31,7 @@
 #include "google/spanner/v1/commit_response.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.grpc.pb.h"
+#include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
 #include "absl/memory/memory.h"
 #include "common/constants.h"
@@ -156,6 +157,10 @@ class SpannerService : public spanner_api::Spanner::Service {
   DEFINE_GRPC_METHOD(Spanner, ExecuteBatchDml,
                      spanner_api::ExecuteBatchDmlRequest,
                      spanner_api::ExecuteBatchDmlResponse);
+
+  // Batch
+  DEFINE_GRPC_METHOD(Spanner, BatchWrite, spanner_api::BatchWriteRequest,
+                     grpc::ServerWriter<v1::BatchWriteResponse>);
 
   // Partitions.
   DEFINE_GRPC_METHOD(Spanner, PartitionRead, spanner_api::PartitionReadRequest,

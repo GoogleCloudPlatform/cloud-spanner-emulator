@@ -123,6 +123,36 @@ TEST(EmulatorFeatureFlags, PostgresqlInterfaceFlag) {
   EXPECT_TRUE(features.flags().enable_postgresql_interface);
 }
 
+TEST(EmulatorFeatureFlags, SearchIndexFlag) {
+  const EmulatorFeatureFlags& features = EmulatorFeatureFlags::instance();
+
+  EXPECT_FALSE(features.flags().enable_search_index);
+
+  {
+    EmulatorFeatureFlags::Flags flags;
+    flags.enable_search_index = true;
+    test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+    EXPECT_TRUE(features.flags().enable_search_index);
+  }
+
+  EXPECT_FALSE(features.flags().enable_search_index);
+}
+
+TEST(EmulatorFeatureFlags, HiddenColumnFlag) {
+  const EmulatorFeatureFlags& features = EmulatorFeatureFlags::instance();
+
+  EXPECT_TRUE(features.flags().enable_hidden_column);
+
+  {
+    EmulatorFeatureFlags::Flags flags;
+    flags.enable_hidden_column = false;
+    test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+    EXPECT_FALSE(features.flags().enable_hidden_column);
+  }
+
+  EXPECT_TRUE(features.flags().enable_hidden_column);
+}
+
 }  // namespace
 }  // namespace emulator
 }  // namespace spanner

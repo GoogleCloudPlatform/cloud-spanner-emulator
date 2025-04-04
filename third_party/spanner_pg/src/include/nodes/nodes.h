@@ -438,6 +438,15 @@ typedef enum NodeTag
 	T_AlterSpangresStatsStmt,
   T_CreateChangeStreamStmt,
   T_AlterChangeStreamStmt,
+	T_LocalityGroupOption,
+  T_CreateLocalityGroupStmt,
+	T_AlterLocalityGroupStmt,
+	T_AlterColumnLocalityGroupStmt,
+	// SPANGRES BEGIN
+  T_CreateSearchIndexStmt,
+  T_AlterSearchIndexStmt,
+  T_AlterSearchIndexCmd,
+  // SPANGRES END
 
 	/*
 	 * TAGS FOR PARSE TREE NODES (parsenodes.h)

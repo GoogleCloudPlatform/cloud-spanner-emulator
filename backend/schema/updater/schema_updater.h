@@ -70,6 +70,9 @@ struct SchemaChangeContext {
   // Assigns OIDs to database objects when dialect is POSTGRESQL. The assigner
   // is owned by the database and is shared across all schema changes.
   PgOidAssigner* pg_oid_assigner;
+
+  // The database id for the schema change.
+  std::string database_id;
 };
 
 // The result of processing a set of DDL statements for a schema change request.

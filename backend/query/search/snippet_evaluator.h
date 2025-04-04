@@ -17,10 +17,11 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_SEARCH_SNIPPET_EVALUATOR_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_SEARCH_SNIPPET_EVALUATOR_H_
 
+#include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/json_value.h"
 #include "zetasql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -35,7 +36,7 @@ namespace search {
 
 class SnippetEvaluator {
  public:
-  static absl::StatusOr<zetasql::Value> Evaluate(
+  static absl::StatusOr<std::optional<std::string>> Evaluate(
       absl::Span<const zetasql::Value> args);
 
  private:
@@ -68,9 +69,10 @@ class SnippetEvaluator {
       absl::string_view target, absl::string_view::const_iterator first_match,
       absl::string_view::const_iterator match_end, int max_snippet_length);
 
-  static absl::StatusOr<zetasql::JSONValue> BuildSnippets(
-      absl::string_view target, absl::string_view query, int max_snippet_length,
-      int max_snippets);
+  static absl::StatusOr<std::string> BuildSnippets(absl::string_view target,
+                                                   absl::string_view query,
+                                                   int max_snippet_length,
+                                                   int max_snippets);
 };
 
 }  // namespace search

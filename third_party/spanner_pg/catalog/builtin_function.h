@@ -260,9 +260,6 @@ void AddAnonFunctions(std::vector<PostgresFunctionArguments>& functions);
 // Miscellaneous.
 void AddSequenceFunctions(std::vector<PostgresFunctionArguments>& functions);
 
-// Rewritten functions.
-void AddRewriteFunctions(std::vector<PostgresFunctionArguments>& functions);
-
 // String.
 void AddContainsSubstrFunction(
     std::vector<PostgresFunctionArguments>& functions);

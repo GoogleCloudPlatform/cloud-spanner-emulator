@@ -76,7 +76,10 @@
 #include "catalog/pg_type.h"
 #include "catalog/pg_user_mapping.h"
 #include "lib/qunique.h"
+#include "miscadmin.h"
+#include "storage/lmgr.h"
 #include "utils/catcache.h"
+#include "utils/inval.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
@@ -1183,6 +1186,27 @@ ReleaseSysCache(HeapTuple tuple)
 }
 
 /*
+ * SearchSysCacheLocked1
+ *
+ * Combine SearchSysCache1() with acquiring a LOCKTAG_TUPLE at mode
+ * InplaceUpdateTupleLock.  This is a tool for complying with the
+ * README.tuplock section "Locking to write inplace-updated tables".  After
+ * the caller's heap_update(), it should UnlockTuple(InplaceUpdateTupleLock)
+ * and ReleaseSysCache().
+ *
+ * The returned tuple may be the subject of an uncommitted update, so this
+ * doesn't prevent the "tuple concurrently updated" error.
+ */
+HeapTuple
+SearchSysCacheLocked1(int cacheId,
+					  Datum key1)
+{
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
+}
+
+/*
  * SearchSysCacheCopy
  *
  * A convenience routine that does SearchSysCache and (if successful)
@@ -1196,6 +1220,22 @@ SearchSysCacheCopy(int cacheId,
 				   Datum key2,
 				   Datum key3,
 				   Datum key4)
+{
+	// SPANGRES BEGIN
+	ThrowSysCacheLookupError();
+	// SPANGRES END
+}
+
+/*
+ * SearchSysCacheLockedCopy1
+ *
+ * Meld SearchSysCacheLockedCopy1 with SearchSysCacheCopy().  After the
+ * caller's heap_update(), it should UnlockTuple(InplaceUpdateTupleLock) and
+ * heap_freetuple().
+ */
+HeapTuple
+SearchSysCacheLockedCopy1(int cacheId,
+						  Datum key1)
 {
 	// SPANGRES BEGIN
 	ThrowSysCacheLookupError();

@@ -63,6 +63,8 @@ struct DbInfo {
   std::unique_ptr<Database> database;
 };
 
+constexpr char kDatabaseId[] = "test-db";
+
 constexpr char kCreateTestTable[] = R"(
                             CREATE TABLE TestTable (
                               int64_col INT64,
@@ -77,7 +79,7 @@ absl::StatusOr<DbInfo> CreateTestDb(
   DbInfo db_info = {.clock = std::make_unique<Clock>()};
   ZETASQL_ASSIGN_OR_RETURN(
       db_info.database,
-      Database::Create(db_info.clock.get(),
+      Database::Create(db_info.clock.get(), kDatabaseId,
                        SchemaChangeOperation{.statements = create_statements}));
   return db_info;
 }

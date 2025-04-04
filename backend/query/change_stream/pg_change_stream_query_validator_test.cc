@@ -38,6 +38,7 @@
 #include "backend/query/change_stream/change_stream_query_validator.h"
 #include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/schema.h"
+#include "common/constants.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "tests/common/schema_constructor.h"
@@ -59,7 +60,7 @@ class PgChangeStreamQueryValidatorTest : public testing::Test {
  public:
   friend class Catalog;
   PgChangeStreamQueryValidatorTest()
-      : analyzer_options_(MakeGoogleSqlAnalyzerOptions()),
+      : analyzer_options_(MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone)),
         fn_catalog_(&type_factory_),
         schema_(test::CreateSchemaWithOneTableAndOneChangeStream(
             &type_factory_, database_api::DatabaseDialect::POSTGRESQL)),

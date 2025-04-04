@@ -1745,6 +1745,10 @@ select * from parent; select * from child;
 update parent set val1 = 'b' where aid = 1; -- should fail
 ERROR:  tuple to be updated was already modified by an operation triggered by the current command
 HINT:  Consider using an AFTER trigger instead of a BEFORE trigger to propagate changes to other rows.
+merge into parent p using (values (1)) as v(id) on p.aid = v.id
+  when matched then update set val1 = 'b'; -- should fail
+ERROR:  tuple to be updated or deleted was already modified by an operation triggered by the current command
+HINT:  Consider using an AFTER trigger instead of a BEFORE trigger to propagate changes to other rows.
 select * from parent; select * from child;
  aid | val1 | val2 | val3 | val4 | bcnt 
 -----+------+------+------+------+------
@@ -1758,6 +1762,10 @@ select * from parent; select * from child;
 
 delete from parent where aid = 1; -- should fail
 ERROR:  tuple to be deleted was already modified by an operation triggered by the current command
+HINT:  Consider using an AFTER trigger instead of a BEFORE trigger to propagate changes to other rows.
+merge into parent p using (values (1)) as v(id) on p.aid = v.id
+  when matched then delete; -- should fail
+ERROR:  tuple to be updated or deleted was already modified by an operation triggered by the current command
 HINT:  Consider using an AFTER trigger instead of a BEFORE trigger to propagate changes to other rows.
 select * from parent; select * from child;
  aid | val1 | val2 | val3 | val4 | bcnt 
@@ -3363,6 +3371,17 @@ select * from trig_table;
 (2 rows)
 
 drop table refd_table, trig_table;
+--
+-- Test that we can drop a not-yet-fired deferred trigger
+--
+create table refd_table (id int primary key);
+create table trig_table (fk int references refd_table initially deferred);
+begin;
+insert into trig_table values (1);
+drop table refd_table cascade;
+NOTICE:  drop cascades to constraint trig_table_fk_fkey on table trig_table
+commit;
+drop table trig_table;
 --
 -- self-referential FKs are even more fun
 --

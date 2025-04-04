@@ -42,8 +42,7 @@ class PreparePropertyGraphCatalog : public Catalog {
   PreparePropertyGraphCatalog(const Schema* schema,
                               const FunctionCatalog* function_catalog,
                               zetasql::TypeFactory* type_factory,
-                              const zetasql::AnalyzerOptions& options =
-                                  MakeGoogleSqlAnalyzerOptions())
+                              const zetasql::AnalyzerOptions& options)
       : Catalog(schema, function_catalog, type_factory, options) {}
 
   absl::Status GetPropertyGraph(absl::string_view name,

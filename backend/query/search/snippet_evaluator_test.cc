@@ -25,6 +25,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
@@ -65,24 +66,23 @@ TEST(SnippetEvaluatorTest, EvaluateNullSource) {
   std::vector<zetasql::Value> args{zetasql::Value::NullString(),
                                      zetasql::Value::String("foo")};
 
-  absl::StatusOr<zetasql::Value> result = SnippetEvaluator::Evaluate(args);
+  absl::StatusOr<std::optional<std::string>> result =
+      SnippetEvaluator::Evaluate(args);
   ZETASQL_EXPECT_OK(result.status());
-
-  zetasql::Value snippets = result.value();
-  EXPECT_TRUE(snippets.type()->IsJsonType());
-  EXPECT_TRUE(snippets.is_null());
+  std::optional<std::string> snippets = result.value();
+  EXPECT_FALSE(snippets.has_value());
 }
 
 TEST(SnippetEvaluatorTest, EvaluateNullQuery) {
   std::vector<zetasql::Value> args{zetasql::Value::String("foo bar"),
                                      zetasql::Value::NullString()};
 
-  absl::StatusOr<zetasql::Value> result = SnippetEvaluator::Evaluate(args);
+  absl::StatusOr<std::optional<std::string>> result =
+      SnippetEvaluator::Evaluate(args);
   ZETASQL_EXPECT_OK(result.status());
 
-  zetasql::Value snippets = result.value();
-  EXPECT_TRUE(snippets.type()->IsJsonType());
-  EXPECT_TRUE(snippets.is_null());
+  std::optional<std::string> snippets = result.value();
+  EXPECT_FALSE(snippets.has_value());
 }
 
 struct SnippetEvaluatorTestCase {
@@ -113,14 +113,13 @@ TEST_P(SnippetEvaluatorTest, TestEvaluation) {
                                      max_snippet_length,
                                      max_snippets};
 
-  absl::StatusOr<zetasql::Value> result = SnippetEvaluator::Evaluate(args);
+  absl::StatusOr<std::optional<std::string>> result =
+      SnippetEvaluator::Evaluate(args);
   ZETASQL_EXPECT_OK(result.status());
 
-  zetasql::Value snippets = result.value();
-  EXPECT_TRUE(snippets.type()->IsJsonType());
-  zetasql::JSONValueConstRef snippets_json = snippets.json_value();
-
-  EXPECT_EQ(test_case.expected_result, snippets_json.ToString());
+  std::optional<std::string> snippets = result.value();
+  EXPECT_TRUE(snippets.has_value());
+  EXPECT_EQ(test_case.expected_result, snippets.value());
 }
 
 std::string GetExpectedResult(absl::Span<const std::pair<int, int>> positions,

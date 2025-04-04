@@ -42,7 +42,7 @@ package(
     ],
 )
 
-licenses(["notice"])
+licenses(["restricted"])
 
 cc_library(
     name = "catalog",
@@ -108,6 +108,10 @@ filegroup(
     name = "perl_utils",
     srcs = [
         "Catalog.pm",
+    ],
+    visibility = [
+        "//:__subpackages__",
+        "//third_party/spanner_pg/bootstrap_catalog:__subpackages__",
     ],
 )
 

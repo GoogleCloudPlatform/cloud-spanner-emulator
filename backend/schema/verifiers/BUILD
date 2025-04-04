@@ -81,6 +81,7 @@ cc_library(
         "//backend/schema/updater:schema_validation_context",
         "//common:errors",
         "@com_google_absl//absl/status",
+        "@com_google_zetasql//zetasql/public:analyzer_options",
     ],
 )
 
@@ -90,6 +91,7 @@ cc_test(
     deps = [
         ":check_constraint_verifiers",
         "//backend/database",
+        "//backend/schema/updater:schema_updater",
         "//backend/transaction:read_write_transaction",
         "//common:clock",
         "//tests/common:proto_matchers",
@@ -121,11 +123,16 @@ cc_test(
     srcs = ["foreign_key_verifiers_test.cc"],
     deps = [
         ":foreign_key_verifiers",
+        "//backend/access:write",
         "//backend/database",
+        "//backend/schema/updater:schema_updater",
         "//backend/transaction:read_write_transaction",
         "//common:clock",
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/time",
+        "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],

@@ -62,6 +62,8 @@
 #include "backend/datamodel/key_set.h"
 #include "backend/datamodel/value.h"
 #include "backend/query/analyzer_options.h"
+#include "backend/query/ann_functions_rewriter.h"
+#include "backend/query/ann_validator.h"
 #include "backend/query/catalog.h"
 #include "backend/query/change_stream/change_stream_query_validator.h"
 #include "backend/query/dml_query_validator.h"
@@ -138,19 +140,19 @@ class VectorsRowCursor : public RowCursor {
 };
 
 zetasql::EvaluatorOptions CommonEvaluatorOptions(
-    zetasql::TypeFactory* type_factory) {
+    zetasql::TypeFactory* type_factory, const std::string time_zone) {
   zetasql::EvaluatorOptions options;
   options.type_factory = type_factory;
-  absl::TimeZone time_zone;
-  absl::LoadTimeZone(kDefaultTimeZone, &time_zone);
-  options.default_time_zone = time_zone;
+  absl::TimeZone time_zone_obj;
+  absl::LoadTimeZone(time_zone, &time_zone_obj);
+  options.default_time_zone = time_zone_obj;
   options.scramble_undefined_orderings = true;
   return options;
 }
 
 absl::StatusOr<zetasql::AnalyzerOptions> MakeAnalyzerOptionsWithParameters(
-    const zetasql::ParameterValueMap& params) {
-  zetasql::AnalyzerOptions options = MakeGoogleSqlAnalyzerOptions();
+    const zetasql::ParameterValueMap& params, const std::string time_zone) {
+  zetasql::AnalyzerOptions options = MakeGoogleSqlAnalyzerOptions(time_zone);
   for (const auto& [name, value] : params) {
     ZETASQL_RETURN_IF_ERROR(options.AddQueryParameter(name, value.type()));
   }
@@ -525,7 +527,8 @@ absl::StatusOr<CaseInsensitiveStringSet> ColumnsInUpdate(
 absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedInsert(
     const zetasql::ResolvedInsertStmt* insert_statement,
     const zetasql::ParameterValueMap& parameters,
-    zetasql::TypeFactory* type_factory, DatabaseDialect database_dialect) {
+    zetasql::TypeFactory* type_factory, DatabaseDialect database_dialect,
+    const std::string time_zone) {
   if (insert_statement->insert_mode() ==
       zetasql::ResolvedInsertStmt::OR_REPLACE) {
     return error::UnsupportedUpsertQueries("Insert or replace");
@@ -561,9 +564,9 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedInsert(
                        insert_statement->row_list()));
 
   auto prepared_insert = std::make_unique<zetasql::PreparedModify>(
-      insert_statement, CommonEvaluatorOptions(type_factory));
+      insert_statement, CommonEvaluatorOptions(type_factory, time_zone));
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
-                   MakeAnalyzerOptionsWithParameters(parameters));
+                   MakeAnalyzerOptionsWithParameters(parameters, time_zone));
   ZETASQL_RETURN_IF_ERROR(prepared_insert->Prepare(analyzer_options));
 
   std::unique_ptr<zetasql::EvaluatorTableIterator> returning_iter;
@@ -600,7 +603,8 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedInsert(
 absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedUpdate(
     const zetasql::ResolvedUpdateStmt* update_statement,
     const zetasql::ParameterValueMap& parameters,
-    zetasql::TypeFactory* type_factory, const Schema* schema) {
+    zetasql::TypeFactory* type_factory, const Schema* schema,
+    const std::string time_zone) {
   ZETASQL_ASSIGN_OR_RETURN(auto updated_columns,
                    ColumnsInUpdate(update_statement->update_item_list()));
   ZETASQL_ASSIGN_OR_RETURN(auto pending_ts_columns,
@@ -608,9 +612,9 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedUpdate(
                        update_statement->update_item_list()));
 
   auto prepared_update = std::make_unique<zetasql::PreparedModify>(
-      update_statement, CommonEvaluatorOptions(type_factory));
+      update_statement, CommonEvaluatorOptions(type_factory, time_zone));
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
-                   MakeAnalyzerOptionsWithParameters(parameters));
+                   MakeAnalyzerOptionsWithParameters(parameters, time_zone));
   ZETASQL_RETURN_IF_ERROR(prepared_update->Prepare(analyzer_options));
 
   std::unique_ptr<zetasql::EvaluatorTableIterator> returning_iter;
@@ -631,11 +635,11 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedUpdate(
 absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedDelete(
     const zetasql::ResolvedDeleteStmt* delete_statement,
     const zetasql::ParameterValueMap& parameters,
-    zetasql::TypeFactory* type_factory) {
+    zetasql::TypeFactory* type_factory, const std::string time_zone) {
   auto prepared_delete = std::make_unique<zetasql::PreparedModify>(
-      delete_statement, CommonEvaluatorOptions(type_factory));
+      delete_statement, CommonEvaluatorOptions(type_factory, time_zone));
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
-                   MakeAnalyzerOptionsWithParameters(parameters));
+                   MakeAnalyzerOptionsWithParameters(parameters, time_zone));
   ZETASQL_RETURN_IF_ERROR(prepared_delete->Prepare(analyzer_options));
 
   std::unique_ptr<zetasql::EvaluatorTableIterator> returning_iter;
@@ -655,20 +659,20 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateUpdate(
     const zetasql::ResolvedStatement* resolved_statement,
     zetasql::Catalog* catalog, const zetasql::ParameterValueMap& parameters,
     zetasql::TypeFactory* type_factory, DatabaseDialect database_dialect,
-    const Schema* schema) {
+    const Schema* schema, const std::string time_zone) {
   switch (resolved_statement->node_kind()) {
     case zetasql::RESOLVED_INSERT_STMT:
       return EvaluateResolvedInsert(
           resolved_statement->GetAs<zetasql::ResolvedInsertStmt>(),
-          parameters, type_factory, database_dialect);
+          parameters, type_factory, database_dialect, time_zone);
     case zetasql::RESOLVED_UPDATE_STMT:
       return EvaluateResolvedUpdate(
           resolved_statement->GetAs<zetasql::ResolvedUpdateStmt>(),
-          parameters, type_factory, schema);
+          parameters, type_factory, schema, time_zone);
     case zetasql::RESOLVED_DELETE_STMT:
       return EvaluateResolvedDelete(
           resolved_statement->GetAs<zetasql::ResolvedDeleteStmt>(),
-          parameters, type_factory);
+          parameters, type_factory, time_zone);
     default:
       ZETASQL_RET_CHECK_FAIL() << "Unsupported support node kind "
                        << ResolvedNodeKind_Name(
@@ -692,7 +696,8 @@ absl::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
     const zetasql::ResolvedStatement* resolved_statement,
     const zetasql::ParameterValueMap& params,
     zetasql::TypeFactory* type_factory, int64_t* num_output_rows,
-    const v1::ExecuteSqlRequest_QueryMode query_mode) {
+    const v1::ExecuteSqlRequest_QueryMode query_mode,
+    const std::string time_zone) {
   if (resolved_statement->node_kind() == zetasql::RESOLVED_CALL_STMT) {
     // Evaluation of a CALL statement is currently a no-op. This is added to
     // ensure the emulator doesn't error out when the customer tries the CALL
@@ -704,11 +709,11 @@ absl::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
 
   auto prepared_query = std::make_unique<zetasql::PreparedQuery>(
       resolved_statement->GetAs<zetasql::ResolvedQueryStmt>(),
-      CommonEvaluatorOptions(type_factory));
+      CommonEvaluatorOptions(type_factory, time_zone));
   // Call PrepareQuery to set the AnalyzerOptions that we used to Analyze the
   // statement.
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
-                   MakeAnalyzerOptionsWithParameters(params));
+                   MakeAnalyzerOptionsWithParameters(params, time_zone));
   ZETASQL_RETURN_IF_ERROR(prepared_query->Prepare(analyzer_options));
 
   // Get the query metadata from the prepared query.
@@ -849,6 +854,24 @@ ExtractValidatedResolvedStatementAndOptions(
       in_select_for_update_query};
   ZETASQL_RETURN_IF_ERROR(statement->Accept(&index_hint_validator));
 
+  ANNFunctionsRewriter ann_functions_rewriter;
+  ZETASQL_RETURN_IF_ERROR(statement->Accept(&ann_functions_rewriter));
+  ZETASQL_ASSIGN_OR_RETURN(
+      statement,
+      ann_functions_rewriter.ConsumeRootNode<zetasql::ResolvedStatement>());
+
+  if (!ann_functions_rewriter.ann_functions().empty()) {
+    ANNValidator ann_validator(context.schema);
+    ZETASQL_RETURN_IF_ERROR(statement->Accept(&ann_validator));
+    // Check if all the ANN functions passed the validation.
+    for (const auto& ann_function : ann_functions_rewriter.ann_functions()) {
+      if (!ann_validator.ann_functions().contains(ann_function)) {
+        return error::ApproxDistanceInvalidShape(
+            ann_function->function()->Name());
+      }
+    }
+  }
+
   // Check the query size limits
   // https://cloud.google.com/spanner/quotas#query_limits
   QuerySizeLimitsChecker checker;
@@ -911,7 +934,9 @@ class QueryEvaluatorForEngine : public QueryEvaluator {
 absl::StatusOr<std::string> QueryEngine::GetDmlTargetTable(
     const Query& query, const Schema* schema) const {
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
-                   MakeAnalyzerOptionsWithParameters(query.declared_params));
+                   MakeAnalyzerOptionsWithParameters(
+                       query.declared_params,
+                       GetTimeZone(function_catalog_.GetLatestSchema())));
   analyzer_options.set_prune_unused_columns(true);
   Catalog catalog(schema, &function_catalog_, type_factory_, analyzer_options);
   ZETASQL_ASSIGN_OR_RETURN(
@@ -937,12 +962,23 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
   return ExecuteSql(query, context, v1::ExecuteSqlRequest::NORMAL);
 }
 
+std::string QueryEngine::GetTimeZone(const Schema* schema) {
+  std::string time_zone = kDefaultTimeZone;
+  if (schema != nullptr) {
+    time_zone = schema->default_time_zone();
+  }
+  return time_zone;
+}
+
 absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
     const Query& query, const QueryContext& context,
     v1::ExecuteSqlRequest_QueryMode query_mode) const {
   absl::Time start_time = absl::Now();
+
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
-                   MakeAnalyzerOptionsWithParameters(query.declared_params));
+                   MakeAnalyzerOptionsWithParameters(
+                       query.declared_params,
+                       GetTimeZone(function_catalog_.GetLatestSchema())));
   analyzer_options.set_prune_unused_columns(true);
 
   QueryEvaluatorForEngine view_evaluator(*this, context);
@@ -993,7 +1029,8 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
     ZETASQL_ASSIGN_OR_RETURN(
         auto cursor,
         EvaluateQuery(resolved_statement.get(), params, type_factory_,
-                      &result.num_output_rows, query_mode));
+                      &result.num_output_rows, query_mode,
+                      GetTimeZone(function_catalog_.GetLatestSchema())));
     result.rows = std::move(cursor);
   } else {
     ZETASQL_RET_CHECK_NE(context.writer, nullptr);
@@ -1018,7 +1055,8 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
           auto execute_update_result,
           EvaluateUpdate(resolved_statement.get(), &catalog, params,
                          type_factory_, context.schema->dialect(),
-                         context.schema));
+                         context.schema,
+                         GetTimeZone(function_catalog_.GetLatestSchema())));
       ZETASQL_RETURN_IF_ERROR(context.writer->Write(execute_update_result.mutation));
       result.modified_row_count = execute_update_result.modify_row_count;
       result.rows = std::move(execute_update_result.returning_row_cursor);
@@ -1074,7 +1112,9 @@ const zetasql::ResolvedReturningClause* GetReturningClause(
 absl::Status QueryEngine::IsPartitionable(const Query& query,
                                           const QueryContext& context) const {
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
-                   MakeAnalyzerOptionsWithParameters(query.declared_params));
+                   MakeAnalyzerOptionsWithParameters(
+                       query.declared_params,
+                       GetTimeZone(function_catalog_.GetLatestSchema())));
   analyzer_options.set_prune_unused_columns(true);
   Catalog catalog{context.schema, &function_catalog_, type_factory_,
                   analyzer_options};
@@ -1110,7 +1150,9 @@ absl::Status QueryEngine::IsValidPartitionedDML(
   }
 
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
-                   MakeAnalyzerOptionsWithParameters(query.declared_params));
+                   MakeAnalyzerOptionsWithParameters(
+                       query.declared_params,
+                       GetTimeZone(function_catalog_.GetLatestSchema())));
   analyzer_options.set_prune_unused_columns(true);
   Catalog catalog{context.schema, &function_catalog_, type_factory_,
                   analyzer_options};
@@ -1139,10 +1181,12 @@ QueryEngine::TryGetChangeStreamMetadata(const Query& query,
                                         bool in_read_write_txn) {
   const absl::Time start_time = absl::Now();
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
-                   MakeAnalyzerOptionsWithParameters(query.declared_params));
+                   MakeAnalyzerOptionsWithParameters(query.declared_params,
+                                                     GetTimeZone(schema)));
   analyzer_options.set_prune_unused_columns(true);
   zetasql::TypeFactory type_factory;
-  FunctionCatalog function_catalog(&type_factory);
+  FunctionCatalog function_catalog(
+      &type_factory, kCloudSpannerEmulatorFunctionCatalogName, schema);
   Catalog catalog{schema, &function_catalog, &type_factory, analyzer_options};
   std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
   if (schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {

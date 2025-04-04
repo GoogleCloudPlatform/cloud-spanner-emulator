@@ -45,8 +45,8 @@ using ::postgres_translator::interfaces::PGArena;
 using ::postgres_translator::spangres::datatypes::
     CreatePgJsonbValueFromNormalized;
 using ::postgres_translator::spangres::datatypes::GetPgJsonbNormalizedValue;
-using ::postgres_translator::spangres::datatypes::common::jsonb::
-    ParseJsonbArray;
+using ::postgres_translator::spangres::datatypes::common::jsonb::PgJsonbValue;
+using ::postgres_translator::spangres::datatypes::common::jsonb::TreeNode;
 
 // The emulator implementation of jsonb_array_elements.
 class JsonbArrayElementsEvaluator : public zetasql::EvaluatorTableIterator {
@@ -88,7 +88,10 @@ class JsonbArrayElementsEvaluator : public zetasql::EvaluatorTableIterator {
 
     // Parse the input.
     ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(input_));
-    ZETASQL_ASSIGN_OR_RETURN(jsonb_array_, ParseJsonbArray(std::string(jsonb)));
+    std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+    ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue jsonb_value,
+                     PgJsonbValue::Parse(std::string(jsonb), &tree_nodes));
+    ZETASQL_ASSIGN_OR_RETURN(jsonb_array_, jsonb_value.GetSerializedArrayElements());
 
     return absl::OkStatus();
   }

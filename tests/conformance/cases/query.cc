@@ -977,7 +977,6 @@ TEST_P(QueryTest, LimitInAggregate) {
       Query("SELECT STRING_AGG(name, ', ' ORDER BY name LIMIT 2) FROM users"),
       IsOkAndHoldsRow("Douglas Adams, J.R.R. Tolkien"));
 }
-
 }  // namespace
 
 }  // namespace test

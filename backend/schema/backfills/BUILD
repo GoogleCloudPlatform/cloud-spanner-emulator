@@ -57,6 +57,7 @@ cc_library(
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:optional",
         "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_zetasql//zetasql/public:analyzer_options",
         "@com_google_zetasql//zetasql/public:type",
         "@com_google_zetasql//zetasql/public:type_cc_proto",
         "@com_google_zetasql//zetasql/public:value",

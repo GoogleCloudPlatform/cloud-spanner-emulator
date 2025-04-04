@@ -140,6 +140,10 @@ class Index : public SchemaNode {
   // SchemaNode interface implementation.
   // ------------------------------------
 
+  ddl::VectorIndexOptionsProto vector_index_options() const {
+    return vector_index_options_;
+  }
+
   std::optional<SchemaNameInfo> GetSchemaNameInfo() const override {
     return SchemaNameInfo{.name = name_, .kind = "Index", .global = true};
   }

@@ -50,13 +50,10 @@ absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::CreateSchema(
 }
 
 absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::UpdateSchema(
-    const Schema* base_schema,
-    absl::Span<const std::string> statements
-    ,
-    absl::string_view proto_descriptor_bytes
-    ,
+    const Schema* base_schema, absl::Span<const std::string> statements,
+    absl::string_view proto_descriptor_bytes,
     const database_api::DatabaseDialect& dialect,
-    bool use_gsql_to_pg_translation) {
+    bool use_gsql_to_pg_translation, std::string_view database_id) {
   std::vector<std::string> pg_ddl_statements;
   if (dialect == database_api::DatabaseDialect::POSTGRESQL &&
       use_gsql_to_pg_translation) {
@@ -80,7 +77,8 @@ absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::UpdateSchema(
   SchemaChangeContext context{.type_factory = &type_factory_,
                               .table_id_generator = &table_id_generator_,
                               .column_id_generator = &column_id_generator_,
-                              .pg_oid_assigner = pg_oid_assigner_.get()};
+                              .pg_oid_assigner = pg_oid_assigner_.get(),
+                              .database_id = std::string(database_id)};
   return updater.ValidateSchemaFromDDL(
       SchemaChangeOperation{
           .statements = statements,

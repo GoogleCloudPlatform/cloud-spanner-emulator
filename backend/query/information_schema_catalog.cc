@@ -77,6 +77,7 @@ using ::zetasql::values::String;
 using ::zetasql::values::Timestamp;
 
 static constexpr char kInformationSchema[] = "INFORMATION_SCHEMA";
+static constexpr char kCatalogName[] = "CATALOG_NAME";
 static constexpr char kTableCatalog[] = "TABLE_CATALOG";
 static constexpr char kTableSchema[] = "TABLE_SCHEMA";
 static constexpr char kTableName[] = "TABLE_NAME";
@@ -441,7 +442,7 @@ absl::flat_hash_map<std::string, zetasql::Value> GetColumnsWithDefault(
 // for (const Table* table : default_schema_->tables()) {
 //   rows.push_back({
 //       // table_catalog
-//       String(""),
+//       DialectTableCatalog(),
 //       // table_schema
 //       DialectDefaultSchema(),
 //       // table_name
@@ -478,9 +479,11 @@ std::vector<zetasql::Value> GetRowFromRowKVs(
 }
 
 std::vector<zetasql::Value> GetSchemaRow(const zetasql::Table* table,
-                                           zetasql::Value value) {
+                                           zetasql::Value tableCatalog,
+                                           zetasql::Value schemaName) {
   absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
-  specific_kvs[kSchemaName] = value;
+  specific_kvs[kCatalogName] = tableCatalog;
+  specific_kvs[kSchemaName] = schemaName;
   return GetRowFromRowKVs(table, specific_kvs);
 }
 
@@ -564,6 +567,14 @@ inline zetasql::Value InformationSchemaCatalog::DialectDefaultSchema() {
   return String(dialect_ == DatabaseDialect::POSTGRESQL ? kPublic : "");
 }
 
+inline zetasql::Value InformationSchemaCatalog::DialectTableCatalog() {
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    return String(default_schema_->database_id());
+  } else {
+    return String("");
+  }
+}
+
 inline std::pair<std::string, std::string>
 InformationSchemaCatalog::GetSchemaAndNameForInformationSchema(
     std::string table_name) {
@@ -580,24 +591,28 @@ void InformationSchemaCatalog::FillSchemataTable() {
   std::vector<std::vector<zetasql::Value>> rows;
 
   // Row for the unnamed default schema.
-  rows.push_back(GetSchemaRow(table, DialectDefaultSchema()));
+  rows.push_back(
+      GetSchemaRow(table, DialectTableCatalog(), DialectDefaultSchema()));
 
   // Row for the information schema.
-  rows.push_back(
-      GetSchemaRow(table, String(GetNameForDialect(kInformationSchema))));
+  rows.push_back(GetSchemaRow(table, DialectTableCatalog(),
+                              String(GetNameForDialect(kInformationSchema))));
 
   // Row for the spanner_sys schema.
   rows.push_back(
-      GetSchemaRow(table, String(GetNameForDialect(SpannerSysCatalog::kName))));
+      GetSchemaRow(table, DialectTableCatalog(),
+                   String(GetNameForDialect(SpannerSysCatalog::kName))));
 
   // Row for the pg_catalog schema for PG databases.
   if (dialect_ == DatabaseDialect::POSTGRESQL) {
-    rows.push_back(GetSchemaRow(table, String(GetNameForDialect(kPGCatalog))));
+    rows.push_back(GetSchemaRow(table, DialectTableCatalog(),
+                                String(GetNameForDialect(kPGCatalog))));
   }
 
   // Row for each named schema.
   for (const auto& named_schema : default_schema_->named_schemas()) {
-    rows.push_back(GetSchemaRow(table, String(named_schema->Name())));
+    rows.push_back(GetSchemaRow(table, DialectTableCatalog(),
+                                String(named_schema->Name())));
   }
 
   table->SetContents(rows);
@@ -608,6 +623,7 @@ void InformationSchemaCatalog::FillDatabaseOptionsTable() {
   std::vector<std::vector<zetasql::Value>> rows;
   absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
 
+  specific_kvs[kCatalogName] = DialectTableCatalog();
   specific_kvs[kSchemaName] = DialectDefaultSchema();
   specific_kvs[kOptionType] = String(
       dialect_ == DatabaseDialect::POSTGRESQL ? kCharacterVarying : kString);
@@ -624,6 +640,18 @@ void InformationSchemaCatalog::FillDatabaseOptionsTable() {
     specific_kvs[kOptionName] = String(ddl::kDefaultSequenceKindOptionName);
     specific_kvs[kOptionValue] =
         String(default_schema_->options()->default_sequence_kind().value());
+    rows.push_back(GetRowFromRowKVs(table, specific_kvs));
+  }
+
+  if (default_schema_->options() != nullptr &&
+      default_schema_->options()->default_time_zone().has_value()) {
+    specific_kvs.clear();
+    specific_kvs[kSchemaName] = DialectDefaultSchema();
+    specific_kvs[kOptionType] = String(
+        dialect_ == DatabaseDialect::POSTGRESQL ? kCharacterVarying : kString);
+    specific_kvs[kOptionName] = String(ddl::kDefaultTimeZoneOptionName);
+    specific_kvs[kOptionValue] =
+        String(default_schema_->options()->default_time_zone().value());
     rows.push_back(GetRowFromRowKVs(table, specific_kvs));
   }
 
@@ -667,6 +695,7 @@ void InformationSchemaCatalog::FillTablesTable() {
 
     const auto& [table_schema_part, table_name_part] =
         GetSchemaAndNameForInformationSchema(table->Name());
+    specific_kvs[kTableCatalog] = DialectTableCatalog();
     specific_kvs[kTableSchema] = String(table_schema_part);
     specific_kvs[kTableName] = String(table_name_part);
     specific_kvs[kTableType] = String(kBaseTable);
@@ -689,6 +718,7 @@ void InformationSchemaCatalog::FillTablesTable() {
     absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
     const auto& [schema_part, name_part] =
         GetSchemaAndNameForInformationSchema(view->Name());
+    specific_kvs[kTableCatalog] = DialectTableCatalog();
     specific_kvs[kTableSchema] = String(schema_part);
     specific_kvs[kTableName] = String(name_part);
     specific_kvs[kTableType] = String(kView);
@@ -702,6 +732,7 @@ void InformationSchemaCatalog::FillTablesTable() {
 
   for (const auto& table : spanner_sys_catalog_->tables()) {
     absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+    specific_kvs[kTableCatalog] = DialectTableCatalog();
     specific_kvs[kTableSchema] =
         String(GetNameForDialect(SpannerSysCatalog::kName));
     specific_kvs[kTableType] = String(kView);
@@ -716,6 +747,7 @@ void InformationSchemaCatalog::FillTablesTable() {
 
   for (const auto& table : this->tables()) {
     absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+    specific_kvs[kTableCatalog] = DialectTableCatalog();
     specific_kvs[kTableSchema] = String(GetNameForDialect(kInformationSchema));
     specific_kvs[kTableName] = String(GetNameForDialect(table->Name()));
     specific_kvs[kTableType] = String(kView);
@@ -855,6 +887,7 @@ void InformationSchemaCatalog::FillColumnsTable() {
 
       const auto& [table_schema_part, table_name_part] =
           GetSchemaAndNameForInformationSchema(table->Name());
+      specific_kvs[kTableCatalog] = DialectTableCatalog();
       specific_kvs[kTableSchema] = String(table_schema_part);
       specific_kvs[kTableName] = String(table_name_part);
       specific_kvs[kColumnName] = String(column->Name());
@@ -933,6 +966,7 @@ void InformationSchemaCatalog::FillColumnsTable() {
 
       const auto& [view_schema_part, view_name_part] =
           GetSchemaAndNameForInformationSchema(view->Name());
+      specific_kvs[kTableCatalog] = DialectTableCatalog();
       specific_kvs[kTableSchema] = String(view_schema_part);
       specific_kvs[kTableName] = String(view_name_part);
       specific_kvs[kColumnName] = String(column.name);
@@ -979,6 +1013,7 @@ void InformationSchemaCatalog::FillColumnsTable() {
         specific_kvs[kSpannerType] = String(metadata.spanner_type);
       }
 
+      specific_kvs[kTableCatalog] = DialectTableCatalog();
       specific_kvs[kTableSchema] =
           String(GetNameForDialect(kInformationSchema));
       specific_kvs[kTableName] = String(GetNameForDialect(table->Name()));
@@ -1020,7 +1055,7 @@ void InformationSchemaCatalog::FillColumnColumnUsageTable() {
         for (const Column* used_column : column->dependent_columns()) {
           rows.push_back({
               // table_catalog
-              String(""),
+              DialectTableCatalog(),
               // table_schema
               String(table_schema_part),
               // table_name
@@ -1088,7 +1123,7 @@ void InformationSchemaCatalog::FillIndexesTable() {
     for (const Index* index : table->indexes()) {
       rows.push_back({
           // table_catalog
-          String(""),
+          DialectTableCatalog(),
           // table_schema
           String(table_schema_part),
           // table_name
@@ -1123,7 +1158,7 @@ void InformationSchemaCatalog::FillIndexesTable() {
     // Add the primary key index.
     rows.push_back({
         // table_catalog
-        String(""),
+        DialectTableCatalog(),
         // table_schema
         String(table_schema_part),
         // table_name
@@ -1160,7 +1195,7 @@ void InformationSchemaCatalog::FillIndexesTable() {
     for (const auto& table : this->tables()) {
       rows.push_back({
           // table_catalog
-          String(""),
+          DialectTableCatalog(),
           // table_schema
           String(kInformationSchema),
           // table_name
@@ -1212,7 +1247,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable() {
       // Add key columns.
       for (const KeyColumn* key_column : index->key_columns()) {
         rows.push_back({// table_catalog
-                        String(""),
+                        DialectTableCatalog(),
                         // table_schema
                         String(table_schema_part),
                         // table_name
@@ -1239,7 +1274,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable() {
       for (const Column* column : index->stored_columns()) {
         rows.push_back({
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(table_schema_part),
             // table_name
@@ -1268,7 +1303,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable() {
       for (const KeyColumn* key_column : table->primary_key()) {
         rows.push_back({
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(table_schema_part),
             // table_name
@@ -1306,7 +1341,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable() {
         }
         rows.push_back({
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(kInformationSchema),
             // table_name
@@ -1363,7 +1398,7 @@ void InformationSchemaCatalog::FillColumnOptionsTable() {
     for (const Column* column : table->columns()) {
       if (column->allows_commit_timestamp()) {
         rows.push_back({// table_catalog
-                        String(""),
+                        DialectTableCatalog(),
                         // table_schema
                         String(schema_part),
                         // table_name
@@ -1377,7 +1412,7 @@ void InformationSchemaCatalog::FillColumnOptionsTable() {
       }
       if (column->locality_group()) {
         rows.push_back({// table_catalog
-                        String(""),
+                        DialectTableCatalog(),
                         // table_schema
                         String(""),
                         // table_name
@@ -1418,13 +1453,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable() {
     // Add the primary key.
     rows.push_back({
         // constraint_catalog
-        String(""),
+        DialectTableCatalog(),
         // constraint_schema
         String(table_schema_part),
         // constraint_name
         String(PrimaryKeyName(table)),
         // table_catalog
-        String(""),
+        DialectTableCatalog(),
         // table_schema
         String(table_schema_part),
         // table_name
@@ -1446,13 +1481,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable() {
       }
       rows.push_back({
           // constraint_catalog
-          String(""),
+          DialectTableCatalog(),
           // constraint_schema
           String(table_schema_part),
           // constraint_name
           String(CheckNotNullName(table, column)),
           // table_catalog
-          String(""),
+          DialectTableCatalog(),
           // table_schema
           String(table_schema_part),
           // table_name
@@ -1472,13 +1507,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable() {
     for (const auto* check_constraint : table->check_constraints()) {
       rows.push_back({
           // constraint_catalog
-          String(""),
+          DialectTableCatalog(),
           // constraint_schema
           String(table_schema_part),
           // constraint_name
           String(check_constraint->Name()),
           // table_catalog
-          String(""),
+          DialectTableCatalog(),
           // table_schema
           String(table_schema_part),
           // table_name
@@ -1497,13 +1532,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable() {
     for (const auto* foreign_key : table->foreign_keys()) {
       rows.push_back({
           // constraint_catalog
-          String(""),
+          DialectTableCatalog(),
           // constraint_schema
           String(table_schema_part),
           // constraint_name
           String(SDLObjectName::GetInSchemaName(foreign_key->Name())),
           // table_catalog
-          String(""),
+          DialectTableCatalog(),
           // table_schema
           String(table_schema_part),
           // table_name
@@ -1525,13 +1560,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable() {
       if (foreign_key->referenced_index()) {
         rows.push_back({
             // constraint_catalog
-            String(""),
+            DialectTableCatalog(),
             // constraint_schema
             DialectDefaultSchema(),
             // constraint_name
             String(foreign_key->referenced_index()->Name()),
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(referenced_table_schema_part),
             // table_name
@@ -1557,13 +1592,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable() {
       // Add the primary key.
       rows.push_back({
           // constraint_catalog
-          String(""),
+          DialectTableCatalog(),
           // constraint_schema
           String(kInformationSchema),
           // constraint_name
           String(PrimaryKeyName(table)),
           // table_catalog
-          String(""),
+          DialectTableCatalog(),
           // table_schema
           String(kInformationSchema),
           // table_name
@@ -1587,13 +1622,13 @@ void InformationSchemaCatalog::FillTableConstraintsTable() {
         }
         rows.push_back({
             // constraint_catalog
-            String(""),
+            DialectTableCatalog(),
             // constraint_schema
             String(kInformationSchema),
             // constraint_name
             String(CheckNotNullName(table, column)),
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(kInformationSchema),
             // table_name
@@ -1641,7 +1676,7 @@ void InformationSchemaCatalog::FillCheckConstraintsTable() {
       }
       rows.push_back({
           // constraint_catalog
-          String(""),
+          DialectTableCatalog(),
           // constraint_schema
           String(table_schema_part),
           // constraint_name
@@ -1657,7 +1692,7 @@ void InformationSchemaCatalog::FillCheckConstraintsTable() {
     for (const auto* check_constraint : table->check_constraints()) {
       rows.push_back({
           // constraint_catalog
-          String(""),
+          DialectTableCatalog(),
           // constraint_schema
           String(table_schema_part),
           // constraint_name
@@ -1687,7 +1722,7 @@ void InformationSchemaCatalog::FillCheckConstraintsTable() {
         }
         rows.push_back({
             // constraint_catalog
-            String(""),
+            DialectTableCatalog(),
             // constraint_schema
             String(kInformationSchema),
             // constraint_name
@@ -1726,13 +1761,13 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable() {
     // Add the primary key.
     rows.push_back({
         // table_catalog
-        String(""),
+        DialectTableCatalog(),
         // table_schema
         String(table_schema_part),
         // table_name
         String(table_name_part),
         // constraint_catalog
-        String(""),
+        DialectTableCatalog(),
         // constraint_schema
         String(table_schema_part),
         // constraint_name
@@ -1749,13 +1784,13 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable() {
         }
         rows.push_back({
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(table_schema_part),
             // table_name
             String(table_name_part),
             // constraint_catalog
-            String(""),
+            DialectTableCatalog(),
             // constraint_schema
             String(table_schema_part),
             // constraint_name
@@ -1767,13 +1802,13 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable() {
       for (const auto* check_constraint : table->check_constraints()) {
         rows.push_back({
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(table_schema_part),
             // table_name
             String(table_name_part),
             // constraint_catalog
-            String(""),
+            DialectTableCatalog(),
             // constraint_schema
             String(table_schema_part),
             // constraint_name
@@ -1789,13 +1824,13 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable() {
               foreign_key->referenced_table()->Name());
       rows.push_back({
           // table_catalog
-          String(""),
+          DialectTableCatalog(),
           // table_schema
           String(referenced_table_schema_part),
           // table_name
           String(referenced_table_name_part),
           // constraint_catalog
-          String(""),
+          DialectTableCatalog(),
           // constraint_schema
           String(table_schema_part),
           // constraint_name
@@ -1806,13 +1841,13 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable() {
       if (foreign_key->referenced_index()) {
         rows.push_back({
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(referenced_table_schema_part),
             // table_name
             String(referenced_table_name_part),
             // constraint_catalog
-            String(""),
+            DialectTableCatalog(),
             // constraint_schema
             String(table_schema_part),
             // constraint_name
@@ -1830,13 +1865,13 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable() {
       // Add the primary key.
       rows.push_back({
           // table_catalog
-          String(""),
+          DialectTableCatalog(),
           // table_schema
           String(kInformationSchema),
           // table_name
           String(table->Name()),
           // constraint_catalog
-          String(""),
+          DialectTableCatalog(),
           // constraint_schema
           String(kInformationSchema),
           // constraint_name
@@ -1852,13 +1887,13 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable() {
         }
         rows.push_back({
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(kInformationSchema),
             // table_name
             String(table->Name()),
             // constraint_catalog
-            String(""),
+            DialectTableCatalog(),
             // constraint_schema
             String(kInformationSchema),
             // constraint_name
@@ -1893,13 +1928,13 @@ void InformationSchemaCatalog::FillReferentialConstraintsTable() {
     for (const auto* foreign_key : table->foreign_keys()) {
       rows.push_back({
           // constraint_catalog
-          String(""),
+          DialectTableCatalog(),
           // constraint_schema
           String(table_schema_part),
           // constraint_name
           String(SDLObjectName::GetInSchemaName(foreign_key->Name())),
           // unique_constraint_catalog
-          String(""),
+          DialectTableCatalog(),
           // unique_constraint_schema
           String(table_schema_part),
           // unique_constraint_name
@@ -1943,13 +1978,13 @@ void InformationSchemaCatalog::FillKeyColumnUsageTable() {
     for (const auto* key_column : table->primary_key()) {
       rows.push_back({
           // constraint_catalog
-          String(""),
+          DialectTableCatalog(),
           // constraint_schema
           String(table_schema_part),
           // constraint_name
           String(PrimaryKeyName(table)),
           // table_catalog
-          String(""),
+          DialectTableCatalog(),
           // table_schema
           String(table_schema_part),
           // table_name
@@ -1970,13 +2005,13 @@ void InformationSchemaCatalog::FillKeyColumnUsageTable() {
       for (const auto* column : foreign_key->referencing_columns()) {
         rows.push_back({
             // constraint_catalog
-            String(""),
+            DialectTableCatalog(),
             // constraint_schema
             String(table_schema_part),
             // constraint_name
             String(SDLObjectName::GetInSchemaName(foreign_key->Name())),
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(table_schema_part),
             // table_name
@@ -2001,14 +2036,14 @@ void InformationSchemaCatalog::FillKeyColumnUsageTable() {
              foreign_key->referenced_index()->key_columns()) {
           rows.push_back({
               // constraint_catalog
-              String(""),
+              DialectTableCatalog(),
               // constraint_schema
               String(table_schema_part),
               // constraint_name
               String(SDLObjectName::GetInSchemaName(
                   foreign_key->referenced_index()->Name())),
               // table_catalog
-              String(""),
+              DialectTableCatalog(),
               // table_schema
               String(referenced_table_schema_part),
               // table_name
@@ -2039,13 +2074,13 @@ void InformationSchemaCatalog::FillKeyColumnUsageTable() {
         }
         rows.push_back({
             // constraint_catalog
-            String(""),
+            DialectTableCatalog(),
             // constraint_schema
             String(kInformationSchema),
             // constraint_name
             String(PrimaryKeyName(table)),
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(kInformationSchema),
             // table_name
@@ -2088,7 +2123,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
     for (const auto* key_column : table->primary_key()) {
       rows.push_back({
           // table_catalog
-          String(""),
+          DialectTableCatalog(),
           // table_schema
           String(table_schema_part),
           // table_name
@@ -2096,7 +2131,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
           // column_name
           String(key_column->column()->Name()),
           // constraint_catalog
-          String(""),
+          DialectTableCatalog(),
           // constraint_schema
           String(table_schema_part),
           // constraint_name
@@ -2111,7 +2146,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
       }
       rows.push_back({
           // table_catalog
-          String(""),
+          DialectTableCatalog(),
           // table_schema
           String(table_schema_part),
           // table_name
@@ -2119,7 +2154,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
           // column_name
           String(column->Name()),
           // constraint_catalog
-          String(""),
+          DialectTableCatalog(),
           // constraint_schema
           String(table_schema_part),
           // constraint_name
@@ -2132,7 +2167,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
       for (const auto* dep_column : check_constraint->dependent_columns()) {
         rows.push_back({
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(table_schema_part),
             // table_name
@@ -2140,7 +2175,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
             // column_name
             String(dep_column->Name()),
             // constraint_catalog
-            String(""),
+            DialectTableCatalog(),
             // constraint_schema
             String(table_schema_part),
             // constraint_name
@@ -2159,7 +2194,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
       for (const auto* column : foreign_key->referenced_columns()) {
         rows.push_back({
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(referenced_table_schema_part),
             // table_name
@@ -2167,7 +2202,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
             // column_name
             String(column->Name()),
             // constraint_catalog
-            String(""),
+            DialectTableCatalog(),
             // constraint_schema
             String(table_schema_part),
             // constraint_name
@@ -2181,7 +2216,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
              foreign_key->referenced_index()->key_columns()) {
           rows.push_back({
               // table_catalog
-              String(""),
+              DialectTableCatalog(),
               // table_schema
               String(referenced_table_schema_part),
               // table_name
@@ -2189,7 +2224,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
               // column_name
               String(key_column->column()->Name()),
               // constraint_catalog
-              String(""),
+              DialectTableCatalog(),
               // constraint_schema
               String(table_schema_part),
               // constraint_name
@@ -2214,7 +2249,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
         }
         rows.push_back({
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(kInformationSchema),
             // table_name
@@ -2222,7 +2257,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
             // column_name
             String(metadata->column_name),
             // constraint_catalog
-            String(""),
+            DialectTableCatalog(),
             // constraint_schema
             String(kInformationSchema),
             // constraint_name
@@ -2241,7 +2276,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
         }
         rows.push_back({
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(kInformationSchema),
             // table_name
@@ -2249,7 +2284,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
             // column_name
             String(metadata.column_name),
             // constraint_catalog
-            String(""),
+            DialectTableCatalog(),
             // constraint_schema
             String(kInformationSchema),
             // constraint_name
@@ -2277,6 +2312,7 @@ void InformationSchemaCatalog::FillViewsTable() {
   for (const View* view : default_schema_->views()) {
     const auto& [view_schema_part, view_name_part] =
         GetSchemaAndNameForInformationSchema(view->Name());
+    specific_kvs[kTableCatalog] = DialectTableCatalog();
     specific_kvs[kTableSchema] = String(view_schema_part);
     specific_kvs[kTableName] = String(view_name_part);
     if (dialect_ == DatabaseDialect::POSTGRESQL) {
@@ -2305,7 +2341,7 @@ void InformationSchemaCatalog::FillChangeStreamsTable() {
   absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
   for (const ChangeStream* change_stream : default_schema_->change_streams()) {
     rows.push_back({// change_stream_catalog
-                    String(""),
+                    DialectTableCatalog(),
                     // change_stream_schema
                     DialectDefaultSchema(),
                     // change_stream_name
@@ -2349,13 +2385,13 @@ void InformationSchemaCatalog::FillChangeStreamColumnsTable() {
       for (const auto& column : table_to_columns.second) {
         rows.push_back({
             // change_stream_catalog
-            String(""),
+            DialectTableCatalog(),
             // change_stream_schema
             DialectDefaultSchema(),
             // change_stream_name
             String(change_stream->Name()),
             // table_catalog
-            String(""),
+            DialectTableCatalog(),
             // table_schema
             String(table_schema_part),
             // table_name
@@ -2388,7 +2424,7 @@ void InformationSchemaCatalog::FillChangeStreamOptionsTable() {
     if (change_stream->retention_period().has_value()) {
       rows.push_back({
           // change_stream_catalog
-          String(""),
+          DialectTableCatalog(),
           // change_stream_schema
           DialectDefaultSchema(),
           // change_stream_name
@@ -2404,7 +2440,7 @@ void InformationSchemaCatalog::FillChangeStreamOptionsTable() {
     if (change_stream->value_capture_type().has_value()) {
       rows.push_back({
           // change_stream_catalog
-          String(""),
+          DialectTableCatalog(),
           // change_stream_schema
           DialectDefaultSchema(),
           // change_stream_name
@@ -2450,13 +2486,13 @@ void InformationSchemaCatalog::FillChangeStreamTablesTable() {
               ->FindChangeStream(change_stream->Name());
       rows.push_back({
           // change_stream_catalog
-          String(""),
+          DialectTableCatalog(),
           // change_stream_schema
           DialectDefaultSchema(),
           // change_stream_name
           String(change_stream->Name()),
           // table_catalog
-          String(""),
+          DialectTableCatalog(),
           // table_schema
           String(table_schema_part),
           // table_name
@@ -2484,7 +2520,7 @@ void InformationSchemaCatalog::FillSequencesTable() {
         GetSchemaAndNameForInformationSchema(sequence->Name());
     if (dialect_ == DatabaseDialect::POSTGRESQL) {
       rows.push_back({// sequence_catalog
-                      String(""),
+                      DialectTableCatalog(),
                       // sequence_schema
                       String(sequence_schema_part),
                       // sequence_name
@@ -2523,7 +2559,7 @@ void InformationSchemaCatalog::FillSequencesTable() {
                            : NullInt64())});
     } else {
       rows.push_back({// catalog
-                      String(""),
+                      DialectTableCatalog(),
                       // schema
                       String(sequence_schema_part),
                       // name
@@ -2552,7 +2588,7 @@ void InformationSchemaCatalog::FillSequenceOptionsTable() {
         GetSchemaAndNameForInformationSchema(sequence->Name());
     rows.push_back(
         {// catalog
-         String(""),
+         DialectTableCatalog(),
          // schema
          String(sequence_schema_part),
          // name
@@ -2565,7 +2601,7 @@ void InformationSchemaCatalog::FillSequenceOptionsTable() {
          String(absl::AsciiStrToLower(sequence->sequence_kind_name()))});
     if (sequence->skip_range_min().has_value()) {
       rows.push_back({// catalog
-                      String(""),
+                      DialectTableCatalog(),
                       // schema
                       String(sequence_schema_part),
                       // name
@@ -2579,7 +2615,7 @@ void InformationSchemaCatalog::FillSequenceOptionsTable() {
     }
     if (sequence->skip_range_max().has_value()) {
       rows.push_back({// catalog
-                      String(""),
+                      DialectTableCatalog(),
                       // schema
                       String(sequence_schema_part),
                       // name
@@ -2593,7 +2629,7 @@ void InformationSchemaCatalog::FillSequenceOptionsTable() {
     }
     if (sequence->start_with_counter().has_value()) {
       rows.push_back({// catalog
-                      String(""),
+                      DialectTableCatalog(),
                       // schema
                       String(sequence_schema_part),
                       // name
@@ -2620,7 +2656,7 @@ void InformationSchemaCatalog::FillModelsTable() {
         GetSchemaAndNameForInformationSchema(model->Name());
     rows.push_back({
         // model_catalog
-        String(""),
+        DialectTableCatalog(),
         // model_schema
         String(model_schema_part),
         // model_name
@@ -2645,7 +2681,7 @@ void InformationSchemaCatalog::FillModelOptionsTable() {
     if (model->default_batch_size().has_value()) {
       rows.push_back({
           // model_catalog
-          String(""),
+          DialectTableCatalog(),
           // model_schema
           String(model_schema_part),
           // model_name
@@ -2661,7 +2697,7 @@ void InformationSchemaCatalog::FillModelOptionsTable() {
     if (model->endpoint().has_value()) {
       rows.push_back({
           // model_catalog
-          String(""),
+          DialectTableCatalog(),
           // model_schema
           String(model_schema_part),
           // model_name
@@ -2677,7 +2713,7 @@ void InformationSchemaCatalog::FillModelOptionsTable() {
     if (!model->endpoints().empty()) {
       rows.push_back({
           // model_catalog
-          String(""),
+          DialectTableCatalog(),
           // model_schema
           String(model_schema_part),
           // model_name
@@ -2729,7 +2765,7 @@ void InformationSchemaCatalog::FillModelColumnsTable(
       GetSchemaAndNameForInformationSchema(model.Name());
   rows->push_back({
       // model_catalog
-      String(""),
+      DialectTableCatalog(),
       // model_schema
       String(model_schema_part),
       // model_name
@@ -2774,7 +2810,7 @@ void InformationSchemaCatalog::FillModelColumnOptionsTable(
       GetSchemaAndNameForInformationSchema(model.Name());
   rows->push_back({
       // model_catalog
-      String(""),
+      DialectTableCatalog(),
       // model_schema
       String(model_schema_part),
       // model_name

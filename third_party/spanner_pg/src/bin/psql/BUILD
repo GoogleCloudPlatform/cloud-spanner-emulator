@@ -31,6 +31,8 @@
 
 load("@com_google_zetasql//bazel:flex.bzl", "genlex")
 
+
+
 package(
     default_visibility = [
         "//:__subpackages__",
@@ -45,7 +47,7 @@ package(
     ],
 )
 
-licenses(["notice"])
+licenses(["restricted"])
 
 cc_binary(
     name = "psql",

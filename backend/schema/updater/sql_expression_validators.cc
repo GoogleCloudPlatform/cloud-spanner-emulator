@@ -352,7 +352,9 @@ absl::Status AnalyzeColumnExpression(
     bool allow_volatile_expression,
     absl::flat_hash_set<const SchemaNode*>* udf_dependencies) {
   zetasql::SimpleTable simple_table(table->Name(), name_and_types);
-  zetasql::AnalyzerOptions options = MakeGoogleSqlAnalyzerOptions();
+
+  zetasql::AnalyzerOptions options =
+      MakeGoogleSqlAnalyzerOptions(schema->default_time_zone());
   // ZetaSQL rewriting could rewrite scalar expressions into subquery.
   // Disable all default enabled rewriting to check the original shape of
   // user provided expression and ensure forward compatibility.
@@ -367,7 +369,8 @@ absl::Status AnalyzeColumnExpression(
   }
   std::unique_ptr<const zetasql::AnalyzerOutput> output;
   FunctionCatalog function_catalog(type_factory);
-  Catalog catalog(schema, &function_catalog, type_factory);
+  Catalog catalog(schema, &function_catalog, type_factory,
+                  MakeGoogleSqlAnalyzerOptions(schema->default_time_zone()));
 
   ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeExpressionForAssignmentToType(
       expression, options, &catalog, type_factory, target_type, &output));
@@ -399,8 +402,8 @@ absl::Status AnalyzeViewDefinition(
                                view_name, view_definition);
 
   // Analyze the view definition.
-  auto analyzer_options =
-      MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(schema->dialect());
+  auto analyzer_options = MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
+      schema->default_time_zone(), schema->dialect());
   analyzer_options.set_prune_unused_columns(true);
   FunctionCatalog function_catalog(
       type_factory, kCloudSpannerEmulatorFunctionCatalogName, schema);
@@ -438,8 +441,8 @@ absl::Status AnalyzeUdfDefinition(
       absl::Substitute("CREATE FUNCTION `$0`($1) SQL SECURITY INVOKER AS ($2)",
                        udf_name, param_list, udf_definition);
   // Analyze the udf definition.
-  auto analyzer_options =
-      MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(schema->dialect());
+  auto analyzer_options = MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
+      schema->default_time_zone(), schema->dialect());
   analyzer_options.set_prune_unused_columns(true);
   FunctionCatalog function_catalog(
       type_factory, kCloudSpannerEmulatorFunctionCatalogName, schema);

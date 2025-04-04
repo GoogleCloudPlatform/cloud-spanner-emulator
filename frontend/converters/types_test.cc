@@ -56,6 +56,8 @@ using zetasql::types::EmptyStructType;
 using zetasql::types::FloatType;
 using zetasql::types::Int64ArrayType;
 using zetasql::types::Int64Type;
+using zetasql::types::IntervalArrayType;
+using zetasql::types::IntervalType;
 using zetasql::types::JsonArrayType;
 using zetasql::types::JsonType;
 using zetasql::types::NumericArrayType;
@@ -152,6 +154,7 @@ TEST_F(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
       {DateType(), "code: DATE"},
       {StringType(), "code: STRING"},
       {BytesType(), "code: BYTES"},
+      {IntervalType(), "code: INTERVAL"},
       {Int64ArrayType(), "code: ARRAY array_element_type { code: INT64 }"},
       {GetPgOidArrayType(),
        R"(code: ARRAY
@@ -164,6 +167,8 @@ TEST_F(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
       {GetPgJsonbArrayType(),
        R"(code: ARRAY
           array_element_type { code: JSON type_annotation: PG_JSONB })"},
+      {IntervalArrayType(),
+       "code: ARRAY array_element_type { code: INTERVAL }"},
       {EmptyStructType(), "code: STRUCT struct_type: { }"},
       {str_int_pair_type,
        R"(code: STRUCT

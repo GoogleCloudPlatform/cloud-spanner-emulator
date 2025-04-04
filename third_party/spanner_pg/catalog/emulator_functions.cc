@@ -67,6 +67,7 @@
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "absl/types/span.h"
+#include "zetasql/base/mathutil.h"
 #include "zetasql/common/string_util.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
@@ -102,12 +103,13 @@ using spangres::datatypes::CreatePgJsonbValueFromNormalized;
 using spangres::datatypes::CreatePgNumericValue;
 using spangres::datatypes::CreatePgNumericValueWithMemoryContext;
 using spangres::datatypes::CreatePgNumericValueWithPrecisionAndScale;
-using spangres::datatypes::GetPgOidValue;
 using spangres::datatypes::GetPgJsonbNormalizedValue;
 using spangres::datatypes::GetPgNumericNormalizedValue;
+using spangres::datatypes::GetPgOidValue;
 using spangres::datatypes::common::jsonb::IsValidJsonbString;
 using spangres::datatypes::common::jsonb::NormalizeJsonbString;
-using spangres::datatypes::common::jsonb::ParseJsonbArray;
+using spangres::datatypes::common::jsonb::PgJsonbValue;
+using spangres::datatypes::common::jsonb::TreeNode;
 
 using ::zetasql::FunctionArgumentType;
 using ::zetasql::FunctionArgumentTypeOptions;
@@ -115,6 +117,8 @@ using ::zetasql::FunctionOptions;
 using ::zetasql::FunctionSignature;
 using ::zetasql::FunctionSignatureOptions;
 using ::zetasql::FunctionSignatureRewriteOptions;
+
+using MathUtil = ::zetasql_base::MathUtil;
 
 const zetasql::Type* gsql_bool = zetasql::types::BoolType();
 const zetasql::Type* gsql_bytes = zetasql::types::BytesType();
@@ -124,6 +128,10 @@ const zetasql::Type* gsql_double = zetasql::types::DoubleType();
 const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
 const zetasql::Type* gsql_string = zetasql::types::StringType();
 const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
+
+const zetasql::Type* gsql_interval = zetasql::types::IntervalType();
+const zetasql::Type* gsql_interval_array =
+    zetasql::types::IntervalArrayType();
 
 const zetasql::ArrayType* gsql_bool_array = zetasql::types::BoolArrayType();
 const zetasql::ArrayType* gsql_bytes_array =
@@ -187,6 +195,14 @@ using ::postgres_translator::function_evaluators::Textregexsubstr;
 using ::postgres_translator::function_evaluators::ToTimestamp;
 using ::postgres_translator::function_evaluators::Trunc;
 using ::postgres_translator::function_evaluators::UnaryMinus;
+
+using ::postgres_translator::function_evaluators::PgIntervalDivide;
+using ::postgres_translator::function_evaluators::PgIntervalExtract;
+using ::postgres_translator::function_evaluators::PgIntervalIn;
+using ::postgres_translator::function_evaluators::PgIntervalMultiply;
+using ::postgres_translator::function_evaluators::PgIntervalOut;
+using ::postgres_translator::function_evaluators::PgIntervalToChar;
+using ::postgres_translator::function_evaluators::PgMakeInterval;
 
 // PG array functions
 
@@ -259,6 +275,9 @@ std::unique_ptr<zetasql::Function> ArrayUpperFunction(
                                        /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{gsql_int64,
                                        {gsql_timestamp_array, gsql_int64},
+                                       /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{gsql_int64,
+                                       {gsql_interval_array, gsql_int64},
                                        /*context_ptr=*/nullptr},
       },
       function_options);
@@ -410,6 +429,14 @@ std::unique_ptr<zetasql::Function> ToTimestampFunction(
       function_options);
 }
 
+absl::StatusOr<zetasql::IntervalValue> RoundPrecision(
+    const zetasql::IntervalValue& interval) {
+  int64_t micros = MathUtil::Round<int64_t>(
+      (interval.get_nanos() * 1.0) / zetasql::IntervalValue::kNanosInMicro);
+  return zetasql::IntervalValue::FromMonthsDaysMicros(
+      interval.get_months(), interval.get_days(), micros);
+}
+
 absl::StatusOr<zetasql::Value> EvalToChar(
     absl::Span<const zetasql::Value> args) {
   static const zetasql::Type* gsql_pg_numeric =
@@ -447,6 +474,15 @@ absl::StatusOr<zetasql::Value> EvalToChar(
           Float4ToChar(args[0].float_value(), args[1].string_value()));
       return zetasql::Value::String(result);
     }
+    case zetasql::TYPE_INTERVAL: {
+      std::unique_ptr<std::string> result;
+      ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue interval,
+                       RoundPrecision(args[0].interval_value()));
+      ZETASQL_ASSIGN_OR_RETURN(result,
+                       PgIntervalToChar(interval, args[1].string_value()));
+      return result == nullptr ? zetasql::Value::NullString()
+                               : zetasql::Value::String(*result);
+    }
     case zetasql::TYPE_EXTENDED:
       if (args[0].type()->Equals(gsql_pg_numeric)) {
         ZETASQL_ASSIGN_OR_RETURN(absl::Cord numeric_string,
@@ -464,14 +500,14 @@ absl::StatusOr<zetasql::Value> EvalToChar(
 }
 
 std::unique_ptr<zetasql::Function> ToCharFunction(
-    absl::string_view catalog_name) {
+    absl::string_view catalog_name, const std::string& time_zone) {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(PGFunctionEvaluator(EvalToChar, [] {
     CleanupPostgresNumberCache();
     CleanupPostgresDateTimeCache();
-  }));
+  }, time_zone));
   return std::make_unique<zetasql::Function>(
       kPGToCharFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
@@ -488,6 +524,9 @@ std::unique_ptr<zetasql::Function> ToCharFunction(
                                        /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{gsql_string,
                                        {gsql_pg_numeric, gsql_string},
+                                       /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{gsql_string,
+                                       {gsql_interval, gsql_string},
                                        /*context_ptr=*/nullptr},
       },
       function_options);
@@ -983,6 +1022,8 @@ absl::StatusOr<zetasql::Value> EvalCastToString(
   ZETASQL_RET_CHECK(args.size() == 1);
 
   switch (args[0].type()->kind()) {
+    case zetasql::TYPE_INTERVAL:
+      return EvalCastIntervalToString(args);
     case zetasql::TYPE_EXTENDED: {
       auto type_code =
           static_cast<const spangres::datatypes::SpannerExtendedType*>(
@@ -1005,18 +1046,21 @@ absl::StatusOr<zetasql::Value> EvalCastToString(
 }
 
 std::unique_ptr<zetasql::Function> CastToStringFunction(
-    absl::string_view catalog_name) {
+    absl::string_view catalog_name, const std::string& time_zone) {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
 
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalCastToString));
+  function_options.set_evaluator(
+      PGFunctionEvaluator(EvalCastToString, []() {}, time_zone));
 
   return std::make_unique<zetasql::Function>(
       kPGCastToStringFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{
               gsql_string, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{
+              gsql_string, {gsql_interval}, /*context_ptr=*/nullptr},
       },
       function_options);
 }
@@ -1403,10 +1447,10 @@ absl::StatusOr<zetasql::Value> EvalCastToTimestamp(
 }
 
 std::unique_ptr<zetasql::Function> CastToTimestampFunction(
-    const std::string& catalog_name) {
+    const std::string& catalog_name, const std::string& time_zone) {
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(
-      PGFunctionEvaluator(EvalCastToTimestamp, CleanupPostgresDateTimeCache));
+  function_options.set_evaluator(PGFunctionEvaluator(
+      EvalCastToTimestamp, CleanupPostgresDateTimeCache, time_zone));
 
   return std::make_unique<zetasql::Function>(
       kPGCastToTimestampFunctionName, catalog_name, zetasql::Function::SCALAR,
@@ -1420,6 +1464,14 @@ std::unique_ptr<zetasql::Function> CastToTimestampFunction(
 absl::StatusOr<zetasql::Value> EvalTimestamptzAdd(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
+
+  if (args[1].type_kind() == zetasql::TYPE_INTERVAL) {
+    ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue interval_arg,
+                     RoundPrecision(args[1].interval_value()));
+    ZETASQL_ASSIGN_OR_RETURN(absl::Time time,
+                     PgTimestamptzAdd(args[0].ToTime(), interval_arg));
+    return zetasql::Value::Timestamp(time);
+  }
 
   ZETASQL_ASSIGN_OR_RETURN(absl::Time time,
                    PgTimestamptzAdd(args[0].ToTime(), args[1].string_value()));
@@ -1438,6 +1490,10 @@ std::unique_ptr<zetasql::Function> TimestamptzAddFunction(
                                        {zetasql::types::TimestampType(),
                                         zetasql::types::StringType()},
                                        nullptr},
+          zetasql::FunctionSignature{zetasql::types::TimestampType(),
+                                       {zetasql::types::TimestampType(),
+                                        zetasql::types::IntervalType()},
+                                       nullptr},
       },
       function_options);
 }
@@ -1445,6 +1501,14 @@ std::unique_ptr<zetasql::Function> TimestamptzAddFunction(
 absl::StatusOr<zetasql::Value> EvalTimestamptzSubtract(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
+
+  if (args[1].type_kind() == zetasql::TYPE_INTERVAL) {
+    ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue interval_arg,
+                     RoundPrecision(args[1].interval_value()));
+    ZETASQL_ASSIGN_OR_RETURN(absl::Time time,
+                     PgTimestamptzSubtract(args[0].ToTime(), interval_arg));
+    return zetasql::Value::Timestamp(time);
+  }
 
   ZETASQL_ASSIGN_OR_RETURN(
       absl::Time time,
@@ -1465,6 +1529,10 @@ std::unique_ptr<zetasql::Function> TimestamptzSubtractFunction(
           zetasql::FunctionSignature{zetasql::types::TimestampType(),
                                        {zetasql::types::TimestampType(),
                                         zetasql::types::StringType()},
+                                       nullptr},
+          zetasql::FunctionSignature{zetasql::types::TimestampType(),
+                                       {zetasql::types::TimestampType(),
+                                        zetasql::types::IntervalType()},
                                        nullptr},
       },
       function_options);
@@ -1549,10 +1617,10 @@ absl::StatusOr<zetasql::Value> EvalExtract(
 }
 
 std::unique_ptr<zetasql::Function> ExtractFunction(
-    const std::string& catalog_name) {
+    const std::string& catalog_name, const std::string& time_zone) {
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(
-      PGFunctionEvaluator(EvalExtract, CleanupPostgresDateTimeCache));
+  function_options.set_evaluator(PGFunctionEvaluator(
+      EvalExtract, CleanupPostgresDateTimeCache, time_zone));
 
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
@@ -1674,6 +1742,13 @@ absl::StatusOr<std::string> GetStringRepresentation(
           absl::RFC3339_full, absl::ToUnixMicros(value.ToTime()),
           absl::UTCTimeZone(), {}, &timestamp_string));
       return timestamp_string;
+    }
+    case zetasql::TYPE_INTERVAL: {
+      std::string interval_string;
+      ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue interval,
+                       RoundPrecision(value.interval_value()));
+      ZETASQL_ASSIGN_OR_RETURN(interval_string, PgIntervalOut(interval));
+      return interval_string;
     }
     case zetasql::TYPE_ARRAY: {
       if (value.empty()) {
@@ -1821,6 +1896,13 @@ absl::StatusOr<zetasql::Value> EvalToJsonbFromExtended(
   }
 }
 
+// Returns a normalized PG.JSONB value from the int64_t input.
+absl::StatusOr<zetasql::Value> EvalToJsonbFromInterval(
+    const zetasql::Value arg) {
+  return CreatePgJsonbValue(
+      absl::StrCat("\"", GetStringRepresentation(arg).value(), "\""));
+}
+
 // Returns a normalized PG.JSONB value from the input.
 absl::StatusOr<zetasql::Value> EvalToJsonbFromValue(
     const zetasql::Value arg) {
@@ -1851,6 +1933,8 @@ absl::StatusOr<zetasql::Value> EvalToJsonbFromValue(
       return EvalToJsonbFromArray(arg);
     case zetasql::TYPE_EXTENDED:
       return EvalToJsonbFromExtended(arg);
+    case zetasql::TYPE_INTERVAL:
+      return EvalToJsonbFromInterval(arg);
     default:
       ZETASQL_RET_CHECK_FAIL() << "Encountered unexpected type " << type_kind;
   }
@@ -1920,6 +2004,10 @@ std::unique_ptr<zetasql::Function> ToJsonbFunction(
               gsql_pg_jsonb, {gsql_pg_oid}, /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{
               gsql_pg_jsonb, {gsql_pg_oid_array}, /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{
+              gsql_pg_jsonb, {gsql_interval}, /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{
+              gsql_pg_jsonb, {gsql_interval_array}, /*context_ptr=*/nullptr},
       },
       function_options);
 }
@@ -2128,8 +2216,11 @@ absl::StatusOr<zetasql::Value> EvalJsonbQueryArray(
   }
 
   ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue jsonb_value,
+                   PgJsonbValue::Parse(std::string(jsonb), &tree_nodes));
   ZETASQL_ASSIGN_OR_RETURN(std::vector<absl::Cord> array,
-                   ParseJsonbArray(std::string(jsonb)));
+                   jsonb_value.GetSerializedArrayElements());
   std::vector<zetasql::Value> values;
   values.reserve(array.size());
   std::for_each(array.begin(), array.end(), [&values](absl::Cord json_element) {
@@ -2243,6 +2334,154 @@ std::unique_ptr<zetasql::Function> JsonbBuildObjectFunction(
             zetasql::FunctionArgumentTypeOptions().set_cardinality(
                 zetasql::FunctionArgumentType::REPEATED)}},
           /*context_ptr=*/nullptr)},
+      function_options);
+}
+
+absl::StatusOr<zetasql::Value> EvalJsonbDelete(
+    absl::Span<const zetasql::Value> args) {
+  return absl::UnimplementedError("jsonb_delete is not implemented");
+}
+
+std::unique_ptr<zetasql::Function> JsonbDeleteFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbDelete));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonbDeleteFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature(gsql_pg_jsonb,
+                                       {{gsql_pg_jsonb, gsql_string}},
+                                       /*context_ptr=*/nullptr),
+          zetasql::FunctionSignature(gsql_pg_jsonb,
+                                       {{gsql_pg_jsonb, gsql_int64}},
+                                       /*context_ptr=*/nullptr),
+          zetasql::FunctionSignature(gsql_pg_jsonb,
+                                       {{gsql_pg_jsonb, gsql_string_array}},
+                                       /*context_ptr=*/nullptr),
+      },
+      function_options);
+}
+
+absl::StatusOr<zetasql::Value> EvalJsonbDeletePath(
+    absl::Span<const zetasql::Value> args) {
+  return absl::UnimplementedError("jsonb_delete_path is not implemented");
+}
+
+std::unique_ptr<zetasql::Function> JsonbDeletePathFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbDeletePath));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonbDeletePathFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_pg_jsonb,
+                                       {gsql_pg_jsonb, gsql_string_array},
+                                       /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+absl::StatusOr<zetasql::Value> EvalJsonbSet(
+    absl::Span<const zetasql::Value> args) {
+  return absl::UnimplementedError("jsonb_set is not implemented");
+}
+
+std::unique_ptr<zetasql::Function> JsonbSetFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbSet));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonbSetFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
+          gsql_pg_jsonb,
+          {gsql_pg_jsonb, gsql_string_array, gsql_pg_jsonb, gsql_bool},
+          /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+absl::StatusOr<zetasql::Value> EvalJsonbSetLax(
+    absl::Span<const zetasql::Value> args) {
+  return absl::UnimplementedError("jsonb_set_lax is not implemented");
+}
+
+std::unique_ptr<zetasql::Function> JsonbSetLaxFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbSetLax));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonbSetLaxFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_pg_jsonb,
+                                       {gsql_pg_jsonb, gsql_string_array,
+                                        gsql_pg_jsonb, gsql_bool, gsql_string},
+                                       /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+absl::StatusOr<zetasql::Value> EvalJsonbConcat(
+    absl::Span<const zetasql::Value> args) {
+  return absl::UnimplementedError("jsonb_concat is not implemented");
+}
+
+std::unique_ptr<zetasql::Function> JsonbConcatFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbConcat));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonbConcatFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_pg_jsonb,
+                                       {gsql_pg_jsonb, gsql_pg_jsonb},
+                                       /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+absl::StatusOr<zetasql::Value> EvalJsonbInsert(
+    absl::Span<const zetasql::Value> args) {
+  return absl::UnimplementedError("jsonb_insert is not implemented");
+}
+
+std::unique_ptr<zetasql::Function> JsonbInsertFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbInsert));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonbInsertFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
+          gsql_pg_jsonb,
+          {gsql_pg_jsonb, gsql_string_array, gsql_pg_jsonb, gsql_bool},
+          /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+absl::StatusOr<zetasql::Value> EvalJsonbStripNulls(
+    absl::Span<const zetasql::Value> args) {
+  return absl::UnimplementedError("jsonb_strip_nulls is not implemented");
+}
+
+std::unique_ptr<zetasql::Function> JsonbStripNullsFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbStripNulls));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonbStripNullsFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_pg_jsonb,
+                                       {gsql_pg_jsonb},
+                                       /*context_ptr=*/nullptr}},
       function_options);
 }
 
@@ -2363,8 +2602,8 @@ LeastGreatestFunctions(const std::string& catalog_name) {
   auto is_non_floating_point_supported_type =
       [](const zetasql::Type* type) -> bool {
     return (type->IsInt64() || type->IsBool() || type->IsBytes() ||
-            type->IsString() || type->IsDate() || type->IsTimestamp())
-        ;
+            type->IsString() || type->IsDate() || type->IsTimestamp() ||
+            type->IsInterval());
   };
 
   zetasql::FunctionEvaluatorFactory least_evaluator_factory(
@@ -2408,12 +2647,17 @@ LeastGreatestFunctions(const std::string& catalog_name) {
   greatest_function_options.set_arguments_are_coercible(false);
 
   std::vector<const zetasql::Type*> supported_types{
-      zetasql::types::DoubleType(), zetasql::types::FloatType(),
-      zetasql::types::Int64Type(), zetasql::types::BoolType(),
-      zetasql::types::BytesType(), zetasql::types::StringType(),
-      zetasql::types::DateType(), zetasql::types::TimestampType(),
+      zetasql::types::DoubleType(),
+      zetasql::types::FloatType(),
+      zetasql::types::Int64Type(),
+      zetasql::types::BoolType(),
+      zetasql::types::BytesType(),
+      zetasql::types::StringType(),
+      zetasql::types::DateType(),
+      zetasql::types::TimestampType(),
       postgres_translator::spangres::datatypes::GetPgNumericType(),
       postgres_translator::spangres::datatypes::GetPgJsonbType(),
+      zetasql::types::IntervalType(),
   };
 
   // Construct the function signatures for all the supported types.
@@ -3446,6 +3690,14 @@ std::unique_ptr<zetasql::Function> OidGreaterThanEqualsFunction(
       function_options);
 }
 
+zetasql::FunctionArgumentTypeOptions GetOptionalNamedArgumentOptions(
+    absl::string_view name) {
+  zetasql::FunctionArgumentTypeOptions options;
+  options.set_cardinality(zetasql::FunctionArgumentType::OPTIONAL);
+  options.set_argument_name(name, zetasql::kNamedOnly);
+  return options;
+}
+
 }  // namespace
 
 absl::StatusOr<zetasql::Value> EvalCastNumericToInt64(
@@ -3506,6 +3758,31 @@ absl::StatusOr<zetasql::Value> EvalCastNumericToString(
   ZETASQL_ASSIGN_OR_RETURN(absl::Cord normalized_value,
                    GetPgNumericNormalizedValue(args[0]));
   return zetasql::Value::String(std::string(normalized_value));
+}
+
+absl::StatusOr<zetasql::Value> EvalCastIntervalToString(
+    absl::Span<const zetasql::Value> args) {
+  ZETASQL_RET_CHECK(args.size() == 1);
+  ZETASQL_RET_CHECK(args[0].type()->IsInterval());
+  if (args[0].is_null()) {
+    return zetasql::Value::NullString();
+  }
+
+  ZETASQL_ASSIGN_OR_RETURN(std::string result, PgIntervalOut(args[0].interval_value()));
+  return zetasql::Value::String(result);
+}
+
+absl::StatusOr<zetasql::Value> EvalCastStringToInterval(
+    absl::Span<const zetasql::Value> args) {
+  ZETASQL_RET_CHECK(args.size() == 1);
+  ZETASQL_RET_CHECK_EQ(args[0].type(), gsql_string);
+  if (args[0].is_null()) {
+    return zetasql::Value::Null(gsql_interval);
+  }
+
+  ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue result,
+                   PgIntervalIn(args[0].string_value()));
+  return zetasql::Value::Interval(result);
 }
 
 namespace {
@@ -3740,16 +4017,270 @@ std::unique_ptr<zetasql::Function> FloatArithmeticFunction(
       function_options);
 }
 
-SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
+bool HasNullValue(absl::Span<const zetasql::Value> args) {
+  return absl::c_any_of(
+      args, [](const zetasql::Value& arg) { return arg.is_null(); });
+}
+
+std::unique_ptr<zetasql::Function> IntervalAddSubtractFunction(
+    absl::string_view function_name, absl::string_view catalog_name) {
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator([function_name](
+                                     absl::Span<const zetasql::Value> args)
+                                     -> absl::StatusOr<zetasql::Value> {
+    ZETASQL_RET_CHECK_EQ(args.size(), 2);
+    ZETASQL_RET_CHECK_EQ(args[0].type(), zetasql::types::IntervalType());
+    ZETASQL_RET_CHECK_EQ(args[1].type(), zetasql::types::IntervalType());
+
+    if (HasNullValue(args)) {
+      return zetasql::Value::NullInterval();
+    }
+
+    ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue arg0,
+                     RoundPrecision(args[0].interval_value()));
+    ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue arg1,
+                     RoundPrecision(args[1].interval_value()));
+
+    absl::StatusOr<zetasql::IntervalValue> result =
+        function_name == kPGIntervalAddFunctionName ? arg0 + arg1 : arg0 - arg1;
+    ZETASQL_RETURN_IF_ERROR(result.status());
+    return zetasql::Value::Interval(*result);
+  });
+
+  return std::make_unique<zetasql::Function>(
+      function_name, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_interval,
+                                       {gsql_interval, gsql_interval},
+                                       /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function> IntervalUnaryMinusFunction(
+    absl::string_view catalog_name) {
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator([](absl::Span<const zetasql::Value> args)
+                                     -> absl::StatusOr<zetasql::Value> {
+    ZETASQL_RET_CHECK_EQ(args.size(), 1);
+    ZETASQL_RET_CHECK_EQ(args[0].type(), zetasql::types::IntervalType());
+    if (HasNullValue(args)) {
+      return zetasql::Value::NullInterval();
+    }
+    ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue arg0,
+                     RoundPrecision(args[0].interval_value()));
+    return zetasql::Value::Interval(-arg0);
+  });
+
+  return std::make_unique<zetasql::Function>(
+      kPGIntervalUnaryMinusFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_interval,
+                                       {gsql_interval},
+                                       /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function> IntervalMultiplyDivideFunction(
+    absl::string_view function_name, absl::string_view catalog_name) {
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(
+      [function_name](absl::Span<const zetasql::Value> args)
+          -> absl::StatusOr<zetasql::Value> {
+        ZETASQL_RET_CHECK_EQ(args.size(), 2);
+        ZETASQL_RET_CHECK_EQ(args[0].type(), zetasql::types::IntervalType());
+        ZETASQL_RET_CHECK_EQ(args[1].type(), zetasql::types::DoubleType());
+        if (HasNullValue(args)) {
+          return zetasql::Value::NullInterval();
+        }
+        ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue arg0,
+                         RoundPrecision(args[0].interval_value()));
+
+        absl::StatusOr<zetasql::IntervalValue> result =
+            function_name == kPGIntervalMultiplyFunctionName
+                ? PgIntervalMultiply(arg0, args[1].double_value())
+                : PgIntervalDivide(arg0, args[1].double_value());
+        ZETASQL_RETURN_IF_ERROR(result.status());
+        return zetasql::Value::Interval(*result);
+      }));
+
+  return std::make_unique<zetasql::Function>(
+      function_name, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_interval,
+                                       {gsql_interval, gsql_double},
+                                       /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function> TimestamptzSubtractTimestamptzFunction(
+    absl::string_view catalog_name) {
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(
+      PGFunctionEvaluator([](absl::Span<const zetasql::Value> args)
+                              -> absl::StatusOr<zetasql::Value> {
+        ZETASQL_RET_CHECK_EQ(args.size(), 2);
+        ZETASQL_RET_CHECK_EQ(args[0].type(), zetasql::types::TimestampType());
+        ZETASQL_RET_CHECK_EQ(args[1].type(), zetasql::types::TimestampType());
+        if (HasNullValue(args)) {
+          return zetasql::Value::NullInterval();
+        }
+        absl::Time arg0 =
+            absl::FromUnixMicros(absl::ToUnixMicros(args[0].ToTime()));
+        absl::Time arg1 =
+            absl::FromUnixMicros(absl::ToUnixMicros(args[1].ToTime()));
+        ZETASQL_ASSIGN_OR_RETURN(
+            zetasql::IntervalValue result,
+            zetasql::functions::IntervalDiffTimestamps(arg0, arg1));
+        return zetasql::Value::Interval(result);
+      }));
+  return std::make_unique<zetasql::Function>(
+      kPGTimestamptzSubtractTimestamptzFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_interval,
+                                       {gsql_timestamp, gsql_timestamp},
+                                       /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function> IntervalJustifyFunction(
+    absl::string_view function_name, absl::string_view catalog_name) {
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(
+      [function_name](absl::Span<const zetasql::Value> args)
+          -> absl::StatusOr<zetasql::Value> {
+        ZETASQL_RET_CHECK_EQ(args.size(), 1);
+        ZETASQL_RET_CHECK_EQ(args[0].type(), zetasql::types::IntervalType());
+        if (HasNullValue(args)) {
+          return zetasql::Value::NullInterval();
+        }
+        ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue arg0,
+                         RoundPrecision(args[0].interval_value()));
+        absl::StatusOr<zetasql::IntervalValue> result =
+            function_name == kPGIntervalJustifyIntervalFunctionName
+                ? zetasql::JustifyInterval(arg0)
+            : function_name == kPGIntervalJustifyDaysFunctionName
+                ? zetasql::JustifyDays(arg0)
+                : zetasql::JustifyHours(arg0);
+        ZETASQL_RETURN_IF_ERROR(result.status());
+        return zetasql::Value::Interval(*result);
+      }));
+
+  return std::make_unique<zetasql::Function>(
+      function_name, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_interval,
+                                       {gsql_interval},
+                                       /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function> MakeIntervalFunction(
+    absl::string_view catalog_name) {
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(
+      PGFunctionEvaluator([](absl::Span<const zetasql::Value> args)
+                              -> absl::StatusOr<zetasql::Value> {
+        ZETASQL_RET_CHECK_EQ(args.size(), 7);
+        for (int i = 0; i < 6; i++) {
+          ZETASQL_RET_CHECK_EQ(args[i].type(), zetasql::types::Int64Type());
+        }
+        ZETASQL_RET_CHECK_EQ(args[6].type(), zetasql::types::DoubleType());
+        if (HasNullValue(args)) {
+          return zetasql::Value::NullInterval();
+        }
+        ZETASQL_ASSIGN_OR_RETURN(
+            zetasql::IntervalValue result,
+            PgMakeInterval(args[0].int64_value(), args[1].int64_value(),
+                           args[2].int64_value(), args[3].int64_value(),
+                           args[4].int64_value(), args[5].int64_value(),
+                           args[6].double_value()));
+        return zetasql::Value::Interval(result);
+      }));
+
+  zetasql::FunctionArgumentTypeOptions years =
+      GetOptionalNamedArgumentOptions("years");
+  zetasql::FunctionArgumentTypeOptions months =
+      GetOptionalNamedArgumentOptions("months");
+  zetasql::FunctionArgumentTypeOptions weeks =
+      GetOptionalNamedArgumentOptions("weeks");
+  zetasql::FunctionArgumentTypeOptions days =
+      GetOptionalNamedArgumentOptions("days");
+  zetasql::FunctionArgumentTypeOptions hours =
+      GetOptionalNamedArgumentOptions("hours");
+  zetasql::FunctionArgumentTypeOptions mins =
+      GetOptionalNamedArgumentOptions("mins");
+  zetasql::FunctionArgumentTypeOptions secs =
+      GetOptionalNamedArgumentOptions("secs");
+
+  return std::make_unique<zetasql::Function>(
+      kPGIntervalMakeIntervalFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_interval,
+                                       {{gsql_int64, years},
+                                        {gsql_int64, months},
+                                        {gsql_int64, weeks},
+                                        {gsql_int64, days},
+                                        {gsql_int64, hours},
+                                        {gsql_int64, mins},
+                                        {gsql_double, secs}},
+                                       /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function> IntervalExtract(
+    absl::string_view catalog_name) {
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(
+      PGFunctionEvaluator([](absl::Span<const zetasql::Value> args)
+                              -> absl::StatusOr<zetasql::Value> {
+        ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue interval_arg,
+                         RoundPrecision(args[1].interval_value()));
+        ZETASQL_ASSIGN_OR_RETURN(
+            absl::Cord result,
+            PgIntervalExtract(args[0].string_value(), interval_arg));
+        return CreatePgNumericValue(std::string(result));
+      }));
+
+  static const zetasql::Type* gsql_pg_numeric =
+      spangres::datatypes::GetPgNumericType();
+
+  return std::make_unique<zetasql::Function>(
+      kPGIntervalExtractFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_pg_numeric,
+                                       {gsql_string, gsql_interval},
+                                       /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function> CastToIntervalFunction(
+    absl::string_view catalog_name) {
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalCastStringToInterval));
+  return std::make_unique<zetasql::Function>(
+      kPGCastToIntervalFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_interval,
+                                       {gsql_string},
+                                       /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name,
+                                         const std::string& time_zone) {
   SpannerPGFunctions functions;
 
-  auto cast_to_string_func = CastToStringFunction(catalog_name);
+  auto cast_to_string_func = CastToStringFunction(catalog_name, time_zone);
   functions.push_back(std::move(cast_to_string_func));
 
   auto cast_to_date_func = CastToDateFunction(catalog_name);
   functions.push_back(std::move(cast_to_date_func));
 
-  auto cast_to_timestamp_func = CastToTimestampFunction(catalog_name);
+  auto cast_to_timestamp_func =
+      CastToTimestampFunction(catalog_name, time_zone);
   functions.push_back(std::move(cast_to_timestamp_func));
 
   auto timestamptz_add_func = TimestamptzAddFunction(catalog_name);
@@ -3760,7 +4291,7 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   functions.push_back(std::move(timestamptz_bin_func));
   auto timestamptz_trunc_func = TimestamptzTruncFunction(catalog_name);
   functions.push_back(std::move(timestamptz_trunc_func));
-  auto extract_func = ExtractFunction(catalog_name);
+  auto extract_func = ExtractFunction(catalog_name, time_zone);
   functions.push_back(std::move(extract_func));
 
   auto map_double_to_int_func = MapDoubleToIntFunction(catalog_name);
@@ -3808,7 +4339,7 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   functions.push_back(std::move(to_date_func));
   auto to_timestamp_func = ToTimestampFunction(catalog_name);
   functions.push_back(std::move(to_timestamp_func));
-  auto to_char_func = ToCharFunction(catalog_name);
+  auto to_char_func = ToCharFunction(catalog_name, time_zone);
   functions.push_back(std::move(to_char_func));
   auto to_number_func = ToNumberFunction(catalog_name);
   functions.push_back(std::move(to_number_func));
@@ -3840,6 +4371,20 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   functions.push_back(std::move(jsonb_build_array_func));
   auto jsonb_build_object_func = JsonbBuildObjectFunction(catalog_name);
   functions.push_back(std::move(jsonb_build_object_func));
+  auto jsonb_delete_func = JsonbDeleteFunction(catalog_name);
+  functions.push_back(std::move(jsonb_delete_func));
+  auto jsonb_delete_path_func = JsonbDeletePathFunction(catalog_name);
+  functions.push_back(std::move(jsonb_delete_path_func));
+  auto jsonb_concat_func = JsonbConcatFunction(catalog_name);
+  functions.push_back(std::move(jsonb_concat_func));
+  auto jsonb_insert_func = JsonbInsertFunction(catalog_name);
+  functions.push_back(std::move(jsonb_insert_func));
+  auto jsonb_strip_nulls_func = JsonbStripNullsFunction(catalog_name);
+  functions.push_back(std::move(jsonb_strip_nulls_func));
+  auto jsonb_set_func = JsonbSetFunction(catalog_name);
+  functions.push_back(std::move(jsonb_set_func));
+  auto jsonb_set_lax_func = JsonbSetLaxFunction(catalog_name);
+  functions.push_back(std::move(jsonb_set_lax_func));
 
   auto float_add_func =
       FloatArithmeticFunction(kPGFloatAddFunctionName, catalog_name);
@@ -3952,6 +4497,39 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   auto array_slice_function = ArraySliceFunction(catalog_name);
   functions.push_back(std::move(array_slice_function));
 
+  // interval functions
+  auto interval_add_func =
+      IntervalAddSubtractFunction(kPGIntervalAddFunctionName, catalog_name);
+  functions.push_back(std::move(interval_add_func));
+  auto interval_subtract_func = IntervalAddSubtractFunction(
+      kPGIntervalSubtractFunctionName, catalog_name);
+  functions.push_back(std::move(interval_subtract_func));
+  auto interval_unary_minus_func = IntervalUnaryMinusFunction(catalog_name);
+  functions.push_back(std::move(interval_unary_minus_func));
+  auto interval_multiply_func = IntervalMultiplyDivideFunction(
+      kPGIntervalMultiplyFunctionName, catalog_name);
+  functions.push_back(std::move(interval_multiply_func));
+  auto interval_divide_func = IntervalMultiplyDivideFunction(
+      kPGIntervalDivideFunctionName, catalog_name);
+  functions.push_back(std::move(interval_divide_func));
+  auto interval_justify_func = IntervalJustifyFunction(
+      kPGIntervalJustifyIntervalFunctionName, catalog_name);
+  functions.push_back(std::move(interval_justify_func));
+  auto interval_justify_days_func =
+      IntervalJustifyFunction(kPGIntervalJustifyDaysFunctionName, catalog_name);
+  functions.push_back(std::move(interval_justify_days_func));
+  auto interval_justify_hours_func = IntervalJustifyFunction(
+      kPGIntervalJustifyHoursFunctionName, catalog_name);
+  functions.push_back(std::move(interval_justify_hours_func));
+  auto interval_make_func = MakeIntervalFunction(catalog_name);
+  functions.push_back(std::move(interval_make_func));
+  auto interval_cast_to_interval_func = CastToIntervalFunction(catalog_name);
+  functions.push_back(std::move(interval_cast_to_interval_func));
+  auto timestamptz_subtract_timestamptz_func =
+      TimestamptzSubtractTimestamptzFunction(catalog_name);
+  functions.push_back(std::move(timestamptz_subtract_timestamptz_func));
+  auto interval_extract_func = IntervalExtract(catalog_name);
+  functions.push_back(std::move(interval_extract_func));
   return functions;
 }
 

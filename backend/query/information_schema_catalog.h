@@ -83,6 +83,7 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
   inline zetasql::Value DialectDefaultSchema();
   inline zetasql::Value DialectBoolValue(bool value);
   zetasql::Value DialectColumnOrdering(const KeyColumn* column);
+  inline zetasql::Value DialectTableCatalog();
   inline std::pair<std::string, std::string>
   GetSchemaAndNameForInformationSchema(std::string table_name);
 

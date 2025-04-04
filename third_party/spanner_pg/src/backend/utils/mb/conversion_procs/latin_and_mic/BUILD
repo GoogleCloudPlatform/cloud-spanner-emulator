@@ -44,7 +44,7 @@ package(
     ],
 )
 
-licenses(["notice"])
+licenses(["restricted"])
 
 cc_binary(
     name = "latin_and_mic.so",

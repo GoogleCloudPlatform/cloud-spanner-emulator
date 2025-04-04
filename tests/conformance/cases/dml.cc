@@ -653,6 +653,14 @@ TEST_P(DmlTest, DISABLED_ReturningGeneratedColumns) {
               IsOkAndHoldsRows({}));
 }
 
+TEST_P(DmlTest, ReadGeneratedColumnsWithIntervalExpression) {
+  ZETASQL_EXPECT_OK(CommitDml(
+      {SqlStatement("INSERT INTO tablegen(k, v1, v2) VALUES (1, 1, 1) ")}));
+
+  EXPECT_THAT(Query("SELECT v1, v2, b1, b2 FROM tablegen WHERE k = 1;"),
+              IsOkAndHoldsRow({1, 1, false, true}));
+}
+
 TEST_P(DmlTest, InsertGPK) {
   // Insert with `gpktable1`.
   ZETASQL_EXPECT_OK(CommitDml(

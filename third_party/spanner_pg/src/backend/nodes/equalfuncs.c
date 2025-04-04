@@ -1173,6 +1173,7 @@ _equalAlterTableCmd(const AlterTableCmd *a, const AlterTableCmd *b)
 	COMPARE_SCALAR_FIELD(behavior);
 	COMPARE_SCALAR_FIELD(missing_ok);
 	COMPARE_SCALAR_FIELD(recurse);
+	COMPARE_NODE_FIELD(locality_group_name);
 	COMPARE_STRING_FIELD(raw_expr_string);
 
 	return true;
@@ -1323,6 +1324,7 @@ _equalCreateStmt(const CreateStmt *a, const CreateStmt *b)
 	COMPARE_NODE_FIELD(options);
 	COMPARE_SCALAR_FIELD(oncommit);
 	COMPARE_STRING_FIELD(tablespacename);
+	COMPARE_NODE_FIELD(locality_group_name);
 	COMPARE_STRING_FIELD(accessMethod);
 	COMPARE_SCALAR_FIELD(if_not_exists);
 	COMPARE_NODE_FIELD(interleavespec);
@@ -1416,6 +1418,7 @@ _equalIndexStmt(const IndexStmt *a, const IndexStmt *b)
 	COMPARE_NODE_FIELD(relation);
 	COMPARE_STRING_FIELD(accessMethod);
 	COMPARE_STRING_FIELD(tableSpace);
+	COMPARE_NODE_FIELD(locality_group_name);
 	COMPARE_NODE_FIELD(indexParams);
 	COMPARE_NODE_FIELD(indexIncludingParams);
 	COMPARE_NODE_FIELD(options);
@@ -1475,6 +1478,7 @@ _equalCreateFunctionStmt(const CreateFunctionStmt *a, const CreateFunctionStmt *
 	COMPARE_NODE_FIELD(returnType);
 	COMPARE_NODE_FIELD(options);
 	COMPARE_NODE_FIELD(sql_body);
+	COMPARE_STRING_FIELD(routine_body_string);
 
 	return true;
 }
@@ -2474,6 +2478,81 @@ _equalAlterChangeStreamStmt(const AlterChangeStreamStmt *a,
 	return true;
 }
 
+// SPANGRES BEGIN
+static bool
+_equalCreateSearchIndexStmt(const CreateSearchIndexStmt *a,
+							const CreateSearchIndexStmt *b)
+{
+	COMPARE_STRING_FIELD(search_index_name);
+	COMPARE_NODE_FIELD(table_name);
+	COMPARE_NODE_FIELD(token_columns);
+	COMPARE_NODE_FIELD(storing);
+	COMPARE_NODE_FIELD(partition);
+	COMPARE_NODE_FIELD(order);
+	COMPARE_NODE_FIELD(null_filters);
+	COMPARE_NODE_FIELD(interleave);
+	COMPARE_NODE_FIELD(options);
+
+	return true;
+}
+
+static bool
+_equalAlterSearchIndexCmd(const AlterSearchIndexCmd *a,
+							const AlterSearchIndexCmd *b)
+{
+	COMPARE_SCALAR_FIELD(cmd_type);
+	COMPARE_STRING_FIELD(column_name);
+
+	return true;
+}
+
+static bool
+_equalAlterSearchIndexStmt(const AlterSearchIndexStmt *a,
+							const AlterSearchIndexStmt *b)
+{
+	COMPARE_NODE_FIELD(search_index_name);
+	COMPARE_NODE_FIELD(alter_search_index_cmd);
+
+	return true;
+}
+// SPANGRES END
+
+static bool _equalLocalityGroupOption(const LocalityGroupOption *a,
+                                       const LocalityGroupOption *b) {
+  COMPARE_STRING_FIELD(value);
+	COMPARE_SCALAR_FIELD(is_null);
+  return true;
+}
+static bool _equalCreateLocalityGroupStmt(const CreateLocalityGroupStmt *a,
+                                          const CreateLocalityGroupStmt *b) {
+  COMPARE_NODE_FIELD(locality_group_name);
+  COMPARE_NODE_FIELD(storage);
+  COMPARE_NODE_FIELD(ssd_to_hdd_spill_timespan);
+  COMPARE_SCALAR_FIELD(if_not_exists);
+
+  return true;
+}
+
+static bool _equalAlterLocalityGroupStmt(const AlterLocalityGroupStmt *a,
+																				 const AlterLocalityGroupStmt *b) {
+  COMPARE_NODE_FIELD(locality_group_name);
+  COMPARE_NODE_FIELD(storage);
+  COMPARE_NODE_FIELD(ssd_to_hdd_spill_timespan);
+  COMPARE_SCALAR_FIELD(if_exists);
+
+  return true;
+}
+
+static bool _equalAlterColumnLocalityGroupStmt(
+    const AlterColumnLocalityGroupStmt *a,
+    const AlterColumnLocalityGroupStmt *b) {
+  COMPARE_NODE_FIELD(relation);
+  COMPARE_STRING_FIELD(column);
+  COMPARE_NODE_FIELD(locality_group_name);
+
+  return true;
+}
+
 static bool
 _equalCreatePolicyStmt(const CreatePolicyStmt *a, const CreatePolicyStmt *b)
 {
@@ -2791,6 +2870,7 @@ _equalColumnDef(const ColumnDef *a, const ColumnDef *b)
 	COMPARE_NODE_FIELD(constraints);
 	COMPARE_NODE_FIELD(fdwoptions);
 	COMPARE_LOCATION_FIELD(location);
+	COMPARE_NODE_FIELD(locality_group_name);
 
 	return true;
 }
@@ -3952,6 +4032,29 @@ equal(const void *a, const void *b)
     case T_AlterChangeStreamStmt:
       retval = _equalAlterChangeStreamStmt(a, b);
       break;
+		// SPANGRES BEGIN
+		case T_CreateSearchIndexStmt:
+			retval = _equalCreateSearchIndexStmt(a, b);
+			break;
+		case T_AlterSearchIndexStmt:
+			retval = _equalAlterSearchIndexStmt(a, b);
+			break;
+		case T_AlterSearchIndexCmd:
+			retval = _equalAlterSearchIndexCmd(a, b);
+			break;
+		// SPANGRES END
+		case T_LocalityGroupOption:
+			retval = _equalLocalityGroupOption(a, b);
+			break;
+		case T_CreateLocalityGroupStmt:
+			retval = _equalCreateLocalityGroupStmt(a, b);
+			break;
+		case T_AlterLocalityGroupStmt:
+			retval = _equalAlterLocalityGroupStmt(a, b);
+			break;
+		case T_AlterColumnLocalityGroupStmt:
+			retval = _equalAlterColumnLocalityGroupStmt(a, b);
+			break;
 		case T_A_Expr:
 			retval = _equalA_Expr(a, b);
 			break;

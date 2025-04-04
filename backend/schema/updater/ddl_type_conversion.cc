@@ -64,6 +64,8 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
       return type_factory->get_date();
     case ddl::TypeDefinition::NUMERIC:
       return type_factory->get_numeric();
+    case ddl::TypeDefinition::INTERVAL:
+      return type_factory->get_interval();
     case ddl::TypeDefinition::PG_NUMERIC:
       return postgres_translator::spangres::types::PgNumericMapping()
           ->mapped_type();
@@ -179,6 +181,8 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
     case ddl::ColumnDefinition::PG_JSONB:
       return postgres_translator::spangres::types::PgJsonbMapping()
           ->mapped_type();
+    case ddl::ColumnDefinition::INTERVAL:
+      return type_factory->get_interval();
     case ddl::ColumnDefinition::ARRAY: {
       ZETASQL_RET_CHECK(ddl_column_def.has_array_subtype())
           << "Missing array_subtype field for ddl::ColumnDefinition input: "
@@ -269,6 +273,7 @@ ddl::TypeDefinition GoogleSqlTypeToDDLType(const zetasql::Type* type) {
   if (type->IsNumericType()) type_def.set_type(ddl::TypeDefinition::NUMERIC);
   if (type->IsJson()) type_def.set_type(ddl::TypeDefinition::JSON);
   if (type->IsTokenList()) type_def.set_type(ddl::TypeDefinition::TOKENLIST);
+  if (type->IsInterval()) type_def.set_type(ddl::TypeDefinition::INTERVAL);
   if (type->IsProto()) {
     type_def.set_type(ddl::TypeDefinition::NONE);
     type_def.set_proto_type_name(type->AsProto()->descriptor()->full_name());
@@ -321,6 +326,8 @@ ddl::ColumnDefinition GoogleSqlTypeToDDLColumnType(
   if (type->IsJson()) ddl_column_def.set_type(ddl::ColumnDefinition::JSON);
   if (type->IsTokenList())
     ddl_column_def.set_type(ddl::ColumnDefinition::TOKENLIST);
+  if (type->IsInterval())
+    ddl_column_def.set_type(ddl::ColumnDefinition::INTERVAL);
   if (type->IsProto()) {
     ddl_column_def.set_type(ddl::ColumnDefinition::NONE);
     ddl_column_def.set_proto_type_name(

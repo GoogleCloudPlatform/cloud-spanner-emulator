@@ -19,6 +19,7 @@
 
 
 #define DEFAULT_INDEX_TYPE	"btree"
+#define VECTOR_INDEX_TYPE		"scann"
 
 /* Action code for index_set_state_flags */
 typedef enum

@@ -158,6 +158,25 @@ TEST_F(DdlTest, DisablePgJsonbType) {
                                         "Type <jsonb> is not supported."));
 }
 
+TEST_F(DdlTest, DisableIntervalType) {
+  const std::string input =
+      "CREATE Table users(id BIGINT PRIMARY KEY, unsupp INTERVAL);";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_interval_type = false});
+
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "Column of type <interval> is not supported."));
+}
+
 TEST_F(DdlTest, DisableAnalyze) {
   const std::string input = "ANALYZE;";
 
@@ -514,6 +533,189 @@ TEST_F(DdlTest, DisableDropChangeStream) {
                   "<DROP CHANGE STREAM> statement is not supported."));
 }
 
+TEST_F(DdlTest, DisableCreateSearchIndex) {
+  const std::string input =
+      "CREATE SEARCH INDEX index_name ON table_name (token_columns)";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_search_index = false});
+
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "<CREATE SEARCH INDEX> statement is not supported."));
+}
+
+TEST_F(DdlTest, DisableDropSearchIndex) {
+  const std::string input = "DROP SEARCH INDEX index_name";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_search_index = false});
+
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "<DROP SEARCH INDEX> statement is not supported."));
+}
+
+TEST_F(DdlTest, DisableCreateLocalityGroup) {
+  const std::string input =
+      "CREATE LOCALITY GROUP lg";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_locality_groups = false});
+
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "<CREATE LOCALITY GROUP> statement is not supported."));
+}
+
+TEST_F(DdlTest, DisableDropLocalityGroup) {
+  const std::string input = "DROP LOCALITY GROUP lg";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_locality_groups = false});
+
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "<DROP LOCALITY GROUP> statement is not supported."));
+}
+
+TEST_F(DdlTest, DisableAlterLocalityGroup) {
+  const std::string input = "ALTER LOCALITY GROUP lg STORAGE 'hdd'";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_locality_groups = false});
+
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "<ALTER LOCALITY GROUP> statement is not supported."));
+}
+
+TEST_F(DdlTest, DisableAlterTableSetLocalityGroup) {
+  const std::string input = "ALTER TABLE t SET LOCALITY GROUP lg";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_locality_groups = false});
+
+  EXPECT_THAT(
+      statements,
+      StatusIs(
+          absl::StatusCode::kFailedPrecondition,
+          "<ALTER TABLE ... SET LOCALITY GROUP> statement is not supported."));
+}
+
+TEST_F(DdlTest, DisableAlterColumnSetLocalityGroup) {
+  const std::string input =
+      "ALTER TABLE t ALTER COLUMN c SET LOCALITY GROUP lg";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_locality_groups = false});
+
+  EXPECT_THAT(
+      statements,
+      StatusIs(
+          absl::StatusCode::kFailedPrecondition,
+          "<ALTER TABLE ... SET LOCALITY GROUP> statement is not supported."));
+}
+
+TEST_F(DdlTest, DisableTableLevelLocalityGroupOnCreateTable) {
+  const std::string input =
+      R"sql(
+        CREATE TABLE Users (
+          id bigint PRIMARY KEY,
+          abc varchar NOT NULL
+        ) LOCALITY GROUP lg_2
+      )sql";
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_locality_groups = false});
+
+  EXPECT_THAT(
+      statements,
+      StatusIs(
+          absl::StatusCode::kFailedPrecondition,
+          "<CREATE TABLE ... SET LOCALITY GROUP> statement is not supported."));
+}
+
+TEST_F(DdlTest, DisableColumnLevelLocalityGroupOnCreateTable) {
+  const std::string input =
+      R"sql(
+        CREATE TABLE Users (
+          id bigint PRIMARY KEY,
+          abc varchar NOT NULL LOCALITY GROUP lg
+        )
+      )sql";
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_locality_groups = false});
+
+  EXPECT_THAT(
+      statements,
+      StatusIs(
+          absl::StatusCode::kFailedPrecondition,
+          "<CREATE TABLE ... SET LOCALITY GROUP> statement is not supported."));
+}
+
 TEST_F(DdlTest, PrintDDLStatementForEmulator) {
   google::protobuf::TextFormat::Parser parser;
   google::spanner::emulator::backend::ddl::DDLStatement ddl;
@@ -566,6 +768,52 @@ TEST_F(DdlTest, PrintRowDeletionPolicyForEmulator) {
       base_helper_.SchemaPrinter()->PrintRowDeletionPolicyForEmulator(policy);
   ASSERT_THAT(result,
               zetasql_base::testing::IsOkAndHolds("INTERVAL '7 DAYS' ON user_id"));
+}
+
+TEST_F(DdlTest, DisableDefaultTimeZone) {
+  const std::string input =
+      "ALTER DATABASE TestDatabase SET spanner.default_time_zone = 'UTC'";
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  EXPECT_THAT(base_helper_.Translator()->Translate(
+                  parsed_statements, {.enable_default_time_zone = false}),
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "Database option <spanner.default_time_zone> "
+                       "is not supported."));
+}
+
+TEST_F(DdlTest, EnableDefaultTimeZone) {
+  const std::string input =
+      "ALTER DATABASE TestDatabase SET spanner.default_time_zone = 'UTC'";
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements,
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_default_time_zone = true}));
+  ASSERT_THAT(statements->statement(), SizeIs(1));
+  ASSERT_THAT(statements->statement(0).alter_database().set_options().options(),
+              SizeIs(1));
+  EXPECT_EQ(statements->statement(0)
+                .alter_database()
+                .set_options()
+                .options(0)
+                .option_name(),
+            "spanner.internal.cloud_default_time_zone");
+  EXPECT_EQ(statements->statement(0)
+                .alter_database()
+                .set_options()
+                .options(0)
+                .string_value(),
+            "UTC");
 }
 
 }  // namespace

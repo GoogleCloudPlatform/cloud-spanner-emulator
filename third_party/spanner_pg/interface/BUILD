@@ -218,6 +218,7 @@ cc_test(
         "//third_party/spanner_pg/shims:memory_reservation_holder",
         "//third_party/spanner_pg/shims:stub_memory_reservation_manager",
         "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
@@ -275,6 +276,7 @@ cc_test(
         ":interfaces_with_stub_implementations",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:analyzer",
@@ -441,6 +443,7 @@ cc_library(
         "bootstrap_catalog_accessor.h",
     ],
     visibility = [
+        "//tests/conformance/common:__subpackages__",
         "//third_party/spanner_pg/bootstrap_catalog:__subpackages__",
         "//third_party/spanner_pg/catalog:__subpackages__",
     ],

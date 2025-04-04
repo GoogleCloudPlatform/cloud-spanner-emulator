@@ -48,11 +48,12 @@ namespace backend {
 
 absl::Status CheckConstraintVerifier::PrepareExpression(
     const CheckConstraint* check_constraint,
+    const zetasql::AnalyzerOptions& analyzer_options,
     zetasql::Catalog* function_catalog) {
   // Prepare an execuatable expression given a check constraint expression.
   auto expr = std::make_unique<zetasql::PreparedExpression>(
       check_constraint->expression());
-  zetasql::AnalyzerOptions options = MakeGoogleSqlAnalyzerOptions();
+  zetasql::AnalyzerOptions options = analyzer_options;
   for (const Column* dep : check_constraint->dependent_columns()) {
     ZETASQL_RETURN_IF_ERROR(options.AddExpressionColumn(dep->Name(), dep->GetType()));
   }
@@ -77,9 +78,11 @@ absl::Status CheckConstraintVerifier::VerifyRow(
 
 CheckConstraintVerifier::CheckConstraintVerifier(
     const CheckConstraint* check_constraint,
+    const zetasql::AnalyzerOptions& analyzer_options,
     zetasql::Catalog* function_catalog)
     : check_constraint_(check_constraint) {
-  absl::Status s = PrepareExpression(check_constraint, function_catalog);
+  absl::Status s =
+      PrepareExpression(check_constraint, analyzer_options, function_catalog);
   ABSL_DCHECK(s.ok()) << "Failed to initialize CheckConstraintVerifier: " << s;
 }
 

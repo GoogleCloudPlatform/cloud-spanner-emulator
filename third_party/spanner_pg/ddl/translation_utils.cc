@@ -138,6 +138,10 @@ static std::vector<PGAlterOption> GetOptionList() {
           PostgreSQLConstants::kSpangresDefaultSequenceKindOptionName, T_String,
           PostgreSQLConstants::kInternalDatabaseDefaultSequenceKindOptionName,
           T_String),
+      PGAlterOption(
+          PostgreSQLConstants::kSpangresDefaultTimeZoneOptionName, T_String,
+          PostgreSQLConstants::kInternalDatabaseDefaultTimeZoneOptionName,
+          T_String),
   };
 
   return options;
@@ -214,6 +218,34 @@ bool IsPostgresReservedName(absl::string_view name) {
   return absl::EqualsIgnoreCase(name, "postgres");
 }
 
+int64_t ParseSchemaTimeSpec(absl::string_view spec) {
+  const int64_t invalid_parse_result = -1;
+  int64_t num = invalid_parse_result;
+  char modifier = '\0';
+  static LazyRE2 time_spec_re = {"(\\d+)([smhd])"};
+  constexpr int64_t kint64max = std::numeric_limits<int64_t>::max();
+  if (!RE2::FullMatch(spec, *time_spec_re, &num, &modifier)) {
+    return -1;
+  }
+
+  if (modifier == 's') {
+    // RE2 already did overflow checking for us.  NOTE: We explicitly
+    // require the 's' modifier so that it will be straightforward to
+    // extend the language to support "ms" and "us".
+  } else if (modifier == 'm') {
+    if (num > kint64max / 60) return -1;
+    num *= 60;
+  } else if (modifier == 'h') {
+    if (num > kint64max / (60 * 60)) return -1;
+    num *= (60 * 60);
+  } else if (modifier == 'd') {
+    if (num > kint64max / (24 * 60 * 60)) return -1;
+    num *= (24 * 60 * 60);
+  }
+
+  return num;
+}
+
 absl::StatusOr<std::string> ObjectTypeToString(ObjectType object_type) {
   switch (object_type) {
     case OBJECT_TABLE:
@@ -274,6 +306,10 @@ absl::StatusOr<std::string> ObjectTypeToString(ObjectType object_type) {
       return "OPERATOR";
     case OBJECT_OPFAMILY:
       return "OPERATOR FAMILY";
+    case OBJECT_LOCALITY_GROUP:
+      return "LOCALITY GROUP";
+    case OBJECT_SEARCH_INDEX:
+      return "SEARCH INDEX";
     case OBJECT_POLICY:
       return "POLICY";
     case OBJECT_PROCEDURE:

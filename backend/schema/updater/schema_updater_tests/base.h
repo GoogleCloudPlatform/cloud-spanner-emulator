@@ -166,6 +166,8 @@ class SchemaUpdaterTest
             .enable_identity_columns = true,
             .enable_serial_auto_increment = true,
             .enable_user_defined_functions = true,
+            .enable_search_index = true,
+            .enable_default_time_zone = true,
         }) {}
   absl::StatusOr<std::unique_ptr<const Schema>> CreateSchema(
       absl::Span<const std::string> statements,
@@ -177,7 +179,8 @@ class SchemaUpdaterTest
       const Schema* base_schema, absl::Span<const std::string> statements,
       absl::string_view proto_descriptor_bytes = "",
       const database_api::DatabaseDialect& dialect = GetParam(),
-      bool use_gsql_to_pg_translation = true);
+      bool use_gsql_to_pg_translation = true,
+      std::string_view database_id = "");
 
  protected:
   void SetUp() override {

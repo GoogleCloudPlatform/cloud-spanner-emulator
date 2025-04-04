@@ -351,6 +351,103 @@ INSTANTIATE_TEST_SUITE_P(DateExtractErrorTestSuite, DateExtractErrorTest,
                               {"timezone", "timezone_m", "timezone_h",
                                "microseconds", "milliseconds", "second",
                                "minute", "hour"}})));
+
+struct IntervalExtractTestCase {
+  IntervalExtractTestCase(
+      std::string source_in,
+      absl::flat_hash_map<std::string, std::string> expected_values_in)
+      : source(source_in), expected_values(expected_values_in) {}
+
+  std::string source;
+  absl::flat_hash_map<std::string, std::string> expected_values;
+};
+
+class IntervalExtractTest
+    : public PgEvaluatorTestWithParam<IntervalExtractTestCase> {
+ protected:
+  void SetUp() override {
+    PgEvaluatorTestWithParam<IntervalExtractTestCase>::SetUp();
+    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+  }
+
+  void TearDown() override {
+    PgEvaluatorTestWithParam<IntervalExtractTestCase>::TearDown();
+    CleanupPostgresDateTimeCache();
+    CleanupTimezone();
+  }
+};
+
+TEST_P(IntervalExtractTest, IntervalExtract) {
+  const IntervalExtractTestCase& test_case = GetParam();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::IntervalValue source_input,
+                       PgIntervalIn(test_case.source));
+
+  for (const auto& test_pair : test_case.expected_values) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord computed_result,
+                         PgIntervalExtract(test_pair.first, source_input));
+    std::string readable_numeric;
+    ZETASQL_EXPECT_OK(DecodeNumericValueToDecimalString(
+        spanner::TypeCode::PG_NUMERIC, computed_result, &readable_numeric));
+    EXPECT_EQ(readable_numeric, test_pair.second);
+  }
+}
+
+// A few test cases from pg_regress Interval.out .
+INSTANTIATE_TEST_SUITE_P(
+    IntervalExtractTestSuite, IntervalExtractTest,
+    testing::Values(IntervalExtractTestCase({
+                        "457 years 11 months 249 days 17:32:7.123456789",
+                        {
+                            {"year", "457"},
+                            {"month", "11"},
+                            {"day", "249"},
+                            {"hour", "17"},
+                            {"minute", "32"},
+                            {"second", "7.123457"},
+                            {"quarter", "4"},
+                            {"msec", "7123.457"},
+                            {"usec", "7123457"},
+                            {"decade", "45"},
+                            {"century", "4"},
+                            {"millennium", "0"},
+                            {"epoch", "14471911927.123457"},
+                        },
+                    }),
+                    IntervalExtractTestCase({
+                        "-457 years -11 months -249 days -17:32:7.123456789",
+                        {
+                            {"year", "-457"},
+                            {"month", "-11"},
+                            {"day", "-249"},
+                            {"hour", "-17"},
+                            {"minute", "-32"},
+                            {"second", "-7.123457"},
+                            {"quarter", "-2"},
+                            {"msec", "-7123.457"},
+                            {"usec", "-7123457"},
+                            {"decade", "-45"},
+                            {"century", "-4"},
+                            {"millennium", "0"},
+                            {"epoch", "-14471911927.123457"},
+                        },
+                    }),
+                    IntervalExtractTestCase({
+                        "-7923 years 378 months -897 days 720 hours 67 minutes "
+                        "2.567898765 seconds",
+                        {{"year", "-7891"},
+                         {"month", "-6"},
+                         {"day", "-897"},
+                         {"hour", "721"},
+                         {"minute", "7"},
+                         {"second", "2.567899"},
+                         {"quarter", "-1"},
+                         {"msec", "2567.899"},
+                         {"usec", "2567899"},
+                         {"decade", "-789"},
+                         {"century", "-78"},
+                         {"millennium", "-7"},
+                         {"epoch", "-249111478377.432101"}},
+                    })));
 }  // namespace
 }  // namespace postgres_translator::function_evaluators
 

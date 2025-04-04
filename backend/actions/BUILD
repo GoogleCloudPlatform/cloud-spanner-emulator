@@ -462,6 +462,7 @@ cc_library(
         ":ops",
         ":unique_index",
         "//backend/access:write",
+        "//backend/query:analyzer_options",
         "//backend/query:catalog",
         "//backend/query:function_catalog",
         "//backend/schema/catalog:schema",

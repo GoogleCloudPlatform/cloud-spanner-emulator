@@ -16,6 +16,7 @@
 
 #include "backend/query/analyzer_options.h"
 
+#include <string>
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
@@ -35,11 +36,12 @@ namespace backend {
 
 using admin::database::v1::DatabaseDialect;
 
-zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptions() {
+zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptions(
+    const std::string time_zone) {
   zetasql::AnalyzerOptions options;
-  absl::TimeZone time_zone;
-  absl::LoadTimeZone(kDefaultTimeZone, &time_zone);
-  options.set_default_time_zone(time_zone);
+  absl::TimeZone time_zone_obj;
+  absl::LoadTimeZone(time_zone, &time_zone_obj);
+  options.set_default_time_zone(time_zone_obj);
   options.set_error_message_mode(
       zetasql::AnalyzerOptions::ERROR_MESSAGE_MULTI_LINE_WITH_CARET);
 
@@ -87,6 +89,7 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::FEATURE_V_1_4_SEQUENCE_ARG,
       zetasql::FEATURE_V_1_4_ENABLE_FLOAT_DISTANCE_FUNCTIONS,
       zetasql::FEATURE_V_1_4_DOT_PRODUCT,
+      zetasql::FEATURE_INTERVAL_TYPE,
       zetasql::FEATURE_V_1_4_SQL_GRAPH,
       zetasql::FEATURE_V_1_4_SQL_GRAPH_ADVANCED_QUERY,
       zetasql::FEATURE_V_1_4_SQL_GRAPH_BOUNDED_PATH_QUANTIFICATION,
@@ -126,7 +129,7 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance() {
 }
 
 zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
-    DatabaseDialect dialect) {
+    std::string time_zone, DatabaseDialect dialect) {
   auto language_opts = MakeGoogleSqlLanguageOptions();
   if (dialect == DatabaseDialect::POSTGRESQL) {
     // PG needs ASC NULLS LAST and DESC NULLS FIRST for default values.
@@ -141,7 +144,7 @@ zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
   // VIEW defintions must be specified in strict name resolution mode.
   language_opts.set_name_resolution_mode(zetasql::NAME_RESOLUTION_STRICT);
 
-  auto analyzer_options = MakeGoogleSqlAnalyzerOptions();
+  auto analyzer_options = MakeGoogleSqlAnalyzerOptions(time_zone);
   analyzer_options.set_prune_unused_columns(true);
   analyzer_options.set_language(language_opts);
   return analyzer_options;

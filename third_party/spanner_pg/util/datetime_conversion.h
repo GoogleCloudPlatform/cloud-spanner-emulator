@@ -39,9 +39,9 @@
 /*
  * A library to convert between PostgreSQL and ZetaSQL datetime
  * representations. This library is used by the Transformer, which links
- * against spangres/src, and also by the function_evaluators library, which
+ * against spangres_src/src, and also by the function_evaluators library, which
  * links against spangres/datetime_parsing. We've chosen to copy typedef and
- * macro definitions here rather than including spangres/src or
+ * macro definitions here rather than including spangres_src/src or
  * spangres/datetime_parsing, which could cause symbol collisions.
  */
 

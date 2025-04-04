@@ -30,6 +30,7 @@
 //------------------------------------------------------------------------------
 
 #include "third_party/spanner_pg/interface/bootstrap_catalog_accessor.h"
+#include <vector>
 
 #include "net/proto2/contrib/parse_proto/parse_text_proto.h"
 #include "absl/status/status.h"
@@ -112,7 +113,7 @@ INSTANTIATE_TEST_SUITE_P(
       nspname: "spanner"
     )pb"));
 
-TEST_P(PgProcDataTest, GetPgProcDataFromBootstrapSuccess) {
+TEST_P(PgProcDataTest, GetPgProcDataFromBootstrapOidSuccess) {
   PgProcData expected = ParseTextProtoOrDie(GetParam());
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       PgProcData actual,
@@ -120,10 +121,26 @@ TEST_P(PgProcDataTest, GetPgProcDataFromBootstrapSuccess) {
   EXPECT_THAT(actual, testing::EqualsProto(expected));
 }
 
-TEST_F(PgProcDataTest, GetPgProcDataFromBootstrapFailure) {
+TEST_P(PgProcDataTest, GetPgProcDataFromBootstrapNameSuccess) {
+  PgProcData expected = ParseTextProtoOrDie(GetParam());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<PgProcData> actual,
+      GetPgProcDataFromBootstrap(GetPgBootstrapCatalog(), expected.proname()));
+  EXPECT_EQ(actual.size(), 1);
+  EXPECT_THAT(actual[0], testing::EqualsProto(expected));
+}
+
+TEST_F(PgProcDataTest, GetPgProcDataFromBootstrapOidFailure) {
   // default (100) is a collation, not a proc.
   ASSERT_THAT(
       GetPgProcDataFromBootstrap(GetPgBootstrapCatalog(), 100),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST_F(PgProcDataTest, GetPgProcDataFromBootstrapNameFailure) {
+  // "C" is a collation, not a proc.
+  ASSERT_THAT(
+      GetPgProcDataFromBootstrap(GetPgBootstrapCatalog(), "C"),
       zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 

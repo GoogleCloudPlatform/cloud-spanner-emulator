@@ -3485,6 +3485,11 @@ ForwardTransformer::BuildGsqlResolvedStatement(const Query& query) {
         case T_AlterOwnerStmt:
         case T_AlterStatsStmt:
         case T_AlterObjectSchemaStmt:
+        case T_CreateSearchIndexStmt:
+        case T_AlterSearchIndexStmt:
+        case T_CreateLocalityGroupStmt:
+        case T_AlterLocalityGroupStmt:
+        case T_AlterColumnLocalityGroupStmt:
           return absl::UnimplementedError(
               "DDL statements cannot be issued as SELECT/DML statements");
         default:

@@ -49,6 +49,7 @@ SecLabelSupportsObjectType(ObjectType objtype)
 		case OBJECT_LANGUAGE:
 		case OBJECT_LARGEOBJECT:
 		case OBJECT_MATVIEW:
+		case OBJECT_LOCALITY_GROUP:
 		case OBJECT_PROCEDURE:
 		case OBJECT_PUBLICATION:
 		case OBJECT_ROLE:

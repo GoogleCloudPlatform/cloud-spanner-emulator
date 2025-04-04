@@ -43,6 +43,8 @@ namespace {
 using zetasql::values::Int64;
 using zetasql_base::testing::StatusIs;
 
+constexpr char kDatabaseId[] = "test-db";
+
 class DatabaseTest : public ::testing::Test {
  public:
   DatabaseTest() = default;
@@ -60,8 +62,9 @@ class DatabaseTest : public ::testing::Test {
 };
 
 TEST_F(DatabaseTest, CreateSuccessful) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<Database> database,
-                       Database::Create(&clock_, SchemaChangeOperation{}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<Database> database,
+      Database::Create(&clock_, kDatabaseId, SchemaChangeOperation{}));
   // Verifies that by default, a ZetaSQL database is created.
   EXPECT_EQ(database->dialect(),
             database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
@@ -77,7 +80,7 @@ TEST_F(DatabaseTest, CreateSuccessful) {
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       database,
-      Database::Create(&clock_,
+      Database::Create(&clock_, kDatabaseId,
                        SchemaChangeOperation{.statements = create_statements}));
   // Verifies that by default, a ZetaSQL database is created.
   EXPECT_EQ(database->dialect(),
@@ -88,7 +91,7 @@ TEST_F(DatabaseTest, CreateWithGSQLDialectSuccessful) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<Database> database,
       Database::Create(
-          &clock_,
+          &clock_, kDatabaseId,
           SchemaChangeOperation{
               .database_dialect =
                   database_api::DatabaseDialect::GOOGLE_STANDARD_SQL}));
@@ -107,7 +110,7 @@ TEST_F(DatabaseTest, CreateWithGSQLDialectSuccessful) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       database,
       Database::Create(
-          &clock_,
+          &clock_, kDatabaseId,
           SchemaChangeOperation{
               .statements = create_statements,
               .database_dialect =
@@ -120,7 +123,7 @@ TEST_F(DatabaseTest, CreateWithPostgresDialectSuccessful) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<Database> database,
       Database::Create(
-          &clock_,
+          &clock_, kDatabaseId,
           SchemaChangeOperation{
               .database_dialect = database_api::DatabaseDialect::POSTGRESQL}));
   EXPECT_EQ(database->dialect(), database_api::DatabaseDialect::POSTGRESQL);
@@ -137,7 +140,7 @@ TEST_F(DatabaseTest, CreateWithPostgresDialectSuccessful) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       database,
       Database::Create(
-          &clock_,
+          &clock_, kDatabaseId,
           SchemaChangeOperation{
               .statements = create_statements,
               .database_dialect = database_api::DatabaseDialect::POSTGRESQL}));
@@ -145,8 +148,8 @@ TEST_F(DatabaseTest, CreateWithPostgresDialectSuccessful) {
 }
 
 TEST_F(DatabaseTest, UpdateSchemaSuccessful) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto db,
-                       Database::Create(&clock_, SchemaChangeOperation{}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto db, Database::Create(&clock_, kDatabaseId, SchemaChangeOperation{}));
 
   std::vector<std::string> update_statements = {R"(
     CREATE TABLE T(
@@ -175,8 +178,9 @@ TEST_F(DatabaseTest, UpdateSchemaPartialSuccess) {
     ) PRIMARY KEY(k1)
   )"};
   ZETASQL_ASSERT_OK_AND_ASSIGN(
-      auto db, Database::Create(&clock_, SchemaChangeOperation{
-                                             .statements = create_statements}));
+      auto db,
+      Database::Create(&clock_, kDatabaseId,
+                       SchemaChangeOperation{.statements = create_statements}));
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<ReadWriteTransaction> txn,
@@ -234,8 +238,9 @@ TEST_F(DatabaseTest, ConcurrentSchemaChangeIsAborted) {
     ) PRIMARY KEY(k1)
   )"};
   ZETASQL_ASSERT_OK_AND_ASSIGN(
-      auto db, Database::Create(&clock_, SchemaChangeOperation{
-                                             .statements = create_statements}));
+      auto db,
+      Database::Create(&clock_, kDatabaseId,
+                       SchemaChangeOperation{.statements = create_statements}));
 
   // Initiate a Read inside a read-write transaction to acquire locks.
   std::unique_ptr<RowCursor> row_cursor;
@@ -269,8 +274,9 @@ TEST_F(DatabaseTest, SchemaChangeLocksSuccesfullyReleased) {
     ) PRIMARY KEY(k1)
   )"};
   ZETASQL_ASSERT_OK_AND_ASSIGN(
-      auto db, Database::Create(&clock_, SchemaChangeOperation{
-                                             .statements = create_statements}));
+      auto db,
+      Database::Create(&clock_, kDatabaseId,
+                       SchemaChangeOperation{.statements = create_statements}));
 
   // Schema update will fail.
   std::vector<std::string> update_statements = {R"(

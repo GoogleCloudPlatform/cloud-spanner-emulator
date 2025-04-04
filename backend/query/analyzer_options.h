@@ -17,10 +17,13 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_ANALYZER_OPTIONS_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_ANALYZER_OPTIONS_H_
 
+#include <string>
+
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/builtin_function_options.h"
 #include "zetasql/public/language_options.h"
+#include "common/constants.h"
 
 namespace google {
 namespace spanner {
@@ -29,13 +32,15 @@ namespace backend {
 
 using admin::database::v1::DatabaseDialect;
 
-zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptions();
+zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptions(
+    std::string time_zone = kDefaultTimeZone);
 
 zetasql::LanguageOptions MakeGoogleSqlLanguageOptions();
 
 zetasql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance();
 
 zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
+    std::string time_zone,
     DatabaseDialect dialect = DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 zetasql::BuiltinFunctionOptions MakeGoogleSqlBuiltinFunctionOptions();

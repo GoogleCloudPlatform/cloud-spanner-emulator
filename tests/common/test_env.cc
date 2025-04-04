@@ -53,6 +53,17 @@ absl::Status ReadFromClientReader(
   return reader->Finish();
 }
 
+absl::Status ReadFromClientReader(
+    std::unique_ptr<grpc::ClientReader<spanner_api::BatchWriteResponse>> reader,
+    std::vector<spanner_api::BatchWriteResponse>* response) {
+  response->clear();
+  spanner_api::BatchWriteResponse result;
+  while (reader->Read(&result)) {
+    response->push_back(result);
+  }
+  return reader->Finish();
+}
+
 }  // namespace
 
 TestEnv::TestEnv() {
@@ -109,6 +120,14 @@ absl::Status ServerTest::ExecuteStreamingSql(
   grpc::ClientContext ctx;
   auto client_reader =
       test_env()->spanner_client()->ExecuteStreamingSql(&ctx, request);
+  return ReadFromClientReader(std::move(client_reader), response);
+}
+
+absl::Status ServerTest::BatchWrite(
+    const spanner_api::BatchWriteRequest& request,
+    std::vector<spanner_api::BatchWriteResponse>* response) {
+  grpc::ClientContext ctx;
+  auto client_reader = test_env()->spanner_client()->BatchWrite(&ctx, request);
   return ReadFromClientReader(std::move(client_reader), response);
 }
 

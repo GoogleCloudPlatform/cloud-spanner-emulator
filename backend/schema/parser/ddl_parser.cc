@@ -92,6 +92,7 @@ const char kWitnessLocationOptionName[] = "witness_location";
 const char kDefaultLeaderOptionName[] = "default_leader";
 const char kVersionRetentionPeriodOptionName[] = "version_retention_period";
 const char kDefaultSequenceKindOptionName[] = "default_sequence_kind";
+const char kDefaultTimeZoneOptionName[] = "default_time_zone";
 const char kVectorIndexTreeDepth[] = "tree_depth";
 const char kVectorIndexNumberOfLeaves[] = "num_leaves";
 const char kVectorIndexNumberOfBranches[] = "num_branches";
@@ -1565,6 +1566,8 @@ void VisitVectorIndexOptionKeyValNode(const SimpleNode* node,
                        ". Supported option values are strings."));
       return;
     }
+  } else if (option_name == kLocalityGroupOptionName) {
+    VisitLocalityGroupName(node, options, errors);
   } else {
     // Unknown option.
     errors->push_back(absl::StrCat("Option: ", option_name, " is unknown."));
@@ -1856,6 +1859,31 @@ void VisitDefaultSequenceKindDatabaseOptionValNode(
   }
 }
 
+void VisitDefaultTimeZoneDatabaseOptionValNode(
+    const SimpleNode* value_node, SetOption* option,
+    std::vector<std::string>* errors) {
+  ABSL_DCHECK_EQ(option->option_name(), kDefaultTimeZoneOptionName);
+
+  if (value_node->getId() == JJTSTR_VAL &&
+      ValidateStringLiteralImage(value_node->image(), /*force=*/true, nullptr)
+          .ok()) {
+    std::string string_value;
+    std::string error = "";
+    if (!UnescapeStringLiteral(value_node->image(), &string_value, &error)) {
+      errors->push_back(error);
+      return;
+    }
+    option->set_string_value(string_value);
+  } else if (value_node->getId() == JJTNULLL) {
+    option->set_null_value(true);
+  } else {
+    errors->push_back(absl::StrCat(
+        "Unexpected value for option: ", kDefaultTimeZoneOptionName,
+        ". Supported option values are strings and NULL."));
+    return;
+  }
+}
+
 void VisitVersionRetentionPeriodDatabaseOptionValNode(
     const SimpleNode* value_node, SetOption* option,
     std::vector<std::string>* errors) {
@@ -1920,6 +1948,13 @@ void VisitDatabaseOptionKeyValNode(const SimpleNode* node, OptionList* options,
     SetOption* option = options->Add();
     option->set_option_name(kDefaultSequenceKindOptionName);
     VisitDefaultSequenceKindDatabaseOptionValNode(value_node, option, errors);
+  } else if (option_name == kDefaultTimeZoneOptionName &&
+             EmulatorFeatureFlags::instance()
+                 .flags()
+                 .enable_default_time_zone) {
+    SetOption* option = options->Add();
+    option->set_option_name(kDefaultTimeZoneOptionName);
+    VisitDefaultTimeZoneDatabaseOptionValNode(value_node, option, errors);
   } else if (option_name == kVersionRetentionPeriodOptionName) {
     SetOption* option = options->Add();
     option->set_option_name(kVersionRetentionPeriodOptionName);
@@ -2511,6 +2546,42 @@ void VisitAlterIndexNode(const SimpleNode* node, AlterIndex* alter_index,
   }
 }
 
+void VisitAddStoredColumnNode(const SimpleNode* node,
+                              AlterVectorIndex* alter_index,
+                              std::vector<std::string>* errors) {
+  CheckNode(node, JJTADD_STORED_COLUMN);
+  ABSL_CHECK_EQ(node->jjtGetNumChildren(), 1);  // Crash OK
+
+  VisitStoredColumnNode(
+      GetChildNode(node, 0, JJTSTORED_COLUMN),
+      alter_index->mutable_add_stored_column()->mutable_column(), errors);
+}
+
+void VisitAlterVectorIndexNode(const SimpleNode* node,
+                               AlterVectorIndex* alter_vector_index,
+                               std::vector<std::string>* errors) {
+  CheckNode(node, JJTALTER_VECTOR_INDEX_STATEMENT);
+  const SimpleNode* alter_type = GetChildNode(node, 1);
+  alter_vector_index->set_index_name(
+      GetQualifiedIdentifier(GetFirstChildNode(node, JJTNAME)));
+  const SimpleNode* child = GetChildNode(node, 1);
+  switch (alter_type->getId()) {
+    case JJTADD_STORED_COLUMN:
+      VisitAddStoredColumnNode(child, alter_vector_index, errors);
+      break;
+    case JJTDROP_STORED_COLUMN_NAME:
+      alter_vector_index->set_drop_stored_column(child->image());
+      break;
+    default: {
+      errors->push_back(LogicalError(
+          alter_type,
+          absl::StrCat("Unexpected value for alter vector index type: ",
+                       alter_type->image())));
+      break;
+    }
+  }
+}
+
 void VisitPrivilegeNode(const SimpleNode* node, Privilege* privilege,
                         std::vector<std::string>* errors) {
   CheckNode(node, JJTPRIVILEGE);
@@ -2981,6 +3052,11 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
       VisitAlterIndexNode(stmt, statement->mutable_alter_index(), errors);
       break;
     }
+    case JJTALTER_VECTOR_INDEX_STATEMENT: {
+      VisitAlterVectorIndexNode(stmt, statement->mutable_alter_vector_index(),
+                                errors);
+      break;
+    }
     case JJTGRANT_STATEMENT: {
       // For grant privilege statement, first child node represents privileges.
       if (GetChildNode(stmt, 0)->getId() == JJTPRIVILEGES) {
@@ -3058,11 +3134,19 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
           }
           statement->mutable_drop_index()->set_index_name(name);
           break;
+        case JJTVECTOR_INDEX:
+          if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
+            statement->mutable_drop_vector_index()->set_existence_modifier(
+                IF_EXISTS);
+          }
+          statement->mutable_drop_vector_index()->set_index_name(name);
+          break;
         case JJTSEARCH_INDEX:
           if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
-            statement->mutable_drop_index()->set_existence_modifier(IF_EXISTS);
+            statement->mutable_drop_search_index()->set_existence_modifier(
+                IF_EXISTS);
           }
-          statement->mutable_drop_index()->set_index_name(name);
+          statement->mutable_drop_search_index()->set_index_name(name);
           break;
         case JJTCHANGE_STREAM:
           statement->mutable_drop_change_stream()->set_change_stream_name(name);

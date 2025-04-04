@@ -44,7 +44,7 @@ package(
     ],
 )
 
-licenses(["notice"])
+licenses(["restricted"])
 
 cc_binary(
     name = "euc_cn_and_mic.so",

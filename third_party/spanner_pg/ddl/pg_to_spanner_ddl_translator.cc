@@ -48,6 +48,7 @@
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
@@ -204,6 +205,62 @@ class PostgreSQLToSpannerDDLTranslatorImpl
 
   friend class CreateIndexStatementTranslator;
 
+  class CreateSearchIndexStatementTranslator
+      : public CreateIndexStatementTranslator {
+   public:
+    CreateSearchIndexStatementTranslator(
+        const CreateSearchIndexStatementTranslator& other) = delete;
+    CreateSearchIndexStatementTranslator& operator=(
+        const CreateSearchIndexStatementTranslator& other) = delete;
+
+    CreateSearchIndexStatementTranslator(
+        const CreateSearchIndexStatementTranslator&& other) = delete;
+    CreateSearchIndexStatementTranslator& operator=(
+        CreateSearchIndexStatementTranslator&& other) = delete;
+
+    CreateSearchIndexStatementTranslator(
+        const PostgreSQLToSpannerDDLTranslatorImpl& ddl_translator,
+        const TranslationOptions& options)
+        : CreateIndexStatementTranslator(ddl_translator, options),
+          ddl_search_translator_(ddl_translator) {}
+
+    absl::Status Translate(
+        const CreateSearchIndexStmt& create_search_index_stmt,
+        const TranslationOptions& options,
+        google::spanner::emulator::backend::ddl::CreateSearchIndex& out);
+
+   private:
+    absl::Status PopulateSearchIndexOptions(
+        List* opt_options, absl::string_view parent_statement,
+        OptionList* options_out, const TranslationOptions& options) const;
+
+    absl::StatusOr<absl::string_view> TranslateSortBy(
+        const SortBy& sort_by, google::spanner::emulator::backend::ddl::KeyPartClause::Order& ordering,
+        const TranslationOptions& options);
+
+    // Translate a partition key in the `PARTITION BY` clause.
+    // Example: `PARTITION BY column1 ASC NULLS FIRST, column2 DESC NULLS LAST`.
+    // This function is used to translate each partition key.
+    absl::StatusOr<absl::string_view> TranslatePartitionBy(
+        const IndexElem& index_elem,
+        google::spanner::emulator::backend::ddl::KeyPartClause::Order& ordering,
+        const TranslationOptions& options);
+
+    absl::StatusOr<absl::string_view> GetNodeColumnName(const Node* node);
+    const PostgreSQLToSpannerDDLTranslatorImpl& ddl_search_translator_;
+
+    absl::Status OrderByTranslationError(
+        absl::string_view parent_statement) const {
+      return ddl_search_translator_.UnsupportedTranslationError(
+          absl::Substitute("<ORDER BY> clause of <$0> statement supports only "
+                           "expressions of the form <column ASC/DESC>, where "
+                           "<column> is part of an index.",
+                           parent_statement));
+    }
+  };
+
+  friend class CreateSearchIndexStatementTranslator;
+
   // Class holding the context for CREATE/ALTER TABLE operations, e.g. primary
   // keys, other constraints, etc.
   struct TableContext;
@@ -247,7 +304,6 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   absl::Status TranslateCreateIndex(const IndexStmt& create_index_statement,
                                     const TranslationOptions& options,
                                     google::spanner::emulator::backend::ddl::CreateIndex& out) const;
-
   absl::Status TranslateAlterIndex(const AlterTableStmt& alter_index_statement,
                                    const TranslationOptions& options,
                                    google::spanner::emulator::backend::ddl::AlterIndex& out) const;
@@ -265,6 +321,16 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       const DropStmt& drop_change_stream_statement,
       const TranslationOptions& options,
       google::spanner::emulator::backend::ddl::DropChangeStream& out) const;
+
+  absl::Status TranslateDropSearchIndex(
+      const DropStmt& drop_search_index_statement,
+      const TranslationOptions& options,
+      google::spanner::emulator::backend::ddl::DropSearchIndex& out) const;
+
+  absl::Status TranslateDropLocalityGroup(
+      const DropStmt& drop_locality_group_statement,
+      const TranslationOptions& options,
+      google::spanner::emulator::backend::ddl::DropLocalityGroup& out) const;
 
   // Updates table translation <context> with the information about translated
   // table <constraint>. If constraint is defined on column level, the
@@ -347,6 +413,12 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   absl::StatusOr<std::string> GetChangeStreamTableName(
       const RangeVar& range_var, absl::string_view parent_statement_type) const;
 
+  absl::StatusOr<std::string> GetSearchIndexName(
+      const RangeVar& range_var, absl::string_view parent_statement_type) const;
+
+  absl::StatusOr<std::string> GetLocalityGroupName(
+      const RangeVar& range_var, absl::string_view parent_statement_type) const;
+
   absl::StatusOr<std::string> GetFunctionName(
       const ObjectWithArgs& object_with_args, bool is_grant,
       absl::string_view parent_statement_type) const;
@@ -392,6 +464,30 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       const AlterChangeStreamStmt& alter_change_stream_stmt,
       const TranslationOptions& options,
       google::spanner::emulator::backend::ddl::AlterChangeStream& out) const;
+
+  absl::Status TranslateCreateSearchIndex(
+      const CreateSearchIndexStmt& create_search_index_stmt,
+      const TranslationOptions& options,
+      google::spanner::emulator::backend::ddl::CreateSearchIndex& out) const;
+
+  absl::Status TranslateStorageOption(
+      const LocalityGroupOption* storage,
+      google::spanner::emulator::backend::ddl::SetOption& option_out) const;
+  absl::Status TranslateSpillTimespanOption(
+      const LocalityGroupOption* ssd_to_hdd_spill_timespan,
+      google::spanner::emulator::backend::ddl::SetOption& option_out) const;
+  absl::Status TranslateCreateLocalityGroup(
+      const CreateLocalityGroupStmt& create_locality_group_stmt,
+      const TranslationOptions& options,
+      google::spanner::emulator::backend::ddl::CreateLocalityGroup& out) const;
+  absl::Status TranslateAlterLocalityGroup(
+      const AlterLocalityGroupStmt& alter_locality_group_stmt,
+      const TranslationOptions& options,
+      google::spanner::emulator::backend::ddl::AlterLocalityGroup& out) const;
+  absl::Status TranslateAlterColumnLocalityGroup(
+    const AlterColumnLocalityGroupStmt& alter_column_locality_group_stmt,
+    const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::SetColumnOptions& out) const;
 
   // SEQUENCE translation statements.
   absl::Status ProcessSequenceSkipRangeOption(
@@ -458,6 +554,8 @@ GetTypeMap() {
       {"numeric", google::spanner::emulator::backend::ddl::ColumnDefinition::PG_NUMERIC},
       {"decimal", google::spanner::emulator::backend::ddl::ColumnDefinition::PG_NUMERIC},
       {"jsonb", google::spanner::emulator::backend::ddl::ColumnDefinition::PG_JSONB},
+      {"interval", google::spanner::emulator::backend::ddl::ColumnDefinition::INTERVAL},
+      {"tokenlist", google::spanner::emulator::backend::ddl::ColumnDefinition::TOKENLIST},
       // Unsupported standard types from pg_catalog schema
       {"aclitem", absl::nullopt},
       {"any", absl::nullopt},
@@ -491,7 +589,6 @@ GetTypeMap() {
       {"int4range", absl::nullopt},
       {"int8range", absl::nullopt},
       {"internal", absl::nullopt},
-      {"interval", absl::nullopt},
       {"uuid", absl::nullopt},
       {"json", absl::nullopt},
       {"jsonpath", absl::nullopt},
@@ -702,6 +799,13 @@ PostgreSQLToSpannerDDLTranslatorImpl::TranslateOption(
         absl::StrCat("Database option <", option_name, "> is not supported."));
   }
 
+  if (option->PGName() ==
+          internal::PostgreSQLConstants::kSpangresDefaultTimeZoneOptionName &&
+      !options.enable_default_time_zone) {
+    return UnsupportedTranslationError(
+        absl::StrCat("Database option <", option_name, "> is not supported."));
+  }
+
   return *option;
 }
 
@@ -893,6 +997,21 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
       return absl::OkStatus();
     }
 
+    case CONSTR_HIDDEN: {
+      if (!options.enable_hidden_column) {
+        return UnsupportedTranslationError(
+            "<HIDDEN> constraint type is not supported.");
+      }
+      if (constraint.conname != nullptr) {
+        return UnsupportedTranslationError(
+            "Setting a name of a <HIDDEN> constraint is not supported.");
+      }
+      ZETASQL_RET_CHECK_NE(target_column, nullptr);
+      ZETASQL_RET_CHECK(target_column->has_column_name());
+      target_column->set_hidden(true);
+      return absl::OkStatus();
+    }
+
     case CONSTR_ATTR_IMMEDIATE:
     case CONSTR_ATTR_NOT_DEFERRABLE: {
       // This means NOT DEFERRABLE and/or INITIALLY IMMEDIATE is set on
@@ -958,6 +1077,19 @@ absl::StatusOr<std::string> PostgreSQLToSpannerDDLTranslatorImpl::
     return absl::InvalidArgumentError(absl::Substitute(
         "Schema name can only be 'public' in <$0> statement.",
         parent_statement_type));
+  }
+  return range_var.relname;
+}
+
+absl::StatusOr<std::string>
+PostgreSQLToSpannerDDLTranslatorImpl::GetLocalityGroupName(
+    const RangeVar& range_var, absl::string_view parent_statement_type) const {
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(range_var, parent_statement_type));
+  if (range_var.schemaname != nullptr &&
+      strcmp(range_var.schemaname, "public") != 0) {
+    return absl::InvalidArgumentError(
+        absl::Substitute("Schema name can only be 'public' in <$0> statement.",
+                         parent_statement_type));
   }
   return range_var.relname;
 }
@@ -1307,6 +1439,22 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateColumnDefinition(
     }
   }
 
+  if (column_definition.locality_group_name != nullptr) {
+    if (!options.enable_locality_groups) {
+      return UnsupportedTranslationError(
+          "<CREATE TABLE ... SET LOCALITY GROUP> statement is not supported.");
+    }
+    google::spanner::emulator::backend::ddl::SetOption* const locality_group_option =
+        out.add_set_options();
+    locality_group_option->set_option_name("locality_group");
+    if (column_definition.locality_group_name->is_null) {
+      locality_group_option->set_null_value(true);
+    } else {
+      locality_group_option->set_string_value(
+          column_definition.locality_group_name->value);
+    }
+  }
+
   return absl::OkStatus();
 }
 
@@ -1368,6 +1516,11 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessPostgresType(
       !IsListEmpty(type.arrayBounds)) {
     return UnsupportedTranslationError(
         absl::StrCat("Type Array of <jsonb> is not supported."));
+  }
+
+  if (!options.enable_interval_type && type_name == "interval") {
+    return UnsupportedTranslationError(
+        absl::StrCat("Column of type <interval> is not supported."));
   }
 
   auto type_it = GetTypeMap().find(type_name);
@@ -1449,6 +1602,10 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessExtendedType(
     const absl::string_view type_name, const TypeName& type,
     const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::ColumnDefinition& out) const {
+  if (!options.enable_search_index && type_name == "tokenlist") {
+    return UnsupportedTranslationError(
+        absl::StrCat("Type <", type_name, "> is not supported."));
+  }
   if (!IsListEmpty(type.typmods)) {
     return UnsupportedTranslationError(absl::StrCat(
         "Type modifiers are not supported for the type <", type_name, ">."));
@@ -1465,6 +1622,15 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessExtendedType(
     commit_ts_option->set_option_name(
         PGConstants::kInternalCommitTimestampOptionName);
     commit_ts_option->set_bool_value(true);
+    return absl::OkStatus();
+  }
+  if (type_name == "tokenlist") {
+    if (!IsListEmpty(type.arrayBounds)) {
+      return UnsupportedTranslationError(
+        absl::StrCat(
+            "Arrays are not supported for the type <", type_name, ">."));
+    }
+    out.set_type(google::spanner::emulator::backend::ddl::ColumnDefinition::TOKENLIST);
     return absl::OkStatus();
   }
 
@@ -1751,6 +1917,22 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
 
   if (create_statement.if_not_exists) {
     out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_NOT_EXISTS);
+  }
+
+  if (create_statement.locality_group_name != nullptr) {
+    if (!options.enable_locality_groups) {
+      return UnsupportedTranslationError(
+          "<CREATE TABLE ... SET LOCALITY GROUP> statement is not supported.");
+    }
+    google::spanner::emulator::backend::ddl::SetOption* const locality_group_option =
+        out.add_set_options();
+    locality_group_option->set_option_name("locality_group");
+    if (create_statement.locality_group_name->is_null) {
+      locality_group_option->set_null_value(true);
+    } else {
+      locality_group_option->set_string_value(
+          create_statement.locality_group_name->value);
+    }
   }
 
   // Post processing phase: add all the constraints (PRIMARY KEY, FOREIGN KEY,
@@ -2160,6 +2342,23 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
       return absl::OkStatus();
     }
 
+    case AT_SetLocalityGroup: {
+      if (!options.enable_locality_groups) {
+        return UnsupportedTranslationError(
+            "<ALTER TABLE ... SET LOCALITY GROUP> statement is not supported.");
+      }
+      google::spanner::emulator::backend::ddl::SetOption* const locality_group_option =
+          out.mutable_set_options()->add_options();
+      locality_group_option->set_option_name("locality_group");
+      if (first_cmd->locality_group_name->is_null) {
+        locality_group_option->set_null_value(true);
+      } else {
+        locality_group_option->set_string_value(
+            first_cmd->locality_group_name->value);
+      }
+      return absl::OkStatus();
+    }
+
     default: {
       ZETASQL_RET_CHECK_FAIL() << "Unknown command type in <ALTER TABLE> statement.";
     }
@@ -2208,6 +2407,14 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropStatement(
       return TranslateDropChangeStream(
           drop_statement, options, *out.mutable_drop_change_stream());
 
+    case OBJECT_SEARCH_INDEX:
+      return TranslateDropSearchIndex(drop_statement, options,
+                                      *out.mutable_drop_search_index());
+
+    case OBJECT_LOCALITY_GROUP:
+      return TranslateDropLocalityGroup(drop_statement, options,
+                                        *out.mutable_drop_locality_group());
+
     case OBJECT_SEQUENCE:
       return TranslateDropSequence(drop_statement, options,
                                    *out.mutable_drop_sequence());
@@ -2238,6 +2445,73 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropChangeStream(
       GetChangeStreamTableName(*changestream_to_drop_node,
                                "DROP CHANGE STREAM"));
   out.set_change_stream_name(change_stream_name);
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSearchIndex(
+    const DropStmt& drop_search_index_statement,
+    const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::DropSearchIndex& out) const {
+  if (!options.enable_search_index) {
+    return UnsupportedTranslationError(
+        "<DROP SEARCH INDEX> statement is not supported.");
+  }
+  ZETASQL_RET_CHECK_EQ(drop_search_index_statement.removeType, OBJECT_SEARCH_INDEX);
+
+  ZETASQL_ASSIGN_OR_RETURN(const List* search_index_to_drop_list,
+                   (SingleItemListAsNode<List, T_List>(
+                       drop_search_index_statement.objects)));
+
+  // Caller should have called ValidateParseTreeNode, which ensures the size of
+  // search_index_to_drop_list is 1 or 2.
+  if (search_index_to_drop_list->length == 2) {
+    ZETASQL_ASSIGN_OR_RETURN(const String* schema_to_drop_node,
+                     (GetListItemAsNode<String, T_String>)(
+                         search_index_to_drop_list, 0));
+    ZETASQL_ASSIGN_OR_RETURN(const String* search_index_to_drop_node,
+                     (GetListItemAsNode<String, T_String>)(
+                         search_index_to_drop_list, 1));
+    if (strcmp(schema_to_drop_node->sval, "public") != 0) {
+      *out.mutable_index_name() = absl::Substitute("$0.$1",
+                                                  schema_to_drop_node->sval,
+                                                  search_index_to_drop_node->sval);
+    } else {
+      *out.mutable_index_name() = absl::StrCat(search_index_to_drop_node->sval);
+    }
+  } else {
+    ZETASQL_RET_CHECK_EQ(search_index_to_drop_list->length, 1)
+        << "Incorrect number of name components in drop target.";
+    ZETASQL_ASSIGN_OR_RETURN(const String* search_index_to_drop_node,
+                     (SingleItemListAsNode<String, T_String>)(
+                         search_index_to_drop_list));
+    *out.mutable_index_name() = search_index_to_drop_node->sval;
+  }
+  if (drop_search_index_statement.missing_ok && options.enable_if_not_exists) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropLocalityGroup(
+    const DropStmt& drop_locality_group_statement,
+    const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::DropLocalityGroup& out) const {
+  if (!options.enable_locality_groups) {
+    return UnsupportedTranslationError(
+        "<DROP LOCALITY GROUP> statement is not supported.");
+  }
+  ZETASQL_RET_CHECK_EQ(drop_locality_group_statement.removeType, OBJECT_LOCALITY_GROUP);
+  if (drop_locality_group_statement.missing_ok) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
+  }
+  ZETASQL_ASSIGN_OR_RETURN(const RangeVar* locality_group_to_drop_node,
+                   (SingleItemListAsNode<RangeVar, T_RangeVar>(
+                       drop_locality_group_statement.objects)));
+  ZETASQL_ASSIGN_OR_RETURN(std::string locality_group_name,
+                   GetLocalityGroupName(*locality_group_to_drop_node,
+                                        "DROP LOCALITY GROUP"));
+  out.set_locality_group_name(locality_group_name);
   return absl::OkStatus();
 }
 
@@ -2325,11 +2599,11 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropTable(
 }
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateIndex(
-    const IndexStmt& create_index_statement, const TranslationOptions& options,
-    google::spanner::emulator::backend::ddl::CreateIndex& out) const {
+    const IndexStmt& create_index_statement, const TranslationOptions&
+    options, google::spanner::emulator::backend::ddl::CreateIndex& out) const {
   CreateIndexStatementTranslator translator(*this, options);
-  ZETASQL_RETURN_IF_ERROR(translator.Translate(create_index_statement, out, options));
-  return absl::OkStatus();
+  ZETASQL_RETURN_IF_ERROR(translator.Translate(create_index_statement, out,
+  options)); return absl::OkStatus();
 }
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterIndex(
@@ -2798,6 +3072,365 @@ PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamForClause(
   return absl::OkStatus();
 }
 
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateSearchIndex(
+    const CreateSearchIndexStmt& create_search_index_stmt,
+    const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::CreateSearchIndex& out) const {
+  if (!options.enable_search_index) {
+    return UnsupportedTranslationError(
+        "<CREATE SEARCH INDEX> statement is not supported.");
+  }
+  CreateSearchIndexStatementTranslator translator(*this, options);
+  ZETASQL_RETURN_IF_ERROR(translator.Translate(create_search_index_stmt, options, out));
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
+    CreateSearchIndexStatementTranslator::Translate(
+        const CreateSearchIndexStmt& create_search_index_stmt,
+        const TranslationOptions& options,
+        google::spanner::emulator::backend::ddl::CreateSearchIndex& out) {
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_search_index_stmt));
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::string table_name,
+      ddl_search_translator_.GetTableName(*create_search_index_stmt.table_name,
+                                          "CREATE SEARCH INDEX"));
+  out.set_index_base_name(table_name);
+  if (create_search_index_stmt.table_name->schemaname != nullptr &&
+      strcmp(create_search_index_stmt.table_name->schemaname, "public") != 0) {
+    out.set_index_name(absl::Substitute(
+        "$0.$1", create_search_index_stmt.table_name->schemaname,
+        create_search_index_stmt.search_index_name));
+  } else {
+    out.set_index_name(create_search_index_stmt.search_index_name);
+  }
+
+  // Process token columns.
+  for (IndexElem* index_elem :
+       StructList<IndexElem*>(create_search_index_stmt.token_columns)) {
+    google::spanner::emulator::backend::ddl::TokenColumnDefinition* token_column_definition =
+        out.add_token_column_definition();
+    token_column_definition->mutable_token_column()->set_key_name(
+        index_elem->name);
+    // Tokenlist columns do not support ordering.
+    if (index_elem->ordering != SORTBY_DEFAULT ||
+        index_elem->nulls_ordering != SORTBY_NULLS_DEFAULT) {
+      return ddl_search_translator_.UnsupportedTranslationError(
+          absl::Substitute(
+              "Ordering is not supported for tokenlist columns in <$0> "
+              "statement.",
+              "CREATE SEARCH INDEX"));
+    }
+  }
+
+  // Process include(storing) columns.
+  for (IndexElem* included_elem :
+       StructList<IndexElem*>(create_search_index_stmt.storing)) {
+    google::spanner::emulator::backend::ddl::StoredColumnDefinition* stored_column =
+        out.add_stored_column_definition();
+    stored_column->set_name(included_elem->name);
+    // Included columns for search index do not support ordering.
+    if (included_elem->ordering != SORTBY_DEFAULT ||
+        included_elem->nulls_ordering != SORTBY_NULLS_DEFAULT) {
+      return ddl_search_translator_.UnsupportedTranslationError(
+          absl::Substitute(
+              "Ordering is not supported for included columns in <$0> "
+              "statement.",
+              "CREATE SEARCH INDEX"));
+    }
+  }
+
+  // Process Partition by.
+  for (IndexElem* partition_key :
+       StructList<IndexElem*>(create_search_index_stmt.partition)) {
+    google::spanner::emulator::backend::ddl::KeyPartClause* partition_by_key = out.add_partition_by();
+    google::spanner::emulator::backend::ddl::KeyPartClause::Order ordering;
+    ZETASQL_ASSIGN_OR_RETURN(absl::string_view partition_key_name,
+                     TranslatePartitionBy(*partition_key, ordering, options));
+    partition_by_key->set_key_name(partition_key_name);
+    partition_by_key->set_order(ordering);
+  }
+
+  // Process Order by.
+  for (SortBy* sort_elem :
+       StructList<SortBy*>(create_search_index_stmt.order)) {
+    google::spanner::emulator::backend::ddl::KeyPartClause* key_part = out.add_order_by();
+    google::spanner::emulator::backend::ddl::KeyPartClause::Order ordering;
+    ZETASQL_ASSIGN_OR_RETURN(absl::string_view column_name,
+                     TranslateSortBy(*sort_elem, ordering, options));
+    key_part->set_key_name(column_name);
+    key_part->set_order(ordering);
+  }
+
+  // Process Where clause for null filtered conditions.
+  if (create_search_index_stmt.null_filters != nullptr) {
+    std::set<absl::string_view> null_filtered_columns;
+    ZETASQL_RETURN_IF_ERROR(TranslateWhereNode(create_search_index_stmt.null_filters,
+                                       &null_filtered_columns,
+                                       "CREATE SEARCH INDEX"));
+
+    for (absl::string_view key_name : null_filtered_columns) {
+      out.add_null_filtered_column(key_name);
+    }
+  }
+
+  // Process Interleave in.
+  if (create_search_index_stmt.interleave != nullptr) {
+    ZETASQL_RETURN_IF_ERROR(
+        CheckInterleaveInParserOutput(create_search_index_stmt.interleave));
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::string relname,
+        ddl_translator_.GetTableName(
+            *create_search_index_stmt.interleave->parent, "INTERLEAVE"));
+    out.set_interleave_in_table(relname);
+  }
+
+  // Process Search Index options.
+  if (create_search_index_stmt.options != nullptr) {
+    ZETASQL_RETURN_IF_ERROR(PopulateSearchIndexOptions(
+        create_search_index_stmt.options, "CREATE SEARCH INDEX",
+        out.mutable_set_options(), options));
+  }
+
+  return absl::OkStatus();
+}
+
+absl::StatusOr<absl::string_view> PostgreSQLToSpannerDDLTranslatorImpl::
+    CreateSearchIndexStatementTranslator::GetNodeColumnName(const Node* node) {
+  if (NodeTag(node->type) != T_ColumnRef) {
+    return OrderByTranslationError("CREATE SEARCH INDEX");
+  }
+  // TODO : Possible refactoring possible between this and
+  // CreateIndex where column_ref is obtained.
+  ZETASQL_ASSIGN_OR_RETURN(const ColumnRef* column_ref,
+                   (DowncastNode<ColumnRef, T_ColumnRef>(node)));
+  const List* column_list = column_ref->fields;
+  if (list_length(column_list) != 1) {
+    return OrderByTranslationError("CREATE SEARCH INDEX");
+  }
+
+  ZETASQL_ASSIGN_OR_RETURN(const String* value,
+                   (SingleItemListAsNode<String, T_String>(column_list)));
+  const char* column_name = value->sval;
+  ZETASQL_RET_CHECK(column_name && *column_name != '\0');
+
+  return column_name;
+}
+
+absl::StatusOr<absl::string_view> PostgreSQLToSpannerDDLTranslatorImpl::
+    CreateSearchIndexStatementTranslator::TranslateSortBy(
+        const SortBy& sort_by, google::spanner::emulator::backend::ddl::KeyPartClause::Order& ordering,
+        const TranslationOptions& options) {
+  ZETASQL_ASSIGN_OR_RETURN(ordering, ProcessOrdering(sort_by.sortby_dir,
+                                             sort_by.sortby_nulls, options));
+  ZETASQL_ASSIGN_OR_RETURN(absl::string_view name, GetNodeColumnName(sort_by.node));
+  return name;
+}
+
+absl::StatusOr<absl::string_view> PostgreSQLToSpannerDDLTranslatorImpl::
+    CreateSearchIndexStatementTranslator::TranslatePartitionBy(
+        const IndexElem& index_elem,
+        google::spanner::emulator::backend::ddl::KeyPartClause::Order& ordering,
+        const TranslationOptions& options) {
+  ZETASQL_ASSIGN_OR_RETURN(
+      ordering,
+      ProcessOrdering(index_elem.ordering, index_elem.nulls_ordering, options));
+  return index_elem.name;
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
+    CreateSearchIndexStatementTranslator::PopulateSearchIndexOptions(
+        List* opt_options, absl::string_view parent_statement,
+        OptionList* options_out, const TranslationOptions& options) const {
+  ABSL_DCHECK(opt_options != nullptr);
+  absl::flat_hash_set<absl::string_view> seen_options;
+  for (DefElem* def_elem : StructList<DefElem*>(opt_options)) {
+    if (def_elem == nullptr || def_elem->arg == nullptr || !def_elem->defname ||
+        *def_elem->defname == '\0') {
+      return absl::InvalidArgumentError(absl::Substitute(
+          "Failed to parse search index option correctly in <$0> statement.",
+          parent_statement));
+    }
+    if (seen_options.contains(def_elem->defname)) {
+      return absl::InvalidArgumentError(absl::Substitute(
+          "Contains duplicate search index option '$0' in <$1> statement.",
+          def_elem->defname, parent_statement));
+    }
+    seen_options.insert(def_elem->defname);
+    if (def_elem->defname ==
+            internal::PostgreSQLConstants::kSearchIndexDisableUidOptionName ||
+        def_elem->defname ==
+            internal::PostgreSQLConstants::kSearchIndexSortOrderOptionName) {
+      if (def_elem->arg->type != T_String) {
+        return absl::InvalidArgumentError(absl::Substitute(
+            "Failed to provide valid option value for '$0' in <$1> statement.",
+            def_elem->defname, parent_statement));
+      }
+
+      ZETASQL_ASSIGN_OR_RETURN(const String* arg_value,
+                       (DowncastNode<String, T_String>(def_elem->arg)));
+      std::string value = arg_value->sval;
+      google::spanner::emulator::backend::ddl::SetOption* option_out = options_out->Add();
+      option_out->set_option_name(def_elem->defname);
+      if (absl::AsciiStrToLower(value) == "null") {
+        option_out->set_null_value(true);
+      } else if (value == PGConstants::kPgTrueLiteral) {
+        option_out->set_bool_value(true);
+      } else if (value == PGConstants::kPgFalseLiteral) {
+        option_out->set_bool_value(false);
+      } else {
+        return UnsupportedTranslationError(
+            absl::Substitute("Unsupported option value in search index option "
+                             "'$0' in <$1> statement.",
+                             def_elem->defname, parent_statement));
+      }
+    } else {
+      return absl::InvalidArgumentError(absl::Substitute(
+          "Invalid search index option '$0' in <$1> statement.",
+          def_elem->defname, parent_statement));
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateStorageOption(
+    const LocalityGroupOption* const storage,
+    google::spanner::emulator::backend::ddl::SetOption& option_out) const {
+  option_out.set_option_name(
+      internal::PostgreSQLConstants::kInternalLocalityGroupStorageOptionName);
+  if (storage->is_null) {
+    option_out.set_null_value(true);
+  } else if (strcmp(storage->value, "ssd") == 0) {
+    option_out.set_bool_value(true);
+  } else if (strcmp(storage->value, "hdd") == 0) {
+    option_out.set_bool_value(false);
+  } else {
+    return UnsupportedTranslationError(absl::Substitute(
+        "Invalid storage value: '$0'. Must be either 'ssd', 'hdd' or NULL.",
+        storage));
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateSpillTimespanOption(
+    const LocalityGroupOption* const ssd_to_hdd_spill_timespan,
+    google::spanner::emulator::backend::ddl::SetOption& option_out) const {
+  option_out.set_option_name(internal::PostgreSQLConstants::
+                                 kInternalLocalityGroupSpillTimeSpanOptionName);
+  if (ssd_to_hdd_spill_timespan->is_null) {
+    option_out.set_null_value(true);
+  } else {
+    if (internal::ParseSchemaTimeSpec(ssd_to_hdd_spill_timespan->value) == -1) {
+      return UnsupportedTranslationError(
+          absl::Substitute("Invalid ssd_to_hdd_spill_timespan '$0'. Must be "
+                           "a valid timespan or NULL.",
+                           ssd_to_hdd_spill_timespan));
+    }
+    *option_out.add_string_list_value() =
+        absl::StrCat("disk:", ssd_to_hdd_spill_timespan->value);
+  }
+  return absl::OkStatus();
+}
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateLocalityGroup(
+    const CreateLocalityGroupStmt& create_locality_group_stmt,
+    const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::CreateLocalityGroup& out) const {
+  if (!options.enable_locality_groups) {
+    return UnsupportedTranslationError(
+        "<CREATE LOCALITY GROUP> statement is not supported.");
+  }
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_locality_group_stmt));
+  if (create_locality_group_stmt.if_not_exists) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_NOT_EXISTS);
+  }
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::string locality_group_name,
+      GetLocalityGroupName(*create_locality_group_stmt.locality_group_name,
+                           "CREATE LOCALITY GROUP"));
+  out.set_locality_group_name(locality_group_name);
+
+  if (create_locality_group_stmt.storage != nullptr) {
+    google::spanner::emulator::backend::ddl::SetOption* option_out = out.add_set_options();
+    ZETASQL_RETURN_IF_ERROR(TranslateStorageOption(create_locality_group_stmt.storage,
+                                           *option_out));
+  }
+
+  if (create_locality_group_stmt.ssd_to_hdd_spill_timespan != nullptr) {
+    google::spanner::emulator::backend::ddl::SetOption* option_out = out.add_set_options();
+    ZETASQL_RETURN_IF_ERROR(TranslateSpillTimespanOption(
+        create_locality_group_stmt.ssd_to_hdd_spill_timespan, *option_out));
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterLocalityGroup(
+    const AlterLocalityGroupStmt& alter_locality_group_stmt,
+    const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::AlterLocalityGroup& out) const {
+  if (!options.enable_locality_groups) {
+    return UnsupportedTranslationError(
+        "<ALTER LOCALITY GROUP> statement is not supported.");
+  }
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_locality_group_stmt));
+  if (alter_locality_group_stmt.if_exists) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
+  }
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::string locality_group_name,
+      GetLocalityGroupName(*alter_locality_group_stmt.locality_group_name,
+                           "ALTER LOCALITY GROUP"));
+  out.set_locality_group_name(locality_group_name);
+
+  if (alter_locality_group_stmt.storage != nullptr) {
+    google::spanner::emulator::backend::ddl::SetOption* option_out =
+        out.mutable_set_options()->add_options();
+    ZETASQL_RETURN_IF_ERROR(
+        TranslateStorageOption(alter_locality_group_stmt.storage, *option_out));
+  }
+
+  if (alter_locality_group_stmt.ssd_to_hdd_spill_timespan != nullptr) {
+    google::spanner::emulator::backend::ddl::SetOption* option_out =
+        out.mutable_set_options()->add_options();
+    ZETASQL_RETURN_IF_ERROR(TranslateSpillTimespanOption(
+        alter_locality_group_stmt.ssd_to_hdd_spill_timespan, *option_out));
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status
+PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterColumnLocalityGroup(
+    const AlterColumnLocalityGroupStmt& alter_column_locality_group_stmt,
+    const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::SetColumnOptions& out) const {
+  if (!options.enable_locality_groups) {
+    return UnsupportedTranslationError(
+        "<ALTER TABLE ... SET LOCALITY GROUP> statement is not supported.");
+  }
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_column_locality_group_stmt));
+
+  ZETASQL_ASSIGN_OR_RETURN(std::string table_name,
+                   GetTableName(*alter_column_locality_group_stmt.relation,
+                                "ALTER TABLE ALTER COLUMN"));
+  google::spanner::emulator::backend::ddl::SetColumnOptions_ColumnPath* column_path =
+      out.add_column_path();
+  column_path->set_table_name(table_name);
+  column_path->set_column_name(alter_column_locality_group_stmt.column);
+
+  google::spanner::emulator::backend::ddl::SetOption* option = out.add_options();
+  option->set_option_name("locality_group");
+  if (alter_column_locality_group_stmt.locality_group_name->is_null) {
+    option->set_null_value(true);
+  } else {
+    option->set_string_value(
+        alter_column_locality_group_stmt.locality_group_name->value);
+  }
+
+  return absl::OkStatus();
+}
+
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateRenameStatement(
     const RenameStmt& rename_statement, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::AlterTable& out) const {
@@ -2927,7 +3560,6 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
           (DowncastNode<IndexStmt, T_IndexStmt>(raw_statement.stmt)));
       ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateIndex(
           *statement, options_, *result_statement.mutable_create_index()));
-
       break;
     }
 
@@ -2983,6 +3615,50 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
           *statement, options_,
           *result_statement.mutable_alter_change_stream()));
 
+      break;
+    }
+
+    case T_CreateSearchIndexStmt: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          const CreateSearchIndexStmt* statement,
+          (DowncastNode<CreateSearchIndexStmt, T_CreateSearchIndexStmt>(
+              raw_statement.stmt)));
+      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateSearchIndex(
+          *statement, options_,
+          *result_statement.mutable_create_search_index()));
+      break;
+    }
+
+    case T_CreateLocalityGroupStmt: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          const CreateLocalityGroupStmt* statement,
+          (DowncastNode<CreateLocalityGroupStmt, T_CreateLocalityGroupStmt>(
+              raw_statement.stmt)));
+      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateLocalityGroup(
+          *statement, options_,
+          *result_statement.mutable_create_locality_group()));
+      break;
+    }
+
+    case T_AlterLocalityGroupStmt: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          const AlterLocalityGroupStmt* statement,
+          (DowncastNode<AlterLocalityGroupStmt, T_AlterLocalityGroupStmt>(
+              raw_statement.stmt)));
+      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterLocalityGroup(
+          *statement, options_,
+          *result_statement.mutable_alter_locality_group()));
+      break;
+    }
+
+    case T_AlterColumnLocalityGroupStmt: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          const AlterColumnLocalityGroupStmt* statement,
+          (DowncastNode<AlterColumnLocalityGroupStmt,
+                        T_AlterColumnLocalityGroupStmt>(raw_statement.stmt)));
+      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterColumnLocalityGroup(
+          *statement, options_,
+          *result_statement.mutable_set_column_options()));
       break;
     }
 
@@ -3140,12 +3816,13 @@ PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::
   }
 }
 
-absl::Status
-PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::Translate(
-    const IndexStmt& create_index_statement,
-    google::spanner::emulator::backend::ddl::CreateIndex& create_index_out,
-    const TranslationOptions& options) {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_index_statement, options));
+  absl::Status
+  PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::Translate(
+      const IndexStmt& create_index_statement,
+      google::spanner::emulator::backend::ddl::CreateIndex& create_index_out,
+      const TranslationOptions& options) {
+    ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_index_statement, options));
+
   if (create_index_statement.nulls_not_distinct) {
     return UnsupportedTranslationError(
         "<NULLS NOT DISTINCT> is not supported in <CREATE INDEX> statement.");
@@ -3212,6 +3889,21 @@ PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::Translate(
     create_index_out.set_interleave_in_table(relname);
   }
 
+  if (create_index_statement.locality_group_name != nullptr) {
+    if (!options.enable_locality_groups) {
+      return UnsupportedTranslationError(
+          "Locality groups are not supported in <CREATE INDEX> statement.");
+    }
+    google::spanner::emulator::backend::ddl::SetOption* set_option = create_index_out.add_set_options();
+    set_option->set_option_name("locality_group");
+    if (create_index_statement.locality_group_name->is_null) {
+      set_option->set_null_value(true);
+    } else {
+      set_option->set_string_value(
+          create_index_statement.locality_group_name->value);
+    }
+  }
+
   if (create_index_statement.if_not_exists && options.enable_if_not_exists) {
     create_index_out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_NOT_EXISTS);
   }
@@ -3242,10 +3934,21 @@ PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::Translate(
       *out.mutable_drop_stored_column() = first_cmd->name;
       break;
     }
+    case AT_SetLocalityGroup: {
+      google::spanner::emulator::backend::ddl::SetOption* set_option =
+          out.mutable_set_options()->add_options();
+      set_option->set_option_name("locality_group");
+      if (first_cmd->locality_group_name->is_null) {
+        set_option->set_null_value(true);
+      } else {
+        set_option->set_string_value(first_cmd->locality_group_name->value);
+      }
+      break;
+    }
     default:
       return UnsupportedTranslationError(
           "<ALTER INDEX> only supports actions to add or drop an include "
-          "column");
+          "column, or to set the locality group.");
   }
 
   return absl::OkStatus();

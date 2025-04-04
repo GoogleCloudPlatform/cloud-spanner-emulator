@@ -40,6 +40,7 @@
 #include "backend/actions/interleave.h"
 #include "backend/actions/ops.h"
 #include "backend/actions/unique_index.h"
+#include "backend/query/analyzer_options.h"
 #include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
@@ -103,7 +104,9 @@ absl::Status ActionRegistry::ExecuteVerifiers(const ActionContext* ctx,
 ActionRegistry::ActionRegistry(const Schema* schema,
                                const FunctionCatalog* function_catalog,
                                zetasql::TypeFactory* type_factory_)
-    : schema_(schema), catalog_(schema, function_catalog, type_factory_) {
+    : schema_(schema),
+      catalog_(schema, function_catalog, type_factory_,
+               MakeGoogleSqlAnalyzerOptions(schema->default_time_zone())) {
   BuildActionRegistry();
 }
 
@@ -176,8 +179,10 @@ void ActionRegistry::BuildActionRegistry() {
     // Actions for check constraints.
     for (const CheckConstraint* check_constraint : table->check_constraints()) {
       table_verifiers_[table].emplace_back(
-          std::make_unique<CheckConstraintVerifier>(check_constraint,
-                                                    &catalog_));
+          std::make_unique<CheckConstraintVerifier>(
+              check_constraint,
+              MakeGoogleSqlAnalyzerOptions(schema_->default_time_zone()),
+              &catalog_));
     }
 
     // A set containing key columns with default/generated values.
@@ -190,8 +195,11 @@ void ActionRegistry::BuildActionRegistry() {
           table->FindKeyColumn(column->Name()) != nullptr) {
         default_or_generated_key_columns.insert(column->Name());
         table_generated_key_effectors_[table->Name()] =
-            std::make_unique<GeneratedColumnEffector>(table, &catalog_,
-                                                      /*for_keys=*/true);
+            std::make_unique<GeneratedColumnEffector>(
+                table,
+                MakeGoogleSqlAnalyzerOptions(schema_->default_time_zone()),
+                &catalog_,
+                /*for_keys=*/true);
         break;
       }
     }
@@ -201,7 +209,10 @@ void ActionRegistry::BuildActionRegistry() {
       if (!default_or_generated_key_columns.contains(column->Name()) &&
           (column->is_generated() || column->has_default_value())) {
         table_effectors_[table].emplace_back(
-            std::make_unique<GeneratedColumnEffector>(table, &catalog_));
+            std::make_unique<GeneratedColumnEffector>(
+                table,
+                MakeGoogleSqlAnalyzerOptions(schema_->default_time_zone()),
+                &catalog_));
         break;
       }
     }

@@ -179,6 +179,7 @@ void function_data_type() :
     | <STRING> ["(" column_length() ")"]
     | <STRUCT> ( "<" struct_fields() ">" | "<>" )
     | <TIMESTAMP>
+    | <INTERVAL>
 
 }
 
@@ -356,6 +357,7 @@ void column_type() :
   | <PG> "." qualified_identifier() #pgtype
   | <JSON>
 
+  | <INTERVAL>
   | <ARRAY> "<" column_type() ">"
       [ "(" <VECTOR_LENGTH> "="">" <INTEGER_LITERAL> #vector_length ")"]
   | <TOKENLIST>
@@ -713,6 +715,12 @@ void stored_column() :
   path()
 }
 
+void alter_stored_column() :
+{}
+{
+  path() <SET> options_clause()
+}
+
 void stored_column_list() :
 {}
 {
@@ -834,6 +842,7 @@ void drop_statement() :
     ( <TABLE> #table [ if_exists() ]
       | <INDEX> #index [ if_exists() ]
       | <SEARCH> <INDEX> #search_index [ if_exists() ]
+      | <VECTOR> <INDEX> #vector_index [ if_exists() ]
       | <VIEW> #view [ if_exists() ]
       | <FUNCTION> #function [ if_exists() ]
       | <CHANGE> <STREAM> #change_stream
@@ -862,6 +871,7 @@ void alter_statement() #void :
     | alter_model_statement()
     | alter_schema_statement()
     | alter_locality_group_statement()
+    | alter_vector_index_statement()
   )
 }
 
@@ -945,6 +955,18 @@ void alter_model_statement() :
   <MODEL> [ if_exists() ] (qualified_identifier() #name)
   [<SET> options_clause()]
 }
+
+void alter_vector_index_statement() :
+{}
+{
+  <VECTOR> <INDEX> (qualified_identifier() #name)
+  (   <ADD> <STORED> <COLUMN> stored_column() #add_stored_column
+    | <DROP> <STORED> <COLUMN> identifier() #drop_stored_column_name
+    | <ALTER> <STORED> <COLUMN> alter_stored_column() #alter_stored_column
+    | <SET> options_clause()
+  )
+}
+
 
 void analyze_statement() :
 {}

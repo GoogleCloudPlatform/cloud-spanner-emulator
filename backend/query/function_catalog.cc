@@ -45,10 +45,10 @@
 #include "backend/query/analyzer_options.h"
 #include "backend/query/ml/ml_predict_row_function.h"
 #include "backend/query/ml/ml_predict_table_valued_function.h"
+#include "backend/query/search/search_function_catalog.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
-#include "backend/query/search/search_function_catalog.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "common/bit_reverse.h"
@@ -176,7 +176,7 @@ FunctionCatalog::FunctionCatalog(zetasql::TypeFactory* type_factory,
   // Add aliases for the functions.
   AddFunctionAliases();
   AddMlFunctions();
-  AddSpannerPGFunctions(type_factory);
+  AddSpannerPGFunctions();
   AddSearchFunctions(type_factory);
 }
 
@@ -249,8 +249,13 @@ void FunctionCatalog::AddMlFunctions() {
 }
 
 void FunctionCatalog::AddSearchFunctions(zetasql::TypeFactory* type_factory) {
+  auto dialect = database_api::DatabaseDialect::GOOGLE_STANDARD_SQL;
+  if (latest_schema_ != nullptr) {
+    dialect = latest_schema_->dialect();
+  }
+
   auto search_functions =
-      query::search::GetSearchFunctions(type_factory, catalog_name_);
+      query::search::GetSearchFunctions(type_factory, catalog_name_, dialect);
 
   for (auto& [name, function] : search_functions) {
     functions_.emplace(name, std::move(function));
@@ -258,8 +263,7 @@ void FunctionCatalog::AddSearchFunctions(zetasql::TypeFactory* type_factory) {
 }
 
 // Adds Spanner PG-specific functions to the list of known functions.
-void FunctionCatalog::AddSpannerPGFunctions(
-    zetasql::TypeFactory* type_factory) {
+void FunctionCatalog::AddSpannerPGFunctions() {
   SpannerPGFunctions spanner_pg_functions =
       GetSpannerPGFunctions(catalog_name_);
 

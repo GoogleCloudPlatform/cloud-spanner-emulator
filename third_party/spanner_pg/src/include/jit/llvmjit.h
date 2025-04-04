@@ -19,6 +19,10 @@
 
 #include <llvm-c/Types.h>
 
+#include "jit/llvmjit_backport.h"
+#ifdef USE_LLVM_BACKPORT_SECTION_MEMORY_MANAGER
+#include <llvm-c/OrcEE.h>
+#endif
 
 /*
  * File needs to be includable by both C and C++ code, and include other
@@ -148,6 +152,11 @@ extern char *LLVMGetHostCPUFeatures(void);
 extern unsigned LLVMGetAttributeCountAtIndexPG(LLVMValueRef F, uint32 Idx);
 extern LLVMTypeRef LLVMGetFunctionReturnType(LLVMValueRef r);
 extern LLVMTypeRef LLVMGetFunctionType(LLVMValueRef r);
+#ifdef USE_LLVM_BACKPORT_SECTION_MEMORY_MANAGER
+extern LLVMOrcObjectLayerRef
+LLVMOrcCreateRTDyldObjectLinkingLayerWithSafeSectionMemoryManager(
+    LLVMOrcExecutionSessionRef ES);
+#endif
 
 #if LLVM_MAJOR_VERSION < 8
 extern LLVMTypeRef LLVMGlobalGetValueType(LLVMValueRef g);

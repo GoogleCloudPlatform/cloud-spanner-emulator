@@ -44,7 +44,7 @@ package(
     ],
 )
 
-licenses(["notice"])
+licenses(["restricted"])
 
 cc_binary(
     name = "euc2004_sjis2004.so",

@@ -34,6 +34,15 @@ bool SupportsSafeErrorMode(const zetasql::Function* function) {
   }
 
   const std::string name = function->FullName(false);
+  static const auto* unsupported_functions =
+      new absl::flat_hash_set<absl::string_view>{
+          "approx_cosine_distance",
+          "approx_euclidean_distance",
+          "approx_dot_product",
+      };
+  if (unsupported_functions->contains(name)) {
+    return false;
+  }
   static const auto* supported_functions =
       new absl::flat_hash_set<absl::string_view>{
           "$safe_array_at_offset",

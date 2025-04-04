@@ -22,7 +22,10 @@ use Carp;
 use FindBin;
 #use lib $FindBin::RealBin;
 BEGIN  {
-	use lib File::Spec->rel2abs(dirname(__FILE__) . "/../src/backend/catalog");
+	use lib File::Spec->rel2abs(
+		dirname(__FILE__) .
+		"/../src/backend/catalog"
+	);
 }
 
 use Catalog;

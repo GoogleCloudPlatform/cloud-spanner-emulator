@@ -1,0 +1,206 @@
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  Name STRING(MAX),
+) PRIMARY KEY(AlbumId);
+ALTER TABLE Albums
+ADD COLUMN Name_Token TOKENLIST
+AS (TOKEN(Name, 15, true)) STORED HIDDEN;
+--
+No matching signature for function SPANNER:TOKEN
+==
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  Length INT64,
+) PRIMARY KEY(AlbumId);
+ALTER TABLE Albums
+ADD COLUMN Length_Token TOKENLIST
+    AS (TOKENIZE_NUMBER(
+          Length,
+        comparison_type=>"ALL",
+        algorithm=>"auto",
+        min=>-1000,
+        max=>1000,
+        granularity=>1,
+        tree_base=>2,
+        precision=>7,
+        "extra-arg")) STORED HIDDEN;
+--
+No matching signature for function SPANNER:TOKENIZE_NUMBER
+==
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  Length INT64,
+) PRIMARY KEY(AlbumId);
+ALTER TABLE Albums
+ADD COLUMN Length_Token TOKENLIST
+    AS (TOKENIZE_NUMBER(
+          Length,
+        "ALL")) STORED HIDDEN;
+--
+No matching signature for function SPANNER:TOKENIZE_NUMBER
+==
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  Length INT64,
+) PRIMARY KEY(AlbumId);
+ALTER TABLE Albums
+ADD COLUMN Length_Tokens TOKENLIST
+    AS (TOKENIZE_NUMBER(
+        Length,
+        comparison_type=>"ALL",
+        algorithm=>"auto",
+        min=>-1000,
+        max=>1000,
+        granularity=>1,
+        tree_base=>2)) STORED HIDDEN;
+--
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+   Length INT64,
+    Length_Tokens TOKENLIST
+    AS (TOKENIZE_NUMBER(
+        Length,
+        comparison_type=>"ALL",
+        algorithm=>"auto",
+        min=>-1000,
+        max=>1000,
+        granularity=>1,
+        tree_base=>2)) STORED HIDDEN,
+) PRIMARY KEY(AlbumId);
+==
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  Length INT64,
+) PRIMARY KEY(AlbumId);
+ALTER TABLE Albums
+ADD COLUMN Length_Tokens TOKENLIST
+    AS (TOKENIZE_NUMBER(
+        Length,
+        min=>-1000,
+        max=>1000,
+        comparison_type=>"ALL",
+        algorithm=>"auto",
+        granularity=>1,
+        tree_base=>2)) STORED HIDDEN;
+--
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+   Length INT64,
+    Length_Tokens TOKENLIST
+    AS (TOKENIZE_NUMBER(
+        Length,
+        min=>-1000,
+        max=>1000,
+        comparison_type=>"ALL",
+        algorithm=>"auto",
+        granularity=>1,
+        tree_base=>2)) STORED HIDDEN,
+) PRIMARY KEY(AlbumId);
+==
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  Name STRING(MAX),
+  Name_Exists BOOL AS (Name IS NOT NULL AND Name!=""),
+) PRIMARY KEY(AlbumId);
+ALTER TABLE Albums
+ADD COLUMN Name_Exists_Token TOKENLIST
+    AS (TOKENIZE_BOOL(Name_Exists, 15)) STORED HIDDEN;
+--
+No matching signature for function SPANNER:TOKENIZE_BOOL
+==
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  Summary STRING(MAX),
+) PRIMARY KEY(AlbumId);
+ALTER TABLE Albums
+ADD COLUMN Summary_Tokens TOKENLIST
+    AS (TOKENIZE_FULLTEXT(
+          Summary,
+          language_tag=>"en-us",
+          content_type=>"text/html")) STORED HIDDEN;
+--
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  Summary STRING(MAX),
+  Summary_Tokens TOKENLIST
+    AS (TOKENIZE_FULLTEXT(
+          Summary,
+          language_tag=>"en-us",
+          content_type=>"text/html")) STORED HIDDEN,
+) PRIMARY KEY(AlbumId);
+==
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  Summary STRING(MAX),
+) PRIMARY KEY(AlbumId);
+ALTER TABLE Albums
+ADD COLUMN Summary_Tokens TOKENLIST
+    AS (TOKENIZE_FULLTEXT(
+          Summary,
+          language_tag=>"en-us",
+          content_type=>"text/plain")) STORED HIDDEN;
+--
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  Summary STRING(MAX),
+  Summary_Tokens TOKENLIST
+    AS (TOKENIZE_FULLTEXT(
+          Summary,
+          language_tag=>"en-us",
+          content_type=>"text/plain")) STORED HIDDEN,
+) PRIMARY KEY(AlbumId);
+==
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  Summary STRING(MAX),
+) PRIMARY KEY(AlbumId);
+ALTER TABLE Albums ADD COLUMN Name_Token TOKENLIST
+    AS (TOKENIZE_FULLTEXT(Summary,
+                          "en-us",
+                          "text/html",
+                          true)) STORED HIDDEN;
+--
+No matching signature for function SPANNER:TOKENIZE_FULLTEXT
+==
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  UserId INT64 NOT NULL,
+  ReleaseTimestamp INT64 NOT NULL,
+  Name STRING(MAX),
+  Name_Tokens TOKENLIST AS (TOKEN(Name)) HIDDEN,
+  Tracks ARRAY<STRING(MAX)>,
+  Tracks_Tokens TOKENLIST AS (TOKENIZE_FULLTEXT(Tracks)) STORED HIDDEN,
+  Summary STRING(MAX),
+  Summary_Tokens TOKENLIST AS (TOKENIZE_FULLTEXT(Summary)) HIDDEN,
+  Length INT64,
+  Length_Tokens TOKENLIST AS (TOKENIZE_NUMBER(Length, min=>0, max=>0x40000000)) STORED HIDDEN,
+) PRIMARY KEY(AlbumId);
+CREATE SEARCH INDEX AlbumIndexDefaultUniformSharding
+ON Albums(Name_Tokens,
+          Tracks_Tokens,
+          Summary_Tokens,
+          Length_Tokens)
+STORING (Length)
+PARTITION BY UserId
+ORDER BY ReleaseTimestamp;
+--
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  UserId INT64 NOT NULL,
+  ReleaseTimestamp INT64 NOT NULL,
+  Name STRING(MAX),
+  Name_Tokens TOKENLIST AS (TOKEN(Name)) HIDDEN,
+  Tracks ARRAY<STRING(MAX)>,
+  Tracks_Tokens TOKENLIST AS (TOKENIZE_FULLTEXT(Tracks)) STORED HIDDEN,
+  Summary STRING(MAX),
+  Summary_Tokens TOKENLIST AS (TOKENIZE_FULLTEXT(Summary)) HIDDEN,
+  Length INT64, Length_Tokens TOKENLIST AS (TOKENIZE_NUMBER(Length, min=>0, max=>0x40000000)) STORED HIDDEN,
+) PRIMARY KEY(AlbumId);
+CREATE SEARCH INDEX AlbumIndexDefaultUniformSharding
+ON Albums(Name_Tokens,
+          Tracks_Tokens,
+          Summary_Tokens,
+          Length_Tokens)
+STORING (Length)
+PARTITION BY UserId
+ORDER BY ReleaseTimestamp;

@@ -112,6 +112,53 @@ absl::StatusOr<absl::Cord> PgTimestamptzExtract(absl::string_view field,
 absl::StatusOr<absl::Cord> PgDateExtract(absl::string_view field,
                                          int32_t source);
 
+// Converts interval to string.
+absl::StatusOr<std::string> PgIntervalOut(
+    const zetasql::IntervalValue& interval);
+
+// Casts a string to an interval.
+absl::StatusOr<zetasql::IntervalValue> PgIntervalIn(
+    absl::string_view interval_string);
+
+// Adds an interval to a timestamptz.
+// Returns an error if the resulting timestamptz is out of range.
+absl::StatusOr<absl::Time> PgTimestamptzAdd(
+    absl::Time input_time, const zetasql::IntervalValue& interval);
+
+// Subtracts an interval from a timestamptz.
+// Returns an error if the resulting timestamptz is out of range.
+absl::StatusOr<absl::Time> PgTimestamptzSubtract(
+    absl::Time input_time, const zetasql::IntervalValue& interval);
+
+// Creates an interval from the given values.
+absl::StatusOr<zetasql::IntervalValue> PgMakeInterval(
+    int64_t years, int64_t months, int64_t weeks, int64_t days, int64_t hours,
+    int64_t minutes, double seconds);
+
+// Multiplies an interval by a double.
+absl::StatusOr<zetasql::IntervalValue> PgIntervalMultiply(
+    const zetasql::IntervalValue& interval, double multiplier);
+
+// Divides an interval by a double.
+absl::StatusOr<zetasql::IntervalValue> PgIntervalDivide(
+    const zetasql::IntervalValue& interval, double divisor);
+
+// Extracts a field from an interval.
+absl::StatusOr<absl::Cord> PgIntervalExtract(
+    absl::string_view field, const zetasql::IntervalValue& interval);
+
+// Converts interval to string according to the given format.
+absl::StatusOr<std::unique_ptr<std::string>> PgIntervalToChar(
+    const zetasql::IntervalValue& interval, absl::string_view format);
+
+// Rounds interval precision to microsecond.
+// If the interval has no nano fractions, it is returned as is.
+// If the interval has nano fractions, the fractions are rounded to nearest
+// microsecond. If the nano fraction is exactly half way between two
+// microseconds, it rounds up to next microsecond.
+absl::StatusOr<zetasql::IntervalValue> PgRoundIntervalPrecision(
+    const zetasql::IntervalValue& interval);
+
 }  // namespace postgres_translator::function_evaluators
 
 #endif  // FUNCTION_EVALUATORS_DATETIME_EVALUATORS_H_

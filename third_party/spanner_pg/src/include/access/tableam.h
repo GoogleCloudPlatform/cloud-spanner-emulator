@@ -601,18 +601,13 @@ typedef struct TableAmRoutine
 									   const RelFileNode *newrnode);
 
 	/* See table_relation_copy_for_cluster() */
-	void		(*relation_copy_for_cluster) (Relation NewTable,
-											  Relation OldTable,
-											  Relation OldIndex,
-											  bool use_sort,
-											  TransactionId OldestXmin,
-											  TransactionId *xid_cutoff,
-											  MultiXactId *multi_cutoff,
-											  double *num_tuples,
-											  double *tups_vacuumed,
-											  double *tups_recently_dead);
+        void (*relation_copy_for_cluster)(
+            Relation OldTable, Relation NewTable, Relation OldIndex,
+            bool use_sort, TransactionId OldestXmin, TransactionId *xid_cutoff,
+            MultiXactId *multi_cutoff, double *num_tuples,
+            double *tups_vacuumed, double *tups_recently_dead);
 
-	/*
+        /*
 	 * React to VACUUM command on the relation. The VACUUM can be triggered by
 	 * a user or by autovacuum. The specific actions performed by the AM will
 	 * depend heavily on the individual AM.

@@ -61,6 +61,12 @@ absl::StatusOr<PgNamespaceData> GetPgNamespaceDataFromBootstrap(
 absl::StatusOr<PgProcData> GetPgProcDataFromBootstrap(
     const PgBootstrapCatalog* catalog, int64_t proc_oid);
 
+// Returns either a struct containing function data or an error based on the
+// given proc_name. If the proc name cannot be found in the catalog,
+// return NotFoundError.
+absl::StatusOr<std::vector<PgProcData>> GetPgProcDataFromBootstrap(
+    const PgBootstrapCatalog* catalog, absl::string_view proc_name);
+
 // Returns either a struct containing type data or an error based on the given
 // type_name. The type name should use the PG format e.g. "jsonb", "_jsonb".
 // If type_name is not an allowed type (see allowlist) or is not in the catalog,

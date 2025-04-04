@@ -51,9 +51,27 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:cord",
+        "@com_google_absl//absl/types:span",
         "@com_google_zetasql//zetasql/base:logging",
         "@com_google_zetasql//zetasql/base:ret_check",
         "@nlohmann_json//:json",
+    ],
+)
+
+cc_test(
+    name = "jsonb_value_test",
+    srcs = [
+        "jsonb_value_test.cc",
+    ],
+    tags = [
+        "spanner.datatypes",
+    ],
+    deps = [
+        ":jsonb_value",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "//third_party/spanner_pg/util:valid_memory_context_fixture",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 

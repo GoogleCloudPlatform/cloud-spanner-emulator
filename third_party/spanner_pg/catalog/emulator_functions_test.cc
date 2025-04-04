@@ -100,6 +100,12 @@ static zetasql::Value CreatePgNumericNullValue() {
   return zetasql::values::Null(gsql_pg_numeric);
 }
 
+static zetasql::Value CreateIntervalValue(absl::string_view interval_string) {
+  return zetasql::values::Interval(
+      *zetasql::IntervalValue::ParseFromString(interval_string,
+                                                 /*allow_nanos=*/true));
+}
+
 class EmulatorFunctionsTest : public ::testing::Test {
  protected:
   EmulatorFunctionsTest() {
@@ -248,6 +254,14 @@ const zetasql::Value kPGOidMaxValue =
 const zetasql::Value kPGOidMinValue =
     *CreatePgOidValue(std::numeric_limits<uint32_t>::min());
 
+const zetasql::Value kNullIntervalValue = zetasql::Value::NullInterval();
+const zetasql::Value kIntervalValue =
+    zetasql::values::Interval(*zetasql::IntervalValue::FromDays(1));
+const zetasql::Value kIntervalMaxValue =
+    zetasql::values::Interval(zetasql::IntervalValue::MaxValue());
+const zetasql::Value kIntervalMinValue =
+    zetasql::values::Interval(zetasql::IntervalValue::MinValue());
+
 const zetasql::Value kMaxTimestampValue =
     zetasql::values::Timestamp(zetasql::types::TimestampMaxBaseTime());
 const zetasql::Value kMinTimestampValue =
@@ -273,10 +287,26 @@ INSTANTIATE_TEST_SUITE_P(
                 absl::CivilSecond(2005, 4, 10, 3, 4, 25), timezone)),
         },
         PGScalarFunctionTestCase{
+            kPGTimestamptzAddFunctionName,
+            {zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
+             CreateIntervalValue("0-3 8 0:0:20")},
+            zetasql::values::Timestamp(absl::FromCivil(
+                absl::CivilSecond(2005, 4, 10, 3, 4, 25), timezone)),
+        },
+        PGScalarFunctionTestCase{
             kPGTimestamptzSubtractFunctionName,
             {zetasql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
              zetasql::values::String("2 years 1 hour")},
+            zetasql::values::Timestamp(absl::FromCivil(
+                absl::CivilSecond(2003, 1, 2, 2, 4, 5), timezone)),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractFunctionName,
+            {zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
+             CreateIntervalValue("2-0 0 1:0:0")},
             zetasql::values::Timestamp(absl::FromCivil(
                 absl::CivilSecond(2003, 1, 2, 2, 4, 5), timezone)),
         },
@@ -567,6 +597,15 @@ INSTANTIATE_TEST_SUITE_P(
             {zetasql::values::Null(zetasql::types::Int64ArrayType()),
              zetasql::values::Int64(1)},
             zetasql::values::NullInt64()},
+        PGScalarFunctionTestCase{
+            kPGArrayLengthFunctionName,
+            {zetasql::values::Array(
+                 zetasql::types::IntervalArrayType(),
+                 {kNullIntervalValue,
+                  zetasql::values::Interval(
+                      zetasql::IntervalValue::MaxValue())}),
+             zetasql::values::Int64(1)},
+            zetasql::values::Int64(2)},
         PGScalarFunctionTestCase{
             kPGNumericSubtractFunctionName,
             {CreatePgNumericNullValue(),
@@ -1345,6 +1384,15 @@ INSTANTIATE_TEST_SUITE_P(
             {zetasql::values::Null(zetasql::types::Int64ArrayType()),
              zetasql::values::Int64(1)},
             zetasql::values::NullInt64()},
+        PGScalarFunctionTestCase{
+            kPGArrayUpperFunctionName,
+            {zetasql::values::Array(
+                 zetasql::types::IntervalArrayType(),
+                 {kNullIntervalValue,
+                  zetasql::values::Interval(
+                      zetasql::IntervalValue::MaxValue())}),
+             zetasql::values::Int64(1)},
+            zetasql::values::Int64(2)},
 
         PGScalarFunctionTestCase{kPGTextregexneFunctionName,
                                  {zetasql::values::String("abcdefg"),
@@ -1817,8 +1865,432 @@ INSTANTIATE_TEST_SUITE_P(
                                  zetasql::values::Float(0.5f)},
         PGScalarFunctionTestCase{kPGFloatDivideFunctionName,
                                  {zetasql::values::Float(2.0), kFloatValue},
-                                 zetasql::values::Float(2.0f)}
-        ),
+                                 zetasql::values::Float(2.0f)},
+        // Interval Unary minus
+        PGScalarFunctionTestCase{kPGIntervalUnaryMinusFunctionName,
+                                 {kNullIntervalValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalUnaryMinusFunctionName,
+                                 {CreateIntervalValue("1-1 8 1:1:1.123456789")},
+                                 CreateIntervalValue("-1-1 -8 -1:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalUnaryMinusFunctionName,
+            {CreateIntervalValue("-1-1 -8 -1:1:1.123456789")},
+            CreateIntervalValue("1-1 8 1:1:1.123457")},
+
+        // interval + interval -> interval
+        PGScalarFunctionTestCase{kPGIntervalAddFunctionName,
+                                 {kNullIntervalValue, kNullIntervalValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalAddFunctionName,
+                                 {kNullIntervalValue, kIntervalValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalAddFunctionName,
+                                 {kIntervalValue, kNullIntervalValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalAddFunctionName,
+                                 {CreateIntervalValue("1-1 8 1:1:1.123456789"),
+                                  CreateIntervalValue("1-1 8 1:1:1.123456789")},
+                                 CreateIntervalValue("2-2 16 2:2:2.246914")},
+        PGScalarFunctionTestCase{kPGIntervalAddFunctionName,
+                                 {kIntervalMaxValue, kIntervalMaxValue},
+                                 kNullIntervalValue,
+                                 absl::StatusCode::kOutOfRange},
+        PGScalarFunctionTestCase{kPGIntervalAddFunctionName,
+                                 {kIntervalMinValue, kIntervalMinValue},
+                                 kNullIntervalValue,
+                                 absl::StatusCode::kOutOfRange},
+
+        // interval - interval -> interval
+        PGScalarFunctionTestCase{kPGIntervalSubtractFunctionName,
+                                 {kNullIntervalValue, kNullIntervalValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalSubtractFunctionName,
+                                 {kNullIntervalValue, kIntervalValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalSubtractFunctionName,
+                                 {kIntervalValue, kNullIntervalValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalSubtractFunctionName,
+                                 {CreateIntervalValue("1-1 8 1:1:1.123456789"),
+                                  CreateIntervalValue("1-1 8 1:1:1.123456789")},
+                                 CreateIntervalValue("0-0 0 0:0:0")},
+        PGScalarFunctionTestCase{
+            kPGIntervalSubtractFunctionName,
+            {CreateIntervalValue("-1-1 -8 -1:1:1.123456489"),
+             CreateIntervalValue("1-1 8 1:1:1.123456489")},
+            CreateIntervalValue("-2-2 -16 -2:2:2.246912")},
+        PGScalarFunctionTestCase{kPGIntervalSubtractFunctionName,
+                                 {CreateIntervalValue("1-1 8 1:1:1.123456"),
+                                  CreateIntervalValue("-1-1 -8 -1:1:1.123456")},
+                                 CreateIntervalValue("2-2 16 2:2:2.246912")},
+        PGScalarFunctionTestCase{kPGIntervalSubtractFunctionName,
+                                 {kIntervalMinValue, kIntervalMaxValue},
+                                 kNullIntervalValue,
+                                 absl::StatusCode::kOutOfRange},
+        PGScalarFunctionTestCase{kPGIntervalSubtractFunctionName,
+                                 {kIntervalMaxValue, kIntervalMinValue},
+                                 kNullIntervalValue,
+                                 absl::StatusCode::kOutOfRange},
+
+        // interval * double -> interval
+        PGScalarFunctionTestCase{kPGIntervalMultiplyFunctionName,
+                                 {kNullIntervalValue, kNullDoubleValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalMultiplyFunctionName,
+                                 {kNullIntervalValue, kDoubleValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalMultiplyFunctionName,
+                                 {kIntervalValue, kNullDoubleValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalMultiplyFunctionName,
+                                 {CreateIntervalValue("1-1 8 1:1:1.123456"),
+                                  zetasql::values::Double(1.0)},
+                                 CreateIntervalValue("1-1 8 1:1:1.123456")},
+        PGScalarFunctionTestCase{
+            kPGIntervalMultiplyFunctionName,
+            {CreateIntervalValue("1-1 8 1:1:1.123456"),
+             zetasql::values::Double(-2.5)},
+            CreateIntervalValue("-2-8 -35 -2:32:32.808640")},
+        PGScalarFunctionTestCase{kPGIntervalMultiplyFunctionName,
+                                 {CreateIntervalValue("1-1 8 1:1:1.123456"),
+                                  zetasql::values::Double(0)},
+                                 CreateIntervalValue("0-0 0 0:0:0")},
+        PGScalarFunctionTestCase{kPGIntervalMultiplyFunctionName,
+                                 {kIntervalMaxValue, kDoubleMaxValue},
+                                 kNullIntervalValue,
+                                 absl::StatusCode::kInvalidArgument},
+        PGScalarFunctionTestCase{kPGIntervalMultiplyFunctionName,
+                                 {kIntervalMinValue, kDoubleMaxValue},
+                                 kNullIntervalValue,
+                                 absl::StatusCode::kInvalidArgument},
+        PGScalarFunctionTestCase{kPGIntervalMultiplyFunctionName,
+                                 {kIntervalMaxValue, kDoubleMinValue},
+                                 CreateIntervalValue("0-0 0 0:0:0")},
+        PGScalarFunctionTestCase{kPGIntervalMultiplyFunctionName,
+                                 {kIntervalMinValue, kDoubleMinValue},
+                                 CreateIntervalValue("0-0 0 0:0:0")},
+        PGScalarFunctionTestCase{
+            kPGIntervalMultiplyFunctionName,
+            {kIntervalMinValue, zetasql::values::Double(
+                                    std::numeric_limits<double>::infinity())},
+            kNullIntervalValue,
+            absl::StatusCode::kInvalidArgument},
+        PGScalarFunctionTestCase{
+            kPGIntervalMultiplyFunctionName,
+            {kIntervalMaxValue, zetasql::values::Double(
+                                    std::numeric_limits<double>::infinity())},
+            kNullIntervalValue,
+            absl::StatusCode::kInvalidArgument},
+        PGScalarFunctionTestCase{
+            kPGIntervalMultiplyFunctionName,
+            {kIntervalMinValue, zetasql::values::Double(
+                                    -std::numeric_limits<double>::infinity())},
+            kNullIntervalValue,
+            absl::StatusCode::kInvalidArgument},
+        PGScalarFunctionTestCase{
+            kPGIntervalMultiplyFunctionName,
+            {kIntervalMaxValue, zetasql::values::Double(
+                                    -std::numeric_limits<double>::infinity())},
+            kNullIntervalValue,
+            absl::StatusCode::kInvalidArgument},
+
+        // interval / double -> interval
+        PGScalarFunctionTestCase{kPGIntervalDivideFunctionName,
+                                 {kNullIntervalValue, kNullDoubleValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalDivideFunctionName,
+                                 {kNullIntervalValue, kDoubleValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalDivideFunctionName,
+                                 {kIntervalValue, kNullDoubleValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalDivideFunctionName,
+                                 {CreateIntervalValue("1-1 8 1:1:1.123456"),
+                                  zetasql::values::Double(1.0)},
+                                 CreateIntervalValue("1-1 8 1:1:1.123456")},
+        PGScalarFunctionTestCase{
+            kPGIntervalDivideFunctionName,
+            {CreateIntervalValue("-0-5 -9 -5:12:24.449382"),
+             zetasql::values::Double(-2.5)},
+            CreateIntervalValue("0-2 3 16:28:57.779753")},
+        PGScalarFunctionTestCase{kPGIntervalDivideFunctionName,
+                                 {CreateIntervalValue("1-1 8 1:1:1.123456"),
+                                  zetasql::values::Double(0)},
+                                 kNullIntervalValue,
+                                 absl::StatusCode::kOutOfRange,
+                                 "division by zero"},
+        PGScalarFunctionTestCase{kPGIntervalDivideFunctionName,
+                                 {kIntervalMaxValue, kDoubleMaxValue},
+                                 CreateIntervalValue("0-0 0 0:0:0")},
+        PGScalarFunctionTestCase{kPGIntervalDivideFunctionName,
+                                 {kIntervalMinValue, kDoubleMaxValue},
+                                 CreateIntervalValue("0-0 0 0:0:0")},
+        PGScalarFunctionTestCase{kPGIntervalDivideFunctionName,
+                                 {kIntervalMaxValue, kDoubleMinValue},
+                                 kNullIntervalValue,
+                                 absl::StatusCode::kInvalidArgument},
+        PGScalarFunctionTestCase{kPGIntervalDivideFunctionName,
+                                 {kIntervalMinValue, kDoubleMinValue},
+                                 kNullIntervalValue,
+                                 absl::StatusCode::kInvalidArgument},
+        PGScalarFunctionTestCase{
+            kPGIntervalDivideFunctionName,
+            {kIntervalMinValue, zetasql::values::Double(
+                                    std::numeric_limits<double>::infinity())},
+            CreateIntervalValue("0-0 0 0:0:0")},
+
+        // make_interval
+        PGScalarFunctionTestCase{
+            kPGIntervalMakeIntervalFunctionName,
+            {zetasql::values::Int64(0), zetasql::values::Int64(0),
+             zetasql::values::Int64(0), zetasql::values::Int64(0),
+             zetasql::values::Int64(0), zetasql::values::Int64(0),
+             kNullDoubleValue},
+            kNullIntervalValue},
+        PGScalarFunctionTestCase{
+            kPGIntervalMakeIntervalFunctionName,
+            {zetasql::values::Int64(0), zetasql::values::Int64(0),
+             zetasql::values::Int64(0), zetasql::values::Int64(0),
+             zetasql::values::Int64(0), zetasql::values::Int64(0),
+             zetasql::values::Double(0.0)},
+            CreateIntervalValue("0-0 0 0:0:0")},
+        PGScalarFunctionTestCase{
+            kPGIntervalMakeIntervalFunctionName,
+            {zetasql::values::Int64(1), zetasql::values::Int64(2),
+             zetasql::values::Int64(3), zetasql::values::Int64(4),
+             zetasql::values::Int64(5), zetasql::values::Int64(6),
+             zetasql::values::Double(10000.12345643)},
+            CreateIntervalValue("1-2 25 7:52:40.123456")},
+        PGScalarFunctionTestCase{
+            kPGIntervalMakeIntervalFunctionName,
+            {zetasql::values::Int64(1), zetasql::values::Int64(-2),
+             zetasql::values::Int64(3), zetasql::values::Int64(-4),
+             zetasql::values::Int64(5), zetasql::values::Int64(-6),
+             zetasql::values::Double(10000.123456789)},
+            CreateIntervalValue("0-10 17 7:40:40.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalMakeIntervalFunctionName,
+            {zetasql::values::Int64(1), zetasql::values::Int64(-2),
+             zetasql::values::Int64(3), zetasql::values::Int64(-4),
+             zetasql::values::Int64(5), zetasql::values::Int64(-6),
+             zetasql::values::Double(
+                 std::numeric_limits<double>::infinity())},
+            kNullIntervalValue,
+            absl::StatusCode::kInvalidArgument},
+        PGScalarFunctionTestCase{
+            kPGIntervalMakeIntervalFunctionName,
+            {zetasql::values::Int64(1), zetasql::values::Int64(-2),
+             zetasql::values::Int64(3), zetasql::values::Int64(-4),
+             zetasql::values::Int64(5), zetasql::values::Int64(-6),
+             zetasql::values::Double(
+                 std::numeric_limits<double>::quiet_NaN())},
+            kNullIntervalValue,
+            absl::StatusCode::kInvalidArgument},
+
+        // justify_interval
+        PGScalarFunctionTestCase{kPGIntervalJustifyIntervalFunctionName,
+                                 {kNullIntervalValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyIntervalFunctionName,
+            {CreateIntervalValue("1-1 8 26:1:1.123456589")},
+            CreateIntervalValue("1-1 9 2:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyIntervalFunctionName,
+            {CreateIntervalValue("1-1 32 2:1:1.123456589")},
+            CreateIntervalValue("1-2 2 2:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyIntervalFunctionName,
+            {CreateIntervalValue("1-1 29 50:1:1.123456589")},
+            CreateIntervalValue("1-2 1 2:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyIntervalFunctionName,
+            {CreateIntervalValue("-1-1 -8 -26:1:1.123456589")},
+            CreateIntervalValue("-1-1 -9 -2:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyIntervalFunctionName,
+            {CreateIntervalValue("-1-1 -32 -2:1:1.123456589")},
+            CreateIntervalValue("-1-2 -2 -2:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyIntervalFunctionName,
+            {CreateIntervalValue("-1-1 -29 -50:1:1.123456589")},
+            CreateIntervalValue("-1-2 -1 -2:1:1.123457")},
+
+        // justify_days
+        PGScalarFunctionTestCase{kPGIntervalJustifyDaysFunctionName,
+                                 {kNullIntervalValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalJustifyDaysFunctionName,
+                                 {CreateIntervalValue("1-1 8 1:1:1.123456789")},
+                                 CreateIntervalValue("1-1 8 1:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyDaysFunctionName,
+            {CreateIntervalValue("1-1 8 26:1:1.123456589")},
+            CreateIntervalValue("1-1 8 26:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyDaysFunctionName,
+            {CreateIntervalValue("1-1 32 2:1:1.123456589")},
+            CreateIntervalValue("1-2 2 2:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyDaysFunctionName,
+            {CreateIntervalValue("1-1 30 50:1:1.123456589")},
+            CreateIntervalValue("1-2 0 50:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyDaysFunctionName,
+            {CreateIntervalValue("-1-1 -8 -26:1:1.123456589")},
+            CreateIntervalValue("-1-1 -8 -26:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyDaysFunctionName,
+            {CreateIntervalValue("-1-1 -32 -2:1:1.123456589")},
+            CreateIntervalValue("-1-2 -2 -2:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyDaysFunctionName,
+            {CreateIntervalValue("-1-1 -30 -50:1:1.123456589")},
+            CreateIntervalValue("-1-2 0 -50:1:1.123457")},
+
+        // justify_hours
+        PGScalarFunctionTestCase{kPGIntervalJustifyHoursFunctionName,
+                                 {kNullIntervalValue},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGIntervalJustifyHoursFunctionName,
+                                 {CreateIntervalValue("1-1 8 1:1:1.123456789")},
+                                 CreateIntervalValue("1-1 8 1:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyHoursFunctionName,
+            {CreateIntervalValue("1-1 8 26:1:1.123456589")},
+            CreateIntervalValue("1-1 9 2:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyHoursFunctionName,
+            {CreateIntervalValue("1-1 32 2:1:1.123456589")},
+            CreateIntervalValue("1-1 32 2:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyHoursFunctionName,
+            {CreateIntervalValue("1-1 29 50:1:1.123456589")},
+            CreateIntervalValue("1-1 31 2:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyHoursFunctionName,
+            {CreateIntervalValue("-1-1 -8 -26:1:1.123456589")},
+            CreateIntervalValue("-1-1 -9 -2:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyHoursFunctionName,
+            {CreateIntervalValue("-1-1 -32 -2:1:1.123456589")},
+            CreateIntervalValue("-1-2 -2 -2:1:1.123457")},
+        PGScalarFunctionTestCase{
+            kPGIntervalJustifyHoursFunctionName,
+            {CreateIntervalValue("-1-1 -29 -50:1:1.123456589")},
+            CreateIntervalValue("-1-1 -31 -2:1:1.123457")},
+
+        // cast to string
+        PGScalarFunctionTestCase{kPGCastToStringFunctionName,
+                                 {kNullIntervalValue},
+                                 zetasql::values::NullString()},
+        PGScalarFunctionTestCase{
+            kPGCastToStringFunctionName,
+            {CreateIntervalValue("1-1 8 1:1:1.123456")},
+            zetasql::Value::String("1 year 1 mon 8 days 01:01:01.123456")},
+        PGScalarFunctionTestCase{
+            kPGCastToStringFunctionName,
+            {CreateIntervalValue("0-1 -8 1:7:1.123456897")},
+            zetasql::Value::String("1 mon -8 days +01:07:01.123457")},
+        PGScalarFunctionTestCase{
+            kPGCastToStringFunctionName,
+            {CreateIntervalValue("-1-1 68 1:56:30.123456")},
+            zetasql::Value::String(
+                "-1 years -1 mons +68 days 01:56:30.123456")},
+
+        // cast to interval
+        PGScalarFunctionTestCase{kPGCastToIntervalFunctionName,
+                                 {zetasql::values::NullString()},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{
+            kPGCastToIntervalFunctionName,
+            {zetasql::values::String("1 year 1 mon 8 days 01:01:01.123456")},
+            CreateIntervalValue("1-1 8 1:1:1.123456")},
+        PGScalarFunctionTestCase{
+            kPGCastToIntervalFunctionName,
+            {zetasql::values::String("P1Y1M8DT1:1:1.123456")},
+            CreateIntervalValue("1-1 8 1:1:1.123456")},
+        PGScalarFunctionTestCase{
+            kPGCastToIntervalFunctionName,
+            {zetasql::values::String("P1Y1M8DT1H1M1.123456S")},
+            CreateIntervalValue("1-1 8 1:1:1.123456")},
+        PGScalarFunctionTestCase{
+            kPGCastToIntervalFunctionName,
+            {zetasql::values::String("abc")},
+            kNullIntervalValue,
+            absl::StatusCode::kInvalidArgument,
+            "invalid input syntax for type interval: \"abc\""},
+
+        // extract(string, interval) -> numeric
+        PGScalarFunctionTestCase{
+            kPGIntervalExtractFunctionName,
+            {zetasql::values::String("seconds"),
+             CreateIntervalValue("1-1 8 1:1:1.123456")},
+            *CreatePgNumericValueWithMemoryContext("1.123456"),
+        },
+        PGScalarFunctionTestCase{
+            kPGIntervalExtractFunctionName,
+            {zetasql::values::String("years"),
+             CreateIntervalValue("1-1 8 1:1:1.123456")},
+            *CreatePgNumericValueWithMemoryContext("1"),
+        },
+        PGScalarFunctionTestCase{
+            kPGIntervalExtractFunctionName,
+            {zetasql::values::String("abc"),
+             CreateIntervalValue("1-1 8 1:1:1.123456")},
+            kNullIntervalValue,
+            absl::StatusCode::kInvalidArgument,
+            "unit \"abc\" not recognized for type interval"},
+
+        // timestamptz - timestamptz -> interval
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractTimestamptzFunctionName,
+            {zetasql::values::NullTimestamp(),
+             zetasql::Value::Timestamp(absl::FromUnixNanos(223456789))},
+            kNullIntervalValue},
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractTimestamptzFunctionName,
+            {zetasql::Value::Timestamp(absl::FromUnixNanos(223456789)),
+             zetasql::values::NullTimestamp()},
+            kNullIntervalValue},
+        PGScalarFunctionTestCase{kPGTimestamptzSubtractTimestamptzFunctionName,
+                                 {zetasql::values::NullTimestamp(),
+                                  zetasql::values::NullTimestamp()},
+                                 kNullIntervalValue},
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractTimestamptzFunctionName,
+            {zetasql::Value::Timestamp(absl::FromUnixNanos(123456789)),
+             zetasql::Value::Timestamp(absl::FromUnixNanos(223456789))},
+            CreateIntervalValue("0-0 0 -0:0:0.100")},
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractTimestamptzFunctionName,
+            {zetasql::Value::Timestamp(absl::FromUnixNanos(123456789)),
+             zetasql::Value::Timestamp(absl::FromUnixNanos(133457789))},
+            CreateIntervalValue("0-0 0 -0:0:0.010001")},
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractTimestamptzFunctionName,
+            {zetasql::Value::Timestamp(absl::FromUnixNanos(123456789)),
+             zetasql::Value::Timestamp(absl::FromUnixNanos(123456788))},
+            CreateIntervalValue("0-0 0 0:0:0.0")},
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractTimestamptzFunctionName,
+            {zetasql::Value::Timestamp(absl::FromUnixNanos(123456789)),
+             zetasql::Value::Timestamp(absl::FromUnixNanos(123456679))},
+            CreateIntervalValue("0-0 0 -0:0:0.0")},
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractTimestamptzFunctionName,
+            {zetasql::Value::Timestamp(absl::FromUnixNanos(223456789)),
+             zetasql::Value::Timestamp(absl::FromUnixNanos(123456079))},
+            CreateIntervalValue("0-0 0 0:0:0.1")},
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractTimestamptzFunctionName,
+            {kMaxTimestampValue, kMinTimestampValue},
+            CreateIntervalValue("0-0 0 87649415:59:59.999999")},
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractTimestamptzFunctionName,
+            {kMinTimestampValue, kMaxTimestampValue},
+            CreateIntervalValue("0-0 0 -87649415:59:59.999999")}),
     [](const testing::TestParamInfo<PGScalarFunctionTestCase>& info) {
       std::string name = absl::StrCat(
           "idx_", info.index, "_", info.param.function_name, "_",
@@ -1877,6 +2349,95 @@ TEST_F(EmulatorFunctionsTest, ArrayUpperWithPGJsonb) {
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {pg_jsonb_array, zetasql::values::Int64(1)})),
               IsOkAndHolds(zetasql::values::Int64(3)));
+}
+
+// Tested separately from the parameterized tests as we need a memory context
+// before creating a PG.JSONB value.
+TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto pg_jsonb_array,
+      zetasql::Value::MakeArray(
+          spangres::datatypes::GetPgJsonbArrayType(),
+          {spangres::datatypes::CreatePgJsonbValue("{\"a\": \"b\"}").value()}));
+
+  const zetasql::Function* jsonb_delete_function =
+      functions_[kPGJsonbDeleteFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+                       (jsonb_delete_function->GetFunctionEvaluatorFactory())(
+                           jsonb_delete_function->signatures().front()));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_array, zetasql::values::String("a")})),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("jsonb_delete is not implemented")));
+
+  const zetasql::Function* jsonb_delete_path_function =
+      functions_[kPGJsonbDeletePathFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      evaluator_, (jsonb_delete_path_function->GetFunctionEvaluatorFactory())(
+                      jsonb_delete_path_function->signatures().front()));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_array, zetasql::values::StringArray({"0"})})),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("jsonb_delete_path is not implemented")));
+
+  const zetasql::Function* jsonb_set_function =
+      functions_[kPGJsonbSetFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+                       (jsonb_set_function->GetFunctionEvaluatorFactory())(
+                           jsonb_set_function->signatures().front()));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_array, zetasql::values::StringArray({"0"}),
+                   pg_jsonb_array, zetasql::values::Bool(true)})),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("jsonb_set is not implemented")));
+
+  const zetasql::Function* jsonb_set_lax_function =
+      functions_[kPGJsonbSetLaxFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+                       (jsonb_set_lax_function->GetFunctionEvaluatorFactory())(
+                           jsonb_set_lax_function->signatures().front()));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_array, zetasql::values::StringArray({"0"}),
+                   pg_jsonb_array, zetasql::values::Bool(true),
+                   zetasql::values::String("use_json_null")})),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("jsonb_set_lax is not implemented")));
+
+  const zetasql::Function* jsonb_concat_function =
+      functions_[kPGJsonbConcatFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+                       (jsonb_concat_function->GetFunctionEvaluatorFactory())(
+                           jsonb_concat_function->signatures().front()));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({pg_jsonb_array, pg_jsonb_array})),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("jsonb_concat is not implemented")));
+
+  const zetasql::Function* jsonb_insert_function =
+      functions_[kPGJsonbInsertFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+                       (jsonb_insert_function->GetFunctionEvaluatorFactory())(
+                           jsonb_insert_function->signatures().front()));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_array, zetasql::values::StringArray({"0"}),
+                   pg_jsonb_array, zetasql::values::Bool(true)})),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("jsonb_insert is not implemented")));
+
+  const zetasql::Function* jsonb_strip_nulls_function =
+      functions_[kPGJsonbStripNullsFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      evaluator_, (jsonb_strip_nulls_function->GetFunctionEvaluatorFactory())(
+                      jsonb_strip_nulls_function->signatures().front()));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({pg_jsonb_array})),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("jsonb_strip_nulls is not implemented")));
 }
 
 // Tested separately from the parameterized tests as we need a memory context
@@ -3128,6 +3689,10 @@ TEST_F(EvalToJsonbTest, NullValueInput) {
   EXPECT_THAT(
       evaluator_,
       NullToJsonb(zetasql::values::Null(zetasql::types::BytesArrayType())));
+
+  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::Value::NullInterval()));
+  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::Null(
+                              zetasql::types::IntervalArrayType())));
 }
 
 MATCHER_P2(TimestampToJsonb, input, expected_string, "") {
@@ -3373,6 +3938,30 @@ TEST_F(EvalToJsonbTest, OidInput) {
   EXPECT_THAT(evaluator_, OidToJsonb(std::numeric_limits<uint32_t>::max(),
                                      "4294967295"));
   EXPECT_THAT(evaluator_, OidToJsonb(0, "0"));
+}
+
+MATCHER_P2(IntervalToJsonb, input, expected_string, "") {
+  EXPECT_THAT(
+      arg(absl::MakeConstSpan({CreateIntervalValue(input)})),
+      zetasql_base::testing::IsOkAndHolds(
+          CreatePgJsonbValueWithMemoryContext(expected_string).value()));
+  return true;
+}
+
+TEST_F(EvalToJsonbTest, IntervalInput) {
+  EXPECT_THAT(evaluator_, IntervalToJsonb("0-0 0 0:0:0", R"("00:00:00")"));
+  EXPECT_THAT(evaluator_,
+              IntervalToJsonb("1-2 4 5:6:7.123456789",
+                              "\"1 year 2 mons 4 days 05:06:07.123457\""));
+  EXPECT_THAT(evaluator_,
+              IntervalToJsonb("1-2 -4 5:6:7.123456789",
+                              "\"1 year 2 mons -4 days +05:06:07.123457\""));
+  EXPECT_THAT(evaluator_, IntervalToJsonb("12-0 0 0:0:0.0", "\"12 years\""));
+  EXPECT_THAT(evaluator_, IntervalToJsonb("0-5 -9 -1:2:3.001",
+                                          "\"5 mons -9 days -01:02:03.001\""));
+  EXPECT_THAT(evaluator_,
+              IntervalToJsonb("-1-5 8 -12:78:24",
+                              "\"-1 years -5 mons +8 days -13:18:24\""));
 }
 
 MATCHER_P2(ArrayToJsonb, array_input, expected_string, "") {
@@ -3964,6 +4553,7 @@ TEST_P(EvalLeastGreatestTest, TestEvalLeastGreatest) {
       zetasql::types::BoolType(), zetasql::types::BytesType(),
       zetasql::types::StringType(), zetasql::types::DateType(),
       zetasql::types::FloatType(), zetasql::types::TimestampType(),
+      zetasql::types::IntervalType(),
   };
 
   absl::flat_hash_map<std::string, zetasql::FunctionEvaluator>
@@ -4227,6 +4817,36 @@ INSTANTIATE_TEST_SUITE_P(
           zetasql::types::TimestampType()->DebugString(),
           0,
           1,
+          absl::StatusCode::kOk},
+         {"IntervalValues",
+          {kIntervalMaxValue, kIntervalMinValue,
+           zetasql::values::Interval(zetasql::IntervalValue())},
+          zetasql::types::IntervalType()->DebugString(),
+          1,
+          0,
+          absl::StatusCode::kOk},
+         {"IntervalValuesWithDuplicates",
+          {kIntervalMaxValue, kIntervalValue, kIntervalMinValue, kIntervalValue,
+           zetasql::values::Interval(zetasql::IntervalValue())},
+          zetasql::types::IntervalType()->DebugString(),
+          2,
+          0,
+          absl::StatusCode::kOk},
+         {"IntervalValuesWithNull",
+          {kIntervalMaxValue, kIntervalValue, kIntervalMinValue,
+           kNullIntervalValue,
+           zetasql::values::Interval(zetasql::IntervalValue())},
+          zetasql::types::IntervalType()->DebugString(),
+          2,
+          0,
+          absl::StatusCode::kOk},
+         {"IntervalValuesOnlyNull",
+          {
+              kNullIntervalValue,
+          },
+          zetasql::types::IntervalType()->DebugString(),
+          0,
+          0,
           absl::StatusCode::kOk},
          {"InvalidArgsCount",
           {},

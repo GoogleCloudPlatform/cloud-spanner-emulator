@@ -49,8 +49,9 @@ namespace postgres_translator {
 
 zetasql::FunctionEvaluator PGFunctionEvaluator(
     const zetasql::FunctionEvaluator& function,
-    const std::function<void()>& on_compute_end) {
-  return [function, on_compute_end](absl::Span<const zetasql::Value> args)
+    const std::function<void()>& on_compute_end, const std::string& time_zone) {
+  return [function, on_compute_end,
+          time_zone](absl::Span<const zetasql::Value> args)
              -> absl::StatusOr<zetasql::Value> {
     // Binds PG memory context arena to thread local
     ZETASQL_VLOG(1) << "Creating PG arena and Evaluating PG function";
@@ -58,12 +59,12 @@ zetasql::FunctionEvaluator PGFunctionEvaluator(
         status_or = postgres_translator::interfaces::CreatePGArena(nullptr);
     if (!status_or.ok()) {
       ABSL_LOG(WARNING) << "Tried to create PG arena but failed: "
-                 << status_or.status();
+                   << status_or.status();
     }
 
-    // Initializes the thread local timezone with the default timezone
+    // Initializes the thread local timezone
     ZETASQL_RETURN_IF_ERROR(
-        postgres_translator::interfaces::InitPGTimezone(kDefaultTimeZone));
+        postgres_translator::interfaces::InitPGTimezone(time_zone.c_str()));
 
     absl::StatusOr<zetasql::Value> result = function(args);
 

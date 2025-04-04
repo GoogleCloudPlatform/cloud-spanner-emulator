@@ -103,6 +103,8 @@ absl::Status CouldNotParseStringAsJson(absl::string_view str);
 absl::Status CouldNotParseStringAsPgJsonb(absl::string_view str);
 absl::Status CouldNotParseStringAsTimestamp(absl::string_view str,
                                             absl::string_view error);
+absl::Status CouldNotParseStringAsInterval(absl::string_view str,
+                                           absl::string_view error);
 absl::Status TimestampMustBeInUTCTimeZone(absl::string_view str);
 absl::Status CouldNotParseStringAsDate(absl::string_view str);
 absl::Status InvalidDate(absl::string_view str);
@@ -843,6 +845,20 @@ absl::Status VectorIndexArrayKeyVectorLengthTooLarge(
     int64_t actual_len_num, int64_t max_len_num);
 absl::Status VectorIndexKeyNotNullFiltered(absl::string_view column_string,
                                            absl::string_view index_string);
+// alter vector index errors
+absl::Status AlterVectorIndexStoredColumnUnsupported();
+absl::Status AlterVectorIndexSetOptionsUnsupported();
+absl::Status VectorIndexStoredColumnNotFound(absl::string_view index_name,
+                                             absl::string_view column_name);
+absl::Status VectorIndexStoredColumnAlreadyExists(
+    absl::string_view index_name, absl::string_view column_name);
+absl::Status VectorIndexStoredColumnIsKey(absl::string_view index_name,
+                                          absl::string_view column_name,
+                                          absl::string_view table_name);
+absl::Status VectorIndexStoredColumnAlreadyPrimaryKey(
+    absl::string_view index_name, absl::string_view column_name);
+absl::Status VectorIndexNotStoredColumn(absl::string_view index_name,
+                                        absl::string_view column_name);
 
 absl::Status FpAlgorithmOnlySupportedOnFloats();
 absl::Status NumericIndexingUnsupportedComparisonType(
@@ -998,6 +1014,11 @@ absl::Status DefaultSequenceKindAlreadySet();
 absl::Status UnsupportedDefaultSequenceKindOptionValues();
 absl::Status UnspecifiedIdentityColumnSequenceKind(
     absl::string_view column_name);
+
+absl::Status ChangeDefaultTimeZoneOnNonEmptyDatabase();
+absl::Status UnsupportedDefaultTimeZoneOptionValues();
+absl::Status InvalidDefaultTimeZoneOption(absl::string_view time_zone);
+
 absl::Status InvalidColumnIdentifierFormat(
     absl::string_view column_path_string);
 absl::Status TableNotFoundInIdentityFunction(absl::string_view table_string);
@@ -1020,6 +1041,31 @@ absl::Status ForUpdateUnsupportedInReadOnlyTransactions();
 absl::Status ForUpdateUnsupportedInSearchQueries();
 absl::Status ForUpdateCannotCombineWithLockScannedRanges();
 
+// Repeatable read related errors
+absl::Status RepeatableReadOnlySupportedInReadWriteTransactions();
+absl::Status ReadLockModeInRepeatableReadMustBeUnspecified();
+
+absl::Status ApproxDistanceFunctionOptionsRequired(
+    absl::string_view function_string);
+absl::Status ApproxDistanceFunctionOptionMustBeLiteral(
+    absl::string_view function_string);
+absl::Status ApproxDistanceFunctionInvalidJsonOption(
+    absl::string_view function_string);
+absl::Status ApproxDistanceInvalidShape(absl::string_view function_string);
+absl::Status ApproxDistanceLengthMismatch(absl::string_view function_string,
+                                          int input_length, int index_length);
+absl::Status VectorIndexesUnusable(absl::string_view distance_type_name,
+                                   absl::string_view ann_func_column_name,
+                                   absl::string_view ann_func_name);
+absl::Status VectorIndexesUnusableNotNullFiltered(
+    absl::string_view index_string, absl::string_view column_string);
+absl::Status VectorIndexesUnusableForceIndexWrongDistanceType(
+    absl::string_view index_string, absl::string_view distance_type_name,
+    absl::string_view ann_func_name, absl::string_view column_string);
+absl::Status VectorIndexesUnusableForceIndexWrongColumn(
+    absl::string_view index_string, absl::string_view ann_func_name,
+    absl::string_view column_string);
+absl::Status NotVectorIndexes(absl::string_view index_string);
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

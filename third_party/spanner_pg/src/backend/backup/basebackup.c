@@ -1185,6 +1185,10 @@ sendDir(bbsink *sink, const char *path, int basepathlen, bool sizeonly,
 					strlen(PG_TEMP_FILE_PREFIX)) == 0)
 			continue;
 
+		/* Skip macOS system files */
+		if (strcmp(de->d_name, ".DS_Store") == 0)
+			continue;
+
 		/*
 		 * Check if the postmaster has signaled us to exit, and abort with an
 		 * error in that case. The error handler further up will call
@@ -1321,13 +1325,7 @@ sendDir(bbsink *sink, const char *path, int basepathlen, bool sizeonly,
 		}
 
 		/* Allow symbolic links in pg_tblspc only */
-		if (strcmp(path, "./pg_tblspc") == 0 &&
-#ifndef WIN32
-			S_ISLNK(statbuf.st_mode)
-#else
-			pgwin32_is_junction(pathbuf)
-#endif
-			)
+		if (strcmp(path, "./pg_tblspc") == 0 && S_ISLNK(statbuf.st_mode))
 		{
 #if defined(HAVE_READLINK) || defined(WIN32)
 			char		linkpath[MAXPGPATH];
@@ -1811,11 +1809,7 @@ static void
 convert_link_to_directory(const char *pathbuf, struct stat *statbuf)
 {
 	/* If symlink, write it as a directory anyway */
-#ifndef WIN32
 	if (S_ISLNK(statbuf->st_mode))
-#else
-	if (pgwin32_is_junction(pathbuf))
-#endif
 		statbuf->st_mode = S_IFDIR | pg_dir_create_mode;
 }
 

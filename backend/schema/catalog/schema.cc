@@ -676,8 +676,12 @@ ddl::DDLStatementList Schema::Dump() const {
 
 Schema::Schema(const SchemaGraph* graph,
                std::shared_ptr<const ProtoBundle> proto_bundle,
-               const database_api::DatabaseDialect& dialect)
-    : graph_(graph), proto_bundle_(proto_bundle), dialect_(dialect) {
+               const database_api::DatabaseDialect& dialect,
+               std::string_view database_id)
+    : graph_(graph),
+      proto_bundle_(proto_bundle),
+      dialect_(dialect),
+      database_id_(database_id) {
   views_.clear();
   views_map_.clear();
   tables_.clear();

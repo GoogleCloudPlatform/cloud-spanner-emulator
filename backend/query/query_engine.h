@@ -131,6 +131,8 @@ class QueryEngine {
   }
 
  private:
+  static std::string GetTimeZone(const Schema* schema);
+
   zetasql::TypeFactory* type_factory_;
   FunctionCatalog function_catalog_;
 };

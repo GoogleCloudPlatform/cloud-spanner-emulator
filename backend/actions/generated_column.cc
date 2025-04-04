@@ -105,6 +105,7 @@ bool IsAnyDependentColumnPresent(
 
 absl::StatusOr<std::unique_ptr<zetasql::PreparedExpression>>
 PrepareExpression(const Column* generated_column,
+                  const zetasql::AnalyzerOptions& analyzer_options,
                   zetasql::Catalog* function_catalog) {
   constexpr char kExpression[] = "CAST (($0) AS $1)";
   std::string sql = absl::Substitute(
@@ -112,7 +113,7 @@ PrepareExpression(const Column* generated_column,
       generated_column->GetType()->TypeName(zetasql::PRODUCT_EXTERNAL,
                                             /*use_external_float32=*/true));
   auto expr = std::make_unique<zetasql::PreparedExpression>(sql);
-  zetasql::AnalyzerOptions options = MakeGoogleSqlAnalyzerOptions();
+  zetasql::AnalyzerOptions options = analyzer_options;
   for (const Column* dep : generated_column->dependent_columns()) {
     ZETASQL_RETURN_IF_ERROR(options.AddExpressionColumn(dep->Name(), dep->GetType()));
   }
@@ -124,13 +125,15 @@ PrepareExpression(const Column* generated_column,
 }  // namespace
 
 GeneratedColumnEffector::GeneratedColumnEffector(
-    const Table* table, zetasql::Catalog* function_catalog, bool for_keys)
+    const Table* table, const zetasql::AnalyzerOptions& analyzer_options,
+    zetasql::Catalog* function_catalog, bool for_keys)
     : table_(table), for_keys_(for_keys) {
-  absl::Status s = Initialize(function_catalog);
+  absl::Status s = Initialize(analyzer_options, function_catalog);
   ABSL_DCHECK(s.ok()) << "Failed to initialize GeneratedColumnEffector: " << s;
 }
 
 absl::Status GeneratedColumnEffector::Initialize(
+    const zetasql::AnalyzerOptions& analyzer_options,
     zetasql::Catalog* function_catalog) {
   ZETASQL_RETURN_IF_ERROR(
       GetGeneratedColumnsInTopologicalOrder(table_, &generated_columns_));
@@ -138,7 +141,8 @@ absl::Status GeneratedColumnEffector::Initialize(
   expressions_.reserve(generated_columns_.size());
   for (const Column* generated_column : generated_columns_) {
     ZETASQL_ASSIGN_OR_RETURN(auto expr,
-                     PrepareExpression(generated_column, function_catalog));
+                     PrepareExpression(generated_column, analyzer_options,
+                                       function_catalog));
     expressions_[generated_column] = std::move(expr);
     for (const Column* dep : generated_column->dependent_columns()) {
       if (unique_dependent_column.insert(dep->id()).second) {

@@ -187,8 +187,7 @@ static char *pg_get_partkeydef_worker(Oid relid, int prettyFlags,
 									  bool attrsOnly, bool missing_ok);
 static char *pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 										 int prettyFlags, bool missing_ok);
-static text *pg_get_expr_worker(text *expr, Oid relid, const char *relname,
-								int prettyFlags);
+static text *pg_get_expr_worker(text *expr, Oid relid, int prettyFlags);
 static int	print_function_arguments(StringInfo buf, HeapTuple proctup,
 									 bool print_table_args, bool print_defaults);
 static void print_function_rettype(StringInfo buf, HeapTuple proctup);
@@ -2479,6 +2478,11 @@ decompile_column_index_array(Datum column_index_array, Oid relId,
  * partial indexes, column default expressions, etc.  We also support
  * Var-free expressions, for which the OID can be InvalidOid.
  *
+ * If the OID is nonzero but not actually valid, don't throw an error,
+ * just return NULL.  This is a bit questionable, but it's what we've
+ * done historically, and it can help avoid unwanted failures when
+ * examining catalog entries for just-deleted relations.
+ *
  * We expect this function to work, or throw a reasonably clean error,
  * for any node tree that can appear in a catalog pg_node_tree column.
  * Query trees, such as those appearing in pg_rewrite.ev_action, are
@@ -2491,29 +2495,16 @@ pg_get_expr(PG_FUNCTION_ARGS)
 {
 	text	   *expr = PG_GETARG_TEXT_PP(0);
 	Oid			relid = PG_GETARG_OID(1);
+	text	   *result;
 	int			prettyFlags;
-	char	   *relname;
 
 	prettyFlags = PRETTYFLAG_INDENT;
 
-	if (OidIsValid(relid))
-	{
-		/* Get the name for the relation */
-		relname = get_rel_name(relid);
-
-		/*
-		 * If the OID isn't actually valid, don't throw an error, just return
-		 * NULL.  This is a bit questionable, but it's what we've done
-		 * historically, and it can help avoid unwanted failures when
-		 * examining catalog entries for just-deleted relations.
-		 */
-		if (relname == NULL)
-			PG_RETURN_NULL();
-	}
+	result = pg_get_expr_worker(expr, relid, prettyFlags);
+	if (result)
+		PG_RETURN_TEXT_P(result);
 	else
-		relname = NULL;
-
-	PG_RETURN_TEXT_P(pg_get_expr_worker(expr, relid, relname, prettyFlags));
+		PG_RETURN_NULL();
 }
 
 Datum
@@ -2522,33 +2513,27 @@ pg_get_expr_ext(PG_FUNCTION_ARGS)
 	text	   *expr = PG_GETARG_TEXT_PP(0);
 	Oid			relid = PG_GETARG_OID(1);
 	bool		pretty = PG_GETARG_BOOL(2);
+	text	   *result;
 	int			prettyFlags;
-	char	   *relname;
 
 	prettyFlags = GET_PRETTY_FLAGS(pretty);
 
-	if (OidIsValid(relid))
-	{
-		/* Get the name for the relation */
-		relname = get_rel_name(relid);
-		/* See notes above */
-		if (relname == NULL)
-			PG_RETURN_NULL();
-	}
+	result = pg_get_expr_worker(expr, relid, prettyFlags);
+	if (result)
+		PG_RETURN_TEXT_P(result);
 	else
-		relname = NULL;
-
-	PG_RETURN_TEXT_P(pg_get_expr_worker(expr, relid, relname, prettyFlags));
+		PG_RETURN_NULL();
 }
 
 static text *
-pg_get_expr_worker(text *expr, Oid relid, const char *relname, int prettyFlags)
+pg_get_expr_worker(text *expr, Oid relid, int prettyFlags)
 {
 	Node	   *node;
 	Node	   *tst;
 	Relids		relids;
 	List	   *context;
 	char	   *exprstr;
+	Relation	rel = NULL;
 	char	   *str;
 
 	/* Convert input pg_node_tree (really TEXT) object to C string */
@@ -2593,15 +2578,28 @@ pg_get_expr_worker(text *expr, Oid relid, const char *relname, int prettyFlags)
 					 errmsg("expression contains variables")));
 	}
 
-	/* Prepare deparse context if needed */
+	/*
+	 * Prepare deparse context if needed.  If we are deparsing with a relid,
+	 * we need to transiently open and lock the rel, to make sure it won't go
+	 * away underneath us.  (set_relation_column_names would lock it anyway,
+	 * so this isn't really introducing any new behavior.)
+	 */
 	if (OidIsValid(relid))
-		context = deparse_context_for(relname, relid);
+	{
+		rel = try_relation_open(relid, AccessShareLock);
+		if (rel == NULL)
+			return NULL;
+		context = deparse_context_for(RelationGetRelationName(rel), relid);
+	}
 	else
 		context = NIL;
 
 	/* Deparse */
 	str = deparse_expression_pretty(node, context, false, false,
 									prettyFlags, 0);
+
+	if (rel != NULL)
+		relation_close(rel, AccessShareLock);
 
 	return string_to_text(str);
 }
@@ -4835,8 +4833,11 @@ set_deparse_plan(deparse_namespace *dpns, Plan *plan)
 	 * For a WorkTableScan, locate the parent RecursiveUnion plan node and use
 	 * that as INNER referent.
 	 *
-	 * For MERGE, make the inner tlist point to the merge source tlist, which
-	 * is same as the targetlist that the ModifyTable's source plan provides.
+	 * For MERGE, pretend the ModifyTable's source plan (its outer plan) is
+	 * INNER referent.  This is the join from the target relation to the data
+	 * source, and all INNER_VAR Vars in other parts of the query refer to its
+	 * targetlist.
+	 *
 	 * For ON CONFLICT .. UPDATE we just need the inner tlist to point to the
 	 * excluded expression's tlist. (Similar to the SubqueryScan we don't want
 	 * to reuse OUTER, it's used for RETURNING in some modify table cases,
@@ -4851,17 +4852,17 @@ set_deparse_plan(deparse_namespace *dpns, Plan *plan)
 		dpns->inner_plan = find_recursive_union(dpns,
 												(WorkTableScan *) plan);
 	else if (IsA(plan, ModifyTable))
-		dpns->inner_plan = plan;
+	{
+		if (((ModifyTable *) plan)->operation == CMD_MERGE)
+			dpns->inner_plan = outerPlan(plan);
+		else
+			dpns->inner_plan = plan;
+	}
 	else
 		dpns->inner_plan = innerPlan(plan);
 
-	if (IsA(plan, ModifyTable))
-	{
-		if (((ModifyTable *) plan)->operation == CMD_MERGE)
-			dpns->inner_tlist = dpns->outer_tlist;
-		else
-			dpns->inner_tlist = ((ModifyTable *) plan)->exclRelTlist;
-	}
+	if (IsA(plan, ModifyTable) && ((ModifyTable *) plan)->operation == CMD_INSERT)
+		dpns->inner_tlist = ((ModifyTable *) plan)->exclRelTlist;
 	else if (dpns->inner_plan)
 		dpns->inner_tlist = dpns->inner_plan->targetlist;
 	else
@@ -8809,17 +8810,31 @@ get_name_for_var_field(Var *var, int fieldno,
 					/*
 					 * We're deparsing a Plan tree so we don't have complete
 					 * RTE entries (in particular, rte->subquery is NULL). But
-					 * the only place we'd see a Var directly referencing a
-					 * SUBQUERY RTE is in a SubqueryScan plan node, and we can
-					 * look into the child plan's tlist instead.
+					 * the only place we'd normally see a Var directly
+					 * referencing a SUBQUERY RTE is in a SubqueryScan plan
+					 * node, and we can look into the child plan's tlist
+					 * instead.  An exception occurs if the subquery was
+					 * proven empty and optimized away: then we'd find such a
+					 * Var in a childless Result node, and there's nothing in
+					 * the plan tree that would let us figure out what it had
+					 * originally referenced.  In that case, fall back on
+					 * printing "fN", analogously to the default column names
+					 * for RowExprs.
 					 */
 					TargetEntry *tle;
 					deparse_namespace save_dpns;
 					const char *result;
 
 					if (!dpns->inner_plan)
-						elog(ERROR, "failed to find plan for subquery %s",
-							 rte->eref->aliasname);
+					{
+						char	   *dummy_name = palloc(32);
+
+						Assert(dpns->plan && IsA(dpns->plan, Result));
+						snprintf(dummy_name, 32, "f%d", fieldno);
+						return dummy_name;
+					}
+					Assert(dpns->plan && IsA(dpns->plan, SubqueryScan));
+
 					tle = get_tle_by_resno(dpns->inner_tlist, attnum);
 					if (!tle)
 						elog(ERROR, "bogus varattno for subquery var: %d",
@@ -8928,20 +8943,30 @@ get_name_for_var_field(Var *var, int fieldno,
 				{
 					/*
 					 * We're deparsing a Plan tree so we don't have a CTE
-					 * list.  But the only places we'd see a Var directly
-					 * referencing a CTE RTE are in CteScan or WorkTableScan
-					 * plan nodes.  For those cases, set_deparse_plan arranged
-					 * for dpns->inner_plan to be the plan node that emits the
-					 * CTE or RecursiveUnion result, and we can look at its
-					 * tlist instead.
+					 * list.  But the only places we'd normally see a Var
+					 * directly referencing a CTE RTE are in CteScan or
+					 * WorkTableScan plan nodes.  For those cases,
+					 * set_deparse_plan arranged for dpns->inner_plan to be
+					 * the plan node that emits the CTE or RecursiveUnion
+					 * result, and we can look at its tlist instead.  As
+					 * above, this can fail if the CTE has been proven empty,
+					 * in which case fall back to "fN".
 					 */
 					TargetEntry *tle;
 					deparse_namespace save_dpns;
 					const char *result;
 
 					if (!dpns->inner_plan)
-						elog(ERROR, "failed to find plan for CTE %s",
-							 rte->eref->aliasname);
+					{
+						char	   *dummy_name = palloc(32);
+
+						Assert(dpns->plan && IsA(dpns->plan, Result));
+						snprintf(dummy_name, 32, "f%d", fieldno);
+						return dummy_name;
+					}
+					Assert(dpns->plan && (IsA(dpns->plan, CteScan) ||
+										  IsA(dpns->plan, WorkTableScan)));
+
 					tle = get_tle_by_resno(dpns->inner_tlist, attnum);
 					if (!tle)
 						elog(ERROR, "bogus varattno for subquery var: %d",

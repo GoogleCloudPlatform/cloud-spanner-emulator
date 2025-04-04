@@ -744,10 +744,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_TransitiveFunctionDeterminism) {
             AS (EXTRACT(YEAR from CURRENT_TIMESTAMP())))",
            R"(CREATE FUNCTION udf_2(x INT64) RETURNS INT64 SQL SECURITY INVOKER
             AS ((SELECT APPROX_DOT_PRODUCT([100, 10], [200, 6]) AS results) + udf_1(x)))"}),
-      zetasql_base::testing::StatusIs(
-          absl::StatusCode::kInvalidArgument,
-          testing::HasSubstr(
-              "Unsupported built-in function: APPROX_DOT_PRODUCT")));
+      StatusIs(error::FunctionTypeMismatch("udf_2", "INT64", "FLOAT64")));
 }
 
 TEST_P(SchemaUpdaterTest, CreateUDF_CyclicDependencyOnViewFails) {

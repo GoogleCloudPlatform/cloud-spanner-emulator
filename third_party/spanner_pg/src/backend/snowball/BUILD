@@ -42,7 +42,7 @@ package(
     ],
 )
 
-licenses(["notice"])
+licenses(["restricted"])
 
 cc_binary(
     name = "dict_snowball.so",

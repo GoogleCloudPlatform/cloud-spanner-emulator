@@ -95,6 +95,26 @@ TEST_P(DatabaseOptionTest, ValidDefaultSequenceKindOptionName) {
         )"}));
   }
 }
+
+TEST_P(DatabaseOptionTest, ValidDefaultTimeZoneOptionName) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"(
+      ALTER DATABASE db SET spanner.default_time_zone = 'UTC'
+                                      )"},
+                                      /*proto_descriptor_bytes=*/"",
+                                      /*dialect=*/POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+      ALTER DATABASE db SET OPTIONS (default_time_zone = 'UTC')
+        )"}));
+  }
+  ASSERT_TRUE(schema->options()->default_time_zone().has_value());
+  EXPECT_EQ(schema->options()->default_time_zone().value(), "UTC");
+}
+
 TEST_P(DatabaseOptionTest, InvalidDatabaseOptionName) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {

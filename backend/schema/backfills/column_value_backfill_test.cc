@@ -57,6 +57,8 @@ using zetasql::values::BytesArray;
 using zetasql::values::Enum;
 using zetasql::values::Proto;
 
+constexpr char kDatabaseId[] = "test-db";
+
 class ColumnValueBackfillTest : public ::testing::Test {
  public:
   ColumnValueBackfillTest()
@@ -73,9 +75,9 @@ class ColumnValueBackfillTest : public ::testing::Test {
                             ) PRIMARY KEY (int64_col)
                          )"};
     ZETASQL_ASSERT_OK_AND_ASSIGN(
-        database_,
-        Database::Create(
-            &clock_, SchemaChangeOperation{.statements = create_statements}));
+        database_, Database::Create(
+                       &clock_, kDatabaseId,
+                       SchemaChangeOperation{.statements = create_statements}));
 
     ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(
@@ -279,10 +281,11 @@ class ProtoColumnValueBackfillTest : public ColumnValueBackfillTest {
                             ) PRIMARY KEY (int64_col)
                           )sql"};
     ZETASQL_ASSERT_OK_AND_ASSIGN(
-        database_, Database::Create(
-                       &clock_, SchemaChangeOperation{.statements = statements,
-                                                      .proto_descriptor_bytes =
-                                                          read_descriptors()}));
+        database_,
+        Database::Create(&clock_, kDatabaseId,
+                         SchemaChangeOperation{
+                             .statements = statements,
+                             .proto_descriptor_bytes = read_descriptors()}));
 
     ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(

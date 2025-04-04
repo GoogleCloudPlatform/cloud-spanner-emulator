@@ -804,11 +804,7 @@ absl::StatusOr<Oid> EngineSystemCatalog::FindMatchingPgProcOid(
     }
   }
   return absl::UnimplementedError(
-      absl::StrCat("No Postgres proc oid found for the provided argument types",
-                   srf_ret_type_mismatch
-                       ? " (this function is a set returning function, "
-                         "which requires an explicit proc OID in the mapping)"
-                       : ""));
+      "No Postgres proc oid found for the provided argument types");
 }
 
 void EngineSystemCatalog::AddFunctionToReverseMappings(

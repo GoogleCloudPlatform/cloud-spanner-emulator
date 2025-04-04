@@ -309,6 +309,10 @@ class ServerTest : public testing::Test {
                                                          response);
   }
 
+  absl::Status BatchWrite(
+      const spanner_api::BatchWriteRequest& request,
+      std::vector<spanner_api::BatchWriteResponse>* response);
+
   absl::Status ExecuteStreamingSql(
       const spanner_api::ExecuteSqlRequest& request,
       std::vector<spanner_api::PartialResultSet>* response);

@@ -1101,7 +1101,10 @@ SH_STAT(SH_TYPE * tb)
 			max_collisions = curcoll;
 	}
 
-	if (tb->members > 0)
+        /* large enough to be worth freeing, even if just used for debugging */
+        pfree(collisions);
+
+        if (tb->members > 0)
 	{
 		fillfactor = tb->members / ((double) tb->size);
 		avg_chain_length = ((double) total_chain_length) / tb->members;

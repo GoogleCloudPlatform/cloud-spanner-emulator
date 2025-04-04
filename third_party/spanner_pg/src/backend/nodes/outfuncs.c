@@ -2748,6 +2748,7 @@ _outCreateStmtInfo(StringInfo str, const CreateStmt *node)
 	WRITE_NODE_FIELD(options);
 	WRITE_ENUM_FIELD(oncommit, OnCommitAction);
 	WRITE_STRING_FIELD(tablespacename);
+	WRITE_NODE_FIELD(locality_group_name);
 	WRITE_STRING_FIELD(accessMethod);
 	WRITE_BOOL_FIELD(if_not_exists);
 	WRITE_NODE_FIELD(interleavespec);
@@ -2798,6 +2799,7 @@ _outIndexStmt(StringInfo str, const IndexStmt *node)
 	WRITE_NODE_FIELD(indexParams);
 	WRITE_NODE_FIELD(indexIncludingParams);
 	WRITE_NODE_FIELD(options);
+	WRITE_NODE_FIELD(locality_group_name);
   WRITE_NODE_FIELD(interleavespec);
 	WRITE_NODE_FIELD(whereClause);
 	WRITE_NODE_FIELD(excludeOpNames);
@@ -3003,6 +3005,7 @@ _outColumnDef(StringInfo str, const ColumnDef *node)
 	WRITE_NODE_FIELD(constraints);
 	WRITE_NODE_FIELD(fdwoptions);
 	WRITE_LOCATION_FIELD(location);
+	WRITE_NODE_FIELD(locality_group_name);
 }
 
 static void
@@ -3978,6 +3981,7 @@ _outAlterTableCmd(StringInfo str, const AlterTableCmd *node)
 	WRITE_NODE_FIELD(def);
 	WRITE_ENUM_FIELD(behavior, DropBehavior);
 	WRITE_BOOL_FIELD(missing_ok);
+	WRITE_NODE_FIELD(locality_group_name);
 	WRITE_STRING_FIELD(raw_expr_string);
 }
 
@@ -4147,6 +4151,68 @@ static void _outAlterChangeStreamStmt(StringInfo str,
   WRITE_NODE_FIELD(opt_reset_options);
   WRITE_BOOL_FIELD(for_all);
   WRITE_BOOL_FIELD(drop_for_all);
+}
+
+// SPANGRES BEGIN
+static void _outCreateSearchIndexStmt(StringInfo str, const CreateSearchIndexStmt* node)
+{
+  WRITE_NODE_TYPE("CREATESEARCHINDEXSTMT");
+	WRITE_STRING_FIELD(search_index_name);
+	WRITE_NODE_FIELD(table_name);
+	WRITE_NODE_FIELD(token_columns);
+	WRITE_NODE_FIELD(storing);
+	WRITE_NODE_FIELD(partition);
+	WRITE_NODE_FIELD(order);
+	WRITE_NODE_FIELD(null_filters);
+	WRITE_NODE_FIELD(interleave);
+	WRITE_NODE_FIELD(options);
+}
+
+static void _outAlterSearchIndexStmt(StringInfo str, const AlterSearchIndexStmt* node)
+{
+  WRITE_NODE_TYPE("ALTERSEARCHINDEXSTMT");
+	WRITE_NODE_FIELD(search_index_name);
+	WRITE_NODE_FIELD(alter_search_index_cmd);
+}
+
+static void _outAlterSearchIndexCmd(StringInfo str, const AlterSearchIndexCmd* node)
+{
+  WRITE_NODE_TYPE("ALTERSEARCHINDEXCMD");
+	WRITE_ENUM_FIELD(cmd_type, AlterSearchIndexCmdType);
+	WRITE_STRING_FIELD(column_name);
+}
+// SPANGRES END
+
+static void _outLocalityGroupOption(StringInfo str,
+                                     const LocalityGroupOption *node) {
+  WRITE_NODE_TYPE("LOCALITYGROUPOPTION");
+  WRITE_STRING_FIELD(value);
+	WRITE_BOOL_FIELD(is_null);
+}
+static void _outCreateLocalityGroupStmt(StringInfo str,
+                                        const CreateLocalityGroupStmt *node) {
+  WRITE_NODE_TYPE("CREATELOCALITYGROUPSTMT");
+  WRITE_NODE_FIELD(locality_group_name);
+  WRITE_NODE_FIELD(storage);
+  WRITE_NODE_FIELD(ssd_to_hdd_spill_timespan);
+  WRITE_BOOL_FIELD(if_not_exists);
+}
+
+static void _outAlterLocalityGroupStmt(StringInfo str,
+                                        const AlterLocalityGroupStmt *node) {
+  WRITE_NODE_TYPE("ALTERLOCALITYGROUPSTMT");
+  WRITE_NODE_FIELD(locality_group_name);
+  WRITE_NODE_FIELD(storage);
+  WRITE_NODE_FIELD(ssd_to_hdd_spill_timespan);
+  WRITE_BOOL_FIELD(if_exists);
+}
+
+static void _outAlterColumnLocalityGroupStmt(
+    StringInfo str, const AlterColumnLocalityGroupStmt *node) {
+  WRITE_NODE_TYPE("ALTERCOLUMNLOCALITYGROUPSTMT");
+  WRITE_NODE_FIELD(relation);
+  WRITE_STRING_FIELD(column);
+  WRITE_NODE_FIELD(locality_group_name);
 }
 
 static void
@@ -5084,6 +5150,29 @@ outNode(StringInfo str, const void *obj)
       case T_AlterChangeStreamStmt:
         _outAlterChangeStreamStmt(str, obj);
         break;
+			// SPANGRES BEGIN
+			case T_CreateSearchIndexStmt:
+				 _outCreateSearchIndexStmt(str, obj);
+				break;
+			case T_AlterSearchIndexStmt:
+				_outAlterSearchIndexStmt(str, obj);
+				break;
+			case T_AlterSearchIndexCmd:
+				_outAlterSearchIndexCmd(str, obj);
+				break;
+			// SPANGRES END
+			case T_LocalityGroupOption:
+				_outLocalityGroupOption(str, obj);
+				break;
+			case T_CreateLocalityGroupStmt:
+				_outCreateLocalityGroupStmt(str, obj);
+				break;
+			case T_AlterLocalityGroupStmt:
+				_outAlterLocalityGroupStmt(str, obj);
+				break;
+			case T_AlterColumnLocalityGroupStmt:
+				_outAlterColumnLocalityGroupStmt(str, obj);
+				break;
 			case T_CreateRoleStmt:
 				_outCreateRoleStmt(str, obj);
 				break;

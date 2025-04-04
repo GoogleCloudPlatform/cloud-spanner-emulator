@@ -39,8 +39,8 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -52,8 +52,11 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
 #include "absl/strings/match.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/strings/substitute.h"
+#include "absl/types/span.h"
 #include "nlohmann/json.hpp"
 #include "third_party/spanner_pg/datatypes/common/numeric_core.h"
 #include "third_party/spanner_pg/datatypes/common/pg_numeric_parse.h"
@@ -64,83 +67,15 @@ namespace postgres_translator::spangres::datatypes::common::jsonb {
 
 using absl::StrAppend;
 
-struct ObjectKeyLess {
-  constexpr bool operator()(absl::string_view lhs,
-                            absl::string_view rhs) const {
-    if (lhs.size() == rhs.size()) {
-      return lhs < rhs;
-    }
-    return lhs.size() < rhs.size();
-  }
-};
-
 class PGJSONBParser {
-  enum NodeType : uint8_t {
-    kFalse = 0,
-    kTrue = 1,
-    kNull = 2,
-    kString = 3,
-    kArray = 4,
-    kObject = 5,
-  };
-
-  struct TreeNode;
-  using JsonbArray = std::vector<TreeNode*>;
-
-  // JSONB Object Value field consists of a TreeNode* along with normalized
-  // representation of its corresponding JSONB Object Key field.
-  using JsonObjectValue = std::pair<TreeNode*, std::string>;
-  using JsonbObject = std::map<std::string, JsonObjectValue, ObjectKeyLess>;
-
-  // TreeNode only stores one of JsonbObject, JsonbArray, or string at a
-  // time. The tag field stores information about what type of object TreeNode
-  // stores. Simple values like true/false/null are piggybacked in the tag
-  // field.
-  struct TreeNode {
-    TreeNode() = delete;
-    TreeNode(const TreeNode&) = delete;
-    TreeNode& operator=(const TreeNode&) = delete;
-    explicit TreeNode(std::string string)
-        : tag(NodeType::kString), value(string) {}
-    explicit TreeNode(NodeType tag) : tag(tag) {
-      switch (tag) {
-        case kFalse:
-        case kTrue:
-        case kNull:
-          break;
-        case kString:
-          value = std::string();
-          break;
-        case kArray:
-          value = JsonbArray();
-          break;
-        case kObject:
-          value = JsonbObject();
-          break;
-      }
-    }
-    NodeType tag;
-    std::variant<JsonbArray, JsonbObject, std::string> value;
-  };
-
-  enum TreeNodeIteratorType : uint8_t {
-    kArrayIterator = 1,
-    kObjectIterator = 2,
-  };
-
-  struct TreeNodeIterator {
-    std::variant<std::monostate, size_t, JsonbObject::const_iterator> iterator;
-  };
-
-  using PrintingStackNode = std::pair<TreeNode*, TreeNodeIterator>;
-
  public:
-  PGJSONBParser()
-      : serializer_(nlohmann::detail::output_adapter<char>(
+  PGJSONBParser(std::vector<std::unique_ptr<TreeNode>>* tree_nodes)
+      : tree_nodes_(tree_nodes),
+        serializer_(nlohmann::detail::output_adapter<char>(
                         normalization_output_buffer_),
                     '\0'),
-        max_depth_(0),
-        total_bytes_(0) {
+        max_depth_estimate_(0),
+        total_bytes_estimate_(0) {
     normalization_output_buffer_.reserve(64);
   }
 
@@ -158,13 +93,13 @@ class PGJSONBParser {
 
   // Called when a signed integer number is parsed; value is passed.
   bool number_integer(std::int64_t value) {
-    AddToWorkingStack(absl::StrCat(value));
+    AddToWorkingStack(absl::StrCat(value), /*is_numeric=*/true);
     return true;
   }
 
   // Called when an unsigned integer number is parsed; value is passed.
   bool number_unsigned(std::uint64_t value) {
-    AddToWorkingStack(absl::StrCat(value));
+    AddToWorkingStack(absl::StrCat(value), /*is_numeric=*/true);
     return true;
   }
 
@@ -181,7 +116,7 @@ class PGJSONBParser {
       status_ = std::move(normalized).status();
       return false;
     }
-    AddToWorkingStack(*normalized);
+    AddToWorkingStack(*normalized, true);
     return true;
   }
 
@@ -205,8 +140,8 @@ class PGJSONBParser {
   // is passed in (or -1 if unknown). Push the node onto the top of the
   // working stack.
   bool start_object(std::size_t) {
-    tree_nodes_.push_back(std::make_unique<TreeNode>(NodeType::kObject));
-    AddToWorkingStack(tree_nodes_.back().get());
+    tree_nodes_->push_back(std::make_unique<TreeNode>(NodeType::kObject));
+    AddToWorkingStack(tree_nodes_->back().get());
     return true;
   }
 
@@ -216,9 +151,12 @@ class PGJSONBParser {
 
     // Increase size for object's '{' and '}' characters, as well as the ": "
     // and ", " delimiters for each member.
-    total_bytes_ += 2 + 6 * std::get<JsonbObject>(current_obj->value).size();
-    max_depth_ =
-        std::max(max_depth_, static_cast<uint32_t>(working_stack_.size()));
+    total_bytes_estimate_ +=
+        2 + 6 * std::get<JsonbObject>(current_obj->value).size();
+
+    max_depth_estimate_ = std::max(
+        max_depth_estimate_, static_cast<uint32_t>(working_stack_.size()));
+
     if (working_stack_.size() > 1) {
       working_stack_.pop_back();
     }
@@ -228,23 +166,23 @@ class PGJSONBParser {
   // Called when an array begins. The number of elements is passed in (or -1 if
   // unknown). Push the node onto the top of the stack.
   bool start_array(std::size_t elements) {
-    tree_nodes_.push_back(std::make_unique<TreeNode>(NodeType::kArray));
-    AddToWorkingStack(tree_nodes_.back().get());
+    tree_nodes_->push_back(std::make_unique<TreeNode>(NodeType::kArray));
+    AddToWorkingStack(tree_nodes_->back().get());
     return true;
   }
 
   // Called when an array ends, remove it from the working stack.
   bool end_array() {
     TreeNode* arr = working_stack_.back();
-    max_depth_ =
-        std::max(max_depth_, static_cast<uint32_t>(working_stack_.size()));
+    max_depth_estimate_ = std::max(
+        max_depth_estimate_, static_cast<uint32_t>(working_stack_.size()));
 
     // Don't pop if this is the top most node in the stack.
     if (working_stack_.size() > 1) {
       working_stack_.pop_back();
     }
     JsonbArray& vec = std::get<JsonbArray>(arr->value);
-    total_bytes_ += vec.empty() ? 2 : 2 * vec.size();
+    total_bytes_estimate_ += vec.empty() ? 2 : 2 * vec.size();
     return true;
   }
 
@@ -259,7 +197,7 @@ class PGJSONBParser {
     serializer_.dump(key, /*pretty_print=*/false, /*=ensure_ascii=*/false,
                      /*indent_step=*/0);
     object_key_ = normalization_output_buffer_;
-    total_bytes_ += normalization_output_buffer_.size();
+    total_bytes_estimate_ += normalization_output_buffer_.size();
     normalization_output_buffer_.clear();
     return true;
   }
@@ -272,120 +210,12 @@ class PGJSONBParser {
     return false;
   }
 
-  absl::StatusOr<absl::Cord> PrintTreeNode(TreeNode* node) {
-    std::string output;
-    output.reserve(total_bytes_);
-
-    // Stack used for maintaining state while printing.
-    std::vector<PrintingStackNode> printing_stack;
-    printing_stack.reserve(max_depth_);
-    ZETASQL_RET_CHECK_EQ(working_stack_.size(), 1);
-    AddToPrintingStack(printing_stack, &output, node);
-
-    while (!printing_stack.empty()) {
-      PrintingStackNode& printing_stack_node = printing_stack.back();
-      TreeNode* tree_node = printing_stack_node.first;
-
-      if (tree_node->tag == NodeType::kArray) {
-        JsonbArray& vec = std::get<JsonbArray>(tree_node->value);
-        size_t& array_iterator = std::get<TreeNodeIteratorType::kArrayIterator>(
-            printing_stack_node.second.iterator);
-        const bool is_beginning_array = array_iterator == 0;
-        const bool is_end_array = array_iterator == vec.size();
-        if (is_beginning_array && is_end_array) {
-          StrAppend(&output, "[]");
-          printing_stack.pop_back();
-          continue;
-        }
-        if (is_end_array) {
-          StrAppend(&output, "]");
-          printing_stack.pop_back();
-          continue;
-        }
-        if (is_beginning_array) {
-          StrAppend(&output, "[");
-        } else {
-          StrAppend(&output, ", ");
-        }
-        array_iterator++;
-        printing_stack.back() = printing_stack_node;
-        TreeNode* ptr = vec[array_iterator - 1];
-        AddToPrintingStack(printing_stack, &output, ptr);
-        continue;
-      }
-      ABSL_DCHECK_EQ(tree_node->tag, NodeType::kObject);
-      JsonbObject& obj = std::get<JsonbObject>(tree_node->value);
-      auto& obj_itr = std::get<TreeNodeIteratorType::kObjectIterator>(
-          printing_stack_node.second.iterator);
-      if (obj.empty()) {
-        StrAppend(&output, "{}");
-        printing_stack.pop_back();
-        continue;
-      }
-
-      const bool is_beginning_obj = obj_itr == obj.cbegin();
-      const bool is_end_obj = obj_itr == obj.cend();
-      if (is_beginning_obj) {
-        StrAppend(&output, "{");
-      } else if (!is_beginning_obj && !is_end_obj) {
-        StrAppend(&output, ", ");
-      } else if (is_end_obj) {
-        StrAppend(&output, "}");
-        printing_stack.pop_back();
-        continue;
-      }
-      StrAppend(&output, obj_itr->second.second);
-      StrAppend(&output, ": ");
-      TreeNode* ptr = obj_itr->second.first;
-      obj_itr++;
-      printing_stack.back() = printing_stack_node;
-      AddToPrintingStack(printing_stack, &output, ptr);
-    }
-
-    ABSL_DCHECK_GE(total_bytes_, output.size())
-        << "Did not pre-allocate enough for output buffer";
-    auto* external = new std::string(output);
-    return absl::MakeCordFromExternal(
-        *external, [external](absl::string_view) { delete external; });
-  }
-
-  // Converts the constructed in-memory JSONB tree representation into a
-  // normalized textual output matching Postgres' semantics. Creates the output
-  // using a non-recursive iterative algorithm to prevent any stack-overflow
-  // from occurring. Returns an error if any was encountered during parsing.
-  // Note that this function must be called exactly once, as it frees resources
-  // which were created during the sax_parse phase.
-  absl::StatusOr<absl::Cord> GetResultDestructive() && {
+  // Returns a PgJsonbValue which is a wrapper on the internal representation.
+  absl::StatusOr<PgJsonbValue> GetRepresentation() && {
     ZETASQL_RETURN_IF_ERROR(status_);
-
     ZETASQL_RET_CHECK_EQ(working_stack_.size(), 1);
-    ZETASQL_ASSIGN_OR_RETURN(absl::Cord result, PrintTreeNode(working_stack_[0]));
-
-    status_.Update(absl::Status(absl::StatusCode::kFailedPrecondition,
-                                "Cannot call GetResultDestructive twice"));
-    return result;
-  }
-
-  absl::StatusOr<std::vector<absl::Cord>> GetResultArrayDestructive() && {
-    ZETASQL_RETURN_IF_ERROR(status_);
-
-    std::vector<absl::Cord> result_array;
-    ZETASQL_RET_CHECK_EQ(working_stack_.size(), 1);
-    TreeNode* array_ptr = working_stack_[0];
-    if (array_ptr->tag != NodeType::kArray) {
-      return absl::InvalidArgumentError(
-          "ParseJsonbArray can only be called on a JSONB array");
-    }
-
-    JsonbArray& vec = std::get<JsonbArray>(array_ptr->value);
-    result_array.reserve(vec.size());
-    for (const auto& element : vec) {
-      ZETASQL_ASSIGN_OR_RETURN(absl::Cord result, PrintTreeNode(element));
-      result_array.push_back(result);
-    }
-    status_.Update(absl::Status(absl::StatusCode::kFailedPrecondition,
-                                "Cannot call GetResultArrayDestructive twice"));
-    return result_array;
+    return PgJsonbValue(working_stack_.back(), std::move(tree_nodes_),
+                        max_depth_estimate_, total_bytes_estimate_);
   }
 
   absl::StatusOr<std::string> NormalizePgNumericForJsonB(
@@ -408,56 +238,18 @@ class PGJSONBParser {
     return true;
   }
 
-  // Adds a TreeNode* to the printing stack. If `node` represents a simple node
-  // which contains no dependencies (everything except Arrays and Objects), does
-  // not add to the stack and instead appends the value directly to `output`.
-  void AddToPrintingStack(std::vector<PrintingStackNode>& printing_stack,
-                          std::string* output, TreeNode* node) {
-    // Don't bother adding scalars to 'printing_stack', only objects and arrays.
-    switch (node->tag) {
-      case NodeType::kFalse: {
-        StrAppend(output, "false");
-        return;
-      }
-      case NodeType::kTrue: {
-        StrAppend(output, "true");
-        return;
-      }
-      case NodeType::kNull: {
-        StrAppend(output, "null");
-        return;
-      }
-      case NodeType::kString: {
-        StrAppend(output, std::get<std::string>(node->value));
-        return;
-      }
-      case NodeType::kArray: {
-        TreeNodeIterator tree_node_iterator;
-        tree_node_iterator.iterator = size_t(0);
-        printing_stack.emplace_back(node, tree_node_iterator);
-        return;
-      }
-      case NodeType::kObject: {
-        TreeNodeIterator tree_node_iterator;
-        tree_node_iterator.iterator =
-            std::get<JsonbObject>(node->value).cbegin();
-        printing_stack.emplace_back(node, tree_node_iterator);
-        return;
-      }
-    }
-  }
-
   // Adds a string value to the working stack.
-  void AddToWorkingStack(const std::string str) {
-    tree_nodes_.push_back(std::make_unique<TreeNode>(str));
-    total_bytes_ += str.size();
-    AddToWorkingStack(tree_nodes_.back().get());
+  void AddToWorkingStack(const std::string str, bool is_numeric = false) {
+    total_bytes_estimate_ += str.size();
+    tree_nodes_->push_back(std::make_unique<TreeNode>(str, is_numeric));
+    AddToWorkingStack(tree_nodes_->back().get());
   }
 
   void AddToWorkingStack(NodeType val) {
-    tree_nodes_.push_back(std::make_unique<TreeNode>(val));
-    total_bytes_ += 5;  // Longest length of string this can represent, "false"
-    AddToWorkingStack(tree_nodes_.back().get());
+    tree_nodes_->push_back(std::make_unique<TreeNode>(val));
+    total_bytes_estimate_ +=
+        5;  // Longest length of string this can represent, "false"
+    AddToWorkingStack(tree_nodes_->back().get());
   }
 
   // Adds a TreeNode* to the working stack.
@@ -507,11 +299,12 @@ class PGJSONBParser {
 
   // This vector contains all TreeNodes created while parsing a JSONB string.
   // These nodes exist throughout the lifetime of this class.
-  std::vector<std::unique_ptr<TreeNode>> tree_nodes_;
+  // unowned.
+  std::vector<std::unique_ptr<TreeNode>>* tree_nodes_;
 
   // The working stack while constructing the internal JSONB tree
-  // representation. It contains pointers to TreeNode in tree_nodes_ vector and
-  // does not modify them. Its lifetime is not longer than tree_nodes_.
+  // representation. It contains the index of the current node in the
+  // tree_nodes_ vector.
   std::vector<TreeNode*> working_stack_;
 
   // The field keeps track of currently active object key in its raw form, and
@@ -534,31 +327,458 @@ class PGJSONBParser {
   nlohmann::detail::serializer<nlohmann::basic_json<>> serializer_;
 
   // Keep track of the maximum depth reached.
-  uint32_t max_depth_;
+  uint32_t max_depth_estimate_;
 
-  // total_bytes_ keeps track of the total number of bytes the result
+  // total_bytes_estimate_ keeps track of the total number of bytes the result
   // will be during computation, so that a single allocation can be done on
   // output_.
-  uint32_t total_bytes_;
+  uint32_t total_bytes_estimate_;
 };
 
-absl::StatusOr<absl::Cord> ParseJsonb(absl::string_view json) {
-  PGJSONBParser parser;
-  using jsonb_parser =
-      nlohmann::basic_json<std::map, std::vector, std::string, bool,
-                           std::int64_t, std::uint64_t, long double>;
-  jsonb_parser::sax_parse(json, &parser);
-  return std::move(parser).GetResultDestructive();
+absl::Cord PgJsonbValue::PrintTreeNode(TreeNode* node) const {
+  std::string output;
+  output.reserve(total_bytes_estimate_);
+
+  // Stack used for maintaining state while printing.
+  std::vector<PrintingStackNode> printing_stack;
+  printing_stack.reserve(max_depth_estimate_);
+  AddToPrintingStack(printing_stack, &output, node);
+
+  while (!printing_stack.empty()) {
+    PrintingStackNode& printing_stack_node = printing_stack.back();
+    TreeNode* tree_node = printing_stack_node.first;
+
+    if (tree_node->tag == NodeType::kArray) {
+      JsonbArray& vec = std::get<JsonbArray>(tree_node->value);
+      size_t& array_iterator = std::get<TreeNodeIteratorType::kArrayIterator>(
+          printing_stack_node.second.iterator);
+      const bool is_beginning_array = array_iterator == 0;
+      const bool is_end_array = array_iterator == vec.size();
+      if (is_beginning_array && is_end_array) {
+        StrAppend(&output, "[]");
+        printing_stack.pop_back();
+        continue;
+      }
+      if (is_end_array) {
+        StrAppend(&output, "]");
+        printing_stack.pop_back();
+        continue;
+      }
+      if (is_beginning_array) {
+        StrAppend(&output, "[");
+      } else {
+        StrAppend(&output, ", ");
+      }
+      array_iterator++;
+      printing_stack.back() = printing_stack_node;
+      TreeNode* ptr = vec[array_iterator - 1];
+      AddToPrintingStack(printing_stack, &output, ptr);
+      continue;
+    }
+    ABSL_DCHECK_EQ(tree_node->tag, NodeType::kObject);
+    JsonbObject& obj = std::get<JsonbObject>(tree_node->value);
+    auto& obj_itr = std::get<TreeNodeIteratorType::kObjectIterator>(
+        printing_stack_node.second.iterator);
+    if (obj.empty()) {
+      StrAppend(&output, "{}");
+      printing_stack.pop_back();
+      continue;
+    }
+
+    const bool is_beginning_obj = obj_itr == obj.cbegin();
+    const bool is_end_obj = obj_itr == obj.cend();
+    if (is_beginning_obj) {
+      StrAppend(&output, "{");
+    } else if (!is_beginning_obj && !is_end_obj) {
+      StrAppend(&output, ", ");
+    } else if (is_end_obj) {
+      StrAppend(&output, "}");
+      printing_stack.pop_back();
+      continue;
+    }
+    StrAppend(&output, obj_itr->second.second);
+    StrAppend(&output, ": ");
+    TreeNode* ptr = obj_itr->second.first;
+    obj_itr++;
+    printing_stack.back() = printing_stack_node;
+    AddToPrintingStack(printing_stack, &output, ptr);
+  }
+
+  auto* external = new std::string(output);
+  return absl::MakeCordFromExternal(
+      *external, [external](absl::string_view) { delete external; });
 }
 
-absl::StatusOr<std::vector<absl::Cord>> ParseJsonbArray(
-    absl::string_view jsonb) {
-  PGJSONBParser parser;
+// Adds a TreeNode* to the printing stack. If `node` represents a simple node
+// which contains no dependencies (everything except Arrays and Objects), does
+// not add to the stack and instead appends the value directly to `output`.
+void PgJsonbValue::AddToPrintingStack(
+    std::vector<PrintingStackNode>& printing_stack, std::string* output,
+    TreeNode* node) const {
+  // Don't bother adding scalars to 'printing_stack', only objects and arrays.
+  switch (node->tag) {
+    case NodeType::kFalse: {
+      StrAppend(output, "false");
+      return;
+    }
+    case NodeType::kTrue: {
+      StrAppend(output, "true");
+      return;
+    }
+    case NodeType::kNull: {
+      StrAppend(output, "null");
+      return;
+    }
+    case NodeType::kString:
+    case NodeType::kNumeric: {
+      StrAppend(output, std::get<std::string>(node->value));
+      return;
+    }
+    case NodeType::kArray: {
+      TreeNodeIterator tree_node_iterator;
+      tree_node_iterator.iterator = size_t(0);
+      printing_stack.emplace_back(node, tree_node_iterator);
+      return;
+    }
+    case NodeType::kObject: {
+      TreeNodeIterator tree_node_iterator;
+      tree_node_iterator.iterator = std::get<JsonbObject>(node->value).cbegin();
+      printing_stack.emplace_back(node, tree_node_iterator);
+      return;
+    }
+  }
+}
+
+void PgJsonbValue::CheckRepresentation(std::vector<NodeType> types) const {
+  auto print_types = [this](const std::vector<NodeType>& types) {
+    std::vector<absl::string_view> type_strings;
+    std::for_each(types.begin(), types.end(),
+                  [this, &type_strings](NodeType type) {
+                    type_strings.push_back(NodeTypeToString(type));
+                  });
+    return absl::StrJoin(type_strings, ", ");
+  };
+  ABSL_CHECK(std::find(types.begin(), types.end(),  // Crash ok.
+                  static_cast<NodeType>(rep_->tag)) != types.end())
+      << "Expected " << print_types(types) << " but got "
+      << NodeTypeToString(static_cast<NodeType>(rep_->tag));
+}
+
+std::string PgJsonbValue::GetString() const {
+  CheckRepresentation({NodeType::kString});
+  return std::get<std::string>(rep_->value)
+      .substr(1, std::get<std::string>(rep_->value).size() - 2);
+}
+
+absl::string_view PgJsonbValue::GetSerializedString() const {
+  CheckRepresentation({NodeType::kString});
+  return std::get<std::string>(rep_->value);
+}
+
+absl::string_view PgJsonbValue::GetNumeric() const {
+  CheckRepresentation({NodeType::kNumeric});
+  return std::get<std::string>(rep_->value);
+}
+
+absl::Cord PgJsonbValue::Serialize() const { return PrintTreeNode(rep_); }
+
+bool PgJsonbValue::HasMember(absl::string_view key) const {
+  if (!IsObject()) {
+    return false;
+  }
+  auto it = std::get<JsonbObject>(rep_->value).find(std::string(key));
+  return it != std::get<JsonbObject>(rep_->value).end();
+}
+
+absl::Status PgJsonbValue::CreateMemberIfNotExists(absl::string_view key) {
+  CheckRepresentation({NodeType::kObject});
+  if (HasMember(key)) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("Member already exists: ", key));
+  }
+
+  if (absl::StrContains(key, '\0')) {
+    return absl::InvalidArgumentError(
+        "unsupported Unicode escape sequence \n DETAIL: \\u0000 cannot be "
+        "converted to text.");
+  }
+
+  std::string key_str(key);
+  std::string serialization_output_buffer;
+  nlohmann::detail::serializer<nlohmann::basic_json<>> serializer(
+      nlohmann::detail::output_adapter<char>(serialization_output_buffer),
+      '\0');
+
+  serializer.dump(key, /*pretty_print=*/false, /*ensure_ascii=*/false,
+                  /*indent_step=*/0);
+  std::get<JsonbObject>(rep_->value)[std::string(key)] = std::make_pair(
+      CreateTreeNode(NodeType::kNull), serialization_output_buffer);
+  total_bytes_estimate_ += serialization_output_buffer.size() + 5;
+  return absl::OkStatus();
+}
+
+std::optional<PgJsonbValue> PgJsonbValue::GetMemberIfExists(
+    absl::string_view key) const {
+  if (!IsObject()) {
+    return std::nullopt;
+  }
+  auto it = std::get<JsonbObject>(rep_->value).find(std::string(key));
+  if (it == std::get<JsonbObject>(rep_->value).end()) {
+    return std::nullopt;
+  }
+  return PgJsonbValue(it->second.first, tree_nodes_, max_depth_estimate_,
+                      total_bytes_estimate_);
+}
+
+std::vector<std::pair<absl::string_view, PgJsonbValue>>
+PgJsonbValue::GetMembers() const {
+  CheckRepresentation({NodeType::kObject, NodeType::kNull});
+  if (IsNull()) {
+    return {};
+  }
+  std::vector<std::pair<absl::string_view, PgJsonbValue>> members;
+  members.reserve(std::get<JsonbObject>(rep_->value).size());
+  TreeNode* ptr;
+  for (const auto& member : std::get<JsonbObject>(rep_->value)) {
+    ptr = member.second.first;
+    members.push_back(std::make_pair(
+        absl::string_view(member.first.data(), member.first.size()),
+        PgJsonbValue(ptr, tree_nodes_, max_depth_estimate_,
+                     total_bytes_estimate_)));
+  }
+  return members;
+}
+
+std::vector<std::string> PgJsonbValue::GetKeys() const {
+  CheckRepresentation({NodeType::kObject, NodeType::kNull});
+  if (IsNull()) {
+    return {};
+  }
+  std::vector<std::string> keys;
+  for (const auto& [key, value] : std::get<JsonbObject>(rep_->value)) {
+    keys.push_back(key);
+  }
+  return keys;
+}
+
+bool PgJsonbValue::Exists(absl::string_view text) const {
+  if (!IsValidJsonbString(text)) {
+    return false;
+  }
+  if (IsObject()) {
+    return HasMember(text);
+  }
+
+  if (IsNumeric() && std::get<std::string>(rep_->value) == text) {
+    return true;
+  }
+
+  // JSONB string is serialized with additional quotation marks.
+  std::string serialized_text =
+      datatypes::common::jsonb::NormalizeJsonbString(text);
+
+  if (IsArray()) {
+    for (const auto& elem : std::get<JsonbArray>(rep_->value)) {
+      if (elem->tag == NodeType::kString &&
+          std::get<std::string>(elem->value) == serialized_text) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (IsString() && std::get<std::string>(rep_->value) == serialized_text) {
+    return true;
+  }
+
+  return false;
+}
+
+bool PgJsonbValue::RemoveMember(absl::string_view key) {
+  CheckRepresentation({NodeType::kObject});
+  return std::get<JsonbObject>(rep_->value).erase(std::string(key)) > 0;
+}
+
+size_t PgJsonbValue::GetObjectSize() const {
+  CheckRepresentation({NodeType::kObject});
+  return std::get<JsonbObject>(rep_->value).size();
+}
+
+int64_t PgJsonbValue::GetArraySize() const {
+  CheckRepresentation({NodeType::kArray});
+  return std::get<JsonbArray>(rep_->value).size();
+}
+
+std::optional<PgJsonbValue> PgJsonbValue::GetArrayElementIfExists(
+    int64_t index) const {
+  if (!IsArray()) {
+    return std::nullopt;
+  }
+  // Transform a negative index to a positive one.
+  if (index < 0) {
+    index = GetArraySize() + index;
+  }
+  // If it's still less than 0 or greater than or equal to the array size,
+  // return nullopt as it is out of range.
+  if (index < 0 || index >= GetArraySize()) {
+    return std::nullopt;
+  }
+  return PgJsonbValue(std::get<JsonbArray>(rep_->value)[index], tree_nodes_,
+                      max_depth_estimate_, total_bytes_estimate_);
+}
+
+std::vector<PgJsonbValue> PgJsonbValue::GetArrayElements() const {
+  CheckRepresentation({NodeType::kArray});
+  std::vector<PgJsonbValue> elements;
+  elements.reserve(std::get<JsonbArray>(rep_->value).size());
+  for (const auto& elem : std::get<JsonbArray>(rep_->value)) {
+    elements.push_back(PgJsonbValue(elem, tree_nodes_, max_depth_estimate_,
+                                    total_bytes_estimate_));
+  }
+  return elements;
+}
+
+absl::StatusOr<std::vector<absl::Cord>>
+PgJsonbValue::GetSerializedArrayElements() const {
+  if (!IsArray()) {
+    return absl::InvalidArgumentError(
+        "GetSerializedArrayElements can only be called on a JSONB array");
+  }
+  std::vector<absl::Cord> result_array;
+  JsonbArray& value_array = std::get<JsonbArray>(rep_->value);
+  result_array.reserve(value_array.size());
+  for (const auto& elem : value_array) {
+    result_array.push_back(PrintTreeNode(elem));
+  }
+  return result_array;
+}
+
+absl::Status PgJsonbValue::InsertArrayElement(const PgJsonbValue& jsonb_value,
+                                              int64_t index) {
+  CheckRepresentation({NodeType::kArray});
+  if (GetArraySize() >= kJSONBMaxArraySize) {
+    return absl::OutOfRangeError(absl::StrCat(
+        "JSONB array size exceeds the limit of ", kJSONBMaxArraySize));
+  }
+  // Transform a negative index to a positive one.
+  if (index < 0) {
+    index = GetArraySize() + index;
+  }
+  // If index is still negative insert at the beginning of the array
+  if (index < 0) {
+    index = 0;
+  }
+  // If the index is greater than the array size, insert at the end of the
+  // array.
+  if (index >= GetArraySize()) {
+    index = GetArraySize();
+  }
+  std::get<JsonbArray>(rep_->value)
+      .insert(std::get<JsonbArray>(rep_->value).begin() + index,
+              jsonb_value.rep_);
+  return absl::OkStatus();
+}
+
+bool PgJsonbValue::RemoveArrayElement(int64_t index) {
+  CheckRepresentation({NodeType::kArray});
+  // Transform a negative index to a positive one.
+  if (index < 0) {
+    index = GetArraySize() + index;
+  }
+  // If it's still less than 0 or greater than or equal to the array size,
+  // return false as it is out of range.
+  if (index < 0 || index >= GetArraySize()) {
+    return false;
+  }
+  std::get<JsonbArray>(rep_->value)
+      .erase(std::get<JsonbArray>(rep_->value).begin() + index);
+  return true;
+}
+
+void PgJsonbValue::CleanUpJsonbObject() {
+  CheckRepresentation({NodeType::kObject});
+  JsonbObject& obj = std::get<JsonbObject>(rep_->value);
+  for (auto it = obj.begin(); it != obj.end();) {
+    if (it->second.first->tag == NodeType::kNull) {
+      it = obj.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+absl::StatusOr<int32_t> PgJsonbValue::PathElementToIndex(
+    absl::string_view path_element, int pos) const {
+  int32_t index;
+  if (!absl::SimpleAtoi(path_element, &index)) {
+    return absl::InvalidArgumentError(absl::Substitute(
+        "path element at position $0 is not an integer: \"$1\"", pos,
+        path_element));
+  }
+  return index;
+}
+
+absl::StatusOr<std::optional<PgJsonbValue>> PgJsonbValue::FindAtPath(
+    absl::Span<const std::string> path, FindAtPathMode mode) const {
+  const PgJsonbValue* parent = this;
+  // Keep the PgJsonbValue representation of the children in the path alive
+  // until the end of computation.
+  std::vector<PgJsonbValue> children;
+  children.reserve(path.size());
+  for (int i = 0; i < path.size(); ++i) {
+    auto path_element = path[i];
+    std::optional<PgJsonbValue> child = std::nullopt;
+    if (parent->IsArray()) {
+      absl::StatusOr<int32_t> index = PathElementToIndex(path_element, i + 1);
+      if (mode == kIgnoreStringPathOnArrayError && !index.ok()) {
+        return std::nullopt;
+      }
+      ZETASQL_RETURN_IF_ERROR(index.status());
+      child = parent->GetArrayElementIfExists(*index);
+    } else if (parent->IsObject()) {
+      child = parent->GetMemberIfExists(path_element);
+    }
+    if (child.has_value()) {
+      children.push_back(std::move(child.value()));
+      parent = &children.back();
+    } else {
+      return std::nullopt;
+    }
+  }
+  return *parent;
+}
+
+void PgJsonbValue::SetValue(const PgJsonbValue& value) {
+  (*rep_).value = value.rep_->value;
+  (*rep_).tag = value.rep_->tag;
+  max_depth_estimate_ = value.max_depth_estimate_;
+  total_bytes_estimate_ = value.total_bytes_estimate_;
+  ABSL_LOG(ERROR) << "value rep: " << PrintTreeNode(value.rep_);
+  ABSL_LOG(ERROR) << "CURRENT REP: " << PrintTreeNode(rep_);
+}
+
+absl::StatusOr<PgJsonbValue> PgJsonbValue::Parse(
+    absl::string_view jsonb,
+    std::vector<std::unique_ptr<TreeNode>>* tree_nodes) {
+  PGJSONBParser parser(tree_nodes);
   using jsonb_parser =
       nlohmann::basic_json<std::map, std::vector, std::string, bool,
                            std::int64_t, std::uint64_t, long double>;
   jsonb_parser::sax_parse(jsonb, &parser);
-  return std::move(parser).GetResultArrayDestructive();
+  return std::move(parser).GetRepresentation();
+}
+
+TreeNode* PgJsonbValue::CreateTreeNode(NodeType tag) {
+  std::unique_ptr<TreeNode> tree_node = std::make_unique<TreeNode>(tag);
+  tree_nodes_->push_back(std::move(tree_node));
+  return tree_nodes_->back().get();
+}
+
+absl::StatusOr<absl::Cord> ParseJsonb(absl::string_view json) {
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue result, PgJsonbValue::Parse(json, &tree_nodes));
+  absl::Cord result_cord = result.Serialize();
+  return result_cord;
 }
 
 std::string NormalizeJsonbString(absl::string_view value) {

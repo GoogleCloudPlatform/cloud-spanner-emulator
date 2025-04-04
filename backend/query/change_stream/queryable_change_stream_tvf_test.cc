@@ -30,6 +30,7 @@
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/schema.h"
+#include "common/constants.h"
 #include "tests/common/schema_constructor.h"
 
 namespace google {
@@ -43,7 +44,7 @@ class QueryableChangeStreamTvfTest : public testing::Test {
   QueryableChangeStreamTvfTest()
       : schema_(
             test::CreateSchemaWithOneTableAndOneChangeStream(&type_factory_)),
-        analyzer_options_(MakeGoogleSqlAnalyzerOptions()),
+        analyzer_options_(MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone)),
         fn_catalog_(&type_factory_),
         catalog_(std::make_unique<Catalog>(
             schema_.get(), &fn_catalog_, &type_factory_, analyzer_options_)) {}

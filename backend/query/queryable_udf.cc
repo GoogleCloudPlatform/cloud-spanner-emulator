@@ -17,6 +17,7 @@
 #include "backend/query/queryable_udf.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "zetasql/public/analyzer.h"
@@ -45,6 +46,7 @@ namespace emulator {
 namespace backend {
 
 QueryableUdf::QueryableUdf(const backend::Udf* backend_udf,
+                           const std::string default_time_zone,
                            zetasql::Catalog* catalog,
                            zetasql::TypeFactory* type_factory)
     : zetasql::Function(
@@ -52,16 +54,18 @@ QueryableUdf::QueryableUdf(const backend::Udf* backend_udf,
           /*catalog_name=*/
           kCloudSpannerEmulatorFunctionCatalogName, zetasql::Function::SCALAR,
           std::vector<zetasql::FunctionSignature>{*backend_udf->signature()},
-          CreateFunctionOptions(backend_udf, catalog, type_factory)),
+          CreateFunctionOptions(backend_udf, default_time_zone, catalog,
+                                type_factory)),
       wrapped_udf_(backend_udf) {}
 
 zetasql::FunctionOptions QueryableUdf::CreateFunctionOptions(
-    const backend::Udf* udf, zetasql::Catalog* catalog,
-    zetasql::TypeFactory* type_factory) {
+    const backend::Udf* udf, const std::string default_time_zone,
+    zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory) {
   auto evaluator = [=](absl::Span<const zetasql::Value> args)
       -> absl::StatusOr<zetasql::Value> {
     std::unique_ptr<const zetasql::AnalyzerOutput> output;
-    zetasql::AnalyzerOptions options = MakeGoogleSqlAnalyzerOptions();
+    zetasql::AnalyzerOptions options =
+        MakeGoogleSqlAnalyzerOptions(default_time_zone);
     zetasql::ParameterValueMap columns;
 
     for (int i = 0; i < udf->signature()->arguments().size(); i++) {

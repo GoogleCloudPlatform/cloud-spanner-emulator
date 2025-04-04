@@ -48,6 +48,8 @@ using zetasql::values::Array;
 using zetasql::values::Bytes;
 using zetasql::values::Proto;
 
+constexpr char kDatabaseId[] = "test-db";
+
 class ColumnValueVerifiersTest : public ::testing::Test {
  public:
   ColumnValueVerifiersTest() = default;
@@ -73,8 +75,9 @@ class ColumnValueVerifiersTest : public ::testing::Test {
                             ) PRIMARY KEY (int64_col)
                           )"};
     ZETASQL_ASSERT_OK_AND_ASSIGN(
-        database_, Database::Create(&clock_, SchemaChangeOperation{
-                                                 .statements = statements}));
+        database_,
+        Database::Create(&clock_, kDatabaseId,
+                         SchemaChangeOperation{.statements = statements}));
 
     ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(
@@ -205,10 +208,11 @@ class ProtoColumnValueVerifierTest : public ColumnValueVerifiersTest {
                             ) PRIMARY KEY (int64_col)
                           )sql"};
     ZETASQL_ASSERT_OK_AND_ASSIGN(
-        database_, Database::Create(
-                       &clock_, SchemaChangeOperation{.statements = statements,
-                                                      .proto_descriptor_bytes =
-                                                          read_descriptors()}));
+        database_,
+        Database::Create(&clock_, kDatabaseId,
+                         SchemaChangeOperation{
+                             .statements = statements,
+                             .proto_descriptor_bytes = read_descriptors()}));
 
     ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(

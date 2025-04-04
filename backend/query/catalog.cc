@@ -57,6 +57,7 @@
 #include "backend/schema/catalog/sequence.h"
 #include "common/errors.h"
 #include "third_party/spanner_pg/catalog/pg_catalog.h"
+#include "third_party/spanner_pg/datatypes/extended/conversion_finder.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
@@ -184,11 +185,12 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
           SDLObjectName::SplitSchemaName(udf_name);
       absl::Status status = AddObjectToNamedSchema(
           std::string(schema_part),
-          std::make_unique<QueryableUdf>(udf, this, type_factory));
+          std::make_unique<QueryableUdf>(udf, schema->default_time_zone(), this,
+                                         type_factory));
       LOG_IF(ERROR, !status.ok()) << status.message();
     } else {
-      udfs_[udf->Name()] =
-          std::make_unique<QueryableUdf>(udf, this, type_factory);
+      udfs_[udf->Name()] = std::make_unique<QueryableUdf>(
+          udf, schema->default_time_zone(), this, type_factory);
     }
   }
 
@@ -393,6 +395,17 @@ absl::Status Catalog::GetModel(const std::string& name,
     *model = it->second.get();
     return absl::OkStatus();
   }
+  return absl::OkStatus();
+}
+
+absl::Status Catalog::FindConversion(
+    const zetasql::Type* from_type, const zetasql::Type* to_type,
+    const zetasql::Catalog::FindConversionOptions& options,
+    zetasql::Conversion* conversion) {
+  ZETASQL_ASSIGN_OR_RETURN(
+      *conversion,
+      postgres_translator::spangres::datatypes::FindExtendedTypeConversion(
+          from_type, to_type, options));
   return absl::OkStatus();
 }
 

@@ -49,7 +49,7 @@ struct PGInterval {
 // days" or "7 weeks, 4 days, 15 minutes - 1 month", into canonical
 // representation `PGInterval(months, days and micros)`. This has been modified
 // to run in a MemoryContext-less path (DDL translation) and should not be used
-// if interval_in can be called directly through spangres/src.
+// if interval_in can be called directly through spangres_src/src.
 absl::StatusOr<PGInterval> ParseInterval(absl::string_view input_string);
 
 // IntervalToSecs turns a postgres-format interval specifier string, like "2

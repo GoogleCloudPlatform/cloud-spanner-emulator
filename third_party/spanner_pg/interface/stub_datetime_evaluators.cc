@@ -117,4 +117,57 @@ absl::StatusOr<absl::Cord> PgDateExtract(absl::string_view field,
                                          int32_t source) {
   return absl::UnimplementedError("invoked stub PgDateExtract");
 }
+
+absl::StatusOr<std::string> PgIntervalOut(
+    const zetasql::IntervalValue& interval) {
+  return absl::UnimplementedError("invoked stub PgIntervalOut");
+}
+
+absl::StatusOr<zetasql::IntervalValue> PgIntervalIn(
+    absl::string_view interval_string) {
+  return absl::UnimplementedError("invoked stub PgIntervalIn");
+}
+
+absl::StatusOr<absl::Time> PgTimestamptzAdd(
+    absl::Time input_time, const zetasql::IntervalValue& interval) {
+  return absl::UnimplementedError("invoked stub PgTimestamptzAdd");
+}
+
+absl::StatusOr<absl::Time> PgTimestamptzSubtract(
+    absl::Time input_time, const zetasql::IntervalValue& interval) {
+  return absl::UnimplementedError("invoked stub PgTimestamptzSubtract");
+}
+
+absl::StatusOr<zetasql::IntervalValue> PgMakeInterval(
+    int64_t years, int64_t months, int64_t weeks, int64_t days, int64_t hours,
+    int64_t minutes, double seconds) {
+  return absl::UnimplementedError("invoked stub PgMakeInterval");
+}
+
+absl::StatusOr<zetasql::IntervalValue> PgIntervalMultiply(
+    const zetasql::IntervalValue& interval, double multiplier) {
+  return absl::UnimplementedError("invoked stub PgIntervalMultiply");
+}
+
+absl::StatusOr<zetasql::IntervalValue> PgIntervalDivide(
+    const zetasql::IntervalValue& interval, double divisor) {
+  return absl::UnimplementedError("invoked stub PgIntervalDivide");
+}
+
+absl::StatusOr<absl::Cord> PgIntervalExtract(
+    absl::string_view field,
+    const zetasql::IntervalValue& interval) {
+  return absl::UnimplementedError("invoked stub PgIntervalExtract");
+}
+
+absl::StatusOr<std::unique_ptr<std::string>> PgIntervalToChar(
+    const zetasql::IntervalValue& interval, absl::string_view format) {
+      return absl::UnimplementedError("invoked stub PgIntervalToChar");
+}
+
+absl::StatusOr<zetasql::IntervalValue> PgRoundIntervalPrecision(
+    const zetasql::IntervalValue& interval) {
+  return absl::UnimplementedError("invoked stub PgRoundIntervalPrecision");
+}
+
 }  // namespace postgres_translator::function_evaluators

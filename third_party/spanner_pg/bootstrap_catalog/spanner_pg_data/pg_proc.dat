@@ -238,6 +238,29 @@
   prorettype => 'float8', proargtypes => '_float4 _float4',
   prosrc => 'dot_product' },
 
+{ oid => '50061', proname => 'approx_cosine_distance', pronamespace => 'spanner',
+  prorettype => 'float8', proargtypes => '_float8 _float8 jsonb',
+  proargnames => '{,,options}', prosrc => 'approx_cosine_distance' },
+
+{ oid => '50062', proname => 'approx_cosine_distance', pronamespace => 'spanner',
+  prorettype => 'float8', proargtypes => '_float4 _float4 jsonb',
+  proargnames => '{,,options}', prosrc => 'approx_cosine_distance' },
+
+{ oid => '50063', proname => 'approx_euclidean_distance', pronamespace => 'spanner',
+  prorettype => 'float8', proargtypes => '_float8 _float8 jsonb',
+  proargnames => '{,,options}', prosrc => 'approx_euclidean_distance' },
+
+{ oid => '50064', proname => 'approx_euclidean_distance', pronamespace => 'spanner',
+  prorettype => 'float8', proargtypes => '_float4 _float4 jsonb',
+  proargnames => '{,,options}', prosrc => 'approx_euclidean_distance' },
+
+{ oid => '50065', proname => 'approx_dot_product', pronamespace => 'spanner',
+  prorettype => 'float8', proargtypes => '_float8 _float8 jsonb',
+  proargnames => '{,,options}', prosrc => 'approx_dot_product' },
+
+{ oid => '50066', proname => 'approx_dot_product', pronamespace => 'spanner',
+  prorettype => 'float8', proargtypes => '_float4 _float4 jsonb',
+  proargnames => '{,,options}', prosrc => 'approx_dot_product' },
 
 #############################
 # ML FUNCTIONS

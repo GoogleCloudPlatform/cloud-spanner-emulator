@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <utility>
@@ -24,6 +25,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -145,6 +147,43 @@ class InformationSchemaTest
     return pattern;
   }
 
+  // Helper function to make error results readable.
+  inline void CheckResultsAgainstExpected(
+      absl::StatusOr<std::vector<ValueRow>>& results_or,
+      std::vector<ValueRow>& expected, size_t col_index = 2) {
+    absl::flat_hash_set<std::string> expected_col_values;
+    for (const auto& row : expected) {
+      expected_col_values.insert(
+          row.values()[col_index].get<std::string>().value());
+    }
+    ZETASQL_EXPECT_OK(results_or);
+    std::vector<ValueRow> results = std::move(results_or.value());
+    for (const auto& col_value : expected_col_values) {
+      std::vector<ValueRow> col_results;
+      for (const auto& row : results) {
+        if (row.values()[col_index].get<std::string>().value() == col_value) {
+          col_results.push_back(row);
+        }
+      }
+      std::vector<ValueRow> col_expected;
+      for (const auto& row : expected) {
+        if (row.values()[col_index].get<std::string>().value() == col_value) {
+          col_expected.push_back(row);
+        }
+      }
+      EXPECT_THAT(col_results, testing::ElementsAreArray(col_expected))
+          << "Found mismatched results for column value = " << col_value;
+    }
+    std::vector<ValueRow> unexpected_results;
+    for (const auto& row : results) {
+      if (!expected_col_values.contains(
+              row.values()[col_index].get<std::string>().value())) {
+        unexpected_results.push_back(row);
+      }
+    }
+    EXPECT_THAT(unexpected_results, testing::IsEmpty());
+  }
+
   static void LogResults(const absl::StatusOr<std::vector<ValueRow>>& results) {
     if (!results.ok()) {
       return;
@@ -199,6 +238,13 @@ class InformationSchemaTest
     return std::string(name);
   }
 
+  std::string TableCatalogForDialect() {
+    if (GetParam() == POSTGRESQL) {
+      return database()->database_id();
+    }
+    return "";
+  }
+
   std::string GetUnsupportedTablesAsString() {
     struct formatter {
       void operator()(std::string* out, std::string s) const {
@@ -211,23 +257,6 @@ class InformationSchemaTest
             *(kUnsupportedTables.second).get<std::vector<std::string>>(), ", ",
             formatter()),
         "]");
-  }
-
-  // For most of the tests, the table_catalog column is the first column in a
-  // result. For PG, we currently don't set the value of this column correctly.
-  // So we use this function to get a vector of rows with the first column
-  // stripped.
-  std::vector<ValueRow> StripFirstColumnFromRows(
-      const std::vector<ValueRow>& rows) {
-    std::vector<ValueRow> new_rows;
-    for (const auto& row : rows) {
-      ValueRow new_row;
-      for (auto& value : row.values().subspan(1)) {
-        new_row.add(value);
-      }
-      new_rows.push_back(new_row);
-    }
-    return new_rows;
   }
 
   // Aliases so test expectations read more clearly.
@@ -264,11 +293,11 @@ TEST_P(InformationSchemaTest, Schemata) {
   if (GetParam() == POSTGRESQL) {
     // Remove the catalog_name column from the expected results since we don't
     // currently set that to its correct value for PG.
-    auto expected = std::vector<ValueRow>(
-        {{"", "information_schema"}, {"", "named_schema"}, {"", "pg_catalog"}});
-    std::vector<ValueRow> pg_expected = StripFirstColumnFromRows(expected);
-    ZETASQL_EXPECT_OK(results);
-    EXPECT_THAT(StripFirstColumnFromRows(*results), pg_expected);
+    auto expected =
+        std::vector<ValueRow>({{TableCatalogForDialect(), "information_schema"},
+                               {TableCatalogForDialect(), "named_schema"},
+                               {TableCatalogForDialect(), "pg_catalog"}});
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   } else {
     auto expected = std::vector<ValueRow>(
         {{"", ""}, {"", "INFORMATION_SCHEMA"}, {"", "SPANNER_SYS"}});
@@ -285,6 +314,7 @@ TEST_P(InformationSchemaTest, MetaTables) {
   // the emulator. This test should not need to filter on table_name.
 
   std::string table_schema = GetNameForDialect("INFORMATION_SCHEMA");
+  // In PostgreSQL the table catalog is populated with the database id
   std::string filter;
   std::string collation;
   if (GetParam() == POSTGRESQL) {
@@ -327,54 +357,68 @@ TEST_P(InformationSchemaTest, MetaTables) {
 
   // clang-format off
   auto expected = std::vector<ValueRow>();
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("CHANGE_STREAM_COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("CHANGE_STREAM_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("CHANGE_STREAM_TABLES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("CHANGE_STREAMS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("CHECK_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("COLUMN_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("COLUMN_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("CONSTRAINT_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("CONSTRAINT_TABLE_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("DATABASE_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("INDEX_COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("INDEXES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("KEY_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("LOCALITY_GROUP_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  if (GetParam() != POSTGRESQL) {
+  if (GetParam() == POSTGRESQL) {
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("CHANGE_STREAM_COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("CHANGE_STREAM_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("CHANGE_STREAM_TABLES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("CHANGE_STREAMS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("CHECK_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("COLUMN_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("COLUMN_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("CONSTRAINT_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("CONSTRAINT_TABLE_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("DATABASE_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("INDEX_COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("INDEXES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("KEY_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("LOCALITY_GROUP_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("REFERENTIAL_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("SCHEMATA"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("SEQUENCES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("SPANNER_STATISTICS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("TABLE_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("TABLES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+
+    // Substituting in the static array of unsupported tables.
+    absl::StatusOr<std::vector<ValueRow>> results =
+        Query(absl::Substitute(query, GetUnsupportedTablesAsString()));
+    LogResults(results);
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  } else {
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("CHANGE_STREAM_COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("CHANGE_STREAM_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("CHANGE_STREAM_TABLES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("CHANGE_STREAMS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("CHECK_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("COLUMN_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("COLUMN_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("CONSTRAINT_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("CONSTRAINT_TABLE_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("DATABASE_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("INDEX_COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("INDEXES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("KEY_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("LOCALITY_GROUP_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODEL_COLUMN_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODEL_COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODEL_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODELS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  }
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("REFERENTIAL_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SCHEMATA"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  if (GetParam() != POSTGRESQL) {
-      expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SEQUENCE_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  }
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SEQUENCES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SPANNER_STATISTICS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("TABLE_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-  expected.push_back({"", table_schema, "VIEW", GetNameForDialect("TABLES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("REFERENTIAL_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SCHEMATA"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SEQUENCE_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SEQUENCES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SPANNER_STATISTICS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("TABLE_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("TABLES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
 
+    absl::StatusOr<std::vector<ValueRow>> results =
+        QueryWithParams(query, {kUnsupportedTables});
+    LogResults(results);
+    CheckResultsAgainstExpected(results, expected, 3);
+  }
   // clang-format on
-  absl::StatusOr<std::vector<ValueRow>> results;
-  if (GetParam() == POSTGRESQL) {
-    // Remove the table_catalog column from the expected results since we don't
-    // currently set that to its correct value for PG.
-    std::vector<ValueRow> pg_expected = StripFirstColumnFromRows(expected);
-
-    // Substituting in the static array of unsupported tables.
-    results = Query(absl::Substitute(query, GetUnsupportedTablesAsString()));
-    LogResults(results);
-    ZETASQL_EXPECT_OK(results);
-    EXPECT_THAT(StripFirstColumnFromRows(*results), pg_expected);
-  } else {
-    results = QueryWithParams(query, {kUnsupportedTables});
-    LogResults(results);
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
-  }
 }
 
 TEST_P(InformationSchemaTest, GSQLMetaColumns) {
@@ -608,7 +652,7 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
   });
 
   // clang-format on
-  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  CheckResultsAgainstExpected(results, expected);
 }
 
 TEST_P(InformationSchemaTest, PGMetaColumns) {
@@ -900,7 +944,7 @@ TEST_P(InformationSchemaTest, MetaIndexColumns) {
     // clang-format on
     results = QueryWithParams(query, {kUnsupportedTables});
     LogResults(results);
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+    CheckResultsAgainstExpected(results, expected);
   }
 }
 
@@ -1130,7 +1174,7 @@ TEST_P(InformationSchemaTest, MetaTableConstraints) {
       {"", "INFORMATION_SCHEMA", "PK_TABLE_CONSTRAINTS", "", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
     });
     // clang-format on
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+    CheckResultsAgainstExpected(results, expected);
   }
 }
 
@@ -1301,7 +1345,7 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_TABLE_CONSTRAINTS_TABLE_SCHEMA", "TABLE_SCHEMA IS NOT NULL", "COMMITTED"},  // NOLINT
     });
     // clang-format on
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+    CheckResultsAgainstExpected(results, expected);
   }
 }
 
@@ -1532,7 +1576,7 @@ TEST_P(InformationSchemaTest, MetaConstraintTableUsage) {
       {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "", "INFORMATION_SCHEMA", "PK_TABLE_CONSTRAINTS"},  // NOLINT
     });
     // clang-format on
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+    CheckResultsAgainstExpected(results, expected);
   }
 }
 
@@ -1715,7 +1759,7 @@ TEST_P(InformationSchemaTest, MetaKeyColumnUsage) {
       {"", "INFORMATION_SCHEMA", "PK_TABLE_CONSTRAINTS", "", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CONSTRAINT_NAME", 3, Ni()},  // NOLINT
     });
     // clang-format on
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+    CheckResultsAgainstExpected(results, expected);
   }
 }
 
@@ -2028,7 +2072,7 @@ TEST_P(InformationSchemaTest, MetaConstraintColumnUsage) {
       {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_SCHEMA", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_TABLE_CONSTRAINTS_TABLE_SCHEMA"},  // NOLINT
     });
     // clang-format off
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+    CheckResultsAgainstExpected(results, expected);
   }
 }
 
@@ -2336,20 +2380,20 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
   LogResults(results);
   if (GetParam() == POSTGRESQL) {
     // clang-format off
-    auto expected = ExpectedRows(StripFirstColumnFromRows(*results), {
-      {"public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "INDEX", "", "NO", "YES", "READ_WRITE", "YES"},  // NOLINT
-      {"public", "base", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
-      {"public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", "YES", "NO", "READ_WRITE", "YES"},  // NOLINT
-      {"public", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
-      {"public", "cascade_child", "cascade_child_by_value", "INDEX", "base", "YES", "NO", "READ_WRITE", "NO"},  // NOLINT
-      {"public", "no_action_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
-      {"public", "no_action_child", "no_action_child_by_value", "INDEX", "", "NO", "NO", "READ_WRITE", "NO"},  // NOLINT
-      {"public", "row_deletion_policy", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
+    auto expected = ExpectedRows(results, {
+      {TableCatalogForDialect(), "public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "INDEX", "", "NO", "YES", "READ_WRITE", "YES"},  // NOLINT
+      {TableCatalogForDialect(), "public", "base", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
+      {TableCatalogForDialect(), "public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", "YES", "NO", "READ_WRITE", "YES"},  // NOLINT
+      {TableCatalogForDialect(), "public", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
+      {TableCatalogForDialect(), "public", "cascade_child", "cascade_child_by_value", "INDEX", "base", "YES", "NO", "READ_WRITE", "NO"},  // NOLINT
+      {TableCatalogForDialect(), "public", "no_action_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
+      {TableCatalogForDialect(), "public", "no_action_child", "no_action_child_by_value", "INDEX", "", "NO", "NO", "READ_WRITE", "NO"},  // NOLINT
+      {TableCatalogForDialect(), "public", "row_deletion_policy", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
     });
     // clang-format on
     // Remove the table_catalog column from the expected results since we don't
     // currently set that to its correct value for PG.
-    EXPECT_THAT(StripFirstColumnFromRows(*results), expected);
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   } else {
     // clang-format off
     auto expected = ExpectedRows(results, {
@@ -2447,29 +2491,29 @@ TEST_P(InformationSchemaTest, DefaultIndexColumns) {
   LogResults(results);
   if (GetParam() == POSTGRESQL) {
     // clang-format off
-    auto expected = ExpectedRows(StripFirstColumnFromRows(*results), {
-      {"public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "bool_value", 1, "ASC NULLS FIRST", "NO", "boolean"},  // NOLINT
-      {"public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
-      {"public", "base", "PRIMARY_KEY", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
-      {"public", "base", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
-      {"public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "child_key", 1, "ASC", "NO", "boolean"},  // NOLINT
-      {"public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "value1", 2, "ASC NULLS FIRST", "NO", "character varying(256)"},  // NOLINT
-      {"public", "cascade_child", "PRIMARY_KEY", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
-      {"public", "cascade_child", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
-      {"public", "cascade_child", "PRIMARY_KEY", "child_key", 3, "ASC", "NO", "boolean"},  // NOLINT
-      {"public", "cascade_child", "cascade_child_by_value", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
-      {"public", "cascade_child", "cascade_child_by_value", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
-      {"public", "cascade_child", "cascade_child_by_value", "value1", Ni(), Ns(), "NO", "character varying(256)"},  // NOLINT
-      {"public", "no_action_child", "PRIMARY_KEY", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
-      {"public", "no_action_child", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
-      {"public", "no_action_child", "PRIMARY_KEY", "child_key", 3, "ASC", "NO", "boolean"},  // NOLINT
-      {"public", "no_action_child", "no_action_child_by_value", "value", 1, "ASC", "YES", "character varying"},  // NOLINT
-      {"public", "row_deletion_policy", "PRIMARY_KEY", "key", 1, "ASC", "NO", "bigint"},  // NOLINT
+    auto expected = ExpectedRows(results, {
+      {TableCatalogForDialect(), "public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "bool_value", 1, "ASC NULLS FIRST", "NO", "boolean"},  // NOLINT
+      {TableCatalogForDialect(), "public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
+      {TableCatalogForDialect(), "public", "base", "PRIMARY_KEY", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
+      {TableCatalogForDialect(), "public", "base", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
+      {TableCatalogForDialect(), "public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "child_key", 1, "ASC", "NO", "boolean"},  // NOLINT
+      {TableCatalogForDialect(), "public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "value1", 2, "ASC NULLS FIRST", "NO", "character varying(256)"},  // NOLINT
+      {TableCatalogForDialect(), "public", "cascade_child", "PRIMARY_KEY", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
+      {TableCatalogForDialect(), "public", "cascade_child", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
+      {TableCatalogForDialect(), "public", "cascade_child", "PRIMARY_KEY", "child_key", 3, "ASC", "NO", "boolean"},  // NOLINT
+      {TableCatalogForDialect(), "public", "cascade_child", "cascade_child_by_value", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
+      {TableCatalogForDialect(), "public", "cascade_child", "cascade_child_by_value", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
+      {TableCatalogForDialect(), "public", "cascade_child", "cascade_child_by_value", "value1", Ni(), Ns(), "NO", "character varying(256)"},  // NOLINT
+      {TableCatalogForDialect(), "public", "no_action_child", "PRIMARY_KEY", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
+      {TableCatalogForDialect(), "public", "no_action_child", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
+      {TableCatalogForDialect(), "public", "no_action_child", "PRIMARY_KEY", "child_key", 3, "ASC", "NO", "boolean"},  // NOLINT
+      {TableCatalogForDialect(), "public", "no_action_child", "no_action_child_by_value", "value", 1, "ASC", "YES", "character varying"},  // NOLINT
+      {TableCatalogForDialect(), "public", "row_deletion_policy", "PRIMARY_KEY", "key", 1, "ASC", "NO", "bigint"},  // NOLINT
     });
     // clang-format on
     // Remove the table_catalog column from the expected results since we don't
     // currently set that to its correct value for PG.
-    EXPECT_THAT(StripFirstColumnFromRows(*results), expected);
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   } else {
     // clang-format off
     auto expected = ExpectedRows(results, {
@@ -2493,7 +2537,7 @@ TEST_P(InformationSchemaTest, DefaultIndexColumns) {
       {"", "", "row_deletion_policy", "PRIMARY_KEY", "key", 1, "ASC", "YES", "INT64"},  // NOLINT
     });
     // clang-format on
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+    CheckResultsAgainstExpected(results, expected);
   }
 }
 
@@ -3321,12 +3365,12 @@ TEST_P(InformationSchemaTest, DefaultViews) {
 
   if (GetParam() == POSTGRESQL) {
     auto expected = std::vector<ValueRow>({
-        {"public", "base_view", "SELECT key1 FROM base"},
+        {TableCatalogForDialect(), "public", "base_view",
+         "SELECT key1 FROM base"},
     });
-    ZETASQL_EXPECT_OK(results);
     // Remove the table_catalog column from the expected results since we
     // don't currently set that to its correct value for PG.
-    EXPECT_THAT(StripFirstColumnFromRows(*results), expected);
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   } else {
     auto expected = std::vector<ValueRow>({
         {"", "", "base_view", "SELECT base.key1 FROM base"},
@@ -3356,26 +3400,24 @@ TEST_P(InformationSchemaTest, DefaultCheckConstraints) {
 
   if (GetParam() == POSTGRESQL) {
     // clang-format off
-    auto expected = ExpectedRows(StripFirstColumnFromRows(*results), {
-      {"public", "CK_IS_NOT_NULL_base_bool_array", "bool_array IS NOT NULL", "COMMITTED"},  // NOLINT
-      {"public", "CK_IS_NOT_NULL_base_int_value", "int_value IS NOT NULL", "COMMITTED"},  // NOLINT
-      {"public", "CK_IS_NOT_NULL_base_key1", "key1 IS NOT NULL", "COMMITTED"},  // NOLINT
-      {"public", "CK_IS_NOT_NULL_base_key2", "key2 IS NOT NULL", "COMMITTED"},  // NOLINT
-      {"public", "CK_IS_NOT_NULL_cascade_child_child_key", "child_key IS NOT NULL", "COMMITTED"},  // NOLINT
-      {"public", "CK_IS_NOT_NULL_cascade_child_key1", "key1 IS NOT NULL", "COMMITTED"},  // NOLINT
-      {"public", "CK_IS_NOT_NULL_cascade_child_key2", "key2 IS NOT NULL", "COMMITTED"},  // NOLINT
-      {"public", "CK_IS_NOT_NULL_cascade_child_value1", "value1 IS NOT NULL", "COMMITTED"},  // NOLINT
-      {"public", "CK_IS_NOT_NULL_no_action_child_child_key", "child_key IS NOT NULL", "COMMITTED"},  // NOLINT
-      {"public", "CK_IS_NOT_NULL_no_action_child_key1", "key1 IS NOT NULL", "COMMITTED"},  // NOLINT
-      {"public", "CK_IS_NOT_NULL_no_action_child_key2", "key2 IS NOT NULL", "COMMITTED"},  // NOLINT
-      {"public", "CK_IS_NOT_NULL_row_deletion_policy_key", "key IS NOT NULL", "COMMITTED"},  // NOLINT
-      {"public", "CK_base_\\w{16}_1", "(int_value > '0'::bigint)", "COMMITTED"},  // NOLINT
-      {"public", "check_constraint_name", "(int_value > '0'::bigint)", "COMMITTED"},  // NOLINT
+    auto expected = ExpectedRows(results, {
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_base_bool_array", "bool_array IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_base_int_value", "int_value IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_base_key1", "key1 IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_base_key2", "key2 IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_cascade_child_child_key", "child_key IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_cascade_child_key1", "key1 IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_cascade_child_key2", "key2 IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_cascade_child_value1", "value1 IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_no_action_child_child_key", "child_key IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_no_action_child_key1", "key1 IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_no_action_child_key2", "key2 IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_row_deletion_policy_key", "key IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_base_\\w{16}_1", "(int_value > '0'::bigint)", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "check_constraint_name", "(int_value > '0'::bigint)", "COMMITTED"},  // NOLINT
     });
     // clang-format on
-    // Remove the table_catalog column from the expected results since we
-    // don't currently set that to its correct value for PG.
-    EXPECT_THAT(StripFirstColumnFromRows(*results), expected);
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   } else {
     // clang-format off
     auto expected = ExpectedRows(results, std::vector<ValueRow>({
@@ -3673,15 +3715,12 @@ TEST_P(InformationSchemaTest, DefaultChangeStreams) {
 
   if (GetParam() == POSTGRESQL) {
     auto expected = std::vector<ValueRow>({
-        {"public", "test_stream", "NO"},
-        {"public", "test_stream2", "NO"},
-        {"public", "test_stream3", "YES"},
-        {"public", "test_stream4", "NO"},
+        {TableCatalogForDialect(), "public", "test_stream", "NO"},
+        {TableCatalogForDialect(), "public", "test_stream2", "NO"},
+        {TableCatalogForDialect(), "public", "test_stream3", "YES"},
+        {TableCatalogForDialect(), "public", "test_stream4", "NO"},
     });
-    ZETASQL_EXPECT_OK(results);
-    // Remove the change_stream_catalog column from the expected results since
-    // we don't currently set that to its correct value for PG.
-    EXPECT_THAT(StripFirstColumnFromRows(*results), expected);
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   } else {
     auto expected = std::vector<ValueRow>({
         {"", "", "test_stream", false},
@@ -3716,16 +3755,16 @@ TEST_P(InformationSchemaTest, DefaultChangeStreamTables) {
 
   if (GetParam() == POSTGRESQL) {
     auto expected = std::vector<ValueRow>({
-        {"test_stream", "public", "base", "NO"},
-        {"test_stream", "public", "no_action_child", "YES"},
-        {"test_stream2", "public", "base", "YES"},
-        {"test_stream2", "public", "cascade_child", "NO"},
-        {"test_stream2", "public", "no_action_child", "NO"},
+        {TableCatalogForDialect(), "test_stream", "public", "base", "NO"},
+        {TableCatalogForDialect(), "test_stream", "public", "no_action_child",
+         "YES"},
+        {TableCatalogForDialect(), "test_stream2", "public", "base", "YES"},
+        {TableCatalogForDialect(), "test_stream2", "public", "cascade_child",
+         "NO"},
+        {TableCatalogForDialect(), "test_stream2", "public", "no_action_child",
+         "NO"},
     });
-    ZETASQL_EXPECT_OK(results);
-    // Remove the table_catalog column from the expected results since
-    // we don't currently set that to its correct value for PG.
-    EXPECT_THAT(StripFirstColumnFromRows(*results), expected);
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   } else {
     auto expected = std::vector<ValueRow>({
         {"", "test_stream", "", "base", false},
@@ -3734,7 +3773,6 @@ TEST_P(InformationSchemaTest, DefaultChangeStreamTables) {
         {"", "test_stream2", "", "cascade_child", false},
         {"", "test_stream2", "", "no_action_child", false},
     });
-    ZETASQL_EXPECT_OK(results);
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   }
 }
@@ -3757,15 +3795,14 @@ TEST_P(InformationSchemaTest, DefaultChangeStreamsOptions) {
       (GetParam() == POSTGRESQL) ? "character varying" : "STRING";
   if (GetParam() == POSTGRESQL) {
     auto expected = std::vector<ValueRow>({
-        {"public", "test_stream", "retention_period", type, "36h"},
-        {"public", "test_stream2", "retention_period", type, "2d"},
-        {"public", "test_stream2", "value_capture_type", type,
-         "OLD_AND_NEW_VALUES"},
+        {TableCatalogForDialect(), "public", "test_stream", "retention_period",
+         type, "36h"},
+        {TableCatalogForDialect(), "public", "test_stream2", "retention_period",
+         type, "2d"},
+        {TableCatalogForDialect(), "public", "test_stream2",
+         "value_capture_type", type, "OLD_AND_NEW_VALUES"},
     });
-    ZETASQL_EXPECT_OK(results);
-    // Remove the change_stream_catalog column from the expected results since
-    // we don't currently set that to its correct value for PG.
-    EXPECT_THAT(StripFirstColumnFromRows(*results), expected);
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   } else {
     auto expected = std::vector<ValueRow>({
         {"", "", "test_stream", "retention_period", type, "36h"},
@@ -3799,16 +3836,18 @@ TEST_P(InformationSchemaTest, DefaultChangeStreamColumns) {
 
   if (GetParam() == POSTGRESQL) {
     auto expected = std::vector<ValueRow>({
-        {"test_stream", "public", "base", "bool_value"},
-        {"test_stream", "public", "base", "int_value"},
-        {"test_stream2", "public", "cascade_child", "created_at"},
-        {"test_stream2", "public", "cascade_child", "value1"},
-        {"test_stream2", "public", "cascade_child", "value2"},
+        {TableCatalogForDialect(), "test_stream", "public", "base",
+         "bool_value"},
+        {TableCatalogForDialect(), "test_stream", "public", "base",
+         "int_value"},
+        {TableCatalogForDialect(), "test_stream2", "public", "cascade_child",
+         "created_at"},
+        {TableCatalogForDialect(), "test_stream2", "public", "cascade_child",
+         "value1"},
+        {TableCatalogForDialect(), "test_stream2", "public", "cascade_child",
+         "value2"},
     });
-    ZETASQL_EXPECT_OK(results);
-    // Remove the change_stream_catalog column from the expected results since
-    // we don't currently set that to its correct value for PG.
-    EXPECT_THAT(StripFirstColumnFromRows(*results), expected);
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   } else {
     auto expected = std::vector<ValueRow>({
         {"", "test_stream", "", "base", "bool_value"},
@@ -3982,15 +4021,14 @@ TEST_P(SequenceInformationSchemaTest, PGSequencesTable) {
   LogResults(results);
   // clang-format off
   ZETASQL_EXPECT_OK(results);
-  std::vector<ValueRow> pg_results = StripFirstColumnFromRows(*results);
-  auto expected = ExpectedRows(pg_results, {
-    {"public", "myseq", "INT64", Ni(), Ni(), Ni(), Ni(), Ni(), Ni(), Ni(),
-        "NO", "bit_reversed_positive", 1, Ni(), Ni()},
-    {"public", "myseq2", "INT64", Ni(), Ni(), Ni(), Ni(), Ni(), Ni(), Ni(),
-        "NO", "bit_reversed_positive", 20, 100, 99999},
+  auto expected = ExpectedRows(results, {
+    {TableCatalogForDialect(), "public", "myseq", "INT64", Ni(), Ni(), Ni(),
+     Ni(), Ni(), Ni(), Ni(), "NO", "bit_reversed_positive", 1, Ni(), Ni()},
+    {TableCatalogForDialect(), "public", "myseq2", "INT64", Ni(), Ni(), Ni(),
+     Ni(), Ni(), Ni(), Ni(), "NO", "bit_reversed_positive", 20, 100, 99999},
   });
   // clang-format on
-  EXPECT_THAT(pg_results, testing::UnorderedElementsAreArray(expected));
+  EXPECT_THAT(results, IsOkAndHoldsUnorderedRows(expected));
 }
 
 TEST_P(SequenceInformationSchemaTest, GSQLSequencesTable) {

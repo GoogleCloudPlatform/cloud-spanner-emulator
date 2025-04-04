@@ -44,7 +44,7 @@ package(
     ],
 )
 
-licenses(["notice"])
+licenses(["restricted"])
 
 cc_binary(
     name = "latin2_and_win1250.so",

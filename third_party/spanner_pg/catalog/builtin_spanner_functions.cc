@@ -36,6 +36,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/log/absl_log.h"
 #include "zetasql/public/function.h"
 #include "zetasql/public/function.pb.h"
 #include "zetasql/public/function_signature.h"
@@ -115,6 +116,22 @@ zetasql::FunctionArgumentTypeOptions GetOptionalNamedArgumentOptions(
     absl::string_view name) {
   zetasql::FunctionArgumentTypeOptions options;
   options.set_cardinality(zetasql::FunctionArgumentType::OPTIONAL);
+  options.set_argument_name(name, zetasql::kNamedOnly);
+  return options;
+}
+
+zetasql::FunctionArgumentTypeOptions GetRequiredPositionalArgumentOptions(
+    absl::string_view name) {
+  zetasql::FunctionArgumentTypeOptions options;
+  options.set_cardinality(zetasql::FunctionArgumentType::REQUIRED);
+  options.set_argument_name(name, zetasql::kPositionalOnly);
+  return options;
+}
+
+zetasql::FunctionArgumentTypeOptions GetRequiredNamedOnlyArgumentOptions(
+    absl::string_view name) {
+  zetasql::FunctionArgumentTypeOptions options;
+  options.set_cardinality(zetasql::FunctionArgumentType::REQUIRED);
   options.set_argument_name(name, zetasql::kNamedOnly);
   return options;
 }
@@ -1265,7 +1282,7 @@ static void RemapMinFunction(
   for (const PostgresFunctionSignatureArguments& existing_signature :
        min_function->signature_arguments()) {
     if (existing_signature.signature().arguments().size() != 1) {
-      ABSL_LOG(FATAL)
+      ABSL_LOG(ERROR)
           << "Encountered min function signature with multiple arguments: "
           << existing_signature.signature().DebugString();
       continue;
@@ -1297,6 +1314,236 @@ static void RemapMinFunction(
   // Add new registration.
   functions.push_back(
       {"min", "min", function_signatures, zetasql::Function::AGGREGATE});
+}
+
+static void AddIntervalSignaturesForExistingFunctions(
+    std::vector<PostgresFunctionArguments>& functions) {
+  const zetasql::Type* gsql_interval = zetasql::types::IntervalType();
+  const zetasql::Type* gsql_interval_array =
+      zetasql::types::IntervalArrayType();
+  const zetasql::Type* gsql_pg_numeric =
+      types::PgNumericMapping()->mapped_type();
+  const zetasql::Type* gsql_pg_jsonb = types::PgJsonbMapping()->mapped_type();
+
+  // Signatures for existing functions.
+  std::vector<FunctionNameWithSignature>
+      existing_functions_with_new_signatures = {
+          {"to_char",
+           {
+               {{gsql_string,
+                 {gsql_interval, gsql_string},
+                 /*context_ptr=*/nullptr}},
+           }},
+          {"to_jsonb",
+           {
+               {{gsql_pg_jsonb,
+                 {gsql_interval},
+                 /*context_ptr=*/nullptr}},
+               {{gsql_pg_jsonb,
+                 {gsql_interval_array},
+                 /*context_ptr=*/nullptr}},
+           }},
+          {"min",
+           {{
+               {gsql_interval, {gsql_interval}, /*context_ptr=*/nullptr},
+               /*has_mapped_function=*/true,
+               /*explicit_mapped_function_name=*/"min",
+           }}},
+          {"max",
+           {{
+               {gsql_interval, {gsql_interval}, /*context_ptr=*/nullptr},
+               /*has_mapped_function=*/true,
+               /*explicit_mapped_function_name=*/"max",
+           }}},
+          {"sum",
+           {{
+               {gsql_interval, {gsql_interval}, /*context_ptr=*/nullptr},
+               /*has_mapped_function=*/true,
+               /*explicit_mapped_function_name=*/"sum",
+           }}},
+          {"avg",
+           {{
+               {gsql_interval, {gsql_interval}, /*context_ptr=*/nullptr},
+               /*has_mapped_function=*/true,
+               /*explicit_mapped_function_name=*/"avg",
+           }}},
+          {"count",
+           {{
+               {gsql_int64, {gsql_interval}, /*context_ptr=*/nullptr},
+           }}},
+          {"array_agg",
+           {{
+               {gsql_interval_array, {gsql_interval}, /*context_ptr=*/nullptr},
+           }}},
+          {"array_cat",
+           {{
+               {gsql_interval_array,
+                {gsql_interval_array, gsql_interval_array},
+                /*context_ptr=*/nullptr},
+           }}},
+          {"array_length",
+           {{
+               {gsql_int64,
+                {gsql_interval_array, gsql_int64},
+                /*context_ptr=*/nullptr},
+           }}},
+          {"arraycontains",
+           {{
+               {gsql_bool,
+                {gsql_interval_array, gsql_interval_array},
+                /*context_ptr=*/nullptr},
+           }}},
+          {"arraycontained",
+           {{
+               {gsql_bool,
+                {gsql_interval_array, gsql_interval_array},
+                /*context_ptr=*/nullptr},
+           }}},
+          {"arrayoverlap",
+           {{
+               {gsql_bool,
+                {gsql_interval_array, gsql_interval_array},
+                /*context_ptr=*/nullptr},
+           }}},
+          {"array_upper",
+           {{
+               {gsql_int64,
+                {gsql_interval_array, gsql_int64},
+                /*context_ptr=*/nullptr},
+           }}},
+      };
+
+    existing_functions_with_new_signatures.push_back(
+        {"extract",
+         {{
+             {gsql_pg_numeric,
+              {gsql_string, gsql_interval},
+              /*context_ptr=*/nullptr},
+             /*has_mapped_function=*/true,
+             /*explicit_mapped_function_name=*/"pg.extract_interval",
+         }}});
+
+  AddNewSignaturesForExistingFunctions(functions,
+                                       existing_functions_with_new_signatures);
+}
+
+void AddIntervalFunctions(std::vector<PostgresFunctionArguments>& functions) {
+  const zetasql::Type* gsql_interval = zetasql::types::IntervalType();
+  functions.push_back({"interval_eq",
+                       "$equal",
+                       {{{gsql_bool,
+                          {gsql_interval, gsql_interval},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"interval_ne",
+                       "$not_equal",
+                       {{{gsql_bool,
+                          {gsql_interval, gsql_interval},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"interval_lt",
+                       "$less",
+                       {{{gsql_bool,
+                          {gsql_interval, gsql_interval},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"interval_le",
+                       "$less_or_equal",
+                       {{{gsql_bool,
+                          {gsql_interval, gsql_interval},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"interval_gt",
+                       "$greater",
+                       {{{gsql_bool,
+                          {gsql_interval, gsql_interval},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"interval_ge",
+                       "$greater_or_equal",
+                       {{{gsql_bool,
+                          {gsql_interval, gsql_interval},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"interval_um",
+                       "pg.interval_unary_minus",
+                       {{{gsql_interval,
+                          {gsql_interval},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"interval_pl",
+                       "pg.interval_add",
+                       {{{gsql_interval,
+                          {gsql_interval, gsql_interval},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"interval_mi",
+                       "pg.interval_subtract",
+                       {{{gsql_interval,
+                          {gsql_interval, gsql_interval},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"interval_mul",
+                       "pg.interval_multiply",
+                       {{{gsql_interval,
+                          {gsql_interval, gsql_double},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"interval_div",
+                       "pg.interval_divide",
+                       {{{gsql_interval,
+                          {gsql_interval, gsql_double},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"justify_hours",
+                       "pg.justify_hours",
+                       {{{gsql_interval,
+                          {gsql_interval},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"justify_days",
+                       "pg.justify_days",
+                       {{{gsql_interval,
+                          {gsql_interval},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"justify_interval",
+                       "pg.justify_interval",
+                       {{{gsql_interval,
+                          {gsql_interval},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"timestamptz_pl_interval",
+                       "pg.timestamptz_add",
+                       {{{gsql_timestamp,
+                          {gsql_timestamp, gsql_interval},
+                          /*context_ptr=*/nullptr}}}});
+  functions.push_back({"timestamptz_mi_interval",
+                       "pg.timestamptz_subtract",
+                       {{{gsql_timestamp,
+                          {gsql_timestamp, gsql_interval},
+                          /*context_ptr=*/nullptr}}}});
+  zetasql::FunctionArgumentTypeOptions years =
+      GetOptionalNamedArgumentOptions("years");
+  zetasql::FunctionArgumentTypeOptions months =
+      GetOptionalNamedArgumentOptions("months");
+  zetasql::FunctionArgumentTypeOptions weeks =
+      GetOptionalNamedArgumentOptions("weeks");
+  zetasql::FunctionArgumentTypeOptions days =
+      GetOptionalNamedArgumentOptions("days");
+  zetasql::FunctionArgumentTypeOptions hours =
+      GetOptionalNamedArgumentOptions("hours");
+  zetasql::FunctionArgumentTypeOptions mins =
+      GetOptionalNamedArgumentOptions("mins");
+  zetasql::FunctionArgumentTypeOptions secs =
+      GetOptionalNamedArgumentOptions("secs");
+  functions.push_back({"make_interval",
+                       "pg.make_interval",
+                       {{{gsql_interval,
+                          {{gsql_int64, years},
+                           {gsql_int64, months},
+                           {gsql_int64, weeks},
+                           {gsql_int64, days},
+                           {gsql_int64, hours},
+                           {gsql_int64, mins},
+                           {gsql_double, secs}},
+                          /*context_ptr=*/nullptr},
+                          /*has_mapped_function=*/true,
+                          /*explicit_mapped_function_name=*/"",
+                          /*postgres_proc_oid=*/F_MAKE_INTERVAL}}});
+  functions.push_back({"timestamptz_mi",
+                       "pg.timestamptz_subtract_timestamptz",
+                       {{{gsql_interval,
+                          {gsql_timestamp, gsql_timestamp},
+                          /*context_ptr=*/nullptr}}}});
+
+  AddIntervalSignaturesForExistingFunctions(functions);
 }
 
 void RemapFunctionsForSpanner(

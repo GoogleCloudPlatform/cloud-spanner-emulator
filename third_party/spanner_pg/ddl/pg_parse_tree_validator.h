@@ -104,6 +104,7 @@ absl::Status ValidateParseTreeNode(const VacuumStmt& node);
 absl::Status ValidateParseTreeNode(const ViewStmt& node);
 absl::Status ValidateParseTreeNode(const CreateChangeStreamStmt& node);
 absl::Status ValidateParseTreeNode(const AlterChangeStreamStmt& node);
+absl::Status ValidateParseTreeNode(const CreateSearchIndexStmt& node);
 absl::Status ValidateParseTreeNode(const CreateRoleStmt& node);
 absl::Status ValidateParseTreeNode(const DropRoleStmt& node);
 absl::Status ValidateParseTreeNode(const GrantStmt& node);
@@ -126,6 +127,9 @@ absl::Status ValidateParseTreeNode(const RenameStmt& node,
 absl::Status ValidateParseTreeNode(const TableChainedRenameStmt& node,
                                    const TranslationOptions& options);
 absl::Status ValidateParseTreeNode(const TableRenameOp& node);
+absl::Status ValidateParseTreeNode(const CreateLocalityGroupStmt& node);
+absl::Status ValidateParseTreeNode(const AlterLocalityGroupStmt& node);
+absl::Status ValidateParseTreeNode(const AlterColumnLocalityGroupStmt& node);
 
 }  // namespace spangres
 }  // namespace postgres_translator

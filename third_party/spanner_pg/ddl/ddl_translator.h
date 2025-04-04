@@ -74,6 +74,9 @@ struct TranslationOptions {
   // identity column in <CREATE TABLE>, <ALTER TABLE ADD COLUMN>, and <CREATE
   // SEQUENCE>.
   bool enable_default_sequence_kind = false;
+  // enable_default_time_zone allows setting the default time zone that affects
+  // the date/timestamp functions like CURRENT_DATE().
+  bool enable_default_time_zone = false;
   // enable_jsonb_type allows translation of Spangres JSONB type into the
   // corresponding PG.JSONB Spanner type.
   bool enable_jsonb_type = false;
@@ -111,6 +114,8 @@ struct TranslationOptions {
   bool enable_change_streams_allow_txn_exclusion_option = false;
   // This enables support for search index in Spangres.
   bool enable_search_index = true;
+  // enable_locality_groups allows create/drop/alter locality groups.
+  bool enable_locality_groups = false;
   // enable_alter_index allows translation of <ALTER INDEX>.
   bool enable_alter_index = true;
   // enable_role_based_access allows role-based access control, e.g.
@@ -126,6 +131,8 @@ struct TranslationOptions {
   bool enable_virtual_generated_column = false;
   // enable_vector_length allows translation of <VECTOR LENGTH> clause.
   bool enable_vector_length = true;
+  // enable_interval_type allows translation of INTERVAL type.
+  bool enable_interval_type = false;
   // enable_hidden_column allows translation of the <HIDDEN> constraint.
   bool enable_hidden_column = true;
   bool enable_serial_types = false;

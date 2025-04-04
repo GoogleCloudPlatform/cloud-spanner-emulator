@@ -3111,6 +3111,7 @@ _copyColumnDef(const ColumnDef *from)
 	COPY_NODE_FIELD(constraints);
 	COPY_NODE_FIELD(fdwoptions);
 	COPY_LOCATION_FIELD(location);
+	COPY_NODE_FIELD(locality_group_name);
 
 	return newnode;
 }
@@ -3438,6 +3439,7 @@ _copyAlterTableCmd(const AlterTableCmd *from)
 	COPY_SCALAR_FIELD(behavior);
 	COPY_SCALAR_FIELD(missing_ok);
 	COPY_SCALAR_FIELD(recurse);
+	COPY_NODE_FIELD(locality_group_name);
 	COPY_STRING_FIELD(raw_expr_string);
 
 	return newnode;
@@ -3618,6 +3620,7 @@ CopyCreateStmtFields(const CreateStmt *from, CreateStmt *newnode)
 	COPY_NODE_FIELD(options);
 	COPY_SCALAR_FIELD(oncommit);
 	COPY_STRING_FIELD(tablespacename);
+	COPY_NODE_FIELD(locality_group_name);
 	COPY_STRING_FIELD(accessMethod);
 	COPY_SCALAR_FIELD(if_not_exists);
 	COPY_NODE_FIELD(interleavespec);
@@ -3735,6 +3738,7 @@ _copyIndexStmt(const IndexStmt *from)
 	COPY_NODE_FIELD(relation);
 	COPY_STRING_FIELD(accessMethod);
 	COPY_STRING_FIELD(tableSpace);
+	COPY_NODE_FIELD(locality_group_name);
 	COPY_NODE_FIELD(indexParams);
 	COPY_NODE_FIELD(indexIncludingParams);
 	COPY_NODE_FIELD(options);
@@ -3800,6 +3804,7 @@ _copyCreateFunctionStmt(const CreateFunctionStmt *from)
 	COPY_NODE_FIELD(returnType);
 	COPY_NODE_FIELD(options);
 	COPY_NODE_FIELD(sql_body);
+	COPY_STRING_FIELD(routine_body_string);
 
 	return newnode;
 }
@@ -5089,6 +5094,87 @@ _copyAlterChangeStreamStmt(const AlterChangeStreamStmt *from)
 	return newnode;
 }
 
+static CreateSearchIndexStmt *
+_copyCreateSearchIndexStmt(const CreateSearchIndexStmt *from)
+{
+	CreateSearchIndexStmt *newnode = makeNode(CreateSearchIndexStmt);
+
+	COPY_STRING_FIELD(search_index_name);
+	COPY_NODE_FIELD(table_name);
+	COPY_NODE_FIELD(token_columns);
+	COPY_NODE_FIELD(storing);
+	COPY_NODE_FIELD(partition);
+	COPY_NODE_FIELD(order);
+	COPY_NODE_FIELD(null_filters);
+	COPY_NODE_FIELD(interleave);
+	COPY_NODE_FIELD(options);
+
+	return newnode;
+}
+
+static AlterSearchIndexStmt *
+_copyAlterSearchIndexStmt(const AlterSearchIndexStmt *from)
+{
+	AlterSearchIndexStmt *newnode = makeNode(AlterSearchIndexStmt);
+
+	COPY_NODE_FIELD(search_index_name);
+	COPY_NODE_FIELD(alter_search_index_cmd);
+
+	return newnode;
+}
+
+static AlterSearchIndexCmd *
+_copyAlterSearchIndexCmd(const AlterSearchIndexCmd *from)
+{
+	AlterSearchIndexCmd *newnode = makeNode(AlterSearchIndexCmd);
+
+	COPY_SCALAR_FIELD(cmd_type);
+	COPY_STRING_FIELD(column_name);
+
+	return newnode;
+}
+// SPANGRES END
+
+static LocalityGroupOption *
+_copyLocalityGroupOption(const LocalityGroupOption *from) {
+  LocalityGroupOption *newnode = makeNode(LocalityGroupOption);
+  COPY_STRING_FIELD(value);
+  COPY_SCALAR_FIELD(is_null);
+  return newnode;
+}
+static CreateLocalityGroupStmt *_copyCreateLocalityGroupStmt(
+    const CreateLocalityGroupStmt *from) {
+  CreateLocalityGroupStmt *newnode = makeNode(CreateLocalityGroupStmt);
+  newnode->locality_group_name = _copyRangeVar(from->locality_group_name);
+  COPY_NODE_FIELD(storage);
+  COPY_NODE_FIELD(ssd_to_hdd_spill_timespan);
+  COPY_SCALAR_FIELD(if_not_exists);
+
+  return newnode;
+}
+
+static AlterLocalityGroupStmt *_copyAlterLocalityGroupStmt(
+    const AlterLocalityGroupStmt *from) {
+  AlterLocalityGroupStmt *newnode = makeNode(AlterLocalityGroupStmt);
+  newnode->locality_group_name = _copyRangeVar(from->locality_group_name);
+  COPY_NODE_FIELD(storage);
+  COPY_NODE_FIELD(ssd_to_hdd_spill_timespan);
+  COPY_SCALAR_FIELD(if_exists);
+
+  return newnode;
+}
+
+static AlterColumnLocalityGroupStmt *_copyAlterColumnLocalityGroupStmt(
+    const AlterColumnLocalityGroupStmt *from) {
+  AlterColumnLocalityGroupStmt *newnode =
+      makeNode(AlterColumnLocalityGroupStmt);
+  newnode->relation = _copyRangeVar(from->relation);
+  COPY_STRING_FIELD(column);
+  COPY_NODE_FIELD(locality_group_name);
+
+	return newnode;
+}
+
 static SynonymClause *
 _copySynonymClause(const SynonymClause *from)
 {
@@ -5983,6 +6069,29 @@ copyObjectImpl(const void *from)
       break;
     case T_AlterChangeStreamStmt:
       retval = _copyAlterChangeStreamStmt(from);
+			break;
+		// SPANGRES BEGIN
+		case T_CreateSearchIndexStmt:
+			retval = _copyCreateSearchIndexStmt(from);
+			break;
+		case T_AlterSearchIndexStmt:
+			retval = _copyAlterSearchIndexStmt(from);
+			break;
+		case T_AlterSearchIndexCmd:
+			retval = _copyAlterSearchIndexCmd(from);
+			break;
+		// SPANGRES END
+		case T_LocalityGroupOption:
+			retval = _copyLocalityGroupOption(from);
+			break;
+		case T_CreateLocalityGroupStmt:
+			retval = _copyCreateLocalityGroupStmt(from);
+			break;
+		case T_AlterLocalityGroupStmt:
+			retval = _copyAlterLocalityGroupStmt(from);
+			break;
+		case T_AlterColumnLocalityGroupStmt:
+			retval = _copyAlterColumnLocalityGroupStmt(from);
 			break;
 		case T_A_Expr:
 			retval = _copyA_Expr(from);

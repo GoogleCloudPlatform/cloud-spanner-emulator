@@ -18,7 +18,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["unencumbered"])
+licenses(["notice"])
 
 cc_library(
     name = "environment",
@@ -56,6 +56,34 @@ cc_library(
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_library(
+    name = "query_translator",
+    testonly = 1,
+    srcs = ["query_translator.cc"],
+    hdrs = ["query_translator.h"],
+    deps = [
+        "//third_party/spanner_pg/interface:bootstrap_catalog_accessor",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_googlesource_code_re2//:re2",
+    ],
+)
+
+cc_test(
+    name = "query_translator_test",
+    testonly = 1,
+    srcs = ["query_translator_test.cc"],
+    deps = [
+        ":query_translator",
+        "//tests/common:proto_matchers",
+        "//third_party/spanner_pg/bootstrap_catalog:bootstrap_catalog_accessor_impl",  # buildcleaner: keep
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

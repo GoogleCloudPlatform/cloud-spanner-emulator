@@ -92,6 +92,11 @@ using zetasql::values::Array;
 using zetasql::values::Enum;
 using zetasql::values::Proto;
 
+using zetasql::IntervalValue;
+using zetasql::types::IntervalArrayType;
+using zetasql::types::IntervalType;
+using zetasql::values::Interval;
+
 using postgres_translator::spangres::datatypes::CreatePgJsonbValue;
 using postgres_translator::spangres::datatypes::CreatePgNumericValue;
 using postgres_translator::spangres::datatypes::CreatePgOidValue;
@@ -232,6 +237,11 @@ TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
        "string_value: '{\"key\":123}'"},
       {CreatePgJsonbValueWithMemoryContext("{\"key\":123}").value(),
        "string_value: '{\"key\": 123}'"},
+      {Interval(IntervalValue::MinValue()),
+       "string_value: 'P-10000Y-3660000DT-87840000H'"},
+      {Interval(IntervalValue()), "string_value: 'P0Y'"},
+      {Interval(IntervalValue::MaxValue()),
+       "string_value: 'P10000Y3660000DT87840000H'"},
       {Int64Array({}), "list_value: { values [] }"},
       {Int64Array({1, 2, 3}),
        "list_value: { values [{string_value: '1'}, {string_value: '2'}, "
@@ -294,6 +304,16 @@ TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
              {Enum(enum_type->AsEnum(),
                    ::emulator::tests::common::TEST_ENUM_ONE)}),
        "list_value: { values [{string_value: '1'}] }"},
+      {zetasql::Value::MakeArray(
+           IntervalArrayType(),
+           {Interval(IntervalValue::MinValue()), Interval(IntervalValue()),
+            zetasql::values::Null(IntervalType()),
+            Interval(IntervalValue::MaxValue())})
+           .value(),
+       "list_value: { values [{string_value: 'P-10000Y-3660000DT-87840000H'}, "
+       "{string_value: 'P0Y'},"
+       " {null_value: NULL_VALUE}, {string_value: 'P10000Y3660000DT87840000H' "
+       "}] }"},
   };
 
   for (const auto& entry : test_cases) {

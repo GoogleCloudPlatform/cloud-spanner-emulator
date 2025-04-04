@@ -97,10 +97,21 @@ static auto kTypeMap =
     {google::spanner::emulator::backend::ddl::ColumnDefinition::DATE, "date"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::TIMESTAMP, "timestamp with time zone"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::PG_JSONB, "jsonb"},
+    {google::spanner::emulator::backend::ddl::ColumnDefinition::INTERVAL, "interval"},
+    {google::spanner::emulator::backend::ddl::ColumnDefinition::TOKENLIST, "spanner.tokenlist"},
 });
 
 std::string CreateNotNullCondition(const absl::string_view column) {
   return StrCat(QuoteIdentifier(column), " IS NOT NULL");
+}
+
+absl::string_view GetSchemaLocalName(absl::string_view name) {
+  size_t last_dot = name.find_last_of('.');
+  if (last_dot == absl::string_view::npos) {
+    return name;
+  } else {
+    return name.substr(last_dot + 1);
+  }
 }
 
 class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
@@ -198,6 +209,25 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
       const google::spanner::emulator::backend::ddl::AlterChangeStream& statement) const;
   std::string PrintDropChangeStream(
       const google::spanner::emulator::backend::ddl::DropChangeStream& statement) const;
+  absl::StatusOr<std::string> PrintCreateSearchIndex(
+      const google::spanner::emulator::backend::ddl::CreateSearchIndex& statement) const;
+  std::string FormatOptionAsNameValuePair(
+      const google::spanner::emulator::backend::ddl::SetOption& option) const;
+  std::string PrintDropSearchIndex(
+      const google::spanner::emulator::backend::ddl::DropSearchIndex& statement) const;
+
+  std::string PrintCreateLocalityGroup(
+      const google::spanner::emulator::backend::ddl::CreateLocalityGroup& statement) const;
+  void PrintStorageOption(const google::spanner::emulator::backend::ddl::SetOption& option,
+                                 std::string& out) const;
+  void PrintSpillTimespanOption(const google::spanner::emulator::backend::ddl::SetOption& option,
+                                       std::string& out) const;
+  std::string PrintAlterLocalityGroup(
+      const google::spanner::emulator::backend::ddl::AlterLocalityGroup& statement) const;
+  absl::StatusOr<std::string> PrintDropLocalityGroup(
+      const google::spanner::emulator::backend::ddl::DropLocalityGroup& statement) const;
+  absl::StatusOr<std::string> PrintAlterColumnLocalityGroup(
+      const google::spanner::emulator::backend::ddl::SetColumnOptions& statement) const;
   absl::StatusOr<std::string> PrintRenameTable(
       const google::spanner::emulator::backend::ddl::RenameTable& statement) const;
 
@@ -264,6 +294,8 @@ SpangresSchemaPrinterImpl::PrintDDLStatement(
     case google::spanner::emulator::backend::ddl::DDLStatement::kDropFunction:
       return WrapOutput(PrintDropFunction(statement.drop_function()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kSetColumnOptions:
+      return WrapOutput(
+          PrintAlterColumnLocalityGroup(statement.set_column_options()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kCreateChangeStream:
       return WrapOutput(
           PrintCreateChangeStream(statement.create_change_stream()));
@@ -272,6 +304,11 @@ SpangresSchemaPrinterImpl::PrintDDLStatement(
           PrintAlterChangeStream(statement.alter_change_stream()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kDropChangeStream:
       return WrapOutput(PrintDropChangeStream(statement.drop_change_stream()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kCreateSearchIndex:
+      return WrapOutput(
+          PrintCreateSearchIndex(statement.create_search_index()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kDropSearchIndex:
+      return WrapOutput(PrintDropSearchIndex(statement.drop_search_index()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kCreateSequence:
       return WrapOutput(PrintCreateSequence(statement.create_sequence()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kAlterSequence:
@@ -280,6 +317,15 @@ SpangresSchemaPrinterImpl::PrintDDLStatement(
       return WrapOutput(PrintDropSequence(statement.drop_sequence()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kRenameTable:
       return WrapOutput(PrintRenameTable(statement.rename_table()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kCreateLocalityGroup:
+      return WrapOutput(
+          PrintCreateLocalityGroup(statement.create_locality_group()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kAlterLocalityGroup:
+      return WrapOutput(
+          PrintAlterLocalityGroup(statement.alter_locality_group()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kDropLocalityGroup:
+      return WrapOutput(
+          PrintDropLocalityGroup(statement.drop_locality_group()));
     default:
       // Ignore unsupported statements
       return StatementTranslationError("Unsupported statement");
@@ -504,6 +550,20 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
           QuoteQualifiedIdentifier(statement.drop_synonym().synonym()));
     }
 
+    case google::spanner::emulator::backend::ddl::AlterTable::kSetOptions: {
+      for (const google::spanner::emulator::backend::ddl::SetOption& option :
+           statement.set_options().options()) {
+        if (absl::EqualsIgnoreCase(option.option_name(), "locality_group")) {
+          if (option.null_value()) {
+            return StrCat(alter_table, " SET LOCALITY GROUP NULL");
+          }
+          return StrCat(alter_table, " SET LOCALITY GROUP ",
+                        option.string_value());
+        }
+      }
+      return absl::InvalidArgumentError("Invalid options for <ALTER TABLE>.");
+    }
+
     default: {
       const google::protobuf::FieldDescriptor* field_descriptor =
           google::spanner::emulator::backend::ddl::AlterTable::GetDescriptor()->FindFieldByNumber(
@@ -577,6 +637,18 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateTable(
               RowDeletionPolicyToInterval(statement.row_deletion_policy()));
   }
 
+  std::string locality_group = "";
+  for (const google::spanner::emulator::backend::ddl::SetOption& option : statement.set_options()) {
+    if (option.option_name() == "locality_group") {
+      StrAppend(&locality_group, " LOCALITY GROUP ");
+      if (option.null_value()) {
+        StrAppend(&locality_group, "NULL");
+      } else {
+        StrAppend(&locality_group, option.string_value());
+      }
+    }
+  }
+  StrAppend(&after_create, locality_group);
   output.push_back(std::move(after_create));
 
   return absl::StrJoin(output, "\n");
@@ -730,6 +802,276 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropIndex(
                     QuoteQualifiedIdentifier(statement.index_name()));
 }
 
+std::string PrintSearchIndexClause(std::vector<std::string>& columns,
+                                   absl::string_view clause) {
+  std::string output = "";
+  if (columns.empty()) {
+    return output;
+  }
+  if (absl::EqualsIgnoreCase(clause, "TOKENLIST_COLUMNS")) {
+    StrAppend(&output, "(", absl::StrJoin(columns, ", "), ")");
+  } else if (absl::EqualsIgnoreCase(clause, "INCLUDE")) {
+    StrAppend(&output, " INCLUDE (", absl::StrJoin(columns, ", "), ")");
+  } else if (absl::EqualsIgnoreCase(clause, "PARTITION_BY")) {
+    StrAppend(&output, " PARTITION BY ", absl::StrJoin(columns, ", "));
+  } else if (absl::EqualsIgnoreCase(clause, "ORDER_BY")) {
+    StrAppend(&output, " ORDER BY ", absl::StrJoin(columns, ", "));
+  } else if (absl::EqualsIgnoreCase(clause, "WHERE")) {
+    StrAppend(&output, " WHERE ", absl::StrJoin(columns, " AND "));
+  } else if (absl::EqualsIgnoreCase(clause, "OPTIONS")) {
+    StrAppend(&output, " WITH (", absl::StrJoin(columns, ", "), ")");
+  }
+
+  return output;
+}
+
+absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSearchIndex(
+    const google::spanner::emulator::backend::ddl::CreateSearchIndex& statement) const {
+  std::vector<std::string> statements;
+
+  // Prints the TOKENLIST COLUMNS on which the SEARCH INDEX is created.
+  std::vector<std::string> token_columns;
+  for (const google::spanner::emulator::backend::ddl::TokenColumnDefinition& token :
+       statement.token_column_definition()) {
+    token_columns.push_back(QuoteIdentifier(token.token_column().key_name()));
+  }
+  statements.emplace_back(
+      PrintSearchIndexClause(token_columns, "TOKENLIST_COLUMNS"));
+
+  // Prints the INCLUDE clause.
+  std::vector<std::string> storing_columns;
+  for (const google::spanner::emulator::backend::ddl::StoredColumnDefinition& stored_column :
+       statement.stored_column_definition()) {
+    storing_columns.push_back(stored_column.name());
+  }
+  statements.emplace_back(PrintSearchIndexClause(storing_columns, "INCLUDE"));
+
+  // Prints the PARTITION BY clause.
+  std::vector<std::string> partition_by;
+  for (const google::spanner::emulator::backend::ddl::KeyPartClause& partition :
+       statement.partition_by()) {
+    const std::string name = QuoteIdentifier(partition.key_name());
+    ZETASQL_ASSIGN_OR_RETURN(absl::string_view partition_order,
+                     PrintSortOrder(partition.order()));
+    partition_by.push_back(StrCat(name, partition_order));
+  }
+  statements.emplace_back(PrintSearchIndexClause(partition_by, "PARTITION_BY"));
+
+  // Prints the ORDER BY clause.
+  std::vector<std::string> order_by;
+  for (const google::spanner::emulator::backend::ddl::KeyPartClause& order_by_part :
+       statement.order_by()) {
+    const std::string name = QuoteIdentifier(order_by_part.key_name());
+    ZETASQL_ASSIGN_OR_RETURN(absl::string_view sort_order,
+                     PrintSortOrder(order_by_part.order()));
+    order_by.push_back(StrCat(name, sort_order));
+  }
+  statements.emplace_back(PrintSearchIndexClause(order_by, "ORDER_BY"));
+
+  // Prints the INTERLEAVE IN clause.
+  std::string interleave_in_clause =
+      statement.interleave_in_table().empty()
+          ? ""
+          : StrCat(" INTERLEAVE IN ",
+                   QuoteQualifiedIdentifier(statement.interleave_in_table()));
+
+  statements.emplace_back(interleave_in_clause);
+
+  // Prints the WHERE clause.
+  std::vector<std::string> null_filtered_columns;
+  for (const std::string& null_filtered_column :
+       statement.null_filtered_column()) {
+    null_filtered_columns.push_back(
+        CreateNotNullCondition(null_filtered_column));
+  }
+
+  statements.emplace_back(
+      PrintSearchIndexClause(null_filtered_columns, "WHERE"));
+
+  // Prints the OPTIONS clause.
+  std::vector<std::string> options;
+  for (const google::spanner::emulator::backend::ddl::SetOption& option : statement.set_options()) {
+    options.push_back(FormatOptionAsNameValuePair(option));
+  }
+  statements.emplace_back(PrintSearchIndexClause(options, "OPTIONS"));
+
+  std::string output;
+  StrAppend(
+      &output, "CREATE SEARCH INDEX ",
+      QuoteQualifiedIdentifier(GetSchemaLocalName(statement.index_name())),
+      " ON ", QuoteQualifiedIdentifier(statement.index_base_name()));
+  for (std::string& statement : statements) {
+    StrAppend(&output, statement);
+  }
+  return output;
+}
+
+std::string SpangresSchemaPrinterImpl::FormatOptionAsNameValuePair(
+    const google::spanner::emulator::backend::ddl::SetOption& option) const {
+  std::string output;
+  StrAppend(&output, QuoteIdentifier(option.option_name()));
+  StrAppend(&output, " = ");
+  if (option.null_value()) {
+    StrAppend(&output, "NULL");
+  } else if (option.has_bool_value()) {
+    StrAppend(&output, option.bool_value() ? PGConstants::kPgTrueLiteral
+                                           : PGConstants::kPgFalseLiteral);
+  } else if (option.has_int64_value()) {
+    StrAppend(&output, option.int64_value());
+  } else {
+    StrAppend(&output, QuoteStringLiteral(option.string_value()));
+  }
+  return output;
+}
+
+std::string SpangresSchemaPrinterImpl::PrintDropSearchIndex(
+    const google::spanner::emulator::backend::ddl::DropSearchIndex& statement) const {
+  std::string output;
+  bool exists = statement.has_existence_modifier() &&
+                statement.existence_modifier() ==
+                    google::spanner::emulator::backend::ddl::ExistenceModifier::IF_EXISTS;
+  std::string if_exists = exists ? "IF EXISTS " : "";
+  StrAppend(&output, "DROP SEARCH INDEX ", if_exists,
+            QuoteQualifiedIdentifier(statement.index_name()));
+  return output;
+}
+
+std::string SpangresSchemaPrinterImpl::PrintCreateLocalityGroup(
+    const google::spanner::emulator::backend::ddl::CreateLocalityGroup& statement) const {
+  std::vector<std::string> output;
+  const std::string existence_modifier =
+      statement.existence_modifier() ==
+              google::spanner::emulator::backend::ddl::ExistenceModifier::IF_NOT_EXISTS
+          ? "IF NOT EXISTS "
+          : "";
+  std::string base =
+      StrCat("CREATE LOCALITY GROUP ", existence_modifier,
+             QuoteQualifiedIdentifier(statement.locality_group_name()));
+  output.push_back(std::move(base));
+
+  std::string storage, ssd_to_hdd_spill_timespan;
+  for (const google::spanner::emulator::backend::ddl::SetOption& option : statement.set_options()) {
+    if (absl::EqualsIgnoreCase(option.option_name(),
+                               internal::PostgreSQLConstants::
+                                   kInternalLocalityGroupStorageOptionName)) {
+      PrintStorageOption(option, storage);
+    } else if (absl::EqualsIgnoreCase(
+                   option.option_name(),
+                   internal::PostgreSQLConstants::
+                       kInternalLocalityGroupSpillTimeSpanOptionName)) {
+      PrintSpillTimespanOption(option, ssd_to_hdd_spill_timespan);
+    }
+  }
+
+  if (!storage.empty()) {
+    output.push_back(std::move(storage));
+  }
+  if (!ssd_to_hdd_spill_timespan.empty()) {
+    output.push_back(std::move(ssd_to_hdd_spill_timespan));
+  }
+
+  return absl::StrJoin(output, "\n");
+}
+
+void SpangresSchemaPrinterImpl::PrintStorageOption(
+    const google::spanner::emulator::backend::ddl::SetOption& option, std::string& out) const {
+  StrAppend(&out, "STORAGE ");
+  if (option.null_value()) {
+    StrAppend(&out, "NULL");
+  } else if (option.bool_value()) {
+    StrAppend(&out, QuoteStringLiteral("ssd"));
+  } else {
+    StrAppend(&out, QuoteStringLiteral("hdd"));
+  }
+}
+
+void SpangresSchemaPrinterImpl::PrintSpillTimespanOption(
+    const google::spanner::emulator::backend::ddl::SetOption& option, std::string& out) const {
+  StrAppend(&out, "SSD_TO_HDD_SPILL_TIMESPAN ");
+  if (option.null_value()) {
+    StrAppend(&out, "NULL");
+  } else {
+    absl::string_view spill_timespan = option.string_list_value(0);
+    absl::ConsumePrefix(&spill_timespan, "disk:");
+    StrAppend(&out, QuoteStringLiteral(spill_timespan));
+  }
+}
+
+std::string SpangresSchemaPrinterImpl::PrintAlterLocalityGroup(
+    const google::spanner::emulator::backend::ddl::AlterLocalityGroup& statement) const {
+  std::vector<std::string> output;
+  const std::string existence_modifier =
+      statement.existence_modifier() ==
+              google::spanner::emulator::backend::ddl::ExistenceModifier::IF_EXISTS
+          ? "IF EXISTS "
+          : "";
+  std::string base =
+      StrCat("ALTER LOCALITY GROUP ", existence_modifier,
+             QuoteQualifiedIdentifier(statement.locality_group_name()));
+  output.push_back(std::move(base));
+
+  std::string storage, ssd_to_hdd_spill_timespan;
+  for (const google::spanner::emulator::backend::ddl::SetOption& option :
+       statement.set_options().options()) {
+    if (absl::EqualsIgnoreCase(option.option_name(),
+                               internal::PostgreSQLConstants::
+                                   kInternalLocalityGroupStorageOptionName)) {
+      PrintStorageOption(option, storage);
+    } else if (absl::EqualsIgnoreCase(
+                   option.option_name(),
+                   internal::PostgreSQLConstants::
+                       kInternalLocalityGroupSpillTimeSpanOptionName)) {
+      PrintSpillTimespanOption(option, ssd_to_hdd_spill_timespan);
+    }
+  }
+
+  if (!storage.empty()) {
+    output.push_back(std::move(storage));
+  }
+  if (!ssd_to_hdd_spill_timespan.empty()) {
+    output.push_back(std::move(ssd_to_hdd_spill_timespan));
+  }
+
+  return absl::StrJoin(output, "\n");
+}
+
+absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropLocalityGroup(
+    const google::spanner::emulator::backend::ddl::DropLocalityGroup& statement) const {
+  std::string existence_modifier =
+      statement.existence_modifier() ==
+              google::spanner::emulator::backend::ddl::ExistenceModifier::IF_EXISTS
+          ? "IF EXISTS "
+          : "";
+  return Substitute("DROP LOCALITY GROUP $0$1", existence_modifier,
+                    QuoteQualifiedIdentifier(statement.locality_group_name()));
+}
+
+absl::StatusOr<std::string>
+SpangresSchemaPrinterImpl::PrintAlterColumnLocalityGroup(
+    const google::spanner::emulator::backend::ddl::SetColumnOptions& statement) const {
+  std::string locality_group;
+  for (const google::spanner::emulator::backend::ddl::SetOption& option : statement.options()) {
+    if (option.option_name() == "locality_group") {
+      if (option.null_value()) {
+        StrAppend(&locality_group, "NULL");
+      } else {
+        StrAppend(&locality_group, option.string_value());
+      }
+    }
+  }
+  if (locality_group.empty()) {
+    return absl::InvalidArgumentError(
+        "Locality group name is missing in the <ALTER COLUMN ... SET LOCALITY "
+        "GROUP> statement.");
+  }
+
+  return Substitute(
+      "ALTER TABLE $0 ALTER COLUMN $1 SET LOCALITY GROUP $2",
+      QuoteQualifiedIdentifier(statement.column_path().at(0).table_name()),
+      QuoteQualifiedIdentifier(statement.column_path().at(0).column_name()),
+      locality_group);
+}
+
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropSchema(
     const google::spanner::emulator::backend::ddl::DropSchema& statement) const {
   std::vector<std::string> drop_schema_clauses;
@@ -772,17 +1114,6 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintRenameTable(
   return output;
 }
 
-namespace {
-absl::string_view GetSchemaLocalName(absl::string_view name) {
-  size_t last_dot = name.find_last_of('.');
-  if (last_dot == absl::string_view::npos) {
-    return name;
-  } else {
-    return name.substr(last_dot + 1);
-  }
-}
-}  // namespace
-
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterIndex(
     const google::spanner::emulator::backend::ddl::AlterIndex& statement) const {
   std::string alter_type;
@@ -797,6 +1128,26 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterIndex(
     case google::spanner::emulator::backend::ddl::AlterIndex::kDropStoredColumn: {
       alter_type = " DROP INCLUDE COLUMN ";
       column_name = QuoteIdentifier(statement.drop_stored_column());
+      break;
+    }
+    case google::spanner::emulator::backend::ddl::AlterIndex::kSetOptions: {
+      alter_type = " SET LOCALITY GROUP ";
+      for (const google::spanner::emulator::backend::ddl::SetOption& option :
+           statement.set_options().options()) {
+        if (option.option_name() == "locality_group") {
+          if (option.null_value()) {
+            column_name = "NULL";
+          } else {
+            column_name = option.string_value();
+          }
+          break;
+        }
+      }
+      if (column_name.empty()) {
+        return absl::InvalidArgumentError(
+            "Locality group option not found in <ALTER INDEX ... SET LOCALITY "
+            "GROUP> statement.");
+      }
       break;
     }
     default: {
@@ -842,6 +1193,18 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateIndex(
           ? ""
           : StrCat(" INCLUDE (", absl::StrJoin(include_columns, ", "), ")");
 
+  std::string locality_group = "";
+  for (const google::spanner::emulator::backend::ddl::SetOption& option : statement.set_options()) {
+    if (option.option_name() == "locality_group") {
+      StrAppend(&locality_group, " LOCALITY GROUP ");
+      if (option.null_value()) {
+        StrAppend(&locality_group, "NULL");
+      } else {
+        StrAppend(&locality_group, option.string_value());
+      }
+    }
+  }
+
   // Interleave in should be put before <WHERE> clause, otherwise it may cause
   // postgresql parser error.
   std::string interleave_in = "";
@@ -870,7 +1233,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateIndex(
                 QuoteIdentifier(GetSchemaLocalName(statement.index_name())),
                 " ON ", QuoteQualifiedIdentifier(statement.index_base_name()),
                 " (", absl::StrJoin(key_parts, ", "), ")", include,
-                interleave_in, where);
+                locality_group, interleave_in, where);
 }
 
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSchema(
@@ -1044,11 +1407,6 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintType(
     return "spanner.commit_timestamp";
   }
 
-  if (column.set_options_size() > 0) {
-    return absl::UnimplementedError(
-        "Translation of column options is not implemented");
-  }
-
   auto type_name_it = kTypeMap.find(type);
   if (type_name_it == kTypeMap.end()) {
     // type not found -> schema is not a valid Spangres schema
@@ -1199,6 +1557,17 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintColumn(
   }
 
   StrAppend(&constraint, column.not_null() ? " NOT NULL" : "");
+  StrAppend(&constraint, column.hidden() ? " HIDDEN" : "");
+  for (const google::spanner::emulator::backend::ddl::SetOption& option : column.set_options()) {
+    if (option.option_name() == "locality_group") {
+      StrAppend(&constraint, " LOCALITY GROUP ");
+      if (option.null_value()) {
+        StrAppend(&constraint, "NULL");
+      } else {
+        StrAppend(&constraint, option.string_value());
+      }
+    }
+  }
   ZETASQL_ASSIGN_OR_RETURN(absl::string_view printed_type, PrintType(column));
   return StrCat(QuoteIdentifier(column.column_name()), " ", printed_type,
                 constraint);

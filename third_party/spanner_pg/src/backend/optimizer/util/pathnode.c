@@ -1609,7 +1609,7 @@ create_memoize_path(PlannerInfo *root, RelOptInfo *rel, Path *subpath,
 	pathnode->param_exprs = param_exprs;
 	pathnode->singlerow = singlerow;
 	pathnode->binary_mode = binary_mode;
-	pathnode->calls = calls;
+	pathnode->calls = clamp_row_est(calls);
 
 	/*
 	 * For now we set est_entries to 0.  cost_memoize_rescan() does all the
@@ -1696,8 +1696,13 @@ create_unique_path(PlannerInfo *root, RelOptInfo *rel, Path *subpath,
 	pathnode->path.pathkeys = NIL;
 
 	pathnode->subpath = subpath;
-	pathnode->in_operators = sjinfo->semi_operators;
-	pathnode->uniq_exprs = sjinfo->semi_rhs_exprs;
+
+	/*
+	 * Under GEQO, the sjinfo might be short-lived, so we'd better make copies
+	 * of data structures we extract from it.
+	 */
+	pathnode->in_operators = copyObject(sjinfo->semi_operators);
+	pathnode->uniq_exprs = copyObject(sjinfo->semi_rhs_exprs);
 
 	/*
 	 * If the input is a relation and it has a unique index that proves the

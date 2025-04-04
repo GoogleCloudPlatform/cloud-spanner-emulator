@@ -30,6 +30,7 @@
 #include "backend/query/change_stream/queryable_change_stream_tvf.h"
 #include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/schema.h"
+#include "common/constants.h"
 #include "tests/common/schema_constructor.h"
 #include "third_party/spanner_pg/interface/emulator_parser.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
@@ -45,7 +46,7 @@ class PgQueryableChangeStreamTvfTest : public testing::Test {
   PgQueryableChangeStreamTvfTest()
       : schema_(test::CreateSchemaWithOneTableAndOneChangeStream(
             &type_factory_, database_api::DatabaseDialect::POSTGRESQL)),
-        analyzer_options_(MakeGoogleSqlAnalyzerOptions()),
+        analyzer_options_(MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone)),
         fn_catalog_(&type_factory_),
         catalog_(std::make_unique<Catalog>(
             schema_.get(), &fn_catalog_, &type_factory_, analyzer_options_)) {}

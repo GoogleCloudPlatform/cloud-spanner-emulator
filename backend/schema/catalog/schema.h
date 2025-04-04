@@ -39,6 +39,7 @@
 #include "backend/schema/catalog/udf.h"
 #include "backend/schema/catalog/view.h"
 #include "backend/schema/graph/schema_graph.h"
+#include "common/constants.h"
 
 namespace google {
 namespace spanner {
@@ -57,11 +58,14 @@ class Schema {
   Schema()
       : graph_(SchemaGraph::CreateEmpty()),
         proto_bundle_(ProtoBundle::CreateEmpty()),
-        dialect_(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {}
+        dialect_(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL),
+        // Only populated for PostgreSQL databases (mirrors production)
+        database_id_("") {}
 
   explicit Schema(const SchemaGraph* graph,
                   std::shared_ptr<const ProtoBundle> proto_bundle,
-                  const database_api::DatabaseDialect& dialect);
+                  const database_api::DatabaseDialect& dialect,
+                  std::string_view database_id);
 
   virtual ~Schema() = default;
 
@@ -195,6 +199,14 @@ class Schema {
     return locality_groups_;
   }
 
+  // Returns the default time zone for this schema.
+  std::string default_time_zone() const {
+    if (options() != nullptr && options()->default_time_zone().has_value()) {
+      return options()->default_time_zone().value();
+    }
+    return kDefaultTimeZone;
+  }
+
   // Return user-visible options in this schema.
   const DatabaseOptions* const options() const { return database_options_; }
 
@@ -223,8 +235,22 @@ class Schema {
   std::shared_ptr<const ProtoBundle> proto_bundle() const {
     return proto_bundle_;
   }
+
   // Returns the database dialect.
   database_api::DatabaseDialect dialect() const { return dialect_; }
+
+  // Returns the database id.
+  std::string_view database_id() const { return database_id_; }
+
+  std::vector<const Index*> vector_indexes() const {
+    std::vector<const Index*> vector_indexes;
+    for (const auto& [name, index] : index_map_) {
+      if (index->is_vector_index()) {
+        vector_indexes.push_back(index);
+      }
+    }
+    return vector_indexes;
+  }
 
  private:
   // Tries to find the managed index from the non-fingerprint part of the
@@ -323,22 +349,32 @@ class Schema {
 
   // Holds the database dialect for this schema.
   const database_api::DatabaseDialect dialect_;
+
+  // Holds the database id for this schema.
+  const std::string database_id_;
 };
 
 // A Schema that also owns the SchemaGraph that manages the lifetime of the
 // schema nodes.
 class OwningSchema : public Schema {
  public:
-  explicit OwningSchema(std::unique_ptr<const SchemaGraph> graph,
-                        std::shared_ptr<const ProtoBundle> proto_bundle,
-                        const database_api::DatabaseDialect& dialect)
-      : Schema(graph.get(), proto_bundle, dialect), graph_(std::move(graph)) {}
+  explicit OwningSchema(
+      std::unique_ptr<const SchemaGraph> graph,
+      std::shared_ptr<const ProtoBundle> proto_bundle,
+      const database_api::DatabaseDialect& dialect,
+      // TODO: b/395063354 - Remove default value once spangres is migrated
+      std::string_view database_id = "")
+      : Schema(graph.get(), proto_bundle, dialect, database_id),
+        graph_(std::move(graph)) {}
 
-  explicit OwningSchema(std::unique_ptr<const SchemaGraph> graph,
-                        const database_api::DatabaseDialect& dialect)
+  explicit OwningSchema(
+      std::unique_ptr<const SchemaGraph> graph,
+      const database_api::DatabaseDialect& dialect,
+      // TODO: b/395063354 - Remove default value once spangres is migrated
+      std::string_view database_id = "")
       : Schema(graph.get(),
                google::spanner::emulator::backend::ProtoBundle::CreateEmpty(),
-               dialect),
+               dialect, database_id),
         graph_(std::move(graph)) {}
 
   ~OwningSchema() override = default;

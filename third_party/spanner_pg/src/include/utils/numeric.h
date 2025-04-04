@@ -16,6 +16,10 @@
 
 #include "fmgr.h"
 
+// SPANGRES BEGIN
+#define DEC_DIGITS	4			/* decimal digits per NBASE digit */
+// SPANGRES END
+
 /*
  * Limits on the precision and scale specifiable in a NUMERIC typmod.  The
  * precision is strictly positive, but the scale may be positive or negative.
@@ -32,6 +36,11 @@
 
 #define NUMERIC_MIN_SCALE			(-1000)
 #define NUMERIC_MAX_SCALE			1000
+
+// SPANGRES BEGIN
+#define NUMERIC_DSCALE_MASK			0x3FFF
+#define NUMERIC_DSCALE_MAX			NUMERIC_DSCALE_MASK
+// SPANGRES END
 
 /*
  * Internal limits on the scales chosen for calculation results
