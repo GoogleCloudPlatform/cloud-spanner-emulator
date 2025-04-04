@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "zetasql/public/type.h"
 #include "absl/status/statusor.h"
@@ -40,12 +41,11 @@ namespace database_api = ::google::spanner::admin::database::v1;
 // TODO : Deprecate this method and fix all tests.
 absl::StatusOr<std::unique_ptr<const backend::Schema>> CreateSchemaFromDDL(
     absl::Span<const std::string> statements,
-    zetasql::TypeFactory* type_factory
-    ,
-    std::string proto_descriptor_bytes = ""
-    ,
+    zetasql::TypeFactory* type_factory,
+    std::string proto_descriptor_bytes = "",
     database_api::DatabaseDialect dialect =
-        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+    std::string_view database_id = "");
 
 // Creates a schema with a single table and an index on the table.
 std::unique_ptr<const backend::Schema> CreateSchemaWithOneTable(

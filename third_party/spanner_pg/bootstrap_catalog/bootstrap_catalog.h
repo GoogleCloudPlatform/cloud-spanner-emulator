@@ -171,10 +171,8 @@ class PgBootstrapCatalog {
   // Access Method Operator ====================================================
   // Given an Operator Family, left and right argument types, and an Access
   // Method Strategy, returns the corresponding pg_amop.
-  absl::StatusOr<const FormData_pg_amop*> GetAmopByFamily(Oid opfamily,
-                                                          Oid lefttype,
-                                                          Oid righttype,
-                                                          int16_t strategy) const;
+  absl::StatusOr<const FormData_pg_amop*> GetAmopByFamily(
+      Oid opfamily, Oid lefttype, Oid righttype, int16_t strategy) const;
 
   // Given an Access Method Operator ID, returns a list of matching pg_amops.
   absl::StatusOr<absl::Span<const FormData_pg_amop* const>> GetAmopsByAmopOpId(

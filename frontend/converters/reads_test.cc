@@ -70,6 +70,9 @@ using zetasql::values::Float;
 using zetasql::values::Int64;
 using zetasql::values::NullString;
 using zetasql::values::String;
+using zetasql::IntervalValue;
+using zetasql::types::IntervalType;
+using zetasql::values::Interval;
 using zetasql_base::testing::StatusIs;
 
 class AccessProtosTest : public testing::Test {
@@ -696,6 +699,151 @@ TEST_F(AccessProtosTest, ReadIndex) {
   EXPECT_EQ(key_range.limit_key().ColumnValue(0),
             zetasql::values::String("789"));
   EXPECT_TRUE(key_range.limit_key().IsColumnDescending(0));
+}
+
+TEST_F(AccessProtosTest, CanConvertIntervalRowCursorToResultSet) {
+  TestRowCursor cursor({"int64", "interval"}, {Int64Type(), IntervalType()},
+                       {{Int64(1), Interval(IntervalValue::MinValue())},
+                        {Int64(2), Interval(IntervalValue())},
+                        {Int64(3), Interval(IntervalValue::MaxValue())}});
+  ResultSet result_pb;
+  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
+
+  EXPECT_THAT(result_pb,
+              test::EqualsProto(
+                  R"pb(metadata {
+                         row_type {
+                           fields {
+                             name: "int64"
+                             type { code: INT64 }
+                           }
+                           fields {
+                             name: "interval"
+                             type { code: INTERVAL }
+                           }
+                         }
+                       }
+                       rows {
+                         values { string_value: "1" }
+                         values { string_value: "P-10000Y-3660000DT-87840000H" }
+                       }
+                       rows {
+                         values { string_value: "2" }
+                         values { string_value: "P0Y" }
+                       }
+                       rows {
+                         values { string_value: "3" }
+                         values { string_value: "P10000Y3660000DT87840000H" }
+                       })pb"));
+}
+
+TEST_F(AccessProtosTest, CanConvertIntervalRowCursorToResultSetWithLimit) {
+  TestRowCursor cursor({"int64", "interval"}, {Int64Type(), IntervalType()},
+                       {{Int64(1), Interval(IntervalValue::MinValue())},
+                        {Int64(2), Interval(IntervalValue())},
+                        {Int64(3), Interval(IntervalValue::MaxValue())}});
+  ResultSet result_pb;
+  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 1, &result_pb));
+
+  EXPECT_THAT(result_pb,
+              test::EqualsProto(
+                  R"pb(metadata {
+                         row_type {
+                           fields {
+                             name: "int64"
+                             type { code: INT64 }
+                           }
+                           fields {
+                             name: "interval"
+                             type { code: INTERVAL }
+                           }
+                         }
+                       }
+                       rows {
+                         values { string_value: "1" }
+                         values { string_value: "P-10000Y-3660000DT-87840000H" }
+                       })pb"));
+}
+
+TEST_F(AccessProtosTest, CanConvertIntervalRowCursorToPartialResultSet) {
+  TestRowCursor cursor({"int64", "interval"}, {Int64Type(), IntervalType()},
+                       {{Int64(1), Interval(IntervalValue::MinValue())},
+                        {Int64(2), Interval(IntervalValue())},
+                        {Int64(3), Interval(IntervalValue::MaxValue())}});
+  std::vector<PartialResultSet> results;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 0));
+
+  EXPECT_THAT(results[0],
+              test::EqualsProto(
+                  R"pb(metadata {
+                         row_type {
+                           fields {
+                             name: "int64"
+                             type { code: INT64 }
+                           }
+                           fields {
+                             name: "interval"
+                             type { code: INTERVAL }
+                           }
+                         }
+                       }
+                       values { string_value: "1" }
+                       values { string_value: "P-10000Y-3660000DT-87840000H" }
+                       values { string_value: "2" }
+                       values { string_value: "P0Y" }
+                       values { string_value: "3" }
+                       values { string_value: "P10000Y3660000DT87840000H" }
+                  )pb"));
+}
+
+TEST_F(AccessProtosTest,
+       CanConvertIntervalRowCursorToPartialResultSetWithLimit) {
+  TestRowCursor cursor({"int64", "interval"}, {Int64Type(), IntervalType()},
+                       {{Int64(1), Interval(IntervalValue::MinValue())},
+                        {Int64(2), Interval(IntervalValue())},
+                        {Int64(3), Interval(IntervalValue::MaxValue())}});
+  std::vector<PartialResultSet> results;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 1));
+
+  EXPECT_THAT(results[0],
+              test::EqualsProto(
+                  R"pb(metadata {
+                         row_type {
+                           fields {
+                             name: "int64"
+                             type { code: INT64 }
+                           }
+                           fields {
+                             name: "interval"
+                             type { code: INTERVAL }
+                           }
+                         }
+                       }
+                       values { string_value: "1" }
+                       values { string_value: "P-10000Y-3660000DT-87840000H" }
+                  )pb"));
+}
+
+TEST_F(AccessProtosTest, CanConvertEmptyIntervalRowCursorToResultSet) {
+  TestRowCursor cursor({"int64", "interval"}, {Int64Type(), IntervalType()},
+                       {});
+  ResultSet result_pb;
+  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
+
+  EXPECT_THAT(result_pb, test::EqualsProto(
+                             R"pb(metadata {
+                                    row_type {
+                                      fields {
+                                        name: "int64"
+                                        type { code: INT64 }
+                                      }
+                                      fields {
+                                        name: "interval"
+                                        type { code: INTERVAL }
+                                      }
+                                    }
+                                  }
+                             )pb"));
 }
 }  // namespace
 

@@ -32,6 +32,7 @@
 #include "third_party/spanner_pg/errors/errors.h"
 
 #include "zetasql/base/logging.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/errors/errors.pb.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"

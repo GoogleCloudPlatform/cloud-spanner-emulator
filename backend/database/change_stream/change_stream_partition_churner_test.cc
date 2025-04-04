@@ -44,6 +44,8 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
+constexpr char kDatabaseId[] = "test-db";
+
 class ChangeStreamPartitionChurnerTest : public ::testing::Test {
  protected:
   struct TestChurnedPartitions {
@@ -74,8 +76,9 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
     CREATE CHANGE STREAM change_stream_one FOR ALL
   )"};
     ZETASQL_ASSERT_OK_AND_ASSIGN(
-        db_, Database::Create(&clock_, SchemaChangeOperation{
-                                           .statements = create_statements}));
+        db_, Database::Create(
+                 &clock_, kDatabaseId,
+                 SchemaChangeOperation{.statements = create_statements}));
   }
 
   void AddChangeStream(absl::string_view change_stream_name) {

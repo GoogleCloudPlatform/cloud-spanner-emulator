@@ -291,6 +291,11 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 	GeneratedColStoreOpt generatedcolstoreopt;
 	InterleaveSpec		*interleavespec;
 	Ttl                 *ttlopt;
+	LocalityGroupOption *locality_group_option;
+
+// SPANGRES BEGIN
+	AlterSearchIndexCmd  *altersearchindexcmd;
+// SPANGRES END
 }
 
 %type <node>	stmt toplevel_stmt schema_stmt routine_body_stmt
@@ -333,6 +338,10 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 		CreatePublicationStmt AlterPublicationStmt
 		CreateSubscriptionStmt AlterSubscriptionStmt DropSubscriptionStmt
     CreateChangeStreamStmt AlterChangeStreamStmt
+		// SPANGRES BEGIN
+		CreateSearchIndexStmt AlterSearchIndexStmt
+		// SPANGRES END
+		CreateLocalityGroupStmt AlterLocalityGroupStmt
 
 %type <node>	select_no_parens select_with_parens select_clause
 				simple_select values_clause
@@ -663,6 +672,15 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 %type <list>    change_stream_tracked_tables_list
 %type <node>    change_stream_tracked_tables
 
+// SPANGRES BEGIN
+%type<altersearchindexcmd> alter_search_index_cmd
+%type <ielem> partitionby_with_order
+%type <list> partitionby_list opt_partition_by_clause partition_clause
+// SPANGRES END
+
+%type <locality_group_option> opt_storage opt_ssd_to_hdd_spill_timespan
+                              opt_locality_group
+
 /*
  * Non-keyword token types.  These are hard-wired into the "flex" lexer.
  * They must be listed first so that their numeric codes do not depend on
@@ -720,6 +738,9 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 	GENERATED GLOBAL GRANT GRANTED GREATEST GROUP_P GROUPING GROUPS
 
 	HANDLER HAVING HEADER_P HOLD HOUR_P
+	// SPANGRES BEGIN
+	HIDDEN
+	// SPANGRES END
 
 	IDENTITY_P IF_P ILIKE IMMEDIATE IMMUTABLE IMPLICIT_P IMPORT_P IN_P INCLUDE
 	INCLUDING INCREMENT INDEX INDEXES INHERIT INHERITS INITIALLY INLINE_P
@@ -732,6 +753,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 
 	LABEL LANGUAGE LARGE_P LAST_P LATERAL_P
 	LEADING LEAKPROOF LEAST LEFT LENGTH LEVEL LIKE LIMIT LISTEN LOAD LOCAL
+	LOCALITY
 	LOCALTIME LOCALTIMESTAMP LOCATION LOCK_P LOCKED LOGGED
 
 	MAPPING MATCH MATCHED MATERIALIZED MAXVALUE MERGE METHOD
@@ -762,6 +784,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 	SAVEPOINT SCHEMA SCHEMAS SCROLL SEARCH SECOND_P SECURITY SELECT SEQUENCE SEQUENCES
 	SERIALIZABLE SERVER SESSION SESSION_USER SET SETS SETOF SHARE SHOW
 	SIMILAR SIMPLE SKIP SMALLINT SNAPSHOT SOME SQL_P
+	SSD_TO_HDD_SPILL_TIMESPAN
 	STABLE STANDALONE_P
 	START STATEMENT STATISTICS STDIN STDOUT STORAGE STORED STREAM STREAMS STRICT_P STRIP_P
 	SUBSCRIPTION SUBSTRING SUPPORT SYMMETRIC SYNONYM SYSID SYSTEM_P
@@ -1037,6 +1060,12 @@ stmt:
 			| CreatePolicyStmt
 			| CreatePLangStmt
 			| CreateSchemaStmt
+			// SPANGRES BEGIN
+			| CreateSearchIndexStmt
+			| AlterSearchIndexStmt
+			// SPANGRES END
+			| CreateLocalityGroupStmt
+			| AlterLocalityGroupStmt
 			| CreateSeqStmt
 			| CreateStmt
 			| CreateSubscriptionStmt
@@ -2074,6 +2103,26 @@ AlterTableStmt:
 					n->missing_ok = true;
 					$$ = (Node *) n;
 				}
+		|	ALTER TABLE relation_expr ALTER opt_column ColId SET LOCALITY GROUP_P name
+				{
+					AlterColumnLocalityGroupStmt *n = makeNode(AlterColumnLocalityGroupStmt);
+
+					n->relation = $3;
+					n->column = $6;
+					n->locality_group_name = makeNode(LocalityGroupOption);
+					n->locality_group_name->value = $10;
+					$$ = (Node *) n;
+				}
+		|	ALTER TABLE relation_expr ALTER opt_column ColId SET LOCALITY GROUP_P NULL_P
+				{
+					AlterColumnLocalityGroupStmt *n = makeNode(AlterColumnLocalityGroupStmt);
+
+					n->relation = $3;
+					n->column = $6;
+					n->locality_group_name = makeNode(LocalityGroupOption);
+					n->locality_group_name->is_null = true;
+					$$ = (Node *) n;
+				}
 		|	ALTER TABLE relation_expr partition_cmd
 				{
 					AlterTableStmt *n = makeNode(AlterTableStmt);
@@ -2385,6 +2434,24 @@ alter_index_cmd:
 					n->missing_ok = true;
 					n->name = $6;
 					$$ = (Node *)n;
+				}
+			/* ALTER INDEX <name> SET LOCALITY GROUP <locality_group> */
+			| SET LOCALITY GROUP_P name
+				{
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+					n->subtype = AT_SetLocalityGroup;
+					n->locality_group_name = makeNode(LocalityGroupOption);
+					n->locality_group_name->value = $4;
+					$$ = (Node *) n;
+				}
+			/* ALTER INDEX <name> SET LOCALITY GROUP NULL */
+			| SET LOCALITY GROUP_P NULL_P
+				{
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+					n->subtype = AT_SetLocalityGroup;
+					n->locality_group_name = makeNode(LocalityGroupOption);
+					n->locality_group_name->is_null = true;
+					$$ = (Node *) n;
 				}
 
 alter_table_cmd:
@@ -3066,6 +3133,24 @@ alter_table_cmd:
 					n->def = (Node *) $2;
 					$$ = (Node *) n;
 				}
+			/* ALTER TABLE <name> SET LOCALITY GROUP <locality_group> */
+			| SET LOCALITY GROUP_P name
+				{
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+					n->subtype = AT_SetLocalityGroup;
+					n->locality_group_name = makeNode(LocalityGroupOption);
+					n->locality_group_name->value = $4;
+					$$ = (Node *) n;
+				}
+			/* ALTER TABLE <name> SET LOCALITY GROUP NULL */
+			| SET LOCALITY GROUP_P NULL_P
+				{
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+					n->subtype = AT_SetLocalityGroup;
+					n->locality_group_name = makeNode(LocalityGroupOption);
+					n->locality_group_name->is_null = true;
+					$$ = (Node *) n;
+				}
 		;
 
 alter_column_default:
@@ -3670,6 +3755,7 @@ OptTtl: TTL ConstInterval Sconst opt_interval ON ColId
 CreateStmt:	CREATE OptTemp TABLE qualified_name '(' OptTableElementList ')'
 			OptInherit OptPartitionSpec table_access_method_clause OptWith
       OnCommitOption OptTableSpace
+			opt_locality_group
 			OptInterleave OptTtl
 				{
 					CreateStmt *n = makeNode(CreateStmt);
@@ -3685,14 +3771,16 @@ CreateStmt:	CREATE OptTemp TABLE qualified_name '(' OptTableElementList ')'
 					n->options = $11;
 					n->oncommit = $12;
 					n->tablespacename = $13;
-					n->interleavespec = $14;
-					n->ttl = $15;
+					n->locality_group_name = $14;
+					n->interleavespec = $15;
+					n->ttl = $16;
 					n->if_not_exists = false;
 					$$ = (Node *) n;
 				}
 		| CREATE OptTemp TABLE IF_P NOT EXISTS qualified_name '('
 			OptTableElementList ')' OptInherit OptPartitionSpec table_access_method_clause
 			OptWith OnCommitOption OptTableSpace
+			opt_locality_group
 			OptInterleave OptTtl
 				{
 					CreateStmt *n = makeNode(CreateStmt);
@@ -3709,8 +3797,9 @@ CreateStmt:	CREATE OptTemp TABLE qualified_name '(' OptTableElementList ')'
 					n->oncommit = $15;
 					n->tablespacename = $16;
 					n->if_not_exists = true;
-					n->interleavespec = $17;
-					n->ttl = $18;
+					n->locality_group_name = $17;
+					n->interleavespec = $18;
+					n->ttl = $19;
 					$$ = (Node *) n;
 				}
 		| CREATE OptTemp TABLE qualified_name OF any_name
@@ -3885,6 +3974,7 @@ TypedTableElement:
 		;
 
 columnDef:	ColId Typename opt_column_compression create_generic_options ColQualList
+						opt_locality_group
 				{
 					ColumnDef *n = makeNode(ColumnDef);
 
@@ -3903,6 +3993,7 @@ columnDef:	ColId Typename opt_column_compression create_generic_options ColQualL
 					SplitColQualList($5, &n->constraints, &n->collClause,
 									 yyscanner);
 					n->location = @1;
+					n->locality_group_name = $6;
 					$$ = (Node *) n;
 				}
 		;
@@ -4135,6 +4226,7 @@ ColConstraintElem:
 					n->initially_valid = true;
 					$$ = (Node *) n;
 				}
+			// SPANGRES BEGIN
 			| VECTOR LENGTH SignedIconst
 				{
 					Constraint *n = makeNode(Constraint);
@@ -4143,6 +4235,14 @@ ColConstraintElem:
 					n->vector_length = $3;
 					$$ = (Node *)n;
 				}
+			| HIDDEN
+			  {
+					Constraint *n = makeNode(Constraint);
+					n->contype = CONSTR_HIDDEN;
+					n->location = @1;
+					$$ = (Node *)n;
+				}
+			// SPANGRES END
 		;
 
 opt_unique_null_treatment:
@@ -5059,6 +5159,10 @@ SeqOptElem: AS SimpleTypename
 				{
 					$$ = makeDefElem("increment", (Node *) $3, @1);
 				}
+			| LOGGED
+				{
+					$$ = makeDefElem("logged", NULL, @1);
+				}
 			| MAXVALUE NumericOnly
 				{
 					$$ = makeDefElem("maxvalue", (Node *) $2, @1);
@@ -5081,7 +5185,6 @@ SeqOptElem: AS SimpleTypename
 				}
 			| SEQUENCE NAME_P any_name
 				{
-					/* not documented, only used by pg_dump */
 					$$ = makeDefElem("sequence_name", (Node *) $3, @1);
 				}
 			| SKIP RANGE NumericOnly NumericOnly
@@ -5113,6 +5216,10 @@ SeqOptElem: AS SimpleTypename
 			| RESTART COUNTER opt_with NumericOnly
 				{
 					$$ = makeDefElem("restart_counter", (Node *)$4, @1);
+				}
+			| UNLOGGED
+				{
+					$$ = makeDefElem("unlogged", NULL, @1);
 				}
 		;
 
@@ -7087,6 +7194,40 @@ DropStmt:	DROP object_type_any_name IF_P EXISTS any_name_list opt_drop_behavior
 					n->objects = list_make1($4);
 					$$ = (Node *)n;
 				}
+			// SPANGRES BEGIN
+			| DROP SEARCH INDEX any_name_list
+				{
+					DropStmt *n = makeNode(DropStmt);
+					n->removeType = OBJECT_SEARCH_INDEX;
+					n->missing_ok = false;
+					n->objects = $4;
+					$$ = (Node *)n;
+				}
+			| DROP SEARCH INDEX IF_P EXISTS any_name_list
+				{
+					DropStmt *n = makeNode(DropStmt);
+					n->removeType = OBJECT_SEARCH_INDEX;
+					n->missing_ok = true;
+					n->objects = $6;
+					$$ = (Node *)n;
+				}
+			// SPANGRES END
+			| DROP LOCALITY GROUP_P qualified_name
+				{
+					DropStmt *n = makeNode(DropStmt);
+					n->removeType = OBJECT_LOCALITY_GROUP;
+					n->missing_ok = false;
+					n->objects = list_make1($4);
+					$$ = (Node *)n;
+				}
+			| DROP LOCALITY GROUP_P IF_P EXISTS qualified_name
+				{
+					DropStmt *n = makeNode(DropStmt);
+					n->removeType = OBJECT_LOCALITY_GROUP;
+					n->missing_ok = true;
+					n->objects = list_make1($6);
+					$$ = (Node *)n;
+				}
 		;
 
 /* object types taking any_name/any_name_list */
@@ -8222,6 +8363,7 @@ defacl_privilege_target:
 IndexStmt:	CREATE opt_unique INDEX opt_concurrently opt_index_name
 			ON relation_expr access_method_clause '(' index_params ')'
 			opt_include opt_unique_null_treatment opt_reloptions OptTableSpace
+			opt_locality_group
 			OptInterleaveIndex where_clause
 				{
 					IndexStmt *n = makeNode(IndexStmt);
@@ -8236,8 +8378,9 @@ IndexStmt:	CREATE opt_unique INDEX opt_concurrently opt_index_name
 					n->nulls_not_distinct = !$13;
 					n->options = $14;
 					n->tableSpace = $15;
-					n->interleavespec = $16;
-					n->whereClause = $17;
+					n->locality_group_name = $16;
+					n->interleavespec = $17;
+					n->whereClause = $18;
 					n->excludeOpNames = NIL;
 					n->idxcomment = NULL;
 					n->indexOid = InvalidOid;
@@ -8256,6 +8399,7 @@ IndexStmt:	CREATE opt_unique INDEX opt_concurrently opt_index_name
 			| CREATE opt_unique INDEX opt_concurrently IF_P NOT EXISTS name
 			ON relation_expr access_method_clause '(' index_params ')'
 			opt_include opt_unique_null_treatment opt_reloptions OptTableSpace
+			opt_locality_group
 			OptInterleaveIndex where_clause
 				{
 					IndexStmt *n = makeNode(IndexStmt);
@@ -8270,8 +8414,9 @@ IndexStmt:	CREATE opt_unique INDEX opt_concurrently opt_index_name
 					n->nulls_not_distinct = !$16;
 					n->options = $17;
 					n->tableSpace = $18;
-					n->interleavespec = $19;
-					n->whereClause = $20;
+					n->locality_group_name = $19;
+					n->interleavespec = $20;
+					n->whereClause = $21;
 					n->excludeOpNames = NIL;
 					n->idxcomment = NULL;
 					n->indexOid = InvalidOid;
@@ -8414,6 +8559,15 @@ CreateFunctionStmt:
 					n->returnType = $7;
 					n->options = $8;
 					n->sql_body = $9;
+					// Spangres extract raw string from the ReturnStmt
+					int query_start_location = @9;
+					int query_end_location =
+							pg_yyget_extra(yyscanner)->current_yylloc;
+					n->routine_body_string =
+							pnstrdup(
+								pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf
+									+ query_start_location,
+								query_end_location - query_start_location);
 					$$ = (Node *) n;
 				}
 			| CREATE opt_or_replace FUNCTION func_name func_args_with_defaults
@@ -8429,6 +8583,15 @@ CreateFunctionStmt:
 					n->returnType->location = @7;
 					n->options = $11;
 					n->sql_body = $12;
+					// Spangres extract raw string from the ReturnStmt
+					int query_start_location = @12;
+					int query_end_location =
+							pg_yyget_extra(yyscanner)->current_yylloc;
+					n->routine_body_string =
+							pnstrdup(
+								pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf
+									+ query_start_location,
+								query_end_location - query_start_location);
 					$$ = (Node *) n;
 				}
 			| CREATE opt_or_replace FUNCTION func_name func_args_with_defaults
@@ -8443,6 +8606,15 @@ CreateFunctionStmt:
 					n->returnType = NULL;
 					n->options = $6;
 					n->sql_body = $7;
+					// Spangres extract raw string for the ReturnStmt
+					int query_start_location = @7;
+					int query_end_location =
+							pg_yyget_extra(yyscanner)->current_yylloc;
+					n->routine_body_string =
+							pnstrdup(
+								pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf
+									+ query_start_location,
+								query_end_location - query_start_location);
 					$$ = (Node *) n;
 				}
 			| CREATE opt_or_replace PROCEDURE func_name func_args_with_defaults
@@ -8457,6 +8629,15 @@ CreateFunctionStmt:
 					n->returnType = NULL;
 					n->options = $6;
 					n->sql_body = $7;
+					// Spangres extract raw string from the ReturnStmt
+					int query_start_location = @7;
+					int query_end_location =
+							pg_yyget_extra(yyscanner)->current_yylloc;
+					n->routine_body_string =
+							pnstrdup(
+								pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf
+									+ query_start_location,
+								query_end_location - query_start_location);
 					$$ = (Node *) n;
 				}
 		;
@@ -11192,6 +11373,207 @@ change_stream_tracked_tables:
            n->opt_reset_options = $7;
            $$ = (Node *)n;
          }
+
+/*****************************************************************************
+ *
+ * CREATE LOCALITY GROUP [IF NOT EXISTS] name
+ * [STORAGE storage] [SSD_TO_HDD_SPILL_TIMESPAN ssd_to_hdd_spill_timespan]
+ *
+ *****************************************************************************/
+ CreateLocalityGroupStmt:
+			CREATE LOCALITY GROUP_P qualified_name opt_storage opt_ssd_to_hdd_spill_timespan
+				{
+					CreateLocalityGroupStmt *n = makeNode(CreateLocalityGroupStmt);
+					n->locality_group_name = $4;
+					n->storage = $5;
+					n->ssd_to_hdd_spill_timespan = $6;
+					$$ = (Node *)n;
+				}
+			| CREATE LOCALITY GROUP_P IF_P NOT EXISTS qualified_name opt_storage opt_ssd_to_hdd_spill_timespan
+				{
+					CreateLocalityGroupStmt *n = makeNode(CreateLocalityGroupStmt);
+					n->if_not_exists = true;
+					n->locality_group_name = $7;
+					n->storage = $8;
+					n->ssd_to_hdd_spill_timespan = $9;
+					$$ = (Node *)n;
+				}
+			;
+
+opt_storage:
+			STORAGE Sconst
+				{
+					$$ = makeNode(LocalityGroupOption);
+					$$->value = pstrdup($2);
+				}
+			| STORAGE NULL_P
+				{
+					$$ = makeNode(LocalityGroupOption);
+					$$->is_null = true;
+				}
+			| /*EMPTY*/ { $$ = NULL; }
+			;
+
+opt_ssd_to_hdd_spill_timespan:
+			SSD_TO_HDD_SPILL_TIMESPAN Sconst
+				{
+					$$ = makeNode(LocalityGroupOption);
+					$$->value = pstrdup($2);
+				}
+			| SSD_TO_HDD_SPILL_TIMESPAN NULL_P
+				{
+					$$ = makeNode(LocalityGroupOption);
+					$$->is_null = true;
+				}
+			| /*EMPTY*/ { $$ = NULL; }
+			;
+
+opt_locality_group:
+			LOCALITY GROUP_P name
+				{
+					$$ = makeNode(LocalityGroupOption);
+					$$->value = pstrdup($3);
+				}
+			| LOCALITY GROUP_P NULL_P
+				{
+					$$ = makeNode(LocalityGroupOption);
+					$$->is_null = true;
+				}
+			| /*EMPTY*/ { $$ = NULL; }
+			;
+
+/*****************************************************************************
+ *
+ * ALTER LOCALITY GROUP [IF EXISTS] name
+ * [STORAGE storage] [SSD_TO_HDD_SPILL_TIMESPAN ssd_to_hdd_spill_timespan]
+ *
+ *****************************************************************************/
+AlterLocalityGroupStmt:
+			ALTER LOCALITY GROUP_P qualified_name opt_storage opt_ssd_to_hdd_spill_timespan
+				{
+					AlterLocalityGroupStmt *n = makeNode(AlterLocalityGroupStmt);
+					n->locality_group_name = $4;
+					n->storage = $5;
+					n->ssd_to_hdd_spill_timespan = $6;
+					$$ = (Node *)n;
+				}
+			| ALTER LOCALITY GROUP_P IF_P EXISTS qualified_name opt_storage opt_ssd_to_hdd_spill_timespan
+				{
+					AlterLocalityGroupStmt *n = makeNode(AlterLocalityGroupStmt);
+					n->if_exists = true;
+					n->locality_group_name = $6;
+					n->storage = $7;
+					n->ssd_to_hdd_spill_timespan = $8;
+					$$ = (Node *)n;
+				}
+			;
+
+// SPANGRES BEGIN
+/*****************************************************************************
+ *
+ * CREATE SEARCH INDEX index_name ON table_name ( columns )
+ * INCLUDE(other_columns) PARTITION BY partition_columns
+ * ORDER BY order_by_columns WHERE where_clause
+ * INTERLEAVE IN PARENT parent_table
+ * WITH (options);
+ *
+ *****************************************************************************/
+CreateSearchIndexStmt:
+						CREATE SEARCH INDEX name ON qualified_name '(' index_params ')'
+						opt_include opt_partition_by_clause opt_sort_clause OptInterleaveIndex where_clause opt_definition
+						{
+								CreateSearchIndexStmt *n = makeNode(CreateSearchIndexStmt);
+								n->search_index_name = $4;
+								n->table_name = $6;
+								n->token_columns = $8;
+								n->storing = $10;
+								n->partition = $11;
+								n->order = $12;
+								n->interleave = $13;
+								n->null_filters = $14;
+								n->options = $15;
+								$$ = (Node *)n;
+						}
+
+opt_partition_by_clause:
+			partition_clause								{ $$ = $1; }
+			| /*EMPTY*/											{ $$ = NIL; }
+		;
+
+partition_clause:
+			PARTITION BY partitionby_list					{ $$ = $3; }
+		;
+
+partitionby_list:
+			partitionby_with_order															{ $$ = list_make1($1); }
+			| partitionby_list ',' partitionby_with_order				{ $$ = lappend($1, $3); }
+		;
+
+partitionby_with_order:	ColId	opt_asc_desc opt_nulls_order
+		{
+			$$ = makeNode(IndexElem);
+			$$->name = $1;
+			$$->expr = NULL;
+			$$->indexcolname = NULL;
+			$$->collation = NULL;
+			$$->opclass = NULL;
+			$$->opclassopts = NULL;
+			$$->ordering = $2;
+			$$->nulls_ordering = $3;
+		}
+		;
+
+/*****************************************************************************
+ *
+ * ALTER SEARCH INDEX index_name {
+ *  ADD COLUMN column_name
+ *  | DROP COLUMN column_name
+ *  | ADD INCLUDE COLUMN column_name
+ *  | DROP INCLUDE COLUMN column_name }
+ *
+ *****************************************************************************/
+AlterSearchIndexStmt:
+			ALTER SEARCH INDEX qualified_name alter_search_index_cmd
+			{
+				AlterSearchIndexStmt *n = makeNode(AlterSearchIndexStmt);
+				n->search_index_name = $4;
+				n->alter_search_index_cmd = $5;
+				$$ = (Node *)n;
+			}
+
+
+alter_search_index_cmd :
+			ADD_P COLUMN ColId
+					{
+						AlterSearchIndexCmd *n = makeNode(AlterSearchIndexCmd);
+						n->cmd_type = ALT_SEARCH_INDEX_ADD_COLUMN;
+						n->column_name = $3;
+						$$ = n;
+					}
+			| DROP COLUMN ColId
+					{
+						AlterSearchIndexCmd *n = makeNode(AlterSearchIndexCmd);
+						n->cmd_type = ALT_SEARCH_INDEX_DROP_COLUMN;
+						n->column_name = $3;
+					  $$ = n;
+					}
+			|	ADD_P INCLUDE COLUMN ColId
+					{
+						AlterSearchIndexCmd *n = makeNode(AlterSearchIndexCmd);
+						n->cmd_type = ALT_SEARCH_INDEX_ADD_INCLUDE_COLUMN;
+						n->column_name = $4;
+						$$ = n;
+					}
+			 | DROP INCLUDE COLUMN ColId
+					{
+						AlterSearchIndexCmd *n = makeNode(AlterSearchIndexCmd);
+						n->cmd_type = ALT_SEARCH_INDEX_DROP_INCLUDE_COLUMN;
+						n->column_name = $4;
+						$$ = n;
+					}
+
+
+// SPANGRES END
 
 /*****************************************************************************
  *
@@ -17486,6 +17868,9 @@ unreserved_keyword:
 			| GROUPS
 			| HANDLER
 			| HEADER_P
+			// SPANGRES BEGIN
+			| HIDDEN
+			// SPANGRES END
 			| HOLD
 			| HOUR_P
 			| IDENTITY_P
@@ -17520,6 +17905,7 @@ unreserved_keyword:
 			| LISTEN
 			| LOAD
 			| LOCAL
+  		| LOCALITY
 			| LOCATION
 			| LOCK_P
 			| LOCKED
@@ -17634,6 +18020,7 @@ unreserved_keyword:
 			| SKIP
 			| SNAPSHOT
 			| SQL_P
+  		| SSD_TO_HDD_SPILL_TIMESPAN
 			| STABLE
 			| STANDALONE_P
 			| START

@@ -48,6 +48,7 @@ class TypesTest : public ::testing::Test {
   std::vector<const zetasql::Type*> unsupported_types() {
     std::vector<const zetasql::Type*> unsupported_types = {
         type_factory_.get_int32(),
+        type_factory_.get_interval(),
     };
 
     return unsupported_types;

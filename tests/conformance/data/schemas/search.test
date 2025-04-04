@@ -1,0 +1,100 @@
+# Note that PG databases by default have lower case table and column names. To
+# use uppercase names, you have to quote them. But the GSQL and PG quoting
+# syntax is incompatible so we use lower-case names in both schemas to avoid
+# having to maintain two copies of each query.
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE albums (
+  albumid INT64 NOT NULL,
+  userid INT64 NOT NULL,
+  releasetimestamp INT64 NOT NULL,
+  uid INT64 NOT NULL,
+  name STRING(MAX),
+  name_tokens TOKENLIST AS (TOKEN(Name)) HIDDEN,
+  name_ngrams_tokens TOKENLIST AS (TOKENIZE_NGRAMS(Name, ngram_size_max=>4, ngram_size_min=>2)) HIDDEN,
+  name_exists BOOL AS (Name IS NOT NULL AND Name!=""),
+  name_exists_tokens TOKENLIST AS (TOKENIZE_BOOL(Name_Exists)) HIDDEN,
+  tracks ARRAY<STRING(MAX)>,
+  tracks_tokens TOKENLIST AS (TOKENIZE_FULLTEXT(Tracks)) STORED HIDDEN,
+  tracks_substring_tokens TOKENLIST AS (TOKENIZE_SUBSTRING(Tracks)) STORED HIDDEN,
+  summary STRING(MAX),
+  summary_tokens TOKENLIST AS (TOKENIZE_FULLTEXT(Summary)) HIDDEN,
+  summary_substr_tokens TOKENLIST AS (TOKENIZE_SUBSTRING(Summary, ngram_size_max=>4, ngram_size_min=>3)) STORED HIDDEN,
+  summary_substr_relative_tokens TOKENLIST AS (TOKENIZE_SUBSTRING(Summary, relative_search_types=>["word_prefix"])) STORED HIDDEN,
+  summary_substr_relative_all_tokens TOKENLIST AS (TOKENIZE_SUBSTRING(Summary, relative_search_types=>["all"], ngram_size_max=>5, ngram_size_min=>3)) STORED HIDDEN,
+  summary2 STRING(MAX),
+  summary2_tokens TOKENLIST AS (TOKENIZE_FULLTEXT(Summary2)) HIDDEN,
+  summary2_substr_tokens TOKENLIST AS (TOKENIZE_SUBSTRING(Summary2, ngram_size_min=>3, ngram_size_max=>4, language_tag=>"ar-ar")) STORED HIDDEN,
+  summaries_tokens TOKENLIST AS (TOKENLIST_CONCAT([Summary_Tokens, Summary2_Tokens])) STORED HIDDEN,
+  summaries_substr_tokens TOKENLIST AS (TOKENLIST_CONCAT([Summary_SubStr_Tokens, Summary2_SubStr_Tokens])) HIDDEN,
+  length INT64,
+  length_tokens TOKENLIST AS (TOKENIZE_NUMBER(Length, min=>0, max=>0x40000000)) STORED HIDDEN,
+) PRIMARY KEY(albumid);
+CREATE SEARCH INDEX albumindex
+ON albums(name_tokens,
+          name_ngrams_tokens,
+          tracks_tokens,
+          tracks_substring_tokens,
+          summary_tokens,
+          summary_substr_tokens,
+          summary_substr_relative_tokens,
+          summary_substr_relative_all_tokens,
+          summary2_tokens,
+          summary2_substr_tokens,
+          summaries_tokens,
+          summaries_substr_tokens,
+          length_tokens)
+STORING(length)
+PARTITION BY userid
+ORDER BY releasetimestamp
+OPTIONS (
+  sort_order_sharding = true,
+  disable_automatic_uid_column=true);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE albums (
+  albumid bigint NOT NULL,
+  userid bigint NOT NULL,
+  releasetimestamp bigint NOT NULL,
+  uid bigint NOT NULL,
+  name varchar,
+  name_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.token(name)) STORED HIDDEN,
+  name_ngrams_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenize_ngrams(name, ngram_size_max=>4::bigint, ngram_size_min=>2::bigint)) STORED HIDDEN,
+  name_exists bool GENERATED ALWAYS AS (name IS NOT NULL AND name!=''::text) STORED,
+  name_exists_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenize_bool(name IS NOT NULL AND name!=''::text)) STORED HIDDEN,
+  tracks varchar[],
+  tracks_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenize_fulltext(tracks)) STORED HIDDEN,
+  tracks_substring_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenize_substring(tracks)) STORED HIDDEN,
+  summary varchar,
+  summary_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenize_fulltext(summary)) STORED HIDDEN,
+  summary_substr_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenize_substring(summary, ngram_size_max=>4::bigint, ngram_size_min=>3::bigint)) STORED HIDDEN,
+  summary_substr_relative_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenize_substring(summary, relative_search_types=>'{word_prefix}'::text[])) STORED HIDDEN,
+  summary_substr_relative_all_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenize_substring(summary, relative_search_types=>'{all}'::text[], ngram_size_max=>5::bigint, ngram_size_min=>3::bigint)) STORED HIDDEN,
+  summary2 varchar,
+  summary2_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenize_fulltext(summary2)) STORED HIDDEN,
+  summary2_substr_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenize_substring(summary2, ngram_size_min=>3::bigint, ngram_size_max=>4::bigint, language_tag=>'ar-ar'::text)) STORED HIDDEN,
+  summaries_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenlist_concat(ARRAY[spanner.tokenize_fulltext(summary), spanner.tokenize_fulltext(summary2)])) STORED HIDDEN,
+  summaries_substr_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenlist_concat(ARRAY[spanner.tokenize_substring(summary, ngram_size_max=>4::bigint, ngram_size_min=>3::bigint), spanner.tokenize_substring(summary2, ngram_size_min=>3::bigint, ngram_size_max=>4::bigint, language_tag=>'ar-ar'::text)])) STORED HIDDEN,
+  length bigint,
+  length_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenize_number(length, min=>0::bigint, max=>40000000::bigint)) STORED HIDDEN,
+  PRIMARY KEY(albumid)
+);
+CREATE SEARCH INDEX albumindex
+ON albums(name_tokens,
+          name_ngrams_tokens,
+          tracks_tokens,
+          tracks_substring_tokens,
+          summary_tokens,
+          summary_substr_tokens,
+          summary_substr_relative_tokens,
+          summary_substr_relative_all_tokens,
+          summary2_tokens,
+          summary2_substr_tokens,
+          summaries_tokens,
+          summaries_substr_tokens,
+          length_tokens)
+INCLUDE(length)
+PARTITION BY userid
+ORDER BY releasetimestamp
+WITH (
+  sort_order_sharding = true,
+  disable_automatic_uid_column=true);

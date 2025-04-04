@@ -42,6 +42,8 @@ cc_library(
     hdrs = ["query_engine.h"],
     deps = [
         ":analyzer_options",
+        ":ann_functions_rewriter",
+        ":ann_validator",
         ":catalog",
         ":dml_query_validator",
         ":function_catalog",
@@ -254,6 +256,43 @@ cc_test(
     ],
 )
 
+cc_library(
+    name = "ann_functions_rewriter",
+    srcs = ["ann_functions_rewriter.cc"],
+    hdrs = ["ann_functions_rewriter.h"],
+    deps = [
+        "//common:errors",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status",
+        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_zetasql//zetasql/public:function",
+        "@com_google_zetasql//zetasql/public:json_value",
+        "@com_google_zetasql//zetasql/public:value",
+        "@com_google_zetasql//zetasql/resolved_ast",
+    ],
+)
+
+cc_library(
+    name = "ann_validator",
+    srcs = ["ann_validator.cc"],
+    hdrs = ["ann_validator.h"],
+    deps = [
+        ":ann_functions_rewriter",
+        "//backend/schema/catalog:schema",
+        "//backend/schema/ddl:operations_cc_proto",
+        "//common:errors",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_zetasql//zetasql/public:function",
+        "@com_google_zetasql//zetasql/public:value",
+        "@com_google_zetasql//zetasql/resolved_ast",
+    ],
+)
+
 cc_binary(
     name = "populate_info_schema_columns_metadata",
     srcs = ["populate_info_schema_columns_metadata.cc"],
@@ -422,8 +461,10 @@ cc_library(
         "//backend/common:case",
         "//backend/query/change_stream:queryable_change_stream_tvf",
         "//backend/schema/catalog:schema",
+        "//common:constants",
         "//common:errors",
         "//third_party/spanner_pg/catalog:pg_catalog",
+        "//third_party/spanner_pg/datatypes/extended:conversion_finder",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
         "//third_party/spanner_pg/datatypes/extended:pg_oid_type",
@@ -457,6 +498,7 @@ cc_test(
         ":queryable_named_schema",
         ":queryable_table",
         "//backend/schema/catalog:schema",
+        "//common:constants",
         "//tests/common:proto_matchers",
         "//tests/common:scoped_feature_flags_setter",
         "//tests/common:test_schema_constructor",
@@ -763,6 +805,7 @@ cc_test(
         ":index_hint_validator",
         ":queryable_table",
         "//backend/schema/catalog:schema",
+        "//common:constants",
         "//common:errors",
         "//tests/common:proto_matchers",
         "//tests/common:test_schema_constructor",
@@ -806,6 +849,7 @@ cc_library(
         ":analyzer_options",
         "//backend/common:case",
         "//backend/schema/catalog:schema",
+        "//common:constants",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/log",
@@ -861,6 +905,7 @@ cc_test(
         ":catalog",
         ":partitioned_dml_validator",
         ":queryable_table",
+        "//common:constants",
         "//common:errors",
         "//tests/common:proto_matchers",
         "//tests/common:test_schema_constructor",

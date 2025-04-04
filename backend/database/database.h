@@ -61,7 +61,8 @@ class Database {
   // create_statements. Returns an error if create_statements are invalid, or if
   // failed to create the database.
   static absl::StatusOr<std::unique_ptr<Database>> Create(
-      Clock* clock, const SchemaChangeOperation& schema_change_operation);
+      Clock* clock, std::string_view database_id,
+      const SchemaChangeOperation& schema_change_operation);
 
   // Creates a read only transaction attached to this database.
   absl::StatusOr<std::unique_ptr<ReadOnlyTransaction>>
@@ -131,6 +132,9 @@ class Database {
 
   // Clock to provide commit timestamps.
   Clock* clock_;
+
+  // Holds the database id.
+  std::string database_id_;
 
   // Unique ID generator for TransactionID.
   TransactionIDGenerator transaction_id_generator_;

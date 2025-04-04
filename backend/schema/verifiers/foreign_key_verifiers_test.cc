@@ -26,10 +26,16 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/status.h"
+#include "absl/time/time.h"
+#include "absl/types/span.h"
+#include "backend/access/write.h"
 #include "backend/database/database.h"
+#include "backend/schema/updater/schema_updater.h"
 #include "backend/transaction/options.h"
 #include "backend/transaction/read_write_transaction.h"
 #include "common/clock.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -40,6 +46,8 @@ namespace {
 using zetasql::values::Int64;
 using zetasql::values::NullInt64;
 using zetasql_base::testing::StatusIs;
+
+constexpr char kDatabaseId[] = "test-db";
 
 // Unit tests for the foreign key verifier. These include branch coverage of the
 // verifier code. Separate conformance tests cover more detailed end-to-end
@@ -70,9 +78,10 @@ class ForeignKeyVerifiersTest : public ::testing::Test {
   }
 
   absl::Status CreateDatabase(const std::vector<std::string>& statements) {
-    ZETASQL_ASSIGN_OR_RETURN(database_,
-                     Database::Create(&clock_, SchemaChangeOperation{
-                                                   .statements = statements}));
+    ZETASQL_ASSIGN_OR_RETURN(
+        database_,
+        Database::Create(&clock_, kDatabaseId,
+                         SchemaChangeOperation{.statements = statements}));
     return absl::OkStatus();
   }
 

@@ -44,6 +44,7 @@
 #include "google/rpc/code.pb.h"
 #include "google/rpc/error_details.pb.h"
 #include "absl/flags/flag.h"
+#include "absl/log/log.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"

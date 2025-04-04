@@ -40,6 +40,7 @@
 #endif
 
 #include "jit/llvmjit.h"
+#include "jit/llvmjit_backport.h"
 #include "jit/llvmjit_emit.h"
 #include "miscadmin.h"
 #include "portability/instr_time.h"
@@ -565,8 +566,11 @@ llvm_copy_attributes(LLVMValueRef v_from, LLVMValueRef v_to)
 	/* copy function attributes */
 	llvm_copy_attributes_at_index(v_from, v_to, LLVMAttributeFunctionIndex);
 
-	/* and the return value attributes */
-	llvm_copy_attributes_at_index(v_from, v_to, LLVMAttributeReturnIndex);
+	if (LLVMGetTypeKind(LLVMGetFunctionReturnType(v_to)) != LLVMVoidTypeKind)
+	{
+		/* and the return value attributes */
+		llvm_copy_attributes_at_index(v_from, v_to, LLVMAttributeReturnIndex);
+	}
 
 	/* and each function parameter's attribute */
 	param_count = LLVMCountParams(v_from);
@@ -1313,8 +1317,13 @@ llvm_log_jit_error(void *ctx, LLVMErrorRef error)
 static LLVMOrcObjectLayerRef
 llvm_create_object_layer(void *Ctx, LLVMOrcExecutionSessionRef ES, const char *Triple)
 {
+#ifdef USE_LLVM_BACKPORT_SECTION_MEMORY_MANAGER
 	LLVMOrcObjectLayerRef objlayer =
-	LLVMOrcCreateRTDyldObjectLinkingLayerWithSectionMemoryManager(ES);
+		LLVMOrcCreateRTDyldObjectLinkingLayerWithSafeSectionMemoryManager(ES);
+#else
+	LLVMOrcObjectLayerRef objlayer =
+		LLVMOrcCreateRTDyldObjectLinkingLayerWithSectionMemoryManager(ES);
+#endif
 
 #if defined(HAVE_DECL_LLVMCREATEGDBREGISTRATIONLISTENER) && HAVE_DECL_LLVMCREATEGDBREGISTRATIONLISTENER
 	if (jit_debugging_support)

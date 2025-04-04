@@ -44,7 +44,7 @@ package(
     ],
 )
 
-licenses(["notice"])
+licenses(["restricted"])
 
 cc_library(
     name = "utils",
@@ -156,6 +156,10 @@ cc_library(
         "fmgroids.h",
         "fmgrprotos.h",
         "probes.h",
+    ],
+    visibility = [
+        "//:__subpackages__",
+        "//third_party/spanner_pg/postgres_includes:__subpackages__",
     ],
     deps = [
         ":errcodes_header",

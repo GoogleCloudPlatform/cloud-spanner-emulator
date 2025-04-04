@@ -67,7 +67,7 @@ struct ChangeStreamOutputTypes {
   zetasql::SimpleCatalog catalog = zetasql::SimpleCatalog(
       "For analyzing change stream output types only.");
   zetasql::AnalyzerOptions analyzer_options =
-      backend::MakeGoogleSqlAnalyzerOptions();
+      backend::MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
   // Outter most change record output related types.
   const zetasql::Type* change_record_arr;
   const zetasql::StructType* change_record_struct;

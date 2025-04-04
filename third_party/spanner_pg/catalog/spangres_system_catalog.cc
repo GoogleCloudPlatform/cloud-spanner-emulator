@@ -49,7 +49,6 @@
 #include "absl/synchronization/mutex.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
-#include "third_party/spanner_pg/catalog/builtin_rewrite_functions.h"
 #include "third_party/spanner_pg/catalog/builtin_spanner_functions.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/catalog/function.h"
@@ -146,7 +145,7 @@ absl::StatusOr<bool> SpangresSystemCatalog::TryInitializeEngineSystemCatalog(
   }
 }
 
-void SpangresSystemCatalog::ResetEngineSystemCatalogForTest() {
+void SpangresSystemCatalog::ResetEngineSystemCatalog() {
   absl::WriterMutexLock l(&engine_system_catalog_mutex);
   EngineSystemCatalog** engine_system_catalog =
       EngineSystemCatalog::GetEngineSystemCatalogPtr();
@@ -446,6 +445,9 @@ absl::Status SpangresSystemCatalog::AddTypes(
   ZETASQL_RETURN_IF_ERROR(AddType(builtin_types::PgDateMapping(), language_options));
   ZETASQL_RETURN_IF_ERROR(AddType(spangres_types::PgOidMapping(), language_options));
 
+    ZETASQL_RETURN_IF_ERROR(
+        AddType(builtin_types::PgIntervalMapping(), language_options));
+
   // Array Types.
   ZETASQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgBoolArrayMapping(), language_options));
@@ -465,6 +467,9 @@ absl::Status SpangresSystemCatalog::AddTypes(
       AddType(builtin_types::PgDateArrayMapping(), language_options));
   ZETASQL_RETURN_IF_ERROR(
       AddType(spangres_types::PgOidArrayMapping(), language_options));
+
+    ZETASQL_RETURN_IF_ERROR(
+        AddType(builtin_types::PgIntervalArrayMapping(), language_options));
 
     ZETASQL_RETURN_IF_ERROR(
         AddType(spangres_types::PgNumericMapping(), language_options));
@@ -538,6 +543,14 @@ absl::Status SpangresSystemCatalog::AddFunctions(
   spangres::AddPgFormattingFunctions(functions);
   spangres::AddPgStringFunctions(functions);
   spangres::AddFloatFunctions(functions);
+
+    ZETASQL_RETURN_IF_ERROR(AddCastOverrideFunction(
+        zetasql::types::StringType(), zetasql::types::IntervalType(),
+        "pg.cast_to_interval", language_options));
+    ZETASQL_RETURN_IF_ERROR(AddCastOverrideFunction(
+        zetasql::types::IntervalType(), zetasql::types::StringType(),
+        "pg.cast_to_string", language_options));
+    spangres::AddIntervalFunctions(functions);
 
   // Map some Postgres functions to custom Spanner functions to match Postgres'
   // order semantics (e.g. PG.MIN).

@@ -71,6 +71,9 @@ bool IsSupportedColumnType(const zetasql::Type* type) {
           return false;
       }
     }
+    // INTERVAL is a query only type.
+    case zetasql::TypeKind::TYPE_INTERVAL:
+      return false;
     default:
       return false;
   }

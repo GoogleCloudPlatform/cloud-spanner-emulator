@@ -22,10 +22,12 @@
 
 #include "google/rpc/error_details.pb.h"
 #include "absl/status/status.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/cord.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
+#include "absl/strings/strip.h"
 #include "absl/strings/substitute.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
@@ -385,6 +387,16 @@ absl::Status CouldNotParseStringAsTimestamp(absl::string_view str,
           "Could not parse ", str, " as a TIMESTAMP: ", error,
           ". For details on the TIMESTAMP type encoding, see "
           "https://cloud.google.com/spanner/docs/data-types#timestamp_type"));
+}
+
+absl::Status CouldNotParseStringAsInterval(absl::string_view str,
+                                           absl::string_view error) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::StrCat(
+          "Could not parse ", str, " as a INTERVAL: ", error,
+          ". For details on the INTERVAL type , see "
+          "https://cloud.google.com/spanner/docs/data-types#interval_type"));
 }
 
 absl::Status TimestampMustBeInUTCTimeZone(absl::string_view str) {
@@ -3484,6 +3496,63 @@ absl::Status VectorIndexKeyNotNullFiltered(absl::string_view column_string,
                        column_string, index_string));
 }
 
+absl::Status AlterVectorIndexStoredColumnUnsupported() {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("Altering a stored column is not supported yet."));
+}
+
+absl::Status AlterVectorIndexSetOptionsUnsupported() {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute(
+          "Options on vector index are not allowed to be altered."));
+}
+
+absl::Status VectorIndexStoredColumnNotFound(absl::string_view index_name,
+                                             absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Index $0 specifies nonexistent stored column $1.",
+                       index_name, column_name));
+}
+
+absl::Status VectorIndexStoredColumnAlreadyExists(
+    absl::string_view index_name, absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Index $0 specifies stored column $1 twice.", index_name,
+                       column_name));
+}
+
+absl::Status VectorIndexStoredColumnIsKey(absl::string_view index_name,
+                                          absl::string_view column_name,
+                                          absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Index $0 specifies stored column $1 which is a key of table $2.",
+          index_name, column_name, table_name));
+}
+
+absl::Status VectorIndexStoredColumnAlreadyPrimaryKey(
+    absl::string_view index_name, absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Index $0 specifies stored column $1 already specified "
+                       "as primary key.",
+                       index_name, column_name));
+}
+
+absl::Status VectorIndexNotStoredColumn(absl::string_view index_name,
+                                        absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Column $0 in index $1 is not a stored column. "
+                       "Only stored columns may be dropped from indices.",
+                       column_name, index_name));
+}
+
 absl::Status SearchIndexTokenlistKeyOrderUnsupported(
     absl::string_view column_name, absl::string_view index_name) {
   return absl::Status(
@@ -4112,6 +4181,25 @@ absl::Status UnspecifiedIdentityColumnSequenceKind(
           "set the database option `default_sequence_kind`."));
 }
 
+absl::Status ChangeDefaultTimeZoneOnNonEmptyDatabase() {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      "The 'default_time_zone' database option cannot be "
+                      "changed on a database with user defined tables.");
+}
+
+absl::Status UnsupportedDefaultTimeZoneOptionValues() {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      "The default_time_zone option only supports string or null.");
+}
+
+absl::Status InvalidDefaultTimeZoneOption(absl::string_view time_zone) {
+  return absl::Status(absl::StatusCode::kFailedPrecondition,
+                      absl::StrCat("Database has invalid default_time_zone "
+                                   "option.  Invalid time zone name: ",
+                                   time_zone));
+}
+
 absl::Status InvalidColumnIdentifierFormat(
     absl::string_view column_path_string) {
   return absl::Status(
@@ -4197,6 +4285,123 @@ absl::Status ForUpdateCannotCombineWithLockScannedRanges() {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
       "FOR UPDATE cannot be combined with statement-level lock hints");
+}
+
+absl::Status ApproxDistanceFunctionOptionsRequired(
+    absl::string_view function_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Argument `options` is required for function $0.",
+                       absl::AsciiStrToUpper(function_string)));
+}
+
+absl::Status ApproxDistanceFunctionOptionMustBeLiteral(
+    absl::string_view function_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Argument `options` of function $0 must be a literal.",
+                       absl::AsciiStrToUpper(function_string)));
+}
+
+absl::Status ApproxDistanceFunctionInvalidJsonOption(
+    absl::string_view function_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Argument `options` of function $0 is invalid. It must have a single "
+          "`num_leaves_to_search` field with an unsigned integer value.",
+          absl::AsciiStrToUpper(function_string)));
+}
+
+absl::Status ApproxDistanceInvalidShape(absl::string_view function_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "The use of function $0 is not supported in this "
+          "query. This function can only be used to sort vectors in a table "
+          "based solely on their approximate distances to another constant "
+          "vector with an ORDER BY clause. The ORDER BY must be followed by a "
+          "mandatory LIMIT clause. Please use $1 in all other cases.",
+          absl::AsciiStrToUpper(function_string),
+          absl::AsciiStrToUpper(
+              absl::StripPrefix(function_string, "approx_"))));
+}
+
+absl::Status ApproxDistanceLengthMismatch(absl::string_view function_string,
+                                          int input_length, int index_length) {
+  return absl::InvalidArgumentError(absl::Substitute(
+      "$0: Array length mismatch: $1 and $2.",
+      absl::AsciiStrToUpper(function_string), input_length, index_length));
+}
+
+absl::Status VectorIndexesUnusable(absl::string_view distance_type_name,
+                                   absl::string_view ann_func_column_name,
+                                   absl::string_view ann_func_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "No usable vector index can be found for this query: $0.",
+          absl::StrCat("a vector index with distance type ", distance_type_name,
+                       " must be defined on column ", ann_func_column_name,
+                       " for function ", absl::AsciiStrToUpper(ann_func_name),
+                       "; also make sure that the vector index is not in "
+                       "backfilling, and the "
+                       "query has a filter that matches that of the vector "
+                       "index")));
+}
+
+absl::Status VectorIndexesUnusableNotNullFiltered(
+    absl::string_view index_string, absl::string_view column_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("The index $0 cannot be used because it filters nulls "
+                       "that are required to answer the query for column $1.",
+                       index_string, column_string));
+}
+
+absl::Status VectorIndexesUnusableForceIndexWrongDistanceType(
+    absl::string_view index_string, absl::string_view distance_type_name,
+    absl::string_view ann_func_name, absl::string_view column_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("The index $0 cannot be used because it is a vector "
+                       "index of distance type $1 but the query requires "
+                       "distance computation function $2 on column $3.",
+                       index_string, distance_type_name,
+                       absl::AsciiStrToUpper(ann_func_name), column_string));
+}
+
+absl::Status VectorIndexesUnusableForceIndexWrongColumn(
+    absl::string_view index_string, absl::string_view ann_func_name,
+    absl::string_view column_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("The index $0 cannot be used because it is not a vector "
+                       "index on column $1 which is required for $2.",
+                       index_string, column_string,
+                       absl::AsciiStrToUpper(ann_func_name)));
+}
+
+absl::Status NotVectorIndexes(absl::string_view index_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "The index $0 cannot be used because it is not a vector index.",
+          index_string));
+}
+
+absl::Status RepeatableReadOnlySupportedInReadWriteTransactions() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "REPEATABLE_READ isolation level is only allowed on read-write "
+      "transactions.");
+}
+
+absl::Status ReadLockModeInRepeatableReadMustBeUnspecified() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "Read lock mode must not be set on read-write transactions using the "
+      "REPEATABLE_READ isolation level.");
 }
 
 }  // namespace error

@@ -1794,6 +1794,55 @@ TEST_P(SchemaUpdaterTest, AlterTable_Add_Non_Hidden_Tokenlist_Column) {
               StatusIs(error::NonHiddenTokenlistColumn("T", "col_token")));
 }
 
+TEST_P(SchemaUpdaterTest, CreateTable_Interval_Column_Fail) {
+  // INTERVAL is query only type and is not supported as a column type.
+  std::string sql = R"sql(
+      CREATE TABLE T(
+        col1 INT64,
+        col_interval INTERVAL
+      ) PRIMARY KEY(col1))sql";
+
+  absl::StatusOr<std::unique_ptr<const Schema>> status = CreateSchema({sql});
+  EXPECT_FALSE(status.ok());
+}
+
+TEST_P(SchemaUpdaterTest, CreateTable_IntervalArray_Column_Fail) {
+  // INTERVAL is query only type and is not supported as a column type.
+  std::string sql;
+  if (GetParam() == POSTGRESQL) {
+    sql = R"sql(
+      CREATE TABLE T(
+        col1 INT64,
+        col_interval INTERVAL[]
+      ) PRIMARY KEY(col1))sql";
+  } else {
+    sql = R"sql(
+      CREATE TABLE T(
+        col1 INT64,
+        col_interval ARRAY<INTERVAL>
+      ) PRIMARY KEY(col1))sql";
+  }
+
+  absl::StatusOr<std::unique_ptr<const Schema>> status = CreateSchema({sql});
+  EXPECT_FALSE(status.ok());
+}
+
+TEST_P(SchemaUpdaterTest, CreateTable_IntervalStruct_Column_Fail) {
+  // INTERVAL is query only type and is not supported as a column type.
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  std::string sql = R"sql(
+      CREATE TABLE T(
+        col1 INT64,
+        col_interval STRUCT<interval_val INTERVAL>
+      ) PRIMARY KEY(col1))sql";
+
+  absl::StatusOr<std::unique_ptr<const Schema>> status = CreateSchema({sql});
+  EXPECT_FALSE(status.ok());
+}
+
 }  // namespace
 
 }  // namespace test

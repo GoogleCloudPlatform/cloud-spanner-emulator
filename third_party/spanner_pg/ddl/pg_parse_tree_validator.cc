@@ -174,6 +174,8 @@ absl::Status ValidateParseTreeNode(const ColumnDef& node,
                          FieldTypeChecker<Oid>(node.collOid),
                          FieldTypeChecker<List*>(node.constraints),
                          FieldTypeChecker<List*>(node.fdwoptions),
+                         FieldTypeChecker<LocalityGroupOption*>(
+                             node.locality_group_name),
                          FieldTypeChecker<int>(node.location));
 
   ZETASQL_RET_CHECK_EQ(node.type, T_ColumnDef);
@@ -269,6 +271,8 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
                          FieldTypeChecker<Node*>(node.def),
                          FieldTypeChecker<DropBehavior>(node.behavior),
                          FieldTypeChecker<bool>(node.missing_ok),
+                         FieldTypeChecker<LocalityGroupOption*>(
+                             node.locality_group_name),
                          FieldTypeChecker<char*>(node.raw_expr_string));
 
   ZETASQL_RET_CHECK_EQ(node.type, T_AlterTableCmd);
@@ -362,6 +366,10 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
           ZETASQL_RET_CHECK_NE(node.name, nullptr);
           break;
         }
+        case AT_SetLocalityGroup: {
+          ZETASQL_RET_CHECK_NE(node.locality_group_name, nullptr);
+          break;
+        }
         default: {
           return UnsupportedTranslationError(
               "Operation is not supported in <ALTER TABLE> statement.");
@@ -374,6 +382,15 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
         case AT_AddIndexIncludeColumn:
         case AT_DropIndexIncludeColumn:
           break;
+        case AT_SetLocalityGroup: {
+          if (!options.enable_locality_groups) {
+            return UnsupportedTranslationError(
+                "Locality groups are not supported in <ALTER INDEX> "
+                "statement.");
+          }
+          ZETASQL_RET_CHECK_NE(node.locality_group_name, nullptr);
+          break;
+        }
         default: {
           return UnsupportedTranslationError(
               "Operation is not supported in <ALTER INDEX> statement.");
@@ -561,6 +578,7 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter,
       case CONSTR_ATTR_NOT_DEFERRABLE:
       case CONSTR_GENERATED:
       case CONSTR_DEFAULT:
+      case CONSTR_HIDDEN:
       case CONSTR_IDENTITY:
         break;
       case CONSTR_VECTOR_LENGTH:
@@ -909,11 +927,15 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
       node.removeType != OBJECT_SCHEMA && node.removeType != OBJECT_VIEW &&
       node.removeType != OBJECT_CHANGE_STREAM &&
       node.removeType != OBJECT_SEQUENCE
+      && node.removeType != OBJECT_SEARCH_INDEX
+      && node.removeType != OBJECT_LOCALITY_GROUP
   ) {
     auto object_type = internal::ObjectTypeToString(node.removeType);
     const std::string error_message =
         "Only <DROP TABLE>, <DROP INDEX>, <DROP SCHEMA>, <DROP VIEW>, "
         "<DROP SEQUENCE>, "
+        "<DROP SEARCH INDEX>, "
+        "<DROP LOCALITY GROUP>, "
         "and <DROP CHANGE STREAM> statements are supported.";
     if (!object_type.ok()) {
       return UnsupportedTranslationError(error_message);
@@ -930,6 +952,32 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
         (SingleItemListAsNode<RangeVar, T_RangeVar>(node.objects)));
     ZETASQL_RET_CHECK(changestream_to_drop_node->relname &&
               *changestream_to_drop_node->relname != '\0');
+  } else if (node.removeType == OBJECT_SEARCH_INDEX) {
+    ZETASQL_ASSIGN_OR_RETURN(const List* search_index_to_drop_list,
+                     (SingleItemListAsNode<List, T_List>(node.objects)));
+    ZETASQL_RET_CHECK(!IsListEmpty(search_index_to_drop_list))
+        << "Empty search index object name to drop provided.";
+    if (list_length(search_index_to_drop_list) > 2) {
+      return UnsupportedTranslationError(
+          "Object name catalog qualifiers are not supported in <DROP> "
+          "statement.");
+    }
+    for (int i = 0; i < list_length(search_index_to_drop_list); ++i) {
+      ZETASQL_ASSIGN_OR_RETURN(
+          const String* search_index_to_drop_node,
+          (GetListItemAsNode<String, T_String>)(search_index_to_drop_list, i));
+
+      char* search_index_to_drop = search_index_to_drop_node->sval;
+      // Expected to see non-empty object name to drop.
+      ZETASQL_RET_CHECK(search_index_to_drop && *search_index_to_drop != '\0');
+    }
+  } else if (node.removeType == OBJECT_LOCALITY_GROUP) {
+    ZETASQL_RET_CHECK_EQ(1, node.objects->length);
+    ZETASQL_ASSIGN_OR_RETURN(
+        const RangeVar* locality_group_to_drop_node,
+        (SingleItemListAsNode<RangeVar, T_RangeVar>(node.objects)));
+    ZETASQL_RET_CHECK(locality_group_to_drop_node->relname &&
+              *locality_group_to_drop_node->relname != '\0');
   } else if (node.removeType != OBJECT_SCHEMA) {
     ZETASQL_ASSIGN_OR_RETURN(const List* object_to_drop_list,
                      (SingleItemListAsNode<List, T_List>(node.objects)));
@@ -989,6 +1037,7 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
           node.removeType == OBJECT_SEQUENCE ||
           node.removeType == OBJECT_VIEW ||
           node.removeType == OBJECT_SCHEMA
+          || node.removeType == OBJECT_LOCALITY_GROUP
           )) {
       return UnsupportedTranslationError(
           "<IF EXISTS> is not supported by <DROP> statement.");
@@ -1350,7 +1399,9 @@ absl::Status ValidateParseTreeNode(const CreateStmt& node,
                          FieldTypeChecker<char*>(node.accessMethod),
                          FieldTypeChecker<bool>(node.if_not_exists),
                          FieldTypeChecker<InterleaveSpec*>(node.interleavespec),
-                         FieldTypeChecker<Ttl*>(node.ttl));
+                         FieldTypeChecker<Ttl*>(node.ttl),
+                          FieldTypeChecker<LocalityGroupOption*>(
+                              node.locality_group_name));
 
   ZETASQL_RET_CHECK_EQ(node.type, T_CreateStmt);
 
@@ -1616,6 +1667,156 @@ absl::Status ValidateParseTreeNode(const CreateChangeStreamStmt& node) {
     ZETASQL_RET_CHECK_EQ(for_all_int + opt_for_tables_int, 1)
         << "Invalid <FOR> clause for <CREATE CHANGE STREAM>";
   }
+  return absl::OkStatus();
+}
+
+absl::Status ValidateParseTreeNode(const CreateSearchIndexStmt& node) {
+  ZETASQL_RET_CHECK_EQ(node.type, T_CreateSearchIndexStmt);
+  // Make sure that if CreateSearchIndexStmt structure changes we update the
+  // translator.
+  AssertPGNodeConsistsOf(node, FieldTypeChecker<char*>(node.search_index_name),
+                         FieldTypeChecker<RangeVar*>(node.table_name),
+                         FieldTypeChecker<List*>(node.token_columns),
+                         FieldTypeChecker<List*>(node.storing),
+                         FieldTypeChecker<List*>(node.partition),
+                         FieldTypeChecker<List*>(node.order),
+                         FieldTypeChecker<Node*>(node.null_filters),
+                         FieldTypeChecker<InterleaveSpec*>(node.interleave),
+                         FieldTypeChecker<List*>(node.options));
+
+  // `search_index_name` defines the name of the index.
+  if (node.search_index_name == nullptr) {
+    return UnsupportedTranslationError(
+        "Index name is mandatory in <CREATE SEARCH INDEX> statement.");
+  }
+
+  // `table_name` defines a table to build index on.
+  ZETASQL_RET_CHECK_NE(node.table_name, nullptr);
+  ZETASQL_RETURN_IF_ERROR(
+      ValidateParseTreeNode(*node.table_name, "CREATE SEARCH INDEX"));
+
+  // `token_columns` defines the columns to index.
+  ZETASQL_RET_CHECK(!IsListEmpty(node.token_columns));
+
+  // `interleave in` validation.
+  if (node.interleave != nullptr) {
+    ZETASQL_RETURN_IF_ERROR(
+        ValidateParseTreeNode(*node.interleave, "CREATE SEARCH INDEX"));
+  }
+
+  /*
+    `include` columns are checked implicitly by ProcessOrdering().
+    `partition by` is a list of string values and does not need explicit
+     handling.
+    `ordering` defines ORDER BY for a column and is checked implicitly
+     by `ProcessOrdering()`
+    `where` defines  NULL FILTERED columns in the form of Col1 NOT NULL AND Col2
+     NOT NULL. This is checked by `TranslateWhereNode`.
+    `options` can be sort_order_sharding = <bool>
+     and disable_automatic_uid = <bool>`.
+     This is validated in `PopulateSearchIndexOptions()`
+  */
+  return absl::OkStatus();
+}
+
+absl::Status ValidateParseTreeNode(const AlterSearchIndexCmd& node) {
+  ZETASQL_RET_CHECK_EQ(node.type, T_AlterSearchIndexCmd);
+  // Make sure that if AlterSearchIndexCmd structure changes we update the
+  // translator.
+  AssertPGNodeConsistsOf(
+      node, FieldTypeChecker<AlterSearchIndexCmdType>(node.cmd_type),
+      FieldTypeChecker<char*>(node.column_name));
+
+  ZETASQL_RET_CHECK_NE(node.column_name, nullptr);
+  return absl::OkStatus();
+}
+
+absl::Status ValidateParseTreeNode(const CreateLocalityGroupStmt& node) {
+  ZETASQL_RET_CHECK_EQ(node.type, T_CreateLocalityGroupStmt);
+
+  // Make sure that if CreateLocalityGroupStmt structure changes we update the
+  // translator.
+  AssertPGNodeConsistsOf(
+      node, FieldTypeChecker<RangeVar*>(node.locality_group_name),
+      FieldTypeChecker<LocalityGroupOption*>(node.storage),
+      FieldTypeChecker<LocalityGroupOption*>(node.ssd_to_hdd_spill_timespan),
+      FieldTypeChecker<bool>(node.if_not_exists));
+
+  if (node.storage != nullptr) {
+    if (!node.storage->is_null && strcmp(node.storage->value, "ssd") != 0 &&
+        strcmp(node.storage->value, "hdd") != 0) {
+      return UnsupportedTranslationError(absl::StrFormat(
+          "Invalid storage '%s'. Must be one of 'ssd', 'hdd' or NULL.",
+          node.storage->value));
+    }
+  }
+  if (node.ssd_to_hdd_spill_timespan != nullptr) {
+    if (!node.ssd_to_hdd_spill_timespan->is_null &&
+        internal::ParseSchemaTimeSpec(node.ssd_to_hdd_spill_timespan->value) ==
+            -1) {
+      return UnsupportedTranslationError(
+          absl::StrFormat("Invalid ssd_to_hdd_spill_timespan '%s'. Must be a "
+                          "valid timespan or NULL.",
+                          node.ssd_to_hdd_spill_timespan->value));
+    }
+  }
+  ZETASQL_RET_CHECK_NE(node.locality_group_name, nullptr);
+
+  return absl::OkStatus();
+}
+
+absl::Status ValidateParseTreeNode(const AlterLocalityGroupStmt& node) {
+  ZETASQL_RET_CHECK_EQ(node.type, T_AlterLocalityGroupStmt);
+
+  // Make sure that if AlterLocalityGroupStmt structure changes we update the
+  // translator.
+  AssertPGNodeConsistsOf(
+      node, FieldTypeChecker<RangeVar*>(node.locality_group_name),
+      FieldTypeChecker<LocalityGroupOption*>(node.storage),
+      FieldTypeChecker<LocalityGroupOption*>(node.ssd_to_hdd_spill_timespan),
+      FieldTypeChecker<bool>(node.if_exists));
+
+  if (node.storage == nullptr && node.ssd_to_hdd_spill_timespan == nullptr) {
+    return UnsupportedTranslationError(
+        "At least one of STORAGE or SSD_TO_HDD_SPILL_TIMESPAN must be "
+        "specified in <ALTER LOCALITY GROUP> statement.");
+  }
+
+  if (node.storage != nullptr) {
+    if (!node.storage->is_null && strcmp(node.storage->value, "ssd") != 0 &&
+        strcmp(node.storage->value, "hdd") != 0) {
+      return UnsupportedTranslationError(absl::StrFormat(
+          "Invalid storage '%s'. Must be one of 'ssd', 'hdd' or NULL.",
+          node.storage->value));
+    }
+  }
+  if (node.ssd_to_hdd_spill_timespan != nullptr) {
+    if (!node.ssd_to_hdd_spill_timespan->is_null &&
+        internal::ParseSchemaTimeSpec(node.ssd_to_hdd_spill_timespan->value) ==
+            -1) {
+      return UnsupportedTranslationError(
+          absl::StrFormat("Invalid ssd_to_hdd_spill_timespan '%s'. Must be a "
+                          "valid timespan or NULL.",
+                          node.ssd_to_hdd_spill_timespan->value));
+    }
+  }
+  ZETASQL_RET_CHECK_NE(node.locality_group_name, nullptr);
+
+  return absl::OkStatus();
+}
+
+absl::Status ValidateParseTreeNode(const AlterColumnLocalityGroupStmt& node) {
+  ZETASQL_RET_CHECK_EQ(node.type, T_AlterColumnLocalityGroupStmt);
+
+  AssertPGNodeConsistsOf(
+      node, FieldTypeChecker<RangeVar*>(node.relation),
+      FieldTypeChecker<char*>(node.column),
+      FieldTypeChecker<LocalityGroupOption*>(node.locality_group_name));
+
+  ZETASQL_RET_CHECK_NE(node.relation, nullptr);
+  ZETASQL_RET_CHECK_NE(node.column, nullptr);
+  ZETASQL_RET_CHECK_NE(node.locality_group_name, nullptr);
+
   return absl::OkStatus();
 }
 
@@ -1934,6 +2135,7 @@ absl::Status ValidateParseTreeNode(const IndexStmt& node,
       FieldTypeChecker<RangeVar*>(node.relation),
       FieldTypeChecker<char*>(node.accessMethod),
       FieldTypeChecker<char*>(node.tableSpace),
+      FieldTypeChecker<LocalityGroupOption*>(node.locality_group_name),
       FieldTypeChecker<List*>(node.indexParams),
       FieldTypeChecker<List*>(node.indexIncludingParams),
       FieldTypeChecker<List*>(node.options),
@@ -1967,10 +2169,9 @@ absl::Status ValidateParseTreeNode(const IndexStmt& node,
   ZETASQL_RET_CHECK_NE(node.relation, nullptr);
   ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.relation, "CREATE INDEX"));
 
-  // `name` defines the name of the access method, default is set to
-  // DEFAULT_INDEX_TYPE(btree). Setting this is not supported, but there is no
-  // way to differenate if it is set explicitly to default value(btree) or not.
-  // Setting to non-default value is definitly not allowed.
+  // `accessMethod` only allows specifying a vector index type.
+  // Setting it to any other value, including the default (btree), is not
+  // supported.
   if (strcmp(node.accessMethod, DEFAULT_INDEX_TYPE) != 0) {
     return UnsupportedTranslationError(
         "Setting access method is not supported in <CREATE INDEX> statement.");
@@ -1992,7 +2193,7 @@ absl::Status ValidateParseTreeNode(const IndexStmt& node,
 
   // `options` defines storage parameters for index in WITH clause. e.g.
   // CREATE INDEX title_idx ON films (title) WITH (deduplicate_items = off);
-  // Setting this is not supported.
+  // This is only supported for vector indexes.
   if (!IsListEmpty(node.options)) {
     return UnsupportedTranslationError(
         "Index options are not supported in <CREATE INDEX> statement.");

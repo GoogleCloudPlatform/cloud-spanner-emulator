@@ -42,7 +42,7 @@ package(
     ],
 )
 
-licenses(["notice"])
+licenses(["restricted"])
 
 filegroup(
     name = "tznames",

@@ -19,6 +19,7 @@
 #include <memory>
 #include <vector>
 
+#include "zetasql/public/analyzer_options.h"
 #include "absl/status/status.h"
 #include "backend/actions/check_constraint.h"
 #include "backend/datamodel/key_range.h"
@@ -37,9 +38,12 @@ namespace backend {
 absl::Status VerifyCheckConstraintData(const CheckConstraint* check_constraint,
                                        const SchemaValidationContext* context) {
   FunctionCatalog function_catalog(context->type_factory());
+  zetasql::AnalyzerOptions analyzer_options = MakeGoogleSqlAnalyzerOptions(
+      context->validated_new_schema()->default_time_zone());
   Catalog catalog(context->validated_new_schema(), &function_catalog,
-                  context->type_factory());
-  CheckConstraintVerifier verifier(check_constraint, &catalog);
+                  context->type_factory(), analyzer_options);
+  CheckConstraintVerifier verifier(check_constraint, analyzer_options,
+                                   &catalog);
 
   const Table* table = check_constraint->table();
   const Storage* storage = context->storage();

@@ -17,6 +17,8 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_QUERYABLE_UDF_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_QUERYABLE_UDF_H_
 
+#include <string>
+
 #include "zetasql/public/function.h"
 #include "zetasql/public/types/type_factory.h"
 #include "backend/schema/catalog/udf.h"
@@ -31,6 +33,7 @@ namespace backend {
 class QueryableUdf : public zetasql::Function {
  public:
   explicit QueryableUdf(const backend::Udf* backend_udf,
+                        std::string default_time_zone,
                         zetasql::Catalog* catalog = nullptr,
                         zetasql::TypeFactory* type_factory = nullptr);
 
@@ -38,8 +41,8 @@ class QueryableUdf : public zetasql::Function {
 
  private:
   static zetasql::FunctionOptions CreateFunctionOptions(
-      const backend::Udf* udf, zetasql::Catalog* catalog,
-      zetasql::TypeFactory* type_factory);
+      const backend::Udf* udf, std::string default_time_zone,
+      zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory);
 
   // The underlying Udf object which backs the QueryableUdf.
   const backend::Udf* wrapped_udf_;

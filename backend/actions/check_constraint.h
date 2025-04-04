@@ -32,8 +32,10 @@ namespace backend {
 // corresponding columns.
 class CheckConstraintVerifier : public Verifier {
  public:
-  explicit CheckConstraintVerifier(const CheckConstraint* check_constraint,
-                                   zetasql::Catalog* function_catalog);
+  explicit CheckConstraintVerifier(
+      const CheckConstraint* check_constraint,
+      const zetasql::AnalyzerOptions& analyzer_options,
+      zetasql::Catalog* function_catalog);
   // Verifies that column values of the row with a given key satisfy the check
   // constraint.
   absl::Status VerifyRow(const zetasql::ParameterValueMap& column_values,
@@ -42,8 +44,10 @@ class CheckConstraintVerifier : public Verifier {
  private:
   // Initializes an executable expression (i.e. expression_) given the check
   // constraint expression.
-  absl::Status PrepareExpression(const CheckConstraint* check_constraint,
-                                 zetasql::Catalog* function_catalog);
+  absl::Status PrepareExpression(
+      const CheckConstraint* check_constraint,
+      const zetasql::AnalyzerOptions& analyzer_options,
+      zetasql::Catalog* function_catalog);
   // Computes the vaule of the check constraint expression.
   absl::Status EvaluateCheckConstraintExpression(
       const zetasql::ParameterValueMap& row_column_values) const;

@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
@@ -41,11 +42,8 @@ namespace database_api = ::google::spanner::admin::database::v1;
 
 absl::StatusOr<std::unique_ptr<const backend::Schema>> CreateSchemaFromDDL(
     absl::Span<const std::string> statements,
-    zetasql::TypeFactory* type_factory
-    ,
-    std::string proto_descriptor_bytes
-    ,
-    database_api::DatabaseDialect dialect) {
+    zetasql::TypeFactory* type_factory, std::string proto_descriptor_bytes,
+    database_api::DatabaseDialect dialect, std::string_view database_id) {
   backend::TableIDGenerator table_id_gen;
   backend::ColumnIDGenerator column_id_gen;
   backend::PgOidAssigner pg_oid_assigner(
@@ -55,6 +53,7 @@ absl::StatusOr<std::unique_ptr<const backend::Schema>> CreateSchemaFromDDL(
       .table_id_generator = &table_id_gen,
       .column_id_generator = &column_id_gen,
       .pg_oid_assigner = &pg_oid_assigner,
+      .database_id = std::string(database_id),
   };
   backend::SchemaUpdater updater;
   return updater.ValidateSchemaFromDDL(

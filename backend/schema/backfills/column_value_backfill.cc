@@ -19,6 +19,7 @@
 #include <memory>
 #include <vector>
 
+#include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
 #include "absl/status/statusor.h"
@@ -141,10 +142,12 @@ absl::Status BackfillGeneratedColumnValue(
   ZETASQL_RET_CHECK_NE(context, nullptr);
   FunctionCatalog function_catalog(context->type_factory());
   function_catalog.SetLatestSchema(context->validated_new_schema());
+  zetasql::AnalyzerOptions analyzer_options = MakeGoogleSqlAnalyzerOptions(
+      context->validated_new_schema()->default_time_zone());
   Catalog catalog(context->validated_new_schema(), &function_catalog,
-                  context->type_factory());
+                  context->type_factory(), analyzer_options);
   const Table* table = generated_column->table();
-  GeneratedColumnEffector effector(table, &catalog);
+  GeneratedColumnEffector effector(table, analyzer_options, &catalog);
 
   std::vector<ColumnID> column_ids = GetColumnIDs(table->columns());
   std::unique_ptr<StorageIterator> itr;

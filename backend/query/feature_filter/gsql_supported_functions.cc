@@ -33,6 +33,9 @@ const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions() {
         "$array_at_ordinal",
         "$safe_array_at_offset",
         "$safe_array_at_ordinal",
+        "approx_cosine_distance",
+        "approx_dot_product",
+        "approx_euclidean_distance",
         "array_concat",
         "array_concat_agg",
         "array_first",
@@ -87,6 +90,7 @@ const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions() {
         "date_from_unix_date",
         "div",
         "$divide",
+        "dot_product",
         "safe_divide",
         "safe_add",
         "safe_subtract",
@@ -237,6 +241,11 @@ const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions() {
         "upper",
         "variance",
         "var_samp",
+        "$interval",
+        "justify_days",
+        "justify_hours",
+        "justify_interval",
+        "make_interval",
           // clang-format on
       };
   return supported_functions;

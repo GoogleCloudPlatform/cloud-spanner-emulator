@@ -41,6 +41,7 @@
 #include "backend/query/queryable_named_schema.h"
 #include "backend/query/queryable_table.h"
 #include "backend/schema/catalog/schema.h"
+#include "common/constants.h"
 #include "tests/common/schema_constructor.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
@@ -77,7 +78,7 @@ class AnalyzeStatementTest : public testing::Test {
         test::CreateSchemaWithOneTable(&type_factory, dialect);
     FunctionCatalog function_catalog{&type_factory};
     function_catalog.SetLatestSchema(schema.get());
-    auto analyzer_options = MakeGoogleSqlAnalyzerOptions();
+    auto analyzer_options = MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
     Catalog catalog{schema.get(), &function_catalog, &type_factory,
                     analyzer_options};
     std::unique_ptr<const zetasql::AnalyzerOutput> output{};
@@ -154,8 +155,9 @@ class CatalogTest : public testing::Test {
   void SetUp() override {
     schema_ = test::CreateSchemaWithOneTable(&type_factory_);
     function_catalog_.SetLatestSchema(schema_.get());
-    catalog_ = std::make_unique<Catalog>(schema_.get(), &function_catalog_,
-                                         &type_factory_);
+    catalog_ = std::make_unique<Catalog>(
+        schema_.get(), &function_catalog_, &type_factory_,
+        MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone));
   }
 
   void MakeCatalog(absl::Span<const std::string> statements,
@@ -163,19 +165,21 @@ class CatalogTest : public testing::Test {
                        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(schema_, test::CreateSchemaFromDDL(
                                       statements, &type_factory_, "", dialect));
-    catalog_ = std::make_unique<Catalog>(schema_.get(), &function_catalog_,
-                                         &type_factory_);
+    catalog_ = std::make_unique<Catalog>(
+        schema_.get(), &function_catalog_, &type_factory_,
+        MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone));
   }
 
   void MakeChangeStreamInternalQueryCatalog(
       absl::Span<const std::string> statements) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(schema_,
                          test::CreateSchemaFromDDL(statements, &type_factory_));
-    catalog_ = std::make_unique<Catalog>(schema_.get(), &function_catalog_,
-                                         &type_factory_);
+    catalog_ = std::make_unique<Catalog>(
+        schema_.get(), &function_catalog_, &type_factory_,
+        MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone));
     change_stream_internal_query_catalog_ = std::make_unique<Catalog>(
         schema_.get(), &function_catalog_, &type_factory_,
-        MakeGoogleSqlAnalyzerOptions(), /*reader=*/nullptr,
+        MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone), /*reader=*/nullptr,
         /*query_evaluator=*/nullptr,
         /*change_stream_internal_lookup=*/"test_stream");
   }

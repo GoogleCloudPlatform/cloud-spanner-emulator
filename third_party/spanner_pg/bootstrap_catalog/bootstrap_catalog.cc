@@ -31,7 +31,9 @@
 
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 
+#include <algorithm>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>

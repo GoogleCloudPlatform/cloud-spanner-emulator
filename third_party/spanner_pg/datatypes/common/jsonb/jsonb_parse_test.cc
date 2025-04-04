@@ -112,8 +112,11 @@ TEST_P(SimpleArrayTest, ArrayTest) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(input));
   EXPECT_EQ(jsonb, input);
 
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_value,
+                       PgJsonbValue::Parse(input, &tree_nodes));
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<absl::Cord> jsonb_array,
-                       ParseJsonbArray(input));
+                       jsonb_value.GetSerializedArrayElements());
   ASSERT_EQ(jsonb_array.size(), test_case.array.size());
   for (int i = 0; i < jsonb_array.size(); ++i) {
     EXPECT_EQ(jsonb_array[i], test_case.array[i]);
@@ -134,9 +137,11 @@ TEST_P(SimpleArrayTest, NestedArrayTest) {
              std::string(max_depth, ']'));
   ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(json_input));
   EXPECT_EQ(jsonb, json_input);
-
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_value,
+                       PgJsonbValue::Parse(json_input, &tree_nodes));
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<absl::Cord> jsonb_inner_array,
-                       ParseJsonbArray(json_input));
+                       jsonb_value.GetSerializedArrayElements());
   ASSERT_EQ(jsonb_inner_array.size(), 1);
   EXPECT_EQ(jsonb_inner_array[0], json_input.substr(1, json_input.size() - 2));
 }
@@ -151,8 +156,11 @@ TEST(JSONBParseTest, LargeArrayTest) {
   }
   StrAppend(&json_input, "1]");
 
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_value,
+                       PgJsonbValue::Parse(json_input, &tree_nodes));
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<absl::Cord> jsonb_inner_array,
-                       ParseJsonbArray(json_input));
+                       jsonb_value.GetSerializedArrayElements());
   ASSERT_EQ(jsonb_inner_array.size(), max_elements + 1);
   EXPECT_EQ(jsonb_inner_array[0], "1");
 }
@@ -299,18 +307,8 @@ INSTANTIATE_TEST_SUITE_P(
                     "{\"\test\u0000key\": \"\test\u0000value\"}"));
 
 TEST_P(ParsingErrorTest, ErrorTestValue) {
-  EXPECT_FALSE(ParseJsonb(GetParam()).ok());
-  EXPECT_FALSE(ParseJsonbArray(GetParam()).ok());
-}
-
-// Test cases that are not arrays and should result in an error.
-class ArrayParsingErrorTest : public testing::TestWithParam<std::string> {};
-INSTANTIATE_TEST_SUITE_P(ErrorTestValues, ArrayParsingErrorTest,
-                         testing::Values("{\"key\": 1}", "1", "abc", "{}",
-                                         "null"));
-
-TEST_P(ArrayParsingErrorTest, ErrorTestValue) {
-  EXPECT_FALSE(ParseJsonbArray(GetParam()).ok());
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  EXPECT_FALSE(PgJsonbValue::Parse(GetParam(), &tree_nodes).ok());
 }
 
 using JsonbParseTest = ValidMemoryContext;

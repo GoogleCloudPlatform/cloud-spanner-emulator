@@ -324,6 +324,7 @@ TEST_F(SerializationDeserializationTest, CreateStmt) {
   create_stmt->options = list_make1(PlaceHolderNode());
   create_stmt->oncommit = ONCOMMIT_PRESERVE_ROWS;
   create_stmt->tablespacename = pstrdup("test_tablespace");
+  create_stmt->locality_group_name = makeNode(LocalityGroupOption);
   create_stmt->if_not_exists = true;
   create_stmt->ttl = makeNode(Ttl);
   create_stmt->ttl->name = pstrdup("some_column");
@@ -348,6 +349,7 @@ TEST_F(SerializationDeserializationTest, ColumnDef) {
   column_def->constraints = list_make1(PlaceHolderNode());
   column_def->fdwoptions = list_make1(PlaceHolderNode());
   column_def->location = 3;
+  column_def->locality_group_name = makeNode(LocalityGroupOption);
 
   EXPECT_THAT(column_def, CanSerializeAndDeserialize());
 }
@@ -578,6 +580,7 @@ TEST_F(SerializationDeserializationTest, IndexStmt) {
   index_stmt->relation = makeNode(RangeVar);
   index_stmt->accessMethod = pstrdup("btree");
   index_stmt->tableSpace = pstrdup("placeholder_tablespace");
+  index_stmt->locality_group_name = makeNode(LocalityGroupOption);
   index_stmt->indexParams = list_make1(PlaceHolderNode());
   index_stmt->indexIncludingParams = list_make1(PlaceHolderNode());
   index_stmt->options = list_make1(PlaceHolderNode());
@@ -619,6 +622,7 @@ TEST_F(SerializationDeserializationTest, AlterTableCmd) {
   alter_table_cmd->def = PlaceHolderNode();
   alter_table_cmd->behavior = DROP_RESTRICT;
   alter_table_cmd->missing_ok = true;
+  alter_table_cmd->locality_group_name = makeNode(LocalityGroupOption);
 
   EXPECT_THAT(alter_table_cmd, CanSerializeAndDeserialize());
 }
@@ -952,6 +956,76 @@ TEST_F(SerializationDeserializationTest, ChangeStreamTrackedTable) {
   change_stream_tracked_table->columns = list_make1(PlaceHolderNode());
   change_stream_tracked_table->for_all_columns = false;
   EXPECT_THAT(change_stream_tracked_table, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, CreateSearchIndexStmt) {
+  CreateSearchIndexStmt* create_search_index_stmt =
+      makeNode(CreateSearchIndexStmt);
+
+  create_search_index_stmt->search_index_name = pstrdup("search_index_name");
+  create_search_index_stmt->table_name =
+      makeRangeVar(pstrdup("schema_name"), pstrdup("table_name"), 1);
+  create_search_index_stmt->token_columns = list_make1(PlaceHolderNode());
+  create_search_index_stmt->storing = list_make1(PlaceHolderNode());
+  create_search_index_stmt->partition = list_make1(PlaceHolderNode());
+  create_search_index_stmt->order = list_make1(PlaceHolderNode());
+  create_search_index_stmt->null_filters = PlaceHolderNode();
+  create_search_index_stmt->interleave = makeNode(InterleaveSpec);
+  create_search_index_stmt->options = list_make1(PlaceHolderNode());
+
+  EXPECT_THAT(create_search_index_stmt, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, DropSearchIndexStmt) {
+  DropStmt* drop_search_index_stmt = makeNode(DropStmt);
+  drop_search_index_stmt->behavior = DROP_CASCADE;
+  drop_search_index_stmt->concurrent = true;
+  drop_search_index_stmt->missing_ok = true;
+  drop_search_index_stmt->objects = list_make1(PlaceHolderNode());
+  drop_search_index_stmt->removeType = OBJECT_SEARCH_INDEX;
+  EXPECT_THAT(drop_search_index_stmt, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, CreateLocalityGroupStmt) {
+  CreateLocalityGroupStmt* create_locality_group_stmt =
+      makeNode(CreateLocalityGroupStmt);
+  create_locality_group_stmt->locality_group_name =
+      makeRangeVar(pstrdup("schema_name"),
+                   pstrdup("locality_group_name"), /*location=*/1);
+  create_locality_group_stmt->storage = makeNode(LocalityGroupOption);
+  create_locality_group_stmt->storage->value = pstrdup("ssd");
+  create_locality_group_stmt->ssd_to_hdd_spill_timespan =
+      makeNode(LocalityGroupOption);
+  create_locality_group_stmt->ssd_to_hdd_spill_timespan->value = pstrdup("13h");
+  EXPECT_THAT(create_locality_group_stmt, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, AlterLocalityGroupStmt) {
+  AlterLocalityGroupStmt* alter_locality_group_stmt =
+      makeNode(AlterLocalityGroupStmt);
+  alter_locality_group_stmt->locality_group_name =
+      makeRangeVar(pstrdup("schema_name"),
+                   pstrdup("locality_group_name"), /*location=*/1);
+  alter_locality_group_stmt->storage = makeNode(LocalityGroupOption);
+  alter_locality_group_stmt->storage->value = pstrdup("ssd");
+  alter_locality_group_stmt->ssd_to_hdd_spill_timespan =
+      makeNode(LocalityGroupOption);
+  alter_locality_group_stmt->ssd_to_hdd_spill_timespan->value = pstrdup("13h");
+  EXPECT_THAT(alter_locality_group_stmt, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, AlterColumnLocalityGroupStmt) {
+  AlterColumnLocalityGroupStmt* alter_column_locality_group_stmt =
+      makeNode(AlterColumnLocalityGroupStmt);
+  alter_column_locality_group_stmt->relation =
+      makeRangeVar(pstrdup("schema_name"), pstrdup("table_name"),
+                   /*location=*/1);
+  alter_column_locality_group_stmt->column = pstrdup("column_name");
+  alter_column_locality_group_stmt->locality_group_name =
+      makeNode(LocalityGroupOption);
+  alter_column_locality_group_stmt->locality_group_name->value =
+      pstrdup("locality_group_name");
+  EXPECT_THAT(alter_column_locality_group_stmt, CanSerializeAndDeserialize());
 }
 
 TEST_F(SerializationDeserializationTest, CreateRoleStmt) {

@@ -45,6 +45,7 @@
 #include "backend/query/queryable_view.h"
 #include "backend/query/spanner_sys_catalog.h"
 #include "backend/schema/catalog/schema.h"
+#include "common/constants.h"
 
 namespace google {
 namespace spanner {
@@ -64,8 +65,9 @@ class Catalog : public zetasql::EnumerableCatalog {
   Catalog(
       const Schema* schema, const FunctionCatalog* function_catalog,
       zetasql::TypeFactory* type_factory,
+      // TODO: Remove the default value for `options`.
       const zetasql::AnalyzerOptions& options =
-          MakeGoogleSqlAnalyzerOptions(),
+          MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone),
       RowReader* reader = nullptr, QueryEvaluator* query_evaluator = nullptr,
       std::optional<std::string> change_stream_internal_lookup = std::nullopt);
 
@@ -105,6 +107,10 @@ class Catalog : public zetasql::EnumerableCatalog {
   absl::Status GetSequence(const std::string& name,
                            const zetasql::Sequence** sequence,
                            const FindOptions& options) override;
+  absl::Status FindConversion(
+      const zetasql::Type* from_type, const zetasql::Type* to_type,
+      const zetasql::Catalog::FindConversionOptions& options,
+      zetasql::Conversion* conversion) override;
   absl::Status GetPropertyGraph(
       std::string_view name, const zetasql::PropertyGraph*& graph,
       const FindOptions& options = FindOptions()) override;

@@ -102,6 +102,7 @@ cc_test(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
@@ -225,6 +226,7 @@ cc_library(
     name = "bootstrap_catalog_accessor_impl",
     srcs = ["bootstrap_catalog_accessor.cc"],
     visibility = [
+        "//tests/conformance/common:__subpackages__",
         "//third_party/spanner_pg/catalog:__subpackages__",
         "//third_party/spanner_pg/interface:__subpackages__",
     ],

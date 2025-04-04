@@ -115,6 +115,66 @@ TEST(StubEvaluatorTest, PgDateExtract) {
                                                HasSubstr("DateExtract")));
 }
 
+TEST(StubEvaluatorTest, PgIntervalOut) {
+  EXPECT_THAT(
+      PgIntervalOut(zetasql::IntervalValue::MinValue()),
+      StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("IntervalOut")));
+}
+
+TEST(StubEvaluatorTest, PgIntervalIn) {
+  EXPECT_THAT(PgIntervalIn("a"), StatusIs(absl::StatusCode::kUnimplemented,
+                                          HasSubstr("IntervalIn")));
+}
+
+TEST(StubEvaluatorTest, PgTimestamptzAddInterval) {
+  EXPECT_THAT(
+      PgTimestamptzAdd(absl::Now(), zetasql::IntervalValue::MinValue()),
+      StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("TimestamptzAdd")));
+}
+
+TEST(StubEvaluatorTest, PgTimestamptzSubtractInterval) {
+  EXPECT_THAT(
+      PgTimestamptzSubtract(absl::Now(), zetasql::IntervalValue::MinValue()),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               HasSubstr("TimestamptzSubtract")));
+}
+
+TEST(StubEvaluatorTest, PgMakeInterval) {
+  EXPECT_THAT(
+      PgMakeInterval(1, 2, 3, 4, 5, 6, 7),
+      StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("MakeInterval")));
+}
+
+TEST(StubEvaluatorTest, PgIntervalMultiply) {
+  EXPECT_THAT(PgIntervalMultiply(zetasql::IntervalValue::MaxValue(), 0.25),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("IntervalMultiply")));
+}
+
+TEST(StubEvaluatorTest, PgIntervalDivide) {
+  EXPECT_THAT(
+      PgIntervalDivide(zetasql::IntervalValue::MaxValue(), 0.5),
+      StatusIs(absl::StatusCode::kUnimplemented, HasSubstr("IntervalDivide")));
+}
+
+TEST(StubEvaluatorTest, PgIntervalExtract) {
+  EXPECT_THAT(PgIntervalExtract("a", zetasql::IntervalValue::MaxValue()),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("PgIntervalExtract")));
+}
+
+TEST(StubEvaluatorTest, PgIntervalToChar) {
+  EXPECT_THAT(PgIntervalToChar(zetasql::IntervalValue::MaxValue(), "a"),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("PgIntervalToChar")));
+}
+
+TEST(StubEvaluatorTest, PgRoundIntervalPrecision) {
+  EXPECT_THAT(PgRoundIntervalPrecision(zetasql::IntervalValue::MaxValue()),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("PgRoundIntervalPrecision")));
+}
+
 }  // namespace
 }  // namespace postgres_translator::function_evaluators
 

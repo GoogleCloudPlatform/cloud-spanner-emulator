@@ -141,6 +141,10 @@ testing::Matcher<const zetasql::Type*> NumericType() {
   return Property(&zetasql::Type::IsNumericType, IsTrue());
 }
 
+testing::Matcher<const zetasql::Type*> IntervalType() {
+  return Property(&zetasql::Type::IsInterval, IsTrue());
+}
+
 testing::Matcher<zetasql::Value> UuidV4StringValue() {
   return Property(&zetasql::Value::string_value,
                   testing::MatchesRegex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-["
@@ -889,6 +893,23 @@ TEST_P(QueryEngineTest, PlanSqlRecognizesFloat32Types) {
   ASSERT_NE(result.rows, nullptr);
   EXPECT_THAT(GetParamNames(result), ElementsAre("p1"));
   EXPECT_THAT(GetParamTypes(result), ElementsAre(Float32Type()));
+}
+
+TEST_P(QueryEngineTest, PlanSqlRecognizesIntervalTypes) {
+  Query query;
+  if (GetParam() == POSTGRESQL) {
+    query = Query{"SELECT cast($1 as INTERVAL) as interval_param;"};
+  } else {
+    query = Query{"SELECT cast(@p1 as INTERVAL) as interval_param;"};
+  }
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{schema(), reader()},
+                                v1::ExecuteSqlRequest::PLAN));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetParamNames(result), ElementsAre("p1"));
+  EXPECT_THAT(GetParamTypes(result), ElementsAre(IntervalType()));
 }
 
 TEST_P(QueryEngineTest, PlanSqlAcceptsIncompleteParameters) {

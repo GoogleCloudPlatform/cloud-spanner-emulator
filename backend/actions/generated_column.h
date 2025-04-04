@@ -20,6 +20,7 @@
 #include <memory>
 #include <vector>
 
+#include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/evaluator.h"
 #include "zetasql/public/value.h"
@@ -46,9 +47,9 @@ namespace backend {
 // generated columns in the code base.
 class GeneratedColumnEffector : public Effector {
  public:
-  explicit GeneratedColumnEffector(const Table* table,
-                                   zetasql::Catalog* function_catalog,
-                                   bool for_keys = false);
+  explicit GeneratedColumnEffector(
+      const Table* table, const zetasql::AnalyzerOptions& analyzer_options,
+      zetasql::Catalog* function_catalog, bool for_keys = false);
 
   // Computes the value of the given 'generated_column' based on the given
   // 'row_column_values'.
@@ -66,7 +67,8 @@ class GeneratedColumnEffector : public Effector {
       std::vector<const Column*>* columns_with_generated_values) const;
 
  private:
-  absl::Status Initialize(zetasql::Catalog* function_catalog);
+  absl::Status Initialize(const zetasql::AnalyzerOptions& analyzer_options,
+                          zetasql::Catalog* function_catalog);
   absl::Status Effect(const ActionContext* ctx,
                       const InsertOp& op) const override;
   absl::Status Effect(const ActionContext* ctx,

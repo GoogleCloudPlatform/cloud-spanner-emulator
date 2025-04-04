@@ -217,10 +217,10 @@ class SchemaUpdaterImpl {
       TableIDGenerator* table_id_generator,
       ColumnIDGenerator* column_id_generator, Storage* storage,
       absl::Time schema_change_ts, PgOidAssigner* pg_oid_assigner,
-      const Schema* existing_schema) {
+      const Schema* existing_schema, std::string_view database_id) {
     SchemaUpdaterImpl impl(type_factory, table_id_generator,
                            column_id_generator, storage, schema_change_ts,
-                           pg_oid_assigner, existing_schema);
+                           pg_oid_assigner, existing_schema, database_id);
     ZETASQL_RETURN_IF_ERROR(impl.Init());
     return impl;
   }
@@ -241,7 +241,7 @@ class SchemaUpdaterImpl {
                     TableIDGenerator* table_id_generator,
                     ColumnIDGenerator* column_id_generator, Storage* storage,
                     absl::Time schema_change_ts, PgOidAssigner* pg_oid_assigner,
-                    const Schema* existing_schema)
+                    const Schema* existing_schema, std::string_view database_id)
       : type_factory_(type_factory),
         table_id_generator_(table_id_generator),
         column_id_generator_(column_id_generator),
@@ -249,7 +249,8 @@ class SchemaUpdaterImpl {
         schema_change_timestamp_(schema_change_ts),
         latest_schema_(existing_schema),
         editor_(nullptr),
-        pg_oid_assigner_(pg_oid_assigner) {}
+        pg_oid_assigner_(pg_oid_assigner),
+        database_id_(database_id) {}
 
   // Initializes potentially failing components after construction.
   absl::Status Init();
@@ -308,7 +309,7 @@ class SchemaUpdaterImpl {
   template <typename IndexModifier>
   absl::Status SetIndexOptions(
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
-      IndexModifier* modifier);
+      IndexModifier* modifier, bool allow_other_options = false);
   template <typename ColumnDef, typename ColumnDefModifer>
   absl::StatusOr<std::string> TranslatePGExpression(
       const ColumnDef& ddl_column, const Table* table,
@@ -386,7 +387,7 @@ class SchemaUpdaterImpl {
   template <typename Modifier>
   absl::Status SetDatabaseOptions(
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
-      Modifier* modifier);
+      const database_api::DatabaseDialect& dialect, Modifier* modifier);
   absl::Status ValidateChangeStreamOptions(
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options);
   static std::string MakeChangeStreamTvfName(
@@ -553,7 +554,8 @@ class SchemaUpdaterImpl {
       const Table* table);
   absl::Status ValidateAlterDatabaseOptions(
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options);
-  absl::Status AlterDatabase(const ddl::AlterDatabase& alter_database);
+  absl::Status AlterDatabase(const ddl::AlterDatabase& alter_database,
+                             const database_api::DatabaseDialect& dialect);
   absl::Status AlterTable(const ddl::AlterTable& alter_table,
                           const database_api::DatabaseDialect& dialect);
   absl::Status AlterChangeStream(
@@ -562,6 +564,7 @@ class SchemaUpdaterImpl {
       const ddl::ChangeStreamForClause& ddl_change_stream_for_clause,
       const ChangeStream* change_stream);
   absl::Status AlterIndex(const ddl::AlterIndex& alter_index);
+  absl::Status AlterVectorIndex(const ddl::AlterVectorIndex& alter_index);
   absl::Status AlterInterleaveAction(
       const ddl::InterleaveClause::Action& ddl_interleave_action,
       const Table* table);
@@ -597,6 +600,10 @@ class SchemaUpdaterImpl {
   absl::Status DropTable(const ddl::DropTable& drop_table);
 
   absl::Status DropIndex(const ddl::DropIndex& drop_index);
+
+  absl::Status DropSearchIndex(const ddl::DropSearchIndex& drop_search_index);
+
+  absl::Status DropVectorIndex(const ddl::DropVectorIndex& drop_vector_index);
 
   absl::Status DropChangeStream(
       const ddl::DropChangeStream& drop_change_stream);
@@ -636,6 +643,8 @@ class SchemaUpdaterImpl {
   absl::Status SetModelOptions(
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
       ModelModifier* modifier);
+
+  std::string GetTimeZone() const;
 
   absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
   AnalyzeCreatePropertyGraph(
@@ -717,6 +726,9 @@ class SchemaUpdaterImpl {
   // Assigns OIDs to database objects when dialect is POSTGRESQL. The assigner
   // is owned by the database and is shared across all schema changes.
   PgOidAssigner* pg_oid_assigner_;
+
+  // Holds the database id for this schema updater.
+  std::string database_id_;
 };
 
 absl::Status SchemaUpdaterImpl::Init() {
@@ -877,7 +889,7 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       break;
     }
     case ddl::DDLStatement::kAlterDatabase: {
-      ZETASQL_RETURN_IF_ERROR(AlterDatabase(ddl_statement->alter_database()));
+      ZETASQL_RETURN_IF_ERROR(AlterDatabase(ddl_statement->alter_database(), dialect));
       break;
     }
     case ddl::DDLStatement::kAlterTable: {
@@ -909,6 +921,10 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       ZETASQL_RETURN_IF_ERROR(AlterIndex(ddl_statement->alter_index()));
       break;
     }
+    case ddl::DDLStatement::kAlterVectorIndex: {
+      ZETASQL_RETURN_IF_ERROR(AlterVectorIndex(ddl_statement->alter_vector_index()));
+      break;
+    }
     case ddl::DDLStatement::kAlterSchema: {
       ZETASQL_RETURN_IF_ERROR(AlterNamedSchema(ddl_statement->alter_schema()));
       break;
@@ -930,6 +946,14 @@ SchemaUpdaterImpl::ApplyDDLStatement(
     }
     case ddl::DDLStatement::kDropIndex: {
       ZETASQL_RETURN_IF_ERROR(DropIndex(ddl_statement->drop_index()));
+      break;
+    }
+    case ddl::DDLStatement::kDropSearchIndex: {
+      ZETASQL_RETURN_IF_ERROR(DropSearchIndex(ddl_statement->drop_search_index()));
+      break;
+    }
+    case ddl::DDLStatement::kDropVectorIndex: {
+      ZETASQL_RETURN_IF_ERROR(DropVectorIndex(ddl_statement->drop_vector_index()));
       break;
     }
     case ddl::DDLStatement::kDropChangeStream: {
@@ -1004,8 +1028,8 @@ SchemaUpdaterImpl::ApplyDDLStatement(
   // validation, please use schema->proto_bundle().
   statement_context_->set_proto_bundle(proto_bundle);
   ZETASQL_ASSIGN_OR_RETURN(auto new_schema_graph, editor_->CanonicalizeGraph());
-  return std::make_unique<const OwningSchema>(std::move(new_schema_graph),
-                                              proto_bundle, dialect);
+  return std::make_unique<const OwningSchema>(
+      std::move(new_schema_graph), proto_bundle, dialect, database_id_);
 }
 
 absl::StatusOr<std::vector<SchemaValidationContext>>
@@ -1035,7 +1059,7 @@ SchemaUpdaterImpl::ApplyDDLStatements(
          &new_tmp_schema](const SchemaGraph* unowned_graph) -> const Schema* {
           new_tmp_schema = std::make_unique<const Schema>(
               unowned_graph, latest_schema_->proto_bundle(),
-              latest_schema_->dialect());
+              latest_schema_->dialect(), database_id_);
           return new_tmp_schema.get();
         });
 
@@ -1102,12 +1126,13 @@ absl::Status SchemaUpdaterImpl::SetTableOptions(
 template <typename IndexModifier>
 absl::Status SchemaUpdaterImpl::SetIndexOptions(
     const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
-    IndexModifier* modifier) {
+    IndexModifier* modifier, bool allow_other_options) {
   for (const ddl::SetOption& option : set_options) {
     if (option.option_name() == ddl::kLocalityGroupOptionName) {
       ZETASQL_RETURN_IF_ERROR(ProcessLocalityGroupOption(option, modifier));
     } else {
-      ZETASQL_RET_CHECK(false) << "Invalid index option: " << option.option_name();
+      ZETASQL_RET_CHECK(allow_other_options)
+          << "Invalid index option: " << option.option_name();
     }
   }
   return absl::OkStatus();
@@ -1147,7 +1172,7 @@ absl::Status SchemaUpdaterImpl::SetColumnOptions(
 template <typename Modifier>
 absl::Status SchemaUpdaterImpl::SetDatabaseOptions(
     const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
-    Modifier* modifier) {
+    const database_api::DatabaseDialect& dialect, Modifier* modifier) {
   modifier->set_options(set_options);
   for (const ddl::SetOption& option : set_options) {
     if (absl::StripPrefix(option.option_name(), "spanner.internal.cloud_") ==
@@ -1158,6 +1183,15 @@ absl::Status SchemaUpdaterImpl::SetDatabaseOptions(
         modifier->set_default_sequence_kind(default_sequence_kind);
       } else if (option.has_null_value()) {
         modifier->set_default_sequence_kind(std::nullopt);
+      }
+    }
+    if (absl::StripPrefix(option.option_name(), "spanner.internal.cloud_") ==
+        ddl::kDefaultTimeZoneOptionName) {
+      if (option.has_string_value()) {
+        std::optional<std::string> default_time_zone = option.string_value();
+        modifier->set_default_time_zone(default_time_zone);
+      } else if (option.has_null_value()) {
+        modifier->set_default_time_zone(std::nullopt);
       }
     }
   }
@@ -2596,7 +2630,8 @@ SchemaUpdaterImpl::TranslatePostgreSqlExpression(
 
   // Setup zetasql::AnalyzerOptions needed for translation from PostgreSQL to
   // ZetaSQL.
-  zetasql::AnalyzerOptions analyzer_options = MakeGoogleSqlAnalyzerOptions();
+  zetasql::AnalyzerOptions analyzer_options =
+      MakeGoogleSqlAnalyzerOptions(GetTimeZone());
   analyzer_options.CreateDefaultArenasIfNotSet();
 
   ZETASQL_ASSIGN_OR_RETURN(
@@ -2619,7 +2654,7 @@ absl::StatusOr<ExpressionTranslateResult>
 SchemaUpdaterImpl::TranslatePostgreSqlQueryInView(absl::string_view query) {
   zetasql::AnalyzerOptions analyzer_options =
       MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
-          admin::database::v1::POSTGRESQL);
+          GetTimeZone(), admin::database::v1::POSTGRESQL);
   analyzer_options.CreateDefaultArenasIfNotSet();
   FunctionCatalog function_catalog(type_factory_);
   function_catalog.SetLatestSchema(latest_schema_);
@@ -3784,8 +3819,8 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
         }));
   }
 
-  if (set_options != nullptr && !set_options->empty() && !is_vector_index) {
-    ZETASQL_RETURN_IF_ERROR(SetIndexOptions(*set_options, &builder));
+  if (set_options != nullptr && !set_options->empty()) {
+    ZETASQL_RETURN_IF_ERROR(SetIndexOptions(*set_options, &builder, is_vector_index));
   }
 
   // The data table must be added after the index for correct order of
@@ -4461,6 +4496,19 @@ absl::Status SchemaUpdaterImpl::ValidateAlterDatabaseOptions(
       } else {
         return error::UnsupportedDefaultSequenceKindOptionValues();
       }
+    } else if (option_name == ddl::kDefaultTimeZoneOptionName) {
+      if (option.has_string_value() || option.has_null_value()) {
+        if (!latest_schema_->tables().empty()) {
+          return error::ChangeDefaultTimeZoneOnNonEmptyDatabase();
+        }
+        absl::TimeZone time_zone;
+        if (option.has_string_value() &&
+            !absl::LoadTimeZone(option.string_value(), &time_zone)) {
+          return error::InvalidDefaultTimeZoneOption(option.string_value());
+        }
+      } else {
+        return error::UnsupportedDefaultTimeZoneOptionValues();
+      }
     } else if (option_name == ddl::kVersionRetentionPeriodOptionName) {
       if (option.has_string_value() || option.has_null_value()) {
         continue;
@@ -4533,7 +4581,8 @@ absl::Status SchemaUpdaterImpl::DropSynonym(
 }
 
 absl::Status SchemaUpdaterImpl::AlterDatabase(
-    const ddl::AlterDatabase& alter_database) {
+    const ddl::AlterDatabase& alter_database,
+    const database_api::DatabaseDialect& dialect) {
   const auto& set_options = alter_database.set_options();
   if (!set_options.options().empty()) {
     ZETASQL_RETURN_IF_ERROR(ValidateAlterDatabaseOptions(set_options.options()));
@@ -4541,17 +4590,18 @@ absl::Status SchemaUpdaterImpl::AlterDatabase(
     if (database_options == nullptr) {
       DatabaseOptions::Builder builder;
       builder.set_db_name(alter_database.db_name());
-      ZETASQL_RETURN_IF_ERROR(SetDatabaseOptions(set_options.options(), &builder));
+      ZETASQL_RETURN_IF_ERROR(
+          SetDatabaseOptions(set_options.options(), dialect, &builder));
       ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
     } else {
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& repeated_set_options =
           set_options.options();
       ZETASQL_RETURN_IF_ERROR(AlterNode<DatabaseOptions>(
           database_options,
-          [this, repeated_set_options](
-              DatabaseOptions::Editor* editor) -> absl::Status {
+          [this, repeated_set_options,
+           dialect](DatabaseOptions::Editor* editor) -> absl::Status {
             // Set database options
-            return SetDatabaseOptions(repeated_set_options, editor);
+            return SetDatabaseOptions(repeated_set_options, dialect, editor);
           }));
     }
   }
@@ -4989,9 +5039,8 @@ absl::Status SchemaUpdaterImpl::AlterIndex(const ddl::AlterIndex& alter_index) {
       }
 
       ZETASQL_ASSIGN_OR_RETURN(const Column* new_index_data_table_column,
-                       CreateIndexDataTableColumn(
-                           indexed_table, column_name, indexed_data_table,
-                           /*null_filtered_key_column=*/false));
+                       CreateIndexDataTableColumn(indexed_table, column_name,
+                                                  indexed_data_table, false));
 
       ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
           indexed_data_table,
@@ -5034,6 +5083,100 @@ absl::Status SchemaUpdaterImpl::AlterIndex(const ddl::AlterIndex& alter_index) {
             return SetIndexOptions(alter_index.set_options().options(), editor);
           }));
       return absl::OkStatus();
+    }
+    default:
+      ZETASQL_RET_CHECK_FAIL() << "Invalid alter index type: "
+                       << absl::StrCat(alter_index);
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::AlterVectorIndex(
+    const ddl::AlterVectorIndex& alter_index) {
+  const Index* index = latest_schema_->FindIndex(alter_index.index_name());
+
+  if (index == nullptr || !index->is_vector_index()) {
+    return error::IndexNotFound(alter_index.index_name());
+  }
+
+  const Table* indexed_table = index->indexed_table();
+  const Table* indexed_data_table = index->index_data_table();
+  ZETASQL_RET_CHECK(indexed_table != nullptr)
+      << "No indexed table found for the index ";
+  ZETASQL_RET_CHECK(indexed_data_table != nullptr)
+      << "No index data table found for the index ";
+
+  switch (alter_index.alter_type_case()) {
+    case ddl::AlterVectorIndex::kAddStoredColumn: {
+      const std::string& column_name =
+          alter_index.add_stored_column().column().name();
+
+      if (indexed_table->FindColumn(column_name) == nullptr) {
+        return error::VectorIndexStoredColumnNotFound(alter_index.index_name(),
+                                                      column_name);
+      }
+      for (const Column* column : index->stored_columns()) {
+        if (column->Name() == column_name) {
+          return error::VectorIndexStoredColumnAlreadyExists(
+              alter_index.index_name(), column_name);
+        }
+      }
+      if (indexed_table->FindKeyColumn(column_name) != nullptr) {
+        return error::VectorIndexStoredColumnIsKey(
+            alter_index.index_name(), column_name, indexed_table->Name());
+      }
+      if (indexed_data_table->FindColumn(column_name) != nullptr) {
+        return error::VectorIndexStoredColumnAlreadyPrimaryKey(
+            alter_index.index_name(), column_name);
+      }
+
+      ZETASQL_ASSIGN_OR_RETURN(const Column* new_index_data_table_column,
+                       CreateIndexDataTableColumn(indexed_table, column_name,
+                                                  indexed_data_table, false));
+
+      ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
+          indexed_data_table,
+          [new_index_data_table_column](Table::Editor* editor) -> absl::Status {
+            editor->add_column(new_index_data_table_column);
+            return absl::OkStatus();
+          }));
+      ZETASQL_RETURN_IF_ERROR(AlterNode<Index>(
+          index,
+          [new_index_data_table_column](Index::Editor* editor) -> absl::Status {
+            editor->add_stored_column(new_index_data_table_column);
+            return absl::OkStatus();
+          }));
+      break;
+    }
+    case ddl::AlterVectorIndex::kDropStoredColumn: {
+      const std::string& column_name = alter_index.drop_stored_column();
+      if (indexed_data_table->FindColumn(column_name) == nullptr) {
+        return error::ColumnNotFound(index->Name(), column_name);
+      }
+      auto stored_columns = index->stored_columns();
+      bool is_stored_column = absl::c_any_of(
+          stored_columns,
+          [column_name](const Column* c) { return c->Name() == column_name; });
+      if (!is_stored_column) {
+        if (!absl::c_any_of(index->key_columns(),
+                            [column_name](const KeyColumn* c) {
+                              return c->column()->Name() == column_name;
+                            })) {
+          return error::ColumnNotFound(index->Name(), column_name);
+        }
+        return error::VectorIndexNotStoredColumn(alter_index.index_name(),
+                                                 column_name);
+      }
+
+      const Column* drop_column = indexed_data_table->FindColumn(column_name);
+      return DropNode(drop_column);
+      break;
+    }
+    case ddl::AlterVectorIndex::kSetOptions: {
+      return error::AlterVectorIndexSetOptionsUnsupported();
+    }
+    case ddl::AlterVectorIndex::kAlterStoredColumn: {
+      return error::AlterVectorIndexStoredColumnUnsupported();
     }
     default:
       ZETASQL_RET_CHECK_FAIL() << "Invalid alter index type: "
@@ -5313,6 +5456,38 @@ absl::Status SchemaUpdaterImpl::DropIndex(const ddl::DropIndex& drop_index) {
   return DropNode(index);
 }
 
+absl::Status SchemaUpdaterImpl::DropSearchIndex(
+    const ddl::DropSearchIndex& drop_search_index) {
+  const Index* index =
+      latest_schema_->FindIndexCaseSensitive(drop_search_index.index_name());
+  if (index == nullptr) {
+    if (drop_search_index.existence_modifier() == ddl::IF_EXISTS) {
+      return absl::OkStatus();
+    }
+    return error::IndexNotFound(drop_search_index.index_name());
+  }
+  if (!index->is_search_index()) {
+    return error::IndexNotFound(drop_search_index.index_name());
+  }
+  return DropNode(index);
+}
+
+absl::Status SchemaUpdaterImpl::DropVectorIndex(
+    const ddl::DropVectorIndex& drop_vector_index) {
+  const Index* index =
+      latest_schema_->FindIndexCaseSensitive(drop_vector_index.index_name());
+  if (index == nullptr) {
+    if (drop_vector_index.existence_modifier() == ddl::IF_EXISTS) {
+      return absl::OkStatus();
+    }
+    return error::IndexNotFound(drop_vector_index.index_name());
+  }
+  if (!index->is_vector_index()) {
+    return error::IndexNotFound(drop_vector_index.index_name());
+  }
+  return DropNode(index);
+}
+
 absl::Status SchemaUpdaterImpl::DropChangeStream(
     const ddl::DropChangeStream& drop_change_stream) {
   const ChangeStream* change_stream =
@@ -5491,6 +5666,14 @@ SchemaUpdaterImpl::AnalyzeCreatePropertyGraph(
   return analyzer_output;
 }
 
+std::string SchemaUpdaterImpl::GetTimeZone() const {
+  std::string time_zone = kDefaultTimeZone;
+  if (latest_schema_ != nullptr) {
+    time_zone = latest_schema_->default_time_zone();
+  }
+  return time_zone;
+}
+
 absl::Status SchemaUpdaterImpl::CreatePropertyGraph(
     const ddl::CreatePropertyGraph& ddl_create_property_graph,
     const database_api::DatabaseDialect& dialect) {
@@ -5516,7 +5699,8 @@ absl::Status SchemaUpdaterImpl::CreatePropertyGraph(
                                           ddl_create_property_graph.name()));
   }
 
-  zetasql::AnalyzerOptions analyzer_options = MakeGoogleSqlAnalyzerOptions();
+  zetasql::AnalyzerOptions analyzer_options =
+      MakeGoogleSqlAnalyzerOptions(GetTimeZone());
   analyzer_options.mutable_language()->set_name_resolution_mode(
       zetasql::NAME_RESOLUTION_DEFAULT);
   analyzer_options.mutable_language()->EnableLanguageFeature(
@@ -5818,10 +6002,12 @@ SchemaUpdaterImpl::DropProtoBundle() {
   return ProtoBundle::CreateEmpty();
 }
 
-const Schema* EmptySchema(database_api::DatabaseDialect dialect) {
+const Schema* EmptySchema(std::string_view database_id,
+                          database_api::DatabaseDialect dialect) {
   if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
-    static const Schema* empty_pg_schema = new Schema(
-        SchemaGraph::CreateEmpty(), ProtoBundle::CreateEmpty(), dialect);
+    static const Schema* empty_pg_schema =
+        new Schema(SchemaGraph::CreateEmpty(), ProtoBundle::CreateEmpty(),
+                   dialect, database_id);
     return empty_pg_schema;
   }
   static const Schema* empty_gsql_schema = new Schema;
@@ -5835,14 +6021,15 @@ SchemaUpdater::ValidateSchemaFromDDL(
     const SchemaChangeOperation& schema_change_operation,
     const SchemaChangeContext& context, const Schema* existing_schema) {
   if (existing_schema == nullptr) {
-    existing_schema = EmptySchema(schema_change_operation.database_dialect);
+    existing_schema = EmptySchema(context.database_id,
+                                  schema_change_operation.database_dialect);
   }
-  ZETASQL_ASSIGN_OR_RETURN(
-      SchemaUpdaterImpl updater,
-      SchemaUpdaterImpl::Build(context.type_factory, context.table_id_generator,
-                               context.column_id_generator, context.storage,
-                               context.schema_change_timestamp,
-                               context.pg_oid_assigner, existing_schema));
+  ZETASQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
+                   SchemaUpdaterImpl::Build(
+                       context.type_factory, context.table_id_generator,
+                       context.column_id_generator, context.storage,
+                       context.schema_change_timestamp, context.pg_oid_assigner,
+                       existing_schema, context.database_id));
   context.pg_oid_assigner->BeginAssignment();
   ZETASQL_ASSIGN_OR_RETURN(pending_work_,
                    updater.ApplyDDLStatements(schema_change_operation));
@@ -5872,12 +6059,12 @@ absl::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
     const Schema* existing_schema,
     const SchemaChangeOperation& schema_change_operation,
     const SchemaChangeContext& context) {
-  ZETASQL_ASSIGN_OR_RETURN(
-      SchemaUpdaterImpl updater,
-      SchemaUpdaterImpl::Build(context.type_factory, context.table_id_generator,
-                               context.column_id_generator, context.storage,
-                               context.schema_change_timestamp,
-                               context.pg_oid_assigner, existing_schema));
+  ZETASQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
+                   SchemaUpdaterImpl::Build(
+                       context.type_factory, context.table_id_generator,
+                       context.column_id_generator, context.storage,
+                       context.schema_change_timestamp, context.pg_oid_assigner,
+                       existing_schema, context.database_id));
   context.pg_oid_assigner->BeginAssignment();
   ZETASQL_ASSIGN_OR_RETURN(pending_work_,
                    updater.ApplyDDLStatements(schema_change_operation));
@@ -5907,7 +6094,8 @@ SchemaUpdater::CreateSchemaFromDDL(
     const SchemaChangeContext& context) {
   ZETASQL_ASSIGN_OR_RETURN(
       SchemaChangeResult result,
-      UpdateSchemaFromDDL(EmptySchema(schema_change_operation.database_dialect),
+      UpdateSchemaFromDDL(EmptySchema(context.database_id,
+                                      schema_change_operation.database_dialect),
                           schema_change_operation, context));
   ZETASQL_RETURN_IF_ERROR(result.backfill_status);
   return std::move(result.updated_schema);
@@ -5938,6 +6126,8 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
             EmulatorFeatureFlags::instance().flags().enable_identity_columns,
         .enable_default_sequence_kind =
             EmulatorFeatureFlags::instance().flags().enable_identity_columns,
+        .enable_default_time_zone =
+            EmulatorFeatureFlags::instance().flags().enable_default_time_zone,
         .enable_jsonb_type = true,
         .enable_array_jsonb_type = true,
         .enable_create_view = true,
@@ -5948,8 +6138,12 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
         .enable_change_streams = true,
         .enable_change_streams_mod_type_filter_options = true,
         .enable_change_streams_ttl_deletes_filter_option = true,
+        .enable_search_index =
+            EmulatorFeatureFlags::instance().flags().enable_search_index,
         .enable_sequence = true,
         .enable_virtual_generated_column = true,
+        .enable_hidden_column =
+            EmulatorFeatureFlags::instance().flags().enable_hidden_column,
         .enable_serial_types = EmulatorFeatureFlags::instance()
                                    .flags()
                                    .enable_serial_auto_increment,

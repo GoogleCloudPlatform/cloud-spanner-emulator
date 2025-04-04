@@ -41,10 +41,13 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
+#include "absl/time/time.h"
 #include "absl/types/span.h"
+#include "third_party/spanner_pg/interface/datetime_evaluators.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"
+#include "zetasql/base/status_macros.h"
 
 namespace postgres_translator {
 namespace {
@@ -63,6 +66,13 @@ absl::StatusOr<zetasql::Value> EvalPgAlloc(
   return zetasql::values::Int64(123);
 }
 
+absl::StatusOr<zetasql::Value> EvalCastToTimestamp(
+  absl::Span<const zetasql::Value> args) {
+ZETASQL_ASSIGN_OR_RETURN(absl::Time time, function_evaluators::PgTimestamptzIn(
+                                      args[0].string_value()));
+return zetasql::Value::Timestamp(time);
+}
+
 TEST(PGFunctionEvaluators, SetUpPGMemoryArena) {
   zetasql::FunctionEvaluator evaluator = PGFunctionEvaluator(EvalPgAlloc);
 
@@ -78,6 +88,26 @@ TEST(PGFunctionEvaluators, CallsGivenCleanupFunction) {
   EXPECT_THAT(evaluator({zetasql::values::Int64(1)}),
               IsOkAndHolds(zetasql::values::Int64(123)));
   EXPECT_TRUE(function_called);
+}
+
+TEST(PGFunctionEvaluators, TestTimeZoneDefault) {
+  zetasql::FunctionEvaluator evaluator =
+      PGFunctionEvaluator(EvalCastToTimestamp);
+
+  EXPECT_THAT(evaluator({zetasql::values::String("2008-12-25 15:30:00")}),
+              IsOkAndHolds(zetasql::values::Timestamp(
+                  // 1230247800 is the unix timestamp for 2008-12-25T23:30:00+00
+                  absl::FromUnixSeconds(1230247800))));
+}
+
+TEST(PGFunctionEvaluators, TestTimeZoneUTC) {
+  zetasql::FunctionEvaluator evaluator =
+      PGFunctionEvaluator(EvalCastToTimestamp, []() {}, "UTC");
+
+  EXPECT_THAT(evaluator({zetasql::values::String("2008-12-25 15:30:00")}),
+              IsOkAndHolds(zetasql::values::Timestamp(
+                  // 1230219000 is the unix timestamp for 2008-12-25T15:30:00+00
+                  absl::FromUnixSeconds(1230219000))));
 }
 }  // namespace
 }  // namespace postgres_translator

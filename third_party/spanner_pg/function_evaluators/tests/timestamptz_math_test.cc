@@ -116,6 +116,48 @@ TEST_P(TimestamptzMathTest, TimestamptzSubtractIntervalString) {
   EXPECT_EQ(expected_timestamptz, computed_time);
 }
 
+TEST_P(TimestamptzMathTest, TimestamptzAddInterval) {
+  const TimestamptzMathTestCase& test_case = GetParam();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time timestamptz_input,
+                       PgTimestamptzIn(test_case.timestamptz_input_str));
+  std::string interval =
+      absl::StrCat(test_case.interval_value, " ", test_case.interval_type);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::IntervalValue gsql_interval,
+                       PgIntervalIn(interval));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time computed_time,
+                       PgTimestamptzAdd(timestamptz_input, gsql_interval));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time expected_timestamptz,
+                       PgTimestamptzIn(test_case.expected_timestamptz_str));
+  EXPECT_EQ(expected_timestamptz, computed_time)
+      << "Input Time: " << test_case.timestamptz_input_str
+      << " Interval: " << interval;
+}
+
+TEST_P(TimestamptzMathTest, TimestamptzSubtractInterval) {
+  const TimestamptzMathTestCase& test_case = GetParam();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time timestamptz_input,
+                       PgTimestamptzIn(test_case.timestamptz_input_str));
+
+  // Turn each add case into a subtract case by multiplying the interval
+  // value by -1.
+  double interval_value = -1 * test_case.interval_value;
+  std::string interval =
+      absl::StrCat(interval_value, " ", test_case.interval_type);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::IntervalValue gsql_interval,
+                       PgIntervalIn(interval));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time computed_time,
+                       PgTimestamptzSubtract(timestamptz_input, gsql_interval));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time expected_timestamptz,
+                       PgTimestamptzIn(test_case.expected_timestamptz_str));
+
+  EXPECT_EQ(expected_timestamptz, computed_time)
+      << "Input Time: " << test_case.timestamptz_input_str
+      << " Interval: " << interval;
+}
+
 INSTANTIATE_TEST_SUITE_P(
     TimestamptzMathTestSuite, TimestamptzMathTest,
     testing::Values(

@@ -266,6 +266,13 @@ absl::StatusOr<BatchDmlResult> DatabaseTest::BatchDmlTransaction(
   return result.value();
 }
 
+cloud::spanner::BatchedCommitResultStream DatabaseTest::BatchWrite(
+    const std::vector<Mutations>& mutations) {
+  cloud::spanner::BatchedCommitResultStream result =
+      client().CommitAtLeastOnce(mutations);
+  return result;
+}
+
 absl::Status DatabaseTest::Rollback(Transaction txn) {
   auto status = client().Rollback(txn);
   return absl::Status(absl::StatusCode(status.code()), status.message());

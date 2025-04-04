@@ -21,8 +21,10 @@
 #include <utility>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
+#include "zetasql/public/types/type_factory.h"
 #include "absl/functional/bind_front.h"
 #include "absl/memory/memory.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
@@ -33,12 +35,18 @@
 #include "backend/database/pg_oid_assigner/pg_oid_assigner.h"
 #include "backend/locking/manager.h"
 #include "backend/query/query_engine.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/versioned_catalog.h"
+#include "backend/schema/graph/schema_graph.h"
 #include "backend/schema/updater/schema_updater.h"
 #include "backend/schema/updater/scoped_schema_change_lock.h"
 #include "backend/storage/in_memory_storage.h"
 #include "backend/transaction/options.h"
+#include "backend/transaction/read_only_transaction.h"
+#include "backend/transaction/read_write_transaction.h"
+#include "common/clock.h"
+#include "common/errors.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
@@ -52,9 +60,11 @@ namespace backend {
 Database::Database() : transaction_id_generator_(1) {}
 
 absl::StatusOr<std::unique_ptr<Database>> Database::Create(
-    Clock* clock, const SchemaChangeOperation& schema_change_operation) {
+    Clock* clock, std::string_view database_id,
+    const SchemaChangeOperation& schema_change_operation) {
   auto database = absl::WrapUnique(new Database());
   database->clock_ = clock;
+  database->database_id_ = database_id;
   database->storage_ = std::make_unique<InMemoryStorage>();
   database->lock_manager_ = std::make_unique<LockManager>(clock);
   database->type_factory_ = std::make_unique<zetasql::TypeFactory>();
@@ -69,12 +79,10 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
   if (schema_change_operation.statements.empty()) {
     if (database->dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
       // Create an empty schema with the dialect set.
-      database->versioned_catalog_ = std::make_unique<VersionedCatalog>(
-          std::make_unique<const Schema>(SchemaGraph::CreateEmpty()
-                                         ,
-                                         ProtoBundle::CreateEmpty()
-                                         ,
-                                         database->dialect_));
+      database->versioned_catalog_ =
+          std::make_unique<VersionedCatalog>(std::make_unique<const Schema>(
+              SchemaGraph::CreateEmpty(), ProtoBundle::CreateEmpty(),
+              database->dialect_, database_id));
     } else {
       database->versioned_catalog_ = std::make_unique<VersionedCatalog>();
     }
@@ -132,6 +140,7 @@ SchemaChangeContext Database::GetSchemaChangeContext() {
       .column_id_generator = &column_id_generator_,
       .storage = storage_.get(),
       .pg_oid_assigner = pg_oid_assigner_.get(),
+      .database_id = database_id_,
   };
 }
 

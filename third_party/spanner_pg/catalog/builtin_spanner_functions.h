@@ -34,6 +34,7 @@
 
 #include <vector>
 
+#include "absl/flags/declare.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 
 namespace postgres_translator {
@@ -45,6 +46,8 @@ void AddPgNumericFunctions(std::vector<PostgresFunctionArguments>& functions);
 void AddPgJsonbFunctions(std::vector<PostgresFunctionArguments>& functions);
 void AddPgOidFunctions(std::vector<PostgresFunctionArguments>& functions);
 void AddFloatFunctions(std::vector<PostgresFunctionArguments>& functions);
+
+void AddIntervalFunctions(std::vector<PostgresFunctionArguments>& functions);
 
 void AddPgComparisonFunctions(
     std::vector<PostgresFunctionArguments>& functions);

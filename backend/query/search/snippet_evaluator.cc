@@ -21,11 +21,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/json_value.h"
 #include "zetasql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
@@ -143,7 +143,7 @@ const_iterator SnippetEvaluator::GetMatchBegin(absl::string_view target,
   return start_pos;
 }
 
-absl::StatusOr<zetasql::JSONValue> SnippetEvaluator::BuildSnippets(
+absl::StatusOr<std::string> SnippetEvaluator::BuildSnippets(
     absl::string_view target, absl::string_view query, int max_snippet_length,
     int max_snippets) {
   // We only return one snippet for simplification purpose, Thus max_snippet
@@ -206,7 +206,7 @@ absl::StatusOr<zetasql::JSONValue> SnippetEvaluator::BuildSnippets(
   JSON result_json;
   result_json[kSnippets] = std::move(snippets);
 
-  return zetasql::JSONValue::ParseJSONString(result_json.dump());
+  return result_json.dump();
 }
 
 namespace {
@@ -224,7 +224,7 @@ absl::StatusOr<int> TryGetIntParameterValue(
 
 }  // namespace
 
-absl::StatusOr<zetasql::Value> SnippetEvaluator::Evaluate(
+absl::StatusOr<std::optional<std::string>> SnippetEvaluator::Evaluate(
     absl::Span<const zetasql::Value> args) {
   // argument indexes
   constexpr int kTarget = 0;
@@ -255,7 +255,7 @@ absl::StatusOr<zetasql::Value> SnippetEvaluator::Evaluate(
   }
 
   if (target.is_null() || query.is_null()) {
-    return zetasql::Value::NullJson();
+    return std::nullopt;
   }
 
   ZETASQL_ASSIGN_OR_RETURN(
@@ -269,10 +269,8 @@ absl::StatusOr<zetasql::Value> SnippetEvaluator::Evaluate(
   const std::string target_string = target.string_value();
   const std::string query_string = query.string_value();
 
-  ZETASQL_ASSIGN_OR_RETURN(auto result,
-                   BuildSnippets(target_string, query_string,
-                                 max_snippet_length, max_snippets));
-  return zetasql::Value::Json(std::move(result));
+  return BuildSnippets(target_string, query_string, max_snippet_length,
+                       max_snippets);
 }
 
 }  // namespace search

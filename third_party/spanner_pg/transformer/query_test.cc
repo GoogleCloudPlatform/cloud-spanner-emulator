@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "zetasql/base/logging.h"
+#include "absl/log/absl_log.h"
 #include "zetasql/public/analyzer.h"
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/analyzer_output.h"
@@ -338,7 +339,8 @@ void StripPgExpr(Expr* expr) {
       break;
     }
     default:
-      ABSL_LOG(FATAL) << "Unexpected Expr type: " << NodeTagToString(expr->type);
+      ABSL_LOG(ERROR) << "Unexpected Expr type: "
+                            << NodeTagToString(expr->type);
   }
 }
 

@@ -68,6 +68,7 @@ const zetasql::Type* gsql_double = zetasql::types::DoubleType();
 const zetasql::Type* gsql_string = zetasql::types::StringType();
 const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
 const zetasql::Type* gsql_date = zetasql::types::DateType();
+const zetasql::Type* gsql_interval = zetasql::types::IntervalType();
 
 const zetasql::Type* gsql_bool_array = zetasql::types::BoolArrayType();
 const zetasql::Type* gsql_bytes_array = zetasql::types::BytesArrayType();
@@ -77,6 +78,8 @@ const zetasql::Type* gsql_string_array = zetasql::types::StringArrayType();
 const zetasql::Type* gsql_timestamp_array =
     zetasql::types::TimestampArrayType();
 const zetasql::Type* gsql_date_array = zetasql::types::DateArrayType();
+const zetasql::Type* gsql_interval_array =
+    zetasql::types::IntervalArrayType();
 
 static zetasql::LanguageOptions GetLanguageOptions() {
   return zetasql::LanguageOptions();
@@ -176,8 +179,8 @@ class TestSystemCatalog : public EngineSystemCatalog {
 
   // A set returning function.
   absl::Status AddGenerateSeriesFunction(bool set_oid) {
-    ZETASQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgVarcharMapping()));
-    ZETASQL_RETURN_IF_ERROR(AddTypeIfNotPresent(spangres::types::PgJsonbMapping()));
+    ZETASQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgInt8Mapping()));
+    ZETASQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgInt8ArrayMapping()));
 
     PostgresFunctionArguments arguments(
         {"generate_series",
@@ -187,7 +190,7 @@ class TestSystemCatalog : public EngineSystemCatalog {
             /*context_ptr=*/nullptr},
            /*has_mapped_function=*/true,
            /*explicit_mapped_function_name=*/"",
-           set_oid ? F_GENERATE_SERIES_NUMERIC_NUMERIC : InvalidOid}}});
+           set_oid ? F_GENERATE_SERIES_INT8_INT8 : InvalidOid}}});
     ZETASQL_RETURN_IF_ERROR(AddFunction(arguments, GetLanguageOptions()));
     return absl::OkStatus();
   }
@@ -256,6 +259,7 @@ TEST_F(EngineSystemCatalogTest, BoolTest) {
   CheckType(types::PgTimestamptzMapping(), "timestamptz", TIMESTAMPTZOID,
             gsql_timestamp);
   CheckType(types::PgDateMapping(), "date", DATEOID, gsql_date);
+  CheckType(types::PgIntervalMapping(), "interval", INTERVALOID, gsql_interval);
 
   // Supported Array Types.
   CheckType(types::PgBoolArrayMapping(), "_bool", BOOLARRAYOID,
@@ -277,6 +281,8 @@ TEST_F(EngineSystemCatalogTest, BoolTest) {
             TIMESTAMPTZARRAYOID, gsql_timestamp_array);
   CheckType(types::PgDateArrayMapping(), "_date", DATEARRAYOID,
             gsql_date_array);
+  CheckType(types::PgIntervalArrayMapping(), "_interval", INTERVALARRAYOID,
+            gsql_interval_array);
 }
 
 // GetTypes is only used by the RQG and will return the mapped ZetaSQL types.
@@ -471,14 +477,18 @@ TEST_F(EngineSystemCatalogTest, GetSetReturningFunctionsWithoutSetOid) {
   // Add a function.
   absl::Status actual_status =
       catalog->AddGenerateSeriesFunction(/*set_oid=*/false);
-  EXPECT_THAT(actual_status, StatusIs(absl::StatusCode::kUnimplemented,
-                                      HasSubstr("No Postgres proc oid found")));
-  EXPECT_THAT(
-      actual_status,
-      StatusIs(
-          absl::StatusCode::kUnimplemented,
-          HasSubstr("(this function is a set returning function, "
-                    "which requires an explicit proc OID in the mapping)")));
+
+  absl::flat_hash_set<const zetasql::Function*> functions;
+  ZETASQL_ASSERT_OK(catalog->GetSetReturningFunctions(&functions));
+
+  // Collect all the function names.
+  absl::flat_hash_set<absl::string_view> function_names;
+  for (const zetasql::Function* function : functions) {
+    function_names.insert(function->Name());
+  }
+
+  // Check the expected set of function names.
+  EXPECT_THAT(function_names, UnorderedElementsAre("generate_array"));
 }
 
 TEST_F(EngineSystemCatalogTest, ReverseFunctionSignatureLookup) {

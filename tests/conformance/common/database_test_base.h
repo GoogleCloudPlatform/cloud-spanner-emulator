@@ -36,6 +36,7 @@
 #include "absl/time/time.h"
 #include "google/cloud/spanner/admin/database_admin_client.h"
 #include "google/cloud/spanner/client.h"
+#include "google/cloud/spanner/commit_result.h"
 #include "google/cloud/spanner/keys.h"
 #include "google/cloud/spanner/mutations.h"
 #include "google/cloud/spanner/partition_options.h"
@@ -636,6 +637,10 @@ class DatabaseTest : public ::testing::Test {
   // Executes BatchDml within the given transaction.
   absl::StatusOr<BatchDmlResult> BatchDmlTransaction(
       Transaction txn, const std::vector<SqlStatement>& sql_statements);
+
+  // Executes BatchWrite with the given mutations.
+  cloud::spanner::BatchedCommitResultStream BatchWrite(
+      const std::vector<Mutations>& mutations);
 
   // Rollback the given transaction.
   absl::Status Rollback(Transaction txn);

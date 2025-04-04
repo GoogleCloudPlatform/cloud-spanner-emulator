@@ -61,7 +61,7 @@ class CatalogAdapter {
   // TODO: find a safe method to assign oids.
   static constexpr Oid kOidCounterStart = UINT_MAX;
   // Oids should be in the range for normal objects, see
-  // spangres/src/include/access/transam.h
+  // spangres_src/src/include/access/transam.h
   static constexpr Oid kOidCounterEnd = 16384;
 
   // A factory method to create a `CatalogAdapter` object and let callers own
@@ -87,7 +87,7 @@ class CatalogAdapter {
   // TODO: Support (static) search path.
   //
   // Returns error if the next oid to be generated falls out of the range for
-  // normal objects (see spangres/src/include/access/transam.h for more
+  // normal objects (see spangres_src/src/include/access/transam.h for more
   // details on Oid ranges).
   absl::StatusOr<Oid> GetOrGenerateOidFromTableName(
       const TableName& table_name);

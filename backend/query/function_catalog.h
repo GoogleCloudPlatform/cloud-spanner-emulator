@@ -67,7 +67,7 @@ class FunctionCatalog {
   void AddMlFunctions();
   void AddSearchFunctions(zetasql::TypeFactory* type_factory);
 
-  void AddSpannerPGFunctions(zetasql::TypeFactory* type_factory);
+  void AddSpannerPGFunctions();
   void AddFunctionAliases();
 
   std::unique_ptr<zetasql::Function> GetInternalSequenceStateFunction(

@@ -17,6 +17,7 @@
 #include "backend/query/search/search_function_catalog.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -24,6 +25,7 @@
 #include "zetasql/public/function.h"
 #include "zetasql/public/function.pb.h"
 #include "zetasql/public/function_signature.h"
+#include "zetasql/public/json_value.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
@@ -46,6 +48,8 @@
 #include "backend/query/search/snippet_evaluator.h"
 #include "backend/query/search/substring_tokenizer.h"
 #include "backend/query/search/tokenlist_concat.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -55,6 +59,10 @@ namespace query {
 namespace search {
 
 namespace {
+
+using postgres_translator::spangres::datatypes::CreatePgJsonbValue;
+using postgres_translator::spangres::datatypes::GetPgJsonbType;
+
 // Function name to tokenize text. The function is used to define generated
 // TOKENLIST column used for full text search.
 constexpr char kTokenizeFullTextFunctionName[] = "tokenize_fulltext";
@@ -203,33 +211,37 @@ std::unique_ptr<zetasql::Function> TokenizeNumberFunction(
                                                     double_type};
 
   std::vector<zetasql::FunctionSignature> signatures;
-  for (auto type : numeric_types) {
-    const zetasql::FunctionArgumentTypeList tokenize_number_args = {
-        {string_type, GetNamedOptionalArgTypeOptions("comparison_type")},
-        {string_type, GetNamedOptionalArgTypeOptions("algorithm")},
-        {type, GetNamedOptionalArgTypeOptions("min")},
-        {type, GetNamedOptionalArgTypeOptions("max")},
-        {type, GetNamedOptionalArgTypeOptions("granularity")},
-        {int64_type, GetNamedOptionalArgTypeOptions("tree_base")},
-        {int64_type, GetNamedOptionalArgTypeOptions("precision")}};
+  for (auto& precision_name : {"precision", "ieee_precision"}) {
+    for (auto type : numeric_types) {
+      const zetasql::FunctionArgumentTypeList tokenize_number_args = {
+          {string_type, GetNamedOptionalArgTypeOptions("comparison_type")},
+          {string_type, GetNamedOptionalArgTypeOptions("algorithm")},
+          {type, GetNamedOptionalArgTypeOptions("min")},
+          {type, GetNamedOptionalArgTypeOptions("max")},
+          {type, GetNamedOptionalArgTypeOptions("granularity")},
+          {int64_type, GetNamedOptionalArgTypeOptions("tree_base")},
+          {int64_type, GetNamedOptionalArgTypeOptions(precision_name)}};
 
-    zetasql::FunctionArgumentTypeList num_arg_type_list = {
-        {type, GetRequiredArgumentTypeOptions("value", false)}};
-    num_arg_type_list.insert(num_arg_type_list.end(),
-                             tokenize_number_args.begin(),
-                             tokenize_number_args.end());
-    signatures.push_back(zetasql::FunctionSignature{
-        tokenlist_type, num_arg_type_list, nullptr});
-
-    const zetasql::ArrayType* array_type;
-    if (type_factory->MakeArrayType(type, &array_type).ok()) {
-      zetasql::FunctionArgumentTypeList array_arg_type_list = {
-          {array_type, GetRequiredArgumentTypeOptions("value", false)}};
-      array_arg_type_list.insert(array_arg_type_list.end(),
-                                 tokenize_number_args.begin(),
-                                 tokenize_number_args.end());
+      zetasql::FunctionArgumentTypeList num_arg_type_list = {
+          {type, GetRequiredArgumentTypeOptions("value", false)}};
+      num_arg_type_list.insert(num_arg_type_list.end(),
+                               tokenize_number_args.begin(),
+                               tokenize_number_args.end());
       signatures.push_back(zetasql::FunctionSignature{
-          tokenlist_type, array_arg_type_list, nullptr});
+          tokenlist_type, num_arg_type_list, nullptr});
+
+      const zetasql::ArrayType* array_type;
+      if (type_factory->MakeArrayType(type, &array_type).ok()) {
+        zetasql::FunctionArgumentTypeList array_arg_type_list = {
+            {array_type, GetRequiredArgumentTypeOptions("value", false)}};
+        array_arg_type_list.insert(array_arg_type_list.end(),
+                                   tokenize_number_args.begin(),
+                                   tokenize_number_args.end());
+        zetasql::FunctionSignature signature{tokenlist_type,
+                                               array_arg_type_list, nullptr};
+        signatures.push_back(zetasql::FunctionSignature{
+            tokenlist_type, array_arg_type_list, nullptr});
+      }
     }
   }
 
@@ -529,18 +541,41 @@ std::unique_ptr<zetasql::Function> ScoreFunction(
 
 absl::StatusOr<zetasql::Value> EvalSnippet(
     absl::Span<const zetasql::Value> args) {
-  return SnippetEvaluator::Evaluate(args);
+  auto snippet_value = SnippetEvaluator::Evaluate(args);
+  if (!snippet_value.ok()) {
+    return snippet_value.status();
+  }
+  std::optional<std::string> snippet = snippet_value.value();
+  if (!snippet.has_value()) {
+    return zetasql::Value::NullJson();
+  }
+  ZETASQL_ASSIGN_OR_RETURN(auto json_value,
+                   zetasql::JSONValue::ParseJSONString(snippet.value()));
+  return zetasql::Value::Json(std::move(json_value));
+}
+
+absl::StatusOr<zetasql::Value> EvalSnippetPG(
+    absl::Span<const zetasql::Value> args) {
+  auto snippet_value = SnippetEvaluator::Evaluate(args);
+  if (!snippet_value.ok()) {
+    return snippet_value.status();
+  }
+  std::optional<std::string> snippet = snippet_value.value();
+  if (!snippet.has_value()) {
+    return zetasql::Value::Null(GetPgJsonbType());
+  }
+  return CreatePgJsonbValue(snippet.value());
 }
 
 std::unique_ptr<zetasql::Function> SnippetFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
+    zetasql::TypeFactory* type_factory, const std::string& catalog_name,
+    database_api::DatabaseDialect dialect) {
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(zetasql::FunctionEvaluator(EvalSnippet));
-
   const zetasql::Type* string_type = type_factory->get_string();
   const zetasql::Type* bool_type = type_factory->get_bool();
   const zetasql::Type* int64_type = type_factory->get_int64();
   const zetasql::Type* json_type = type_factory->get_json();
+  auto pg_jsonb = postgres_translator::spangres::datatypes::GetPgJsonbType();
 
   // Signature: SNIPPET(string value,
   //                    string query,
@@ -549,6 +584,27 @@ std::unique_ptr<zetasql::Function> SnippetFunction(
   //                    int64_t max_snippet_width = 160,
   //                    int64_t max_snippets = 3,
   //                    string content_type = "text/html")
+
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    function_options.set_evaluator(zetasql::FunctionEvaluator(EvalSnippetPG));
+    return std::make_unique<zetasql::Function>(
+        kSnippetFunctionName, catalog_name, zetasql::Function::SCALAR,
+        std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
+            pg_jsonb,
+            {{string_type, GetRequiredArgumentTypeOptions("value", false)},
+             {string_type, GetRequiredArgumentTypeOptions("query")},
+             {bool_type, GetNamedOptionalArgTypeOptions("enhance_query")},
+             {string_type, GetNamedOptionalArgTypeOptions("language_tag")},
+             {int64_type,
+              GetNamedOptionalArgTypeOptions("max_snippet_width", false)},
+             {int64_type,
+              GetNamedOptionalArgTypeOptions("max_snippets", false)},
+             {string_type, GetNamedOptionalArgTypeOptions("content_type")}},
+            nullptr}},
+        function_options);
+  }
+
+  function_options.set_evaluator(zetasql::FunctionEvaluator(EvalSnippet));
   return std::make_unique<zetasql::Function>(
       kSnippetFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
@@ -691,7 +747,8 @@ std::unique_ptr<zetasql::Function> ScoreNgramsFunction(
 
 absl::flat_hash_map<std::string, std::unique_ptr<zetasql::Function>>
 GetSearchFunctions(zetasql::TypeFactory* type_factory,
-                   const std::string& catalog_name) {
+                   const std::string& catalog_name,
+                   database_api::DatabaseDialect dialect) {
   absl::flat_hash_map<std::string, std::unique_ptr<zetasql::Function>>
       function_map;
   auto token_func = TokenFunction(type_factory, catalog_name);
@@ -725,7 +782,7 @@ GetSearchFunctions(zetasql::TypeFactory* type_factory,
   auto score_func = ScoreFunction(type_factory, catalog_name);
   function_map[score_func->Name()] = std::move(score_func);
 
-  auto snippet_func = SnippetFunction(type_factory, catalog_name);
+  auto snippet_func = SnippetFunction(type_factory, catalog_name, dialect);
   function_map[snippet_func->Name()] = std::move(snippet_func);
 
   auto tokenize_ngrams_func =

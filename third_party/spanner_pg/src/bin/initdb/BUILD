@@ -42,7 +42,7 @@ package(
     ],
 )
 
-licenses(["notice"])
+licenses(["restricted"])
 
 # TODO: fix linker errors for initdb
 # cc_binary(

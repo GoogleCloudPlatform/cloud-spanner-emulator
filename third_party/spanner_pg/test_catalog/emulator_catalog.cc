@@ -140,6 +140,7 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
   //       numeric_value PG.NUMERIC,
   //       jsonb_value PG.JSONB,
   //       float_value FLOAT32,
+  //       tokenlist_value TOKENLIST HIDDEN,
   //       uuid_value UUID,
   //     ) PRIMARY KEY(int64_value)
   //   )",
@@ -181,6 +182,11 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
   std::unique_ptr<const Column> float_value =
       column_builder("float_value", tb.get(), type_factory.get_float()).build();
 
+  std::unique_ptr<const Column> tokenlist_value =
+      column_builder("tokenlist_value", tb.get(), type_factory.get_tokenlist())
+      .set_hidden(true)
+      .build();
+
   std::unique_ptr<const KeyColumn> int64_value_primary =
       KeyColumn::Builder().set_column(int64_value.get()).build();
 
@@ -195,6 +201,7 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
           .add_column(numeric_value.get())
           .add_column(jsonb_value.get())
           .add_column(float_value.get())
+          .add_column(tokenlist_value.get())
           .add_key_column(int64_value_primary.get())
           .build();
   graph->Add(std::move(int64_value));
@@ -207,6 +214,7 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
   graph->Add(std::move(numeric_value));
   graph->Add(std::move(jsonb_value));
   graph->Add(std::move(float_value));
+  graph->Add(std::move(tokenlist_value));
   graph->Add(std::move(int64_value_primary));
   graph->Add(std::move(table));
 }
@@ -226,6 +234,7 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
   //       numeric_array ARRAY<PG.NUMERIC>,
   //       jsonb_array ARRAY<PG.JSONB>,
   //       float_array ARRAY<FLOAT>,
+  //       tokenlist_array ARRAY<TOKENLIST> HIDDEN,
   //     ) PRIMARY KEY(key)
   //   )",
   Table::Builder tb = table_builder("ArrayTypes");
@@ -283,6 +292,13 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
   std::unique_ptr<const Column> float_array =
       column_builder("float_array", tb.get(), float_array_type).build();
 
+  const zetasql::Type* tokenlist_array_type =
+      get_array_type(type_factory, type_factory.get_tokenlist()).value();
+  std::unique_ptr<const Column> tokenlist_array =
+      column_builder("tokenlist_array", tb.get(), tokenlist_array_type)
+          .set_hidden(true)
+          .build();
+
   std::unique_ptr<const KeyColumn> primary_key_constraint =
       KeyColumn::Builder().set_column(key_column.get()).build();
   std::unique_ptr<const Table> table =
@@ -297,6 +313,7 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
           .add_column(numeric_array.get())
           .add_column(jsonb_array.get())
           .add_column(float_array.get())
+          .add_column(tokenlist_array.get())
           .add_key_column(primary_key_constraint.get())
           .build();
   graph->Add(std::move(key_column));
@@ -310,6 +327,7 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
   graph->Add(std::move(numeric_array));
   graph->Add(std::move(jsonb_array));
   graph->Add(std::move(float_array));
+  graph->Add(std::move(tokenlist_array));
   graph->Add(std::move(primary_key_constraint));
   graph->Add(std::move(table));
 }
@@ -557,6 +575,7 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::FEATURE_V_1_4_WITH_EXPRESSION,
       zetasql::FEATURE_V_1_4_ENABLE_FLOAT_DISTANCE_FUNCTIONS,
       zetasql::FEATURE_V_1_4_DOT_PRODUCT,
+      zetasql::FEATURE_INTERVAL_TYPE,
   });
   options.EnableLanguageFeature(zetasql::FEATURE_V_1_3_DML_RETURNING);
   options.SetSupportedStatementKinds({

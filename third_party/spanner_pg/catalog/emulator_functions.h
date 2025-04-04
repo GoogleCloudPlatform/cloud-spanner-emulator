@@ -44,6 +44,7 @@
 #include "zetasql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
+#include "third_party/spanner_pg/catalog/emulator_function_evaluators.h"
 
 namespace postgres_translator {
 
@@ -120,6 +121,13 @@ inline constexpr char kPGJsonbQueryArrayFunctionName[] = "pg.jsonb_query_array";
 inline constexpr char kPGJsonbBuildArrayFunctionName[] = "pg.jsonb_build_array";
 inline constexpr char kPGJsonbBuildObjectFunctionName[] =
     "pg.jsonb_build_object";
+inline constexpr char kPGJsonbDeleteFunctionName[] = "pg.jsonb_delete";
+inline constexpr char kPGJsonbDeletePathFunctionName[] = "pg.jsonb_delete_path";
+inline constexpr char kPGJsonbConcatFunctionName[] = "pg.jsonb_concat";
+inline constexpr char kPGJsonbInsertFunctionName[] = "pg.jsonb_insert";
+inline constexpr char kPGJsonbStripNullsFunctionName[] = "pg.jsonb_strip_nulls";
+inline constexpr char kPGJsonbSetFunctionName[] = "pg.jsonb_set";
+inline constexpr char kPGJsonbSetLaxFunctionName[] = "pg.jsonb_set_lax";
 
 // PG float functions.
 inline constexpr char kPGFloatAddFunctionName[] = "pg.float_add";
@@ -162,12 +170,35 @@ inline constexpr char kPGOidLessThanEqualsFunctionName[] = "pg.oidle";
 inline constexpr char kPGOidGreaterThanFunctionName[] = "pg.oidgt";
 inline constexpr char kPGOidGreaterThanEqualsFunctionName[] = "pg.oidge";
 
+// PG Interval functions.
+inline constexpr char kPGIntervalUnaryMinusFunctionName[] =
+    "pg.interval_unary_minus";
+inline constexpr char kPGIntervalAddFunctionName[] = "pg.interval_add";
+inline constexpr char kPGIntervalSubtractFunctionName[] =
+    "pg.interval_subtract";
+inline constexpr char kPGIntervalMultiplyFunctionName[] =
+    "pg.interval_multiply";
+inline constexpr char kPGIntervalDivideFunctionName[] = "pg.interval_divide";
+inline constexpr char kPGIntervalJustifyHoursFunctionName[] =
+    "pg.justify_hours";
+inline constexpr char kPGIntervalJustifyDaysFunctionName[] = "pg.justify_days";
+inline constexpr char kPGIntervalJustifyIntervalFunctionName[] =
+    "pg.justify_interval";
+inline constexpr char kPGIntervalMakeIntervalFunctionName[] =
+    "pg.make_interval";
+inline constexpr char kPGTimestamptzSubtractTimestamptzFunctionName[] =
+    "pg.timestamptz_subtract_timestamptz";
+inline constexpr char kPGCastToIntervalFunctionName[] = "pg.cast_to_interval";
+inline constexpr char kPGIntervalExtractFunctionName[] = "pg.extract_interval";
+
 using SpannerPGFunctions = std::vector<std::unique_ptr<zetasql::Function>>;
 using SpannerPGTVFs =
     std::vector<std::unique_ptr<zetasql::TableValuedFunction>>;
 
 // Returns Spanner-specific implementations of PG functions.
-SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name);
+SpannerPGFunctions GetSpannerPGFunctions(
+    const std::string& catalog_name,
+    const std::string& time_zone = kDefaultTimeZone);
 
 // Returns Spanner-specific implementations of PG TVFs.
 SpannerPGTVFs GetSpannerPGTVFs(const std::string& catalog_name);
@@ -198,6 +229,12 @@ absl::StatusOr<zetasql::Value> EvalCastOidToInt64(
     absl::Span<const zetasql::Value> args);
 
 absl::StatusOr<zetasql::Value> EvalCastOidToString(
+    absl::Span<const zetasql::Value> args);
+
+absl::StatusOr<zetasql::Value> EvalCastIntervalToString(
+    absl::Span<const zetasql::Value> args);
+
+absl::StatusOr<zetasql::Value> EvalCastStringToInterval(
     absl::Span<const zetasql::Value> args);
 
 }  // namespace postgres_translator

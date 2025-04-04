@@ -85,6 +85,7 @@ const zetasql::Type* gsql_float = zetasql::types::FloatType();
 const zetasql::Type* gsql_string = zetasql::types::StringType();
 const zetasql::Type* gsql_date = zetasql::types::DateType();
 const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
+const zetasql::Type* gsql_interval = zetasql::types::IntervalType();
 const zetasql::Type* gsql_int64_array = zetasql::types::Int64ArrayType();
 const zetasql::Type* gsql_string_array = zetasql::types::StringArrayType();
 const zetasql::Type* gsql_bool_array = zetasql::types::BoolArrayType();
@@ -94,10 +95,13 @@ const zetasql::Type* gsql_bytes_array = zetasql::types::BytesArrayType();
 const zetasql::Type* gsql_date_array = zetasql::types::DateArrayType();
 const zetasql::Type* gsql_timestamp_array =
     zetasql::types::TimestampArrayType();
+const zetasql::Type* gsql_interval_array =
+    zetasql::types::IntervalArrayType();
 
 static zetasql::LanguageOptions GetLanguageOptions() {
   zetasql::LanguageOptions options;
   options.set_product_mode(zetasql::PRODUCT_EXTERNAL);
+  options.EnableLanguageFeature(zetasql::FEATURE_INTERVAL_TYPE);
   return options;
 }
 
@@ -214,11 +218,13 @@ TEST_F(SpangresSystemCatalogTest, GetTypes) {
   std::vector<const zetasql::Type*> expected_types{
       gsql_bool, gsql_int64, gsql_float, gsql_double, gsql_string, gsql_bytes,
       gsql_date, gsql_timestamp,
+      gsql_interval,
       types::PgNumericMapping()->mapped_type(),
       types::PgJsonbMapping()->mapped_type(),
       types::PgOidMapping()->mapped_type(), gsql_bool_array, gsql_int64_array,
       gsql_float_array, gsql_double_array, gsql_string_array, gsql_bytes_array,
       gsql_date_array, gsql_timestamp_array,
+      gsql_interval_array,
       GetPgNumericArrayType(), GetPgJsonbArrayType(), GetPgOidArrayType()};
 
   EXPECT_THAT(types, UnorderedPointwise(TypeEquals(), expected_types));
@@ -504,7 +510,8 @@ TEST_F(SpangresSystemCatalogTest, ArrayCatFunctions) {
       zetasql::types::BytesArrayType(),
       zetasql::types::TimestampArrayType(),
       types::PgNumericArrayMapping()->mapped_type(),
-      zetasql::types::DateArrayType()};
+      zetasql::types::DateArrayType(),
+      zetasql::types::IntervalArrayType()};
 
   for (const zetasql::Type* array_type : array_types) {
     std::vector<zetasql::InputArgumentType> input_types{
@@ -670,14 +677,15 @@ TEST_F(SpangresSystemCatalogTest, NanOrderingFunctionsEnabled) {
 }
 
 static void AssertPGFunctionIsRegistered(
-    absl::string_view pg_function_name, absl::string_view mapped_function_name,
+    absl::string_view nspace, absl::string_view pg_function_name,
+    absl::string_view mapped_function_name,
     absl::Span<const Oid> oid_argument_types,
     std::vector<zetasql::InputArgumentType> gsql_argument_types) {
   EngineSystemCatalog* catalog = GetSpangresTestSystemCatalog();
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(Oid function_oid,
                        PgBootstrapCatalog::Default()->GetProcOid(
-                           "pg_catalog", pg_function_name, oid_argument_types));
+                           nspace, pg_function_name, oid_argument_types));
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       FunctionAndSignature mapped_function_and_signature,
       catalog->GetFunctionAndSignature(function_oid, gsql_argument_types,
@@ -685,6 +693,15 @@ static void AssertPGFunctionIsRegistered(
   EXPECT_EQ(mapped_function_and_signature.function()->FullName(
                 /*include_group=*/false),
             mapped_function_name);
+}
+
+static void AssertPGFunctionIsRegistered(
+    absl::string_view pg_function_name, absl::string_view mapped_function_name,
+    absl::Span<const Oid> oid_argument_types,
+    std::vector<zetasql::InputArgumentType> gsql_argument_types) {
+  AssertPGFunctionIsRegistered("pg_catalog", pg_function_name,
+                               mapped_function_name, oid_argument_types,
+                               gsql_argument_types);
 }
 
 TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
@@ -919,6 +936,85 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
   AssertPGFunctionIsRegistered("int8pl", "$add", {INT8OID, INT8OID},
                                {zetasql::InputArgumentType(gsql_int64),
                                 zetasql::InputArgumentType(gsql_int64)});
+}
+
+TEST_F(SpangresSystemCatalogTest, IntervalFunctions) {
+  const zetasql::Type* gsql_interval = zetasql::types::IntervalType();
+  AssertPGFunctionIsRegistered("interval_eq", "$equal",
+                               {INTERVALOID, INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_interval),
+                                zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("interval_ne", "$not_equal",
+                               {INTERVALOID, INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_interval),
+                                zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("interval_lt", "$less",
+                               {INTERVALOID, INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_interval),
+                                zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("interval_le", "$less_or_equal",
+                               {INTERVALOID, INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_interval),
+                                zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("interval_gt", "$greater",
+                               {INTERVALOID, INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_interval),
+                                zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("interval_ge", "$greater_or_equal",
+                               {INTERVALOID, INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_interval),
+                                zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("interval_pl", "pg.interval_add",
+                               {INTERVALOID, INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_interval),
+                                zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("interval_mi", "pg.interval_subtract",
+                               {INTERVALOID, INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_interval),
+                                zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("interval_mul", "pg.interval_multiply",
+                               {INTERVALOID, FLOAT8OID},
+                               {zetasql::InputArgumentType(gsql_interval),
+                                zetasql::InputArgumentType(gsql_double)});
+  AssertPGFunctionIsRegistered("interval_div", "pg.interval_divide",
+                               {INTERVALOID, FLOAT8OID},
+                               {zetasql::InputArgumentType(gsql_interval),
+                                zetasql::InputArgumentType(gsql_double)});
+  AssertPGFunctionIsRegistered("justify_interval", "pg.justify_interval",
+                               {INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("justify_hours", "pg.justify_hours",
+                               {INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("justify_days", "pg.justify_days", {INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("timestamptz_pl_interval", "pg.timestamptz_add",
+                               {TIMESTAMPTZOID, INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_timestamp),
+                                zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("timestamptz_mi_interval",
+                               "pg.timestamptz_subtract",
+                               {TIMESTAMPTZOID, INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_timestamp),
+                                zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("extract", "pg.extract_interval",
+                               {TEXTOID, INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_string),
+                                zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("to_char", "pg.to_char", {INTERVALOID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_interval),
+                                zetasql::InputArgumentType(gsql_string)});
+  AssertPGFunctionIsRegistered("avg", "avg", {INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("sum", "sum", {INTERVALOID},
+                               {zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("count", "count", {ANYOID},
+                               {zetasql::InputArgumentType(gsql_interval)});
+  AssertPGFunctionIsRegistered("timestamptz_mi",
+                               "pg.timestamptz_subtract_timestamptz",
+                               {TIMESTAMPTZOID, TIMESTAMPTZOID},
+                               {zetasql::InputArgumentType(gsql_timestamp),
+                                zetasql::InputArgumentType(gsql_timestamp)});
 }
 
 }  // namespace

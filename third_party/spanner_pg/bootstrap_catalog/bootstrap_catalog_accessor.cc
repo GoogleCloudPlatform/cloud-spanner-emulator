@@ -126,4 +126,16 @@ absl::StatusOr<PgProcData> GetPgProcDataFromBootstrap(
   return proc_data;
 }
 
+absl::StatusOr<std::vector<PgProcData>> GetPgProcDataFromBootstrap(
+    const PgBootstrapCatalog* catalog, absl::string_view proc_name) {
+  ZETASQL_ASSIGN_OR_RETURN(auto procs, catalog->GetProcsByName(proc_name));
+  std::vector<PgProcData> procs_data;
+  for (const auto& proc : procs) {
+    ZETASQL_ASSIGN_OR_RETURN(auto proc_data,
+                     GetPgProcDataFromBootstrap(catalog, proc->oid));
+    procs_data.push_back(proc_data);
+  }
+  return procs_data;
+}
+
 }  // namespace postgres_translator

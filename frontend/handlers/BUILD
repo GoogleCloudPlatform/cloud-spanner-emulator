@@ -268,6 +268,47 @@ cc_test(
 )
 
 cc_library(
+    name = "batch",
+    srcs = ["batch.cc"],
+    deps = [
+        ":change_streams",
+        "//backend/access:write",
+        "//backend/schema/catalog:schema",
+        "//frontend/common:protos",
+        "//frontend/converters:mutations",
+        "//frontend/converters:time",
+        "//frontend/entities:session",
+        "//frontend/entities:transaction",
+        "//frontend/proto:partition_token_cc_proto",
+        "//frontend/server:handler",
+        "//frontend/server:request_context",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/time",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_protobuf//:cc_wkt_protos",
+    ],
+    alwayslink = 1,
+)
+
+cc_test(
+    name = "batch_test",
+    srcs = ["batch_test.cc"],
+    deps = [
+        ":batch",
+        "//tests/common:proto_matchers",
+        "//tests/common:test_env",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
+        "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_library(
     name = "reads",
     srcs = ["reads.cc"],
     deps = [
@@ -376,7 +417,6 @@ cc_test(
     deps = [
         ":transactions",
         "//backend/transaction:read_only_transaction",
-        "//backend/transaction:read_write_transaction",
         "//common:errors",
         "//frontend/common:uris",
         "//frontend/converters:mutations",
@@ -466,6 +506,7 @@ cc_test(
 cc_library(
     name = "handlers",
     deps = [
+        ":batch",
         ":databases",
         ":instances",
         ":operations",

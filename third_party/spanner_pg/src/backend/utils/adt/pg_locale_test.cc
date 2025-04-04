@@ -19,7 +19,7 @@ using ::testing::Eq;
 using ::testing::IsNull;
 using ::testing::StrEq;
 
-TEST(PgLocaleShimTest, ReturnsEnUsLocaleMonetaryAndNumericSymbols) {
+TEST(PgLocaleTest, ReturnsEnUsLocaleMonetaryAndNumericSymbols) {
   struct lconv* locale = PGLC_localeconv();
   EXPECT_THAT(locale->decimal_point, StrEq("."));
   EXPECT_THAT(locale->thousands_sep, StrEq(","));
@@ -41,7 +41,7 @@ TEST(PgLocaleShimTest, ReturnsEnUsLocaleMonetaryAndNumericSymbols) {
   EXPECT_THAT(locale->n_sign_posn, Eq(1));
 }
 
-TEST(PgLocaleShimTest, RestunsEnUsLocaleTimeDays) {
+TEST(PgLocaleTest, RestunsEnUsLocaleTimeDays) {
   std::vector<std::string> expected_abbrev_days = {"Sun", "Mon", "Tue", "Wed",
                                                    "Thu", "Fri", "Sat"};
   std::vector<std::string> expected_full_days = {
@@ -73,7 +73,6 @@ TEST(PgLocaleShimTest, RestunsEnUsLocaleTimeDays) {
 }  // namespace
 
 int main(int argc, char** argv) {
-  testing::InitGoogleTest(&argc, argv);
-
+  testing::InitGUnit(&argc, &argv);
   return RUN_ALL_TESTS();
 }

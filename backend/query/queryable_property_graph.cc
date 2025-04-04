@@ -35,6 +35,7 @@
 #include "absl/types/span.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/schema/catalog/property_graph.h"
+#include "common/constants.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -74,7 +75,8 @@ QueryableGraphPropertyDeclaration::QueryableGraphPropertyDeclaration(
     : property_graph_(property_graph),
       wrapped_property_declaration_(wrapped_property_declaration) {
   const zetasql::Type* type;
-  zetasql::AnalyzerOptions analyzer_options = MakeGoogleSqlAnalyzerOptions();
+  zetasql::AnalyzerOptions analyzer_options =
+      MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
   absl::Status analyze_status =
       zetasql::AnalyzeType(wrapped_property_declaration->type,
                              analyzer_options, catalog, type_factory, &type);
@@ -97,7 +99,8 @@ QueryableGraphPropertyDefinition::QueryableGraphPropertyDefinition(
         PropertyDefinition* wrapped_property_definition)
     : property_declaration_(property_declaration),
       wrapped_property_definition_(wrapped_property_definition) {
-  zetasql::AnalyzerOptions analyzer_options = MakeGoogleSqlAnalyzerOptions();
+  zetasql::AnalyzerOptions analyzer_options =
+      MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
   // Setup a callback for ZetaSQL's resolver to be able to map the property
   // definition expression back to existing columns in the catalog.
   zetasql::AnalyzerOptions local_options = analyzer_options;

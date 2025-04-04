@@ -115,6 +115,11 @@ absl::Status TypeFromProto(
       return absl::OkStatus();
     }
 
+    case google::spanner::v1::TypeCode::INTERVAL: {
+      *type = factory->get_interval();
+      return absl::OkStatus();
+    }
+
     case google::spanner::v1::TypeCode::ARRAY: {
       const zetasql::Type* element_type;
       if (!type_pb.has_array_element_type()) {
@@ -247,6 +252,11 @@ absl::Status TypeToProto(const zetasql::Type* type,
 
     case zetasql::TYPE_JSON: {
       type_pb->set_code(google::spanner::v1::TypeCode::JSON);
+      return absl::OkStatus();
+    }
+
+    case zetasql::TYPE_INTERVAL: {
+      type_pb->set_code(google::spanner::v1::TypeCode::INTERVAL);
       return absl::OkStatus();
     }
 

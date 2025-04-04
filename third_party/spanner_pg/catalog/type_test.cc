@@ -49,10 +49,10 @@
 #include "absl/time/time.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
-#include "third_party/spanner_pg/src/backend/catalog/pg_type_d.h"
 #include "third_party/spanner_pg/util/postgres.h"
 #include "third_party/spanner_pg/util/uuid_conversion.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
+#include "third_party/spanner_pg/src/backend/catalog/pg_type_d.h"
 #include "zetasql/base/status_macros.h"
 
 namespace postgres_translator {

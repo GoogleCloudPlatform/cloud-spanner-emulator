@@ -70,6 +70,7 @@ cc_binary(
         ":errors_cc_proto",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/log",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
@@ -105,6 +106,7 @@ cc_library(
     deps = [
         ":errors_cc_proto",
         "//third_party/spanner_pg/postgres_includes",
+        "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",
         "@com_google_zetasql//zetasql/base:logging",
     ],
@@ -116,6 +118,7 @@ cc_test(
     deps = [
         ":errors",
         "//third_party/spanner_pg/postgres_includes",
+        "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
@@ -171,6 +174,7 @@ cc_test(
         "//third_party/spanner_pg/util:valid_memory_context_fixture",
         "@com_google_absl//absl/log:scoped_mock_log",
         "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],

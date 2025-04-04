@@ -239,6 +239,71 @@ ALTER DATABASE db SET OPTIONS (default_sequence_kind = 1)
                        HasSubstr("Unexpected value for option")));
 }
 
+TEST(ParseAlterDatabase, SetDefaultTimeZoneDisabled) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_default_time_zone = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  absl::string_view ddl = R"(
+ALTER DATABASE db SET OPTIONS (default_time_zone = 'UTC')
+  )";
+  EXPECT_THAT(ParseDDLStatement(ddl),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Option: default_time_zone is unknown")));
+}
+
+TEST(ParseAlterDatabase, SetDefaultTimeZone) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_default_time_zone = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  absl::string_view ddl = R"(
+ALTER DATABASE db SET OPTIONS (default_time_zone = 'UTC')
+  )";
+  DDLStatement statement;
+  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  EXPECT_THAT(statement, test::EqualsProto(
+                             R"pb(alter_database {
+                                    set_options {
+                                      options {
+                                        option_name: "default_time_zone"
+                                        string_value: "UTC"
+                                      }
+                                    }
+                                    db_name: "db"
+                                  })pb"));
+}
+
+TEST(ParseAlterDatabase, SetDefaultTimeZoneNull) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_default_time_zone = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  absl::string_view ddl = R"(
+ALTER DATABASE db SET OPTIONS (default_time_zone = NULL)
+  )";
+  DDLStatement statement;
+  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  EXPECT_THAT(
+      statement,
+      test::EqualsProto(
+          R"pb(alter_database {
+                 set_options {
+                   options { option_name: "default_time_zone" null_value: true }
+                 }
+                 db_name: "db"
+               })pb"));
+}
+
+TEST(ParseAlterDatabase, InvalidDefaultTimeZone) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_default_time_zone = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  absl::string_view ddl = R"(
+ALTER DATABASE db SET OPTIONS (default_time_zone = 1)
+  )";
+  EXPECT_THAT(ParseDDLStatement(ddl),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Unexpected value for option")));
+}
+
 TEST(ParseAlterDatabase, Invalid_EmptyString) {
   absl::string_view ddl = R"(
     ALTER DATABASE db SET OPTIONS ( default_leader = '' )
@@ -4510,7 +4575,7 @@ TEST(ParseDropSearchIndex, CanParseDropSearchIndexBasic) {
             DROP SEARCH INDEX SearchIndex
               )sql"),
               IsOkAndHolds(test::EqualsProto(
-                  "drop_index { index_name: 'SearchIndex' }")));
+                  "drop_search_index { index_name: 'SearchIndex' }")));
 }
 
 TEST(ParseDropSearchIndex, CannotParseDropSearchIndexMissingIndexName) {
@@ -7507,6 +7572,67 @@ TEST(ParseDropPropertyGraph, ParseDropIfExistsPropertyGraph) {
                   name: "graph"
                   existence_modifier: IF_EXISTS
                 })pb")));
+}
+
+TEST(ParseCreateTable, CanParseCreateTableWithInterval) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE TABLE T (
+                      K INT64 NOT NULL,
+                      IntervalVal INTERVAL,
+                      IntervalArr ARRAY<INTERVAL>,
+                      IntervalStruct STRUCT<IntervalVal INTERVAL>
+                    ) PRIMARY KEY (K)
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "T"
+                      column { column_name: "K" type: INT64 not_null: true }
+                      column { column_name: "IntervalVal" type: INTERVAL }
+                      column {
+                        column_name: "IntervalArr"
+                        type: ARRAY
+                        array_subtype { type: INTERVAL }
+                      }
+                      column {
+                        column_name: "IntervalStruct"
+                        type: STRUCT
+                        type_definition {
+                          type: STRUCT
+                          struct_descriptor {
+                            field {
+                              name: "IntervalVal"
+                              type { type: INTERVAL }
+                            }
+                          }
+                        }
+                      }
+                      primary_key { key_name: "K" }
+                    }
+                  )pb")));
+}
+
+TEST(Comments, SupportComments) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE Albums (
+      Id INT64 NOT NULL, /* block
+comment */ Value Int64,
+      Age Int64, -- inline comment
+      Height Int64 # inline comment
+    ) PRIMARY KEY (Id)
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "Albums"
+                      column { column_name: "Id" type: INT64 not_null: true }
+                      column { column_name: "Value" type: INT64 }
+                      column { column_name: "Age" type: INT64 }
+                      column { column_name: "Height" type: INT64 }
+                      primary_key { key_name: "Id" }
+                    }
+                  )pb")));
 }
 
 }  // namespace

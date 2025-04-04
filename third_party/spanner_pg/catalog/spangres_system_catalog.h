@@ -59,10 +59,10 @@ class SpangresSystemCatalog : public EngineSystemCatalog {
       std::unique_ptr<EngineBuiltinFunctionCatalog> builtin_function_catalog,
       const zetasql::LanguageOptions& language_options);
 
-  // Test-only method to reset the EngineSystemCatalog. This is useful, for
-  // example, when you expect the catalog to initialise differently for
-  // different tests based on flag values.
-  static void ResetEngineSystemCatalogForTest();
+  // Reset the EngineSystemCatalog. The PG evaluators are defined with a time
+  // zone. When we change the default time zone for a database, we need to reset
+  // the EngineSystemCatalog to pick up the new time zone.
+  static void ResetEngineSystemCatalog();
 
   const PostgresTypeMapping* GetType(const std::string& name) const override;
 

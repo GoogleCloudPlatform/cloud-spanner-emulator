@@ -163,6 +163,13 @@ extern TM_Result heap_lock_tuple(Relation relation, HeapTuple tuple,
 								 bool follow_update,
 								 Buffer *buffer, struct TM_FailureData *tmfd);
 
+extern bool heap_inplace_lock(Relation relation, HeapTuple oldtup_ptr,
+                              Buffer buffer, void (*release_callback)(void *),
+                              void *arg);
+extern void heap_inplace_update_and_unlock(Relation relation, HeapTuple oldtup,
+                                           HeapTuple tuple, Buffer buffer);
+extern void heap_inplace_unlock(Relation relation, HeapTuple oldtup,
+                                Buffer buffer);
 extern void heap_inplace_update(Relation relation, HeapTuple tuple);
 extern bool heap_freeze_tuple(HeapTupleHeader tuple,
 							  TransactionId relfrozenxid, TransactionId relminmxid,
@@ -184,12 +191,12 @@ extern TransactionId heap_index_delete_tuples(Relation rel,
 /* in heap/pruneheap.c */
 struct GlobalVisState;
 extern void heap_page_prune_opt(Relation relation, Buffer buffer);
-extern int	heap_page_prune(Relation relation, Buffer buffer,
-							struct GlobalVisState *vistest,
-							TransactionId old_snap_xmin,
-							TimestampTz old_snap_ts_ts,
-							int *nnewlpdead,
-							OffsetNumber *off_loc);
+extern int heap_page_prune(Relation relation, Buffer buffer,
+                           TransactionId oldest_xmin,
+                           struct GlobalVisState *vistest,
+                           TransactionId old_snap_xmin,
+                           TimestampTz old_snap_ts_ts, int *nnewlpdead,
+                           OffsetNumber *off_loc);
 extern void heap_page_prune_execute(Buffer buffer,
 									OffsetNumber *redirected, int nredirected,
 									OffsetNumber *nowdead, int ndead,

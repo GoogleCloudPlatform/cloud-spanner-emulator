@@ -340,4 +340,214 @@ absl::StatusOr<absl::Cord> PgDateExtract(absl::string_view field,
   return absl::Cord(normalized_numeric);
 }
 
+absl::StatusOr<zetasql::IntervalValue> IntervalFromDatumOr(
+    absl::StatusOr<Datum>& interval_or_error) {
+  // Remaps the pg out of range error message
+  if (interval_or_error.status().code() == absl::StatusCode::kInvalidArgument &&
+      absl::StrContains(interval_or_error.status().message(),
+                        kIntervalOutOfRangeMessage)) {
+    return kInvalidInterval;
+  }
+
+  ZETASQL_ASSIGN_OR_RETURN(Datum pg_interval, interval_or_error);
+  Interval* interval = DatumGetIntervalP(pg_interval);
+
+  absl::StatusOr<zetasql::IntervalValue> gsql_interval =
+      zetasql::IntervalValue::FromMonthsDaysMicros(
+          interval->month, interval->day, interval->time);
+  if (gsql_interval.status().code() == absl::StatusCode::kOutOfRange) {
+    // Remaps the gsql out of range error message to Postgres Interval error
+    // message.
+    return kInvalidInterval;
+  }
+
+  return gsql_interval;
+}
+
+absl::StatusOr<zetasql::IntervalValue> PgRoundIntervalPrecision(
+    const zetasql::IntervalValue& interval) {
+  // Postgres Interval type has microsecond precision, so if the interval has
+  // no nano fractions, we can return it as is.
+  if (ABSL_PREDICT_TRUE(interval.get_nano_fractions() == 0)) {
+    return interval;
+  }
+
+  // `get_nano_fractions()` return values in the range [0, 999].
+  int64_t nano_fractions = interval.get_nano_fractions();
+
+  int64_t micros = interval.get_micros();
+  bool is_negative = micros < 0;
+
+  // Keep the sign of microseconds and nano fractions consistent.
+  if (micros < 0) {
+    micros += 1;
+    nano_fractions -= zetasql::IntervalValue::kNanosInMicro;
+  }
+
+  micros = std::abs(micros);
+  nano_fractions = std::abs(nano_fractions);
+
+  micros =
+      micros +
+      (nano_fractions >= (zetasql::IntervalValue::kNanosInMicro / 2) ? 1 : 0);
+
+  return zetasql::IntervalValue::FromMonthsDaysMicros(
+      interval.get_months(), interval.get_days(),
+      is_negative ? -micros : micros);
+}
+
+absl::StatusOr<Interval> ToPgInterval(
+    const zetasql::IntervalValue& interval) {
+  ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue rounded_interval,
+                   PgRoundIntervalPrecision(interval));
+  return Interval{.time = rounded_interval.get_micros(),
+                  .day = static_cast<int32_t>(interval.get_days()),
+                  .month = static_cast<int32_t>(interval.get_months())};
+}
+
+absl::StatusOr<absl::Time> PgTimestamptzAdd(
+    absl::Time input_time, const zetasql::IntervalValue& interval) {
+  Datum input_timestamptz = AbslTimeToPgTimestamptz(input_time);
+  ZETASQL_ASSIGN_OR_RETURN(Interval pg_interval, ToPgInterval(interval));
+  Datum interval_datum = IntervalPGetDatum(&pg_interval);
+
+  absl::StatusOr<Datum> datum_or_error = CheckedOidFunctionCall2(
+      F_TIMESTAMPTZ_PL_INTERVAL, input_timestamptz, interval_datum);
+
+  return TimestampFromDatumOr(datum_or_error);
+}
+
+absl::StatusOr<absl::Time> PgTimestamptzSubtract(
+    absl::Time input_time, const zetasql::IntervalValue& interval) {
+  Datum input_timestamptz = AbslTimeToPgTimestamptz(input_time);
+  ZETASQL_ASSIGN_OR_RETURN(Interval pg_interval, ToPgInterval(interval));
+  Datum interval_datum = IntervalPGetDatum(&pg_interval);
+
+  absl::StatusOr<Datum> datum_or_error = CheckedOidFunctionCall2(
+      F_TIMESTAMPTZ_MI_INTERVAL, input_timestamptz, interval_datum);
+
+  return TimestampFromDatumOr(datum_or_error);
+}
+
+absl::StatusOr<zetasql::IntervalValue> PgMakeInterval(
+    int64_t years, int64_t months, int64_t weeks, int64_t days, int64_t hours,
+    int64_t minutes, double seconds) {
+  auto convert_to_int32 = [](int64_t value) -> absl::StatusOr<int32_t> {
+    if (value < std::numeric_limits<int32_t>::min() ||
+        value > std::numeric_limits<int32_t>::max()) {
+      return kInvalidInterval;
+    }
+    return static_cast<int32_t>(value);
+  };
+
+  ZETASQL_ASSIGN_OR_RETURN(int32_t years_int32, convert_to_int32(years));
+  ZETASQL_ASSIGN_OR_RETURN(int32_t months_int32, convert_to_int32(months));
+  ZETASQL_ASSIGN_OR_RETURN(int32_t weeks_int32, convert_to_int32(weeks));
+  ZETASQL_ASSIGN_OR_RETURN(int32_t days_int32, convert_to_int32(days));
+  ZETASQL_ASSIGN_OR_RETURN(int32_t hours_int32, convert_to_int32(hours));
+  ZETASQL_ASSIGN_OR_RETURN(int32_t minutes_int32, convert_to_int32(minutes));
+
+  absl::StatusOr<Datum> datum_or_error =
+      postgres_translator::CheckedOidFunctionCall7(
+          F_MAKE_INTERVAL, Int32GetDatum(years_int32),
+          Int32GetDatum(months_int32), Int32GetDatum(weeks_int32),
+          Int32GetDatum(days_int32), Int32GetDatum(hours_int32),
+          Int32GetDatum(minutes_int32), Float8GetDatum(seconds));
+
+  return IntervalFromDatumOr(datum_or_error);
+}
+
+absl::StatusOr<zetasql::IntervalValue> PgIntervalMultiply(
+    const zetasql::IntervalValue& interval, double multiplier) {
+  ZETASQL_ASSIGN_OR_RETURN(Interval pg_interval, ToPgInterval(interval));
+  Datum interval_datum = IntervalPGetDatum(&pg_interval);
+  Datum multiplier_datum = Float8GetDatum(multiplier);
+
+  absl::StatusOr<Datum> datum_or_error =
+      postgres_translator::CheckedOidFunctionCall2(
+          F_INTERVAL_MUL, interval_datum, multiplier_datum);
+
+  return IntervalFromDatumOr(datum_or_error);
+}
+
+absl::StatusOr<zetasql::IntervalValue> PgIntervalDivide(
+    const zetasql::IntervalValue& interval, double divisor) {
+  ZETASQL_ASSIGN_OR_RETURN(Interval pg_interval, ToPgInterval(interval));
+  Datum interval_datum = IntervalPGetDatum(&pg_interval);
+  Datum divisor_datum = Float8GetDatum(divisor);
+
+  absl::StatusOr<Datum> datum_or_error =
+      postgres_translator::CheckedOidFunctionCall2(
+          F_INTERVAL_DIV, interval_datum, divisor_datum);
+
+  return IntervalFromDatumOr(datum_or_error);
+}
+
+absl::StatusOr<absl::Cord> PgIntervalExtract(
+    absl::string_view field, const zetasql::IntervalValue& interval) {
+  ZETASQL_ASSIGN_OR_RETURN(Datum pg_field,
+                   CheckedPgStringToDatum(std::string(field).c_str(), TEXTOID));
+  ZETASQL_ASSIGN_OR_RETURN(Interval pg_interval, ToPgInterval(interval));
+  Datum interval_datum = IntervalPGetDatum(&pg_interval);
+
+  ZETASQL_ASSIGN_OR_RETURN(Datum result,
+                   CheckedOidFunctionCall2(F_EXTRACT_TEXT_INTERVAL, pg_field,
+                                           interval_datum));
+  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_string_result,
+                   CheckedOidFunctionCall1(F_NUMERIC_OUT, result));
+  absl::string_view string_value = DatumGetCString(numeric_string_result);
+
+  ZETASQL_ASSIGN_OR_RETURN(std::string normalized_numeric,
+                   NormalizePgNumeric(string_value));
+  return absl::Cord(normalized_numeric);
+}
+
+absl::StatusOr<zetasql::IntervalValue> PgIntervalIn(
+    absl::string_view interval_string) {
+  ZETASQL_ASSIGN_OR_RETURN(Type interval_type, CheckedPgTypeidType(INTERVALOID));
+  // StringTypeDatum expects the string to be NULL terminated, so the
+  // string_view must be copied into a NULL terminated std::string.
+  absl::StatusOr<Datum> datum_or_error =
+      postgres_translator::CheckedPgStringTypeDatum(
+          interval_type,
+          const_cast<char*>(std::string(interval_string).c_str()),
+          /*atttypmod=*/-1);
+
+  return IntervalFromDatumOr(datum_or_error);
+}
+
+absl::StatusOr<std::string> PgIntervalOut(
+    const zetasql::IntervalValue& interval) {
+  ZETASQL_ASSIGN_OR_RETURN(Interval pg_interval, ToPgInterval(interval));
+  Datum interval_in_datum = IntervalPGetDatum(&pg_interval);
+
+  ZETASQL_ASSIGN_OR_RETURN(Datum interval_out_datum,
+                   postgres_translator::CheckedOidFunctionCall1(
+                       F_INTERVAL_OUT, interval_in_datum));
+
+  return DatumGetCString(interval_out_datum);
+}
+
+absl::StatusOr<std::unique_ptr<std::string>> PgIntervalToChar(
+    const zetasql::IntervalValue& interval, absl::string_view format) {
+  ZETASQL_ASSIGN_OR_RETURN(Interval pg_interval, ToPgInterval(interval));
+  Datum interval_in_datum = IntervalPGetDatum(&pg_interval);
+  ZETASQL_ASSIGN_OR_RETURN(
+      Datum format_in_datum,
+      CheckedPgStringToDatum(std::string(format).c_str(), TEXTOID));
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      Datum formatted_interval_datum,
+      postgres_translator::CheckedNullableOidFunctionCall2(
+          F_TO_CHAR_INTERVAL_TEXT, interval_in_datum, format_in_datum));
+
+  if (formatted_interval_datum == NULL_DATUM) {
+    return nullptr;
+  }
+  ZETASQL_ASSIGN_OR_RETURN(char* formatted_interval,
+                   CheckedPgTextDatumGetCString(formatted_interval_datum));
+
+  return std::make_unique<std::string>(formatted_interval);
+}
+
 }  // namespace postgres_translator::function_evaluators

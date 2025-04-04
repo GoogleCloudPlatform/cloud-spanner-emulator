@@ -27,7 +27,10 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/substitute.h"
 #include "absl/types/span.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
@@ -1044,19 +1047,23 @@ TEST_P(SchemaUpdaterTest, CannotCreateIndexOnTokenListColumn) {
       StatusIs(error::CannotCreateIndexOnColumn("Idx", "col3", "TOKENLIST")));
 }
 
-TEST_P(SchemaUpdaterTest, BasicCreateSearchIndex) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
-                                        R"sql(
-      CREATE TABLE T (
-        col1 INT64 NOT NULL,
-        col2 STRING(MAX),
-        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN
-      ) PRIMARY KEY (col1)
-    )sql",
-                                        R"sql(
-      CREATE SEARCH INDEX Idx ON T(col3)
-    )sql"}));
+TEST_P(SchemaUpdaterTest, BasicCreateDropSearchIndex) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+                                     R"sql(
+        CREATE TABLE T (
+          col1 INT64 NOT NULL,
+          col2 STRING(MAX),
+          col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN
+        ) PRIMARY KEY (col1)
+      )sql",
+                                     R"sql(
+        CREATE SEARCH INDEX Idx ON T(col3)
+      )sql"}));
+  }
 
   auto t = schema->FindTable("T");
   auto col3 = t->FindColumn("col3");
@@ -1068,29 +1075,48 @@ TEST_P(SchemaUpdaterTest, BasicCreateSearchIndex) {
 
   auto idx_data = idx->index_data_table();
   EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col3));
+
+  // Drop index
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
+                                                                       R"sql(
+    DROP SEARCH INDEX Idx
+  )sql"}));
+  EXPECT_EQ(new_schema->FindIndex("Idx"), nullptr);
+
+  // Drop index if exists
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto after_drop_schema,
+                       UpdateSchema(schema.get(), {
+                                                      R"sql(
+    DROP SEARCH INDEX IF EXISTS Idx
+  )sql"}));
+  EXPECT_EQ(new_schema->FindIndex("Idx"), nullptr);
 }
 
 TEST_P(SchemaUpdaterTest, ComplexCreateSearchIndex) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
-                                        R"sql(
-      CREATE TABLE T (
-        col1 INT64 NOT NULL,
-        col2 STRING(MAX),
-        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN,
-        col4 TOKENLIST AS(TOKENIZE_SUBSTRING(col2)) STORED HIDDEN,
-        col5 INT64,
-        col6 FLOAT64,
-        col7 INT64 NOT NULL
-      ) PRIMARY KEY (col1)
-    )sql",
-                                        R"sql(
-      CREATE SEARCH INDEX Idx
-      ON T(col3, col4)
-      STORING (col2, col5)
-      PARTITION BY col1, col6
-      ORDER BY col7
-    )sql"}));
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+                                     R"sql(
+        CREATE TABLE T (
+          col1 INT64 NOT NULL,
+          col2 STRING(MAX),
+          col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN,
+          col4 TOKENLIST AS(TOKENIZE_SUBSTRING(col2)) STORED HIDDEN,
+          col5 INT64,
+          col6 FLOAT64,
+          col7 INT64 NOT NULL
+        ) PRIMARY KEY (col1)
+      )sql",
+                                     R"sql(
+        CREATE SEARCH INDEX Idx
+        ON T(col3, col4)
+        STORING (col2, col5)
+        PARTITION BY col1, col6
+        ORDER BY col7
+      )sql"}));
+  }
 
   auto t = schema->FindTable("T");
   auto col3 = t->FindColumn("col3");
@@ -1146,108 +1172,131 @@ TEST_P(SchemaUpdaterTest, UnableToCreateSearchIndexOnJsonColumn) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateSearchIndexShouldNotStoreKeyColumn) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  EXPECT_THAT(
-      CreateSchema({
-          R"sql(
+  absl::StatusOr<std::unique_ptr<const Schema>> schema;
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  } else {
+    schema = CreateSchema({
+        R"sql(
       CREATE TABLE T (
         col1 INT64 NOT NULL,
         col2 STRING(MAX),
         col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN
       ) PRIMARY KEY (col1)
     )sql",
-          R"sql(
+        R"sql(
       CREATE SEARCH INDEX SearchIndex ON T(col3) STORING(col3)
-    )sql"}),
-      StatusIs(error::IndexRefsKeyAsStoredColumn("SearchIndex", "col3")));
+    )sql"});
+  }
+  EXPECT_THAT(schema, StatusIs(error::IndexRefsKeyAsStoredColumn("SearchIndex",
+                                                                 "col3")));
 }
 
 TEST_P(SchemaUpdaterTest, CreateSearchIndexPartitionByColumnMustExist) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  EXPECT_THAT(
-      CreateSchema({
-          R"sql(
+  absl::StatusOr<std::unique_ptr<const Schema>> schema;
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  } else {
+    schema = CreateSchema({
+        R"sql(
       CREATE TABLE T (
         col1 INT64 NOT NULL,
         col2 STRING(MAX),
         col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN
       ) PRIMARY KEY (col1)
-    )sql",
-          R"sql(
+      )sql",
+        R"sql(
       CREATE SEARCH INDEX SearchIndex ON T(col3) PARTITION BY col4
-    )sql"}),
-      StatusIs(error::IndexRefsNonExistentColumn("SearchIndex", "col4")));
+      )sql"});
+  }
+  EXPECT_THAT(schema, StatusIs(error::IndexRefsNonExistentColumn("SearchIndex",
+                                                                 "col4")));
 }
 
 TEST_P(SchemaUpdaterTest, CreateSearchIndexOrderByColumnMustExist) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  EXPECT_THAT(
-      CreateSchema({
-          R"sql(
+  absl::StatusOr<std::unique_ptr<const Schema>> schema;
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  } else {
+    schema = CreateSchema({
+        R"sql(
       CREATE TABLE T (
         col1 INT64 NOT NULL,
         col2 STRING(MAX),
         col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN
       ) PRIMARY KEY (col1)
-    )sql",
-          R"sql(
+      )sql",
+        R"sql(
       CREATE SEARCH INDEX SearchIndex ON T(col3) ORDER BY col4
-    )sql"}),
-      StatusIs(error::IndexRefsNonExistentColumn("SearchIndex", "col4")));
+      )sql"});
+  }
+  EXPECT_THAT(schema, StatusIs(error::IndexRefsNonExistentColumn("SearchIndex",
+                                                                 "col4")));
 }
 
 TEST_P(SchemaUpdaterTest, CreateSearchIndexPartitionByNotTokenListType) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  EXPECT_THAT(CreateSchema({
-                  R"sql(
+  absl::StatusOr<std::unique_ptr<const Schema>> schema;
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  } else {
+    schema = CreateSchema({
+        R"sql(
       CREATE TABLE T (
         col1 INT64 NOT NULL,
         col2 STRING(MAX),
         col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN,
         col4 INT64
       ) PRIMARY KEY (col1)
-    )sql",
-                  R"sql(
+      )sql",
+        R"sql(
       CREATE SEARCH INDEX SearchIndex ON T(col3) PARTITION BY col3
-    )sql"}),
-              StatusIs(error::SearchIndexNotPartitionByokenListType(
-                  "SearchIndex", "col3")));
+      )sql"});
+  }
+  EXPECT_THAT(schema, StatusIs(error::SearchIndexNotPartitionByokenListType(
+                          "SearchIndex", "col3")));
 }
 
 TEST_P(SchemaUpdaterTest, CreateSearchIndexOrderByMustNotNull) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  EXPECT_THAT(CreateSchema({
-                  R"sql(
+  absl::StatusOr<std::unique_ptr<const Schema>> schema;
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  } else {
+    schema = CreateSchema({
+        R"sql(
       CREATE TABLE T (
         col1 INT64 NOT NULL,
         col2 STRING(MAX),
         col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN,
         col4 INT64
       ) PRIMARY KEY (col1)
-    )sql",
-                  R"sql(
+      )sql",
+        R"sql(
       CREATE SEARCH INDEX SearchIndex ON T(col3) ORDER BY col4
-    )sql"}),
-              StatusIs(error::SearchIndexSortMustBeNotNullError(
-                  "col4", "SearchIndex")));
+      )sql"});
+  }
+  EXPECT_THAT(schema, StatusIs(error::SearchIndexSortMustBeNotNullError(
+                          "col4", "SearchIndex")));
 }
 
 TEST_P(SchemaUpdaterTest, CreateSearchIndexNullFilteredOrderBy) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_EXPECT_OK(CreateSchema({
-      R"sql(
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  } else {
+    ZETASQL_EXPECT_OK(CreateSchema({
+        R"sql(
       CREATE TABLE T (
         col1 INT64 NOT NULL,
         col2 STRING(MAX),
         col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN,
         col4 INT64
       ) PRIMARY KEY (col1)
-    )sql",
-      R"sql(
+      )sql",
+        R"sql(
       CREATE SEARCH INDEX SearchIndex ON T(col3)
       ORDER BY col4
       WHERE col4 IS NOT NULL
-    )sql"}));
+      )sql"}));
+  }
 }
 
 TEST_P(SchemaUpdaterTest, CreateSearchIndexOrderByMustBeIntegerType) {
@@ -1269,28 +1318,50 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexOrderByMustBeIntegerType) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateSearchIndexTokenColumnOrderNotAllowed) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
-                                        R"sql(
+  auto dialect = GetParam();
+  std::string create_table_ddl;
+  std::string update_statement_template;
+  absl::Status expected_error;
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  } else {
+    create_table_ddl = R"sql(
       CREATE TABLE T (
         col1 INT64 NOT NULL,
         col2 STRING(MAX),
         col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN,
         col4 INT64 NOT NULL,
       ) PRIMARY KEY (col1)
-    )sql"}));
+    )sql";
+    update_statement_template = R"sql(
+      CREATE SEARCH INDEX SearchIndex ON T(col3 $0) ORDER BY col4
+    )sql";
+    expected_error =
+        error::SearchIndexTokenlistKeyOrderUnsupported("col3", "SearchIndex");
+  }
 
-  EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
-      CREATE SEARCH INDEX SearchIndex ON T(col3 ASC) ORDER BY col4
-    )sql"}),
-              StatusIs(error::SearchIndexTokenlistKeyOrderUnsupported(
-                  "col3", "SearchIndex")));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto schema,
+      CreateSchema({create_table_ddl},
+                   /*proto_descriptor_bytes=*/"",
+                   /*dialect=*/dialect,
+                   /*use_gsql_to_pg_translation=*/dialect != POSTGRESQL));
 
-  EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
-      CREATE SEARCH INDEX SearchIndex ON T(col3 DESC) ORDER BY col4
-    )sql"}),
-              StatusIs(error::SearchIndexTokenlistKeyOrderUnsupported(
-                  "col3", "SearchIndex")));
+  EXPECT_THAT(
+      UpdateSchema(schema.get(),
+                   {absl::Substitute(update_statement_template, "ASC")},
+                   /*proto_descriptor_bytes=*/"",
+                   /*dialect=*/dialect,
+                   /*use_gsql_to_pg_translation=*/dialect != POSTGRESQL),
+      StatusIs(expected_error));
+
+  EXPECT_THAT(
+      UpdateSchema(schema.get(),
+                   {absl::Substitute(update_statement_template, "DESC")},
+                   /*proto_descriptor_bytes=*/"",
+                   /*dialect=*/dialect,
+                   /*use_gsql_to_pg_translation=*/dialect != POSTGRESQL),
+      StatusIs(expected_error));
 }
 
 TEST_P(SchemaUpdaterTest, CreateVectorIndexTwoLayers) {
@@ -1345,6 +1416,33 @@ TEST_P(SchemaUpdaterTest, CreateVectorIndexTwoLayers) {
 
   auto idx_data3 = idx3->index_data_table();
   EXPECT_THAT(idx_data3->primary_key()[0]->column(), SourceColumnIs(col2));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
+                                                                       R"sql(
+      DROP VECTOR INDEX VectorIndex
+    )sql",
+                                                                       R"sql(
+      DROP VECTOR INDEX VectorIndex2
+    )sql",
+                                                                       R"sql(
+      DROP VECTOR INDEX VectorIndex3
+    )sql"}));
+  EXPECT_EQ(new_schema->FindIndex("VectorIndex"), nullptr);
+  EXPECT_EQ(new_schema->FindIndex("VectorIndex2"), nullptr);
+  EXPECT_EQ(new_schema->FindIndex("VectorIndex3"), nullptr);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema2,
+                       (UpdateSchema(new_schema.get(), {
+                                                           R"sql(
+    CREATE LOCALITY GROUP lg
+    )sql",
+                                                           R"sql(
+    CREATE VECTOR INDEX VectorIndex
+      ON Docs(Embedding) WHERE Embedding IS NOT NULL
+      OPTIONS(distance_type='DOT_PRODUCT', num_leaves=2, locality_group = 'lg')
+    )sql"})));
+  EXPECT_EQ(new_schema2->FindIndex("VectorIndex")->locality_group()->Name(),
+            "lg");
 }
 
 TEST_P(SchemaUpdaterTest, CreateVectorIndexThreelayers) {
@@ -1379,6 +1477,12 @@ TEST_P(SchemaUpdaterTest, CreateVectorIndexThreelayers) {
 
   auto idx_data = idx->index_data_table();
   EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
+                                                                       R"sql(
+      DROP VECTOR INDEX VI
+    )sql"}));
+  EXPECT_EQ(new_schema->FindIndex("VI"), nullptr);
 }
 
 TEST_P(SchemaUpdaterTest, CreateVectorIndexNotNullAndStoring) {
@@ -1858,6 +1962,89 @@ TEST_P(SchemaUpdaterTest, CreateVectorIndexInvalidLeafScatterFactorError) {
     )sql"}),
               StatusIs(error::OptionsError(
                   "vector index leaf_scatter_factor must be <= 32.")));
+}
+
+TEST_P(SchemaUpdaterTest, DropVectorIndex) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE Docs(
+        Key STRING(MAX) NOT NULL,
+        Val INT64,
+        Embedding ARRAY<FLOAT32>(vector_length=>2),
+      ) PRIMARY KEY(Key)
+    )sql",
+                                        R"sql(
+      CREATE VECTOR INDEX VectorIndex
+      ON Docs(Embedding) WHERE Embedding IS NOT NULL
+      OPTIONS(distance_type='DOT_PRODUCT', num_leaves=2)
+    )sql",
+                                        R"sql(
+      CREATE INDEX Index1 ON Docs(Val)
+    )sql"}));
+
+  EXPECT_THAT(UpdateSchema(schema.get(),
+                           {
+                               R"sql(
+      DROP VECTOR INDEX VectorIndex2
+    )sql"}),
+              StatusIs(error::IndexNotFound("VectorIndex2")));
+  EXPECT_THAT(UpdateSchema(schema.get(),
+                           {
+                               R"sql(
+      DROP VECTOR INDEX Index1
+    )sql"}),
+              StatusIs(error::IndexNotFound("Index1")));
+  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {
+                                           R"sql(
+      DROP VECTOR INDEX IF EXISTS VectorIndex2
+    )sql"}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
+                                                                       R"sql(
+      DROP INDEX VectorIndex
+    )sql"}));
+  EXPECT_EQ(new_schema->FindIndex("VectorIndex"), nullptr);
+}
+
+TEST_P(SchemaUpdaterTest, AlterVectorIndex) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE Base (
+        K INT64,
+        V INT64 NOT NULL,
+        Embeddings ARRAY<FLOAT32>(vector_length=>128),
+      ) PRIMARY KEY(K)
+    )sql",
+                                        R"sql(
+      CREATE VECTOR INDEX VI ON Base(Embeddings) WHERE Embeddings IS NOT NULL
+        OPTIONS(distance_type = 'EUCLIDEAN')
+    )sql",
+                                        R"sql(
+      ALTER VECTOR INDEX VI ADD STORED COLUMN V
+    )sql"}));
+
+  auto t = schema->FindTable("Base");
+  auto col = t->FindColumn("Embeddings");
+  auto col2 = t->FindColumn("V");
+  EXPECT_TRUE(col->GetType()->IsArray());
+
+  auto idx = schema->FindIndex("VI");
+  EXPECT_NE(idx, nullptr);
+  EXPECT_EQ(idx->key_columns().size(), 1);
+
+  auto idx_data = idx->index_data_table();
+  EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col));
+  EXPECT_EQ(idx->stored_columns().size(), 1);
+  auto stored_col = idx->stored_columns()[0];
+  EXPECT_THAT(stored_col, ColumnIs("V", type_factory_.get_int64()));
+  EXPECT_THAT(stored_col, SourceColumnIs(col2));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
+                                                                       R"sql(
+      ALTER VECTOR INDEX VI DROP STORED COLUMN V
+    )sql"}));
+  EXPECT_EQ(new_schema->FindIndex("VI")->stored_columns().size(), 0);
 }
 
 }  // namespace

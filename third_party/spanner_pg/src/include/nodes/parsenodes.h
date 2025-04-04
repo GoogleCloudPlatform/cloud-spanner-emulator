@@ -676,6 +676,12 @@ typedef struct RangeTableSample
 	int			location;		/* method name location, or -1 if unknown */
 } RangeTableSample;
 
+typedef struct LocalityGroupOption {
+  NodeTag type;
+  char *value;   /* string value of the locality group option */
+	bool is_null;  /* whether the option value is NULL */
+} LocalityGroupOption;
+
 /*
  * ColumnDef - column definition (used in various creates)
  *
@@ -716,6 +722,8 @@ typedef struct ColumnDef
 	List	   *constraints;	/* other constraints on column */
 	List	   *fdwoptions;		/* per-column FDW options */
 	int			location;		/* parse location, or -1 if none/unknown */
+	LocalityGroupOption *locality_group_name;  /* locality group associated
+												 											* with the column */
 } ColumnDef;
 
 /*
@@ -1948,6 +1956,10 @@ typedef enum ObjectType
 	OBJECT_USER_MAPPING,
 	OBJECT_VIEW,
   OBJECT_CHANGE_STREAM,
+  OBJECT_LOCALITY_GROUP,
+	// SPANGRES BEGIN
+  OBJECT_SEARCH_INDEX,
+	// SPANGRES END
 } ObjectType;
 
 /* ----------------------
@@ -1985,6 +1997,14 @@ typedef struct AlterTableStmt
 	ObjectType	objtype;		/* type of object */
 	bool		missing_ok;		/* skip error if table missing */
 } AlterTableStmt;
+
+typedef struct AlterColumnLocalityGroupStmt
+{
+	NodeTag		type;
+	RangeVar  *relation;   /* table to work on */
+	char      *column;   /* column to work on */
+	LocalityGroupOption  *locality_group_name;   /* locality group name */
+} AlterColumnLocalityGroupStmt;
 
 typedef enum AlterTableType
 {
@@ -2072,6 +2092,7 @@ typedef enum AlterTableType
 															column into the index */
 	AT_DropIndexIncludeColumn,	/* ALTER INDEX DROP INCLUDE COLUMN -- drop an 
 															non-key column from the index*/
+	AT_SetLocalityGroup,				/* SET LOCALITY GROUP */
 	AT_AddSynonym,				/* add synonym */
   AT_DropSynonym 				/* drop synonym */
 } AlterTableType;
@@ -2097,6 +2118,7 @@ typedef struct AlterTableCmd /* one subcommand of an ALTER TABLE */
 	DropBehavior behavior;		/* RESTRICT or CASCADE for DROP cases */
 	bool		missing_ok;		/* skip error if missing? */
 	bool		recurse;		/* exec-time recursion */
+  LocalityGroupOption *locality_group_name; /* locality group to be attached to the table */
 
 	// SPANGRES BEGIN
   char *raw_expr_string;  // `raw_expr` in its SQL text representation
@@ -2329,6 +2351,7 @@ typedef struct CreateStmt
 	bool		if_not_exists;	/* just do nothing if it already exists? */
 	InterleaveSpec	*interleavespec; /* INTERLEAVE IN clause */
 	Ttl        *ttl;            /* TTL for table */
+	LocalityGroupOption *locality_group_name;  /* locality group for the table */
 } CreateStmt;
 
 /* ----------
@@ -2375,7 +2398,10 @@ typedef enum ConstrType			/* types of constraints */
 	CONSTR_UNIQUE,
 	CONSTR_EXCLUSION,
 	CONSTR_FOREIGN,
+	// SPANGRES BEGIN
 	CONSTR_VECTOR_LENGTH,
+	CONSTR_HIDDEN,
+	// SPANGRES END
 	CONSTR_ATTR_DEFERRABLE,		/* attributes for previous constraint node */
 	CONSTR_ATTR_NOT_DEFERRABLE,
 	CONSTR_ATTR_DEFERRED,
@@ -3055,6 +3081,7 @@ typedef struct IndexStmt
 	Node	   *whereClause;	/* qualification (partial-index predicate) */
 	List	   *excludeOpNames; /* exclusion operator names, or NIL if none */
 	char	   *idxcomment;		/* comment to apply to index, or NULL */
+	LocalityGroupOption *locality_group_name;  /* locality group name, or NULL */
 	Oid			indexOid;		/* OID of an existing index, if any */
 	Oid			oldNode;		/* relfilenode of existing storage, if any */
 	SubTransactionId oldCreateSubid;	/* rd_createSubid of oldNode */
@@ -3141,6 +3168,12 @@ typedef struct CreateFunctionStmt
 	TypeName   *returnType;		/* the return type */
 	List	   *options;		/* a list of DefElem */
 	Node	   *sql_body;
+	// SPANGRES BEGIN
+	char *routine_body_string;  // sql string of the query field, it is set
+															// in gram.y by using token location
+															// information and extracted from the
+															// <CREATE FUNCTION> string.
+	// SPANGRES END
 } CreateFunctionStmt;
 
 typedef enum FunctionParameterMode
@@ -3941,6 +3974,26 @@ typedef struct DropSubscriptionStmt
 	DropBehavior behavior;		/* RESTRICT or CASCADE behavior */
 } DropSubscriptionStmt;
 
+typedef struct CreateLocalityGroupStmt {
+  NodeTag type;
+  // We use `RangeVar*` here because locality group belongs to a schema. We need
+  // to separate out the schemaname from the relname.
+  RangeVar *locality_group_name;   /* Name of the locality group */
+  LocalityGroupOption *storage;   /* Storage type of the locality group */
+  LocalityGroupOption *ssd_to_hdd_spill_timespan; /* SSD to HDD spill timespan */
+  bool if_not_exists;              /* do nothing if locality group already exists */
+} CreateLocalityGroupStmt;
+
+typedef struct AlterLocalityGroupStmt {
+  NodeTag type;
+  // We use `RangeVar*` here because locality group belongs to a schema. We need
+  // to separate out the schemaname from the relname.
+  RangeVar *locality_group_name;   /* Name of the locality group */
+  LocalityGroupOption *storage;                   /* Storage type of the locality group */
+  LocalityGroupOption *ssd_to_hdd_spill_timespan; /* SSD to HDD spill timespan */
+  bool if_exists;              		 /* skip error if locality group is missing */
+} AlterLocalityGroupStmt;
+
 // SPANGRES BEGIN
 /* ----------------------
  *		ChangeStreams
@@ -3978,6 +4031,44 @@ typedef struct ChangeStreamTrackedTable {
   List *columns;        /* Name of the tracked columns */
   bool for_all_columns; /* Whether all columns in table are tracked */
 } ChangeStreamTrackedTable;
+
+/* ----------------------
+ *		SearchIndex
+ * ----------------------
+*/
+typedef struct CreateSearchIndexStmt {
+  NodeTag type;
+  char *search_index_name; /* Name of the search index */
+  RangeVar *table_name;    /* Name of the table to create search index */
+  List *token_columns;     /* Columns to index: a list of IndexElem */
+  List *storing; /* Optional additional columns to index: a list of IndexElem */
+  List *partition;            /* Optional PARTITION BY column list */
+  List *order;                /* Optional BY SortBy list */
+  Node *null_filters;         /* Optional WHERE for null filtering conditions */
+  InterleaveSpec *interleave; /* Optional INTERLEAVE IN clause */
+  List *options;              /* Optional WITH clause options: a list of DefElem */
+} CreateSearchIndexStmt;
+
+typedef enum AlterSearchIndexCmdType {
+  ALT_SEARCH_INDEX_ADD_COLUMN,
+  ALT_SEARCH_INDEX_DROP_COLUMN,
+  ALT_SEARCH_INDEX_ADD_INCLUDE_COLUMN,
+  ALT_SEARCH_INDEX_DROP_INCLUDE_COLUMN,
+} AlterSearchIndexCmdType;
+
+typedef struct AlterSearchIndexCmd {
+  NodeTag type;
+  AlterSearchIndexCmdType cmd_type; /* Type of the command */
+  char *column_name;                /* Name of the column */
+} AlterSearchIndexCmd;
+
+typedef struct AlterSearchIndexStmt {
+  NodeTag type;
+  RangeVar *search_index_name;                 /* Name of the search index */
+  AlterSearchIndexCmd *alter_search_index_cmd; /* AlterSearchIndexCmd */
+} AlterSearchIndexStmt;
+
+
 
 // SPANGRES END
 

@@ -26,6 +26,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "backend/database/database.h"
+#include "backend/schema/updater/schema_updater.h"
 #include "backend/transaction/options.h"
 #include "backend/transaction/read_write_transaction.h"
 #include "common/clock.h"
@@ -42,6 +43,8 @@ using google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
 using zetasql::values::Int64;
 using zetasql_base::testing::StatusIs;
 
+constexpr char kDatabaseId[] = "test-db";
+
 class CheckConstraintVerifiersTest : public ::testing::Test {
  public:
   CheckConstraintVerifiersTest()
@@ -56,8 +59,9 @@ class CheckConstraintVerifiersTest : public ::testing::Test {
           C INT64 AS (A + B) STORED,
         ) PRIMARY KEY(A))"};
     ZETASQL_ASSERT_OK_AND_ASSIGN(
-        database_, Database::Create(&clock_, SchemaChangeOperation{
-                                                 .statements = statements}));
+        database_,
+        Database::Create(&clock_, kDatabaseId,
+                         SchemaChangeOperation{.statements = statements}));
 
     ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(

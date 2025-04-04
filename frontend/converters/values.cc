@@ -325,6 +325,22 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
       return TokenListFromBytes(bytes);
     }
 
+    case zetasql::TypeKind::TYPE_INTERVAL: {
+      if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
+        return error::ValueProtoTypeMismatch(value_pb.DebugString(),
+                                             type->DebugString());
+      }
+
+      absl::StatusOr<zetasql::IntervalValue> interval_value =
+          zetasql::IntervalValue::Parse(value_pb.string_value(),
+                                          /*allow_nanos=*/true);
+      if (!interval_value.ok()) {
+        return error::CouldNotParseStringAsInterval(
+            value_pb.string_value(), interval_value.status().message());
+      }
+      return zetasql::values::Interval(interval_value.value());
+    }
+
     case zetasql::TypeKind::TYPE_ARRAY: {
       if (value_pb.kind_case() != google::protobuf::Value::kListValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
@@ -536,6 +552,12 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
     case zetasql::TYPE_TOKENLIST: {
       absl::Base64Escape(value.tokenlist_value().GetBytes(),
                          value_pb.mutable_string_value());
+      break;
+    }
+
+    case zetasql::TypeKind::TYPE_INTERVAL: {
+      zetasql::IntervalValue interval_value = value.interval_value();
+      value_pb.set_string_value(interval_value.ToISO8601());
       break;
     }
 

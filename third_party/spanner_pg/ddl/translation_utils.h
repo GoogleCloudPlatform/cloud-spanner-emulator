@@ -104,6 +104,10 @@ struct PostgreSQLConstants {
       "spanner.default_leader";
   static constexpr absl::string_view
       kSpangresDatabaseWitnessLocationOptionName = "spanner.witness_location";
+  static constexpr absl::string_view kSearchIndexDisableUidOptionName =
+      "disable_automatic_uid_column";
+  static constexpr absl::string_view kSearchIndexSortOrderOptionName =
+      "sort_order_sharding";
 
   // TODO: use kDatabaseOptimizerVersionName,
   // kInternalDatabaseVersionRetentionPeriodName,
@@ -137,11 +141,19 @@ struct PostgreSQLConstants {
       "exclude_ttl_deletes";
   static constexpr absl::string_view kChangeStreamAllowTxnExclusionOptionName =
       "allow_txn_exclusion";
+  static constexpr char kInternalLocalityGroupStorageOptionName[] = "inflash";
+  static constexpr char kInternalLocalityGroupSpillTimeSpanOptionName[] =
+    "age_based_spill_policy";
   static constexpr absl::string_view kSpangresDefaultSequenceKindOptionName =
       "spanner.default_sequence_kind";
   static constexpr absl::string_view
       kInternalDatabaseDefaultSequenceKindOptionName =
           "spanner.internal.cloud_default_sequence_kind";
+  static constexpr absl::string_view kSpangresDefaultTimeZoneOptionName =
+      "spanner.default_time_zone";
+  static constexpr absl::string_view
+      kInternalDatabaseDefaultTimeZoneOptionName =
+          "spanner.internal.cloud_default_time_zone";
   static constexpr absl::string_view kInternalDatabaseDefaultLeaderOptionName =
     "spanner.internal.cloud_default_leader";
   static constexpr absl::string_view
@@ -224,6 +236,8 @@ absl::optional<PGAlterOption> GetOptionByInternalName(
 bool IsReservedName(absl::string_view name);
 
 bool IsPostgresReservedName(absl::string_view name);
+
+int64_t ParseSchemaTimeSpec(absl::string_view spec);
 
 // Converts ObjectType enum directly to a string: OBJECT_FOO_BAR -> "FOO BAR".
 absl::StatusOr<std::string> ObjectTypeToString(ObjectType object_type);

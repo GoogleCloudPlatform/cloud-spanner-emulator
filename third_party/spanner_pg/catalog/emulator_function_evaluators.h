@@ -34,6 +34,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <string>
 
 #include "zetasql/public/function.h"
 #include "zetasql/public/value.h"
@@ -47,7 +48,8 @@ inline constexpr char kDefaultTimeZone[] = "America/Los_Angeles";
 
 zetasql::FunctionEvaluator PGFunctionEvaluator(
     const zetasql::FunctionEvaluator& function,
-    const std::function<void()>& on_compute_end = []() {});
+    const std::function<void()>& on_compute_end = []() {},
+    const std::string& time_zone = kDefaultTimeZone);
 
 // This function calls `F_JSONB_ARRAY_ELEMENT_TEXT` to compute the results on
 // arguments `jsonb` and `element`. The function returns `Value::String`

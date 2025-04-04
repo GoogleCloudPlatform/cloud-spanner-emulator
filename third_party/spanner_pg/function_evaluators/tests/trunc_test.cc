@@ -85,14 +85,10 @@ TEST_F(TruncTest, NegativeScaleZerosDecimalPositions) {
 }
 
 TEST_F(TruncTest, CapsToMaxNumericResultScaleWhenScaleIsOverIt) {
-  EXPECT_THAT(Trunc("1", NUMERIC_MAX_RESULT_SCALE + 1),
-              IsOkAndHolds(absl::StrCat(
-                  "1.", std::string(NUMERIC_MAX_RESULT_SCALE, '0'))));
-
-  EXPECT_THAT(Trunc(std::string(NUMERIC_MAX_RESULT_SCALE + 1, '9'),
-                    -NUMERIC_MAX_RESULT_SCALE - 1),
-              IsOkAndHolds(absl::StrCat(
-                  "9", std::string(NUMERIC_MAX_RESULT_SCALE, '0'))));
+  const int16_t max_precision = std::numeric_limits<int16_t>::max() / 2;
+  EXPECT_THAT(
+      Trunc("1", max_precision + 1),
+      IsOkAndHolds(absl::StrCat("1.", std::string(max_precision, '0'))));
 }
 
 TEST_F(TruncTest, ReturnsErrorWhenScaleDoesNotFitIntoInt32) {

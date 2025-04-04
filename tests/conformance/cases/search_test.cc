@@ -24,7 +24,9 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
+#include "tests/conformance/common/query_translator.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -39,65 +41,22 @@ using testing::HasSubstr;
 using testing::Matcher;
 using zetasql_base::testing::StatusIs;
 
-class SearchTest : public DatabaseTest {
+class SearchTest
+    : public DatabaseTest,
+      public ::testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
-  absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(
-        SetSchema({// All TOKENLIST columns need to be defined as HIDDEN to be
-                   // in conformance with Cloud Spanner.
-                   R"sql(
-          CREATE TABLE Albums (
-            AlbumId INT64 NOT NULL,
-            UserId INT64 NOT NULL,
-            ReleaseTimestamp INT64 NOT NULL,
-            Uid INT64 NOT NULL,
-            Name STRING(MAX),
-            Name_Tokens TOKENLIST AS (TOKEN(Name)) HIDDEN,
-            Name_Ngrams_Tokens TOKENLIST AS (TOKENIZE_NGRAMS(Name, ngram_size_max=>4, ngram_size_min=>2)) HIDDEN,
-            Name_Exists BOOL AS (Name IS NOT NULL AND Name!=""),
-            Name_Exists_Tokens TOKENLIST AS (TOKENIZE_BOOL(Name_Exists)) HIDDEN,
-            Tracks ARRAY<STRING(MAX)>,
-            Tracks_Tokens TOKENLIST AS (TOKENIZE_FULLTEXT(Tracks)) STORED HIDDEN,
-            Tracks_Substring_Tokens TOKENLIST AS (TOKENIZE_SUBSTRING(Tracks)) STORED HIDDEN,
-            Summary STRING(MAX),
-            Summary_Tokens TOKENLIST AS (TOKENIZE_FULLTEXT(Summary)) HIDDEN,
-            Summary_SubStr_Tokens TOKENLIST AS (TOKENIZE_SUBSTRING(Summary, ngram_size_max=>4, ngram_size_min=>3)) STORED HIDDEN,
-            Summary_SubStr_Relative_Tokens TOKENLIST AS (TOKENIZE_SUBSTRING(Summary, relative_search_types=>["word_prefix"])) STORED HIDDEN,
-            Summary_SubStr_Relative_All_Tokens TOKENLIST AS (TOKENIZE_SUBSTRING(Summary, relative_search_types=>["all"], ngram_size_max=>5, ngram_size_min=>3)) STORED HIDDEN,
-            Summary2 STRING(MAX),
-            Summary2_Tokens TOKENLIST AS (TOKENIZE_FULLTEXT(Summary2)) HIDDEN,
-            Summary2_SubStr_Tokens TOKENLIST AS (TOKENIZE_SUBSTRING(Summary2, ngram_size_min=>3, ngram_size_max=>4, language_tag=>"ar-ar")) STORED HIDDEN,
-            Summaries_Tokens TOKENLIST AS (TOKENLIST_CONCAT([Summary_Tokens, Summary2_Tokens])) STORED HIDDEN,
-            Summaries_SubStr_Tokens TOKENLIST AS (TOKENLIST_CONCAT([Summary_SubStr_Tokens, Summary2_SubStr_Tokens])) HIDDEN,
-            Length INT64,
-            Length_Tokens TOKENLIST AS (TOKENIZE_NUMBER(Length, min=>0, max=>0x40000000)) STORED HIDDEN,
-          ) PRIMARY KEY(AlbumId)
-        )sql"}));
-    ZETASQL_RETURN_IF_ERROR(SetSchema({
-        R"sql(
-          CREATE SEARCH INDEX AlbumIndex
-          ON Albums(Name_Tokens,
-                    Name_Ngrams_Tokens,
-                    Tracks_Tokens,
-                    Tracks_Substring_Tokens,
-                    Summary_Tokens,
-                    Summary_SubStr_Tokens,
-                    Summary_SubStr_Relative_Tokens,
-                    Summary_SubStr_Relative_All_Tokens,
-                    Summary2_Tokens,
-                    Summary2_SubStr_Tokens,
-                    Summaries_Tokens,
-                    Summaries_SubStr_Tokens,
-                    Length_Tokens)
-          STORING(Length)
-          PARTITION BY UserId
-          ORDER BY ReleaseTimestamp
-          OPTIONS (
-            sort_order_sharding = true,
-            disable_automatic_uid_column=true)
-        )sql",
-    }));
+  SearchTest()
+      : feature_flags_({.enable_postgresql_interface = true,
+                        .enable_search_index = true,
+                        .enable_hidden_column = true}) {}
 
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
+  absl::Status SetUpDatabase() override {
+    ZETASQL_RETURN_IF_ERROR(SetSchemaFromFile("search.test"));
     return PopulateDatabase();
   }
 
@@ -108,9 +67,9 @@ class SearchTest : public DatabaseTest {
     std::vector<std::string> single_track = {"track1"};
     ZETASQL_RETURN_IF_ERROR(
         MultiInsert(
-            "Albums",
-            {"AlbumId", "UserId", "ReleaseTimestamp", "Uid", "Name", "Tracks",
-             "Summary", "Summary2"},
+            "albums",
+            {"albumid", "userid", "releasetimestamp", "uid", "name", "tracks",
+             "summary", "summary2"},
             {{0, 1, 0, 0, "name1", one_track, "", ""},
              {1, 1, 11, 0, "name1", one_track, "global top 50 song", "foo bar"},
              {2, 1, 9, 0, "name1", two_tracks, "global top 100 song", ""},
@@ -133,499 +92,349 @@ class SearchTest : public DatabaseTest {
 
     // Insert a row with NULL name
     ZETASQL_RETURN_IF_ERROR(
-        Insert("Albums",
-               {"AlbumId", "UserId", "ReleaseTimestamp", "Uid", "Summary"},
+        Insert("albums",
+               {"albumid", "userid", "releasetimestamp", "uid", "summary"},
                {14, 2, 9, 0, ""})
             .status());
 
     // Insert a row with NULL summary
-    return Insert("Albums",
-                  {"AlbumId", "UserId", "ReleaseTimestamp", "Uid", "Name"},
+    return Insert("albums",
+                  {"albumid", "userid", "releasetimestamp", "uid", "name"},
                   {15, 1, 12, 0, ""})
         .status();
   }
+
+  bool IsGoogleStandardSql() const {
+    return dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL;
+  }
+
+  std::string GetSqlQueryString(const std::string& query_string) {
+    if (IsGoogleStandardSql()) {
+      return query_string;
+    }
+
+    return QueryTranslator()
+        .UsesHintSyntax()
+        .UsesLiteralCasts()
+        .UsesArgumentStringLiterals()
+        .UsesStringNullLiteral()
+        .UsesStringArrayLiterals()
+        .UsesNamespacedFunctions()
+        .Translate(query_string);
+  }
+
+ private:
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
 };
 
-TEST_F(SearchTest, CreateSearchIndexWithUniformSharding) {
-  ZETASQL_EXPECT_OK(SetSchema({
-      R"sql(
-          CREATE SEARCH INDEX AlbumIndexUniformSharding
-          ON Albums(Name_Tokens,
-                    Tracks_Tokens,
-                    Summary_Tokens,
-                    Length_Tokens)
-          STORING(Length)
-          PARTITION BY UserId
-          ORDER BY ReleaseTimestamp
-          OPTIONS (
-            sort_order_sharding = false)
-        )sql",
-  }));
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectSearchTests, SearchTest,
+    testing::Values(
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL),
+    [](const testing::TestParamInfo<SearchTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
 
-  ZETASQL_EXPECT_OK(SetSchema({
-      R"sql(
-          CREATE SEARCH INDEX AlbumIndexDefaultUniformSharding
-          ON Albums(Name_Tokens,
-                    Tracks_Tokens,
-                    Summary_Tokens,
-                    Length_Tokens)
-          STORING(Length)
-          PARTITION BY UserId
-          ORDER BY ReleaseTimestamp
-        )sql",
-  }));
-}
+TEST_P(SearchTest, SearchFunctionSupportOptionalArguments) {
+  std::string query1 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "top", enhance_query=>true)
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query1)));
 
-TEST_F(SearchTest, TokenWrongArguments) {
-  EXPECT_THAT(UpdateSchema({
-                  R"sql(
-          ALTER TABLE Albums
-          ADD COLUMN Name_Token2 TOKENLIST
-          AS (TOKEN(Name, 15, true)) STORED HIDDEN)sql"}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("No matching signature for function "
-                                 "SPANNER:TOKEN")));
-}
-
-TEST_F(SearchTest, TokenizeNumberNotAcceptPositionalOptionalArguments) {
-  EXPECT_THAT(UpdateSchema({
-                  R"sql(
-          ALTER TABLE Albums
-          ADD COLUMN Length_Token2 TOKENLIST
-              AS (TOKENIZE_NUMBER(
-                   Length,
-                  "ALL")) STORED HIDDEN)sql"}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("No matching signature for function "
-                                 "SPANNER:TOKENIZE_NUMBER")));
-}
-
-TEST_F(SearchTest, TokenizeNumberWithOptionalArguments) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
-      R"sql(
-          ALTER TABLE Albums
-          ADD COLUMN Length_Tokens2 TOKENLIST
-              AS (TOKENIZE_NUMBER(
-                  Length,
-                  comparison_type=>"ALL",
-                  algorithm=>"auto",
-                  min=>-1000,
-                  max=>1000,
-                  granularity=>1,
-                  tree_base=>2)) STORED HIDDEN)sql"}));
-  ZETASQL_EXPECT_OK(UpdateSchema({
-      R"sql(
-      ALTER TABLE Albums DROP COLUMN Length_Tokens2)sql"}));
-}
-
-TEST_F(SearchTest, TokenizeNumberOptionalArgumentsNoOrder) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
-      R"sql(
-          ALTER TABLE Albums
-          ADD COLUMN Length_Tokens3 TOKENLIST
-              AS (TOKENIZE_NUMBER(
-                  Length,
-                  min=>-1000,
-                  max=>1000,
-                  comparison_type=>"ALL",
-                  algorithm=>"auto",
-                  granularity=>1,
-                  tree_base=>2)) STORED HIDDEN)sql"}));
-  ZETASQL_EXPECT_OK(UpdateSchema({
-      R"sql(
-      ALTER TABLE Albums DROP COLUMN Length_Tokens3)sql"}));
-}
-
-TEST_F(SearchTest, TokenizeBoolWrongArguments) {
-  EXPECT_THAT(UpdateSchema({
-                  R"sql(
-          ALTER TABLE Albums
-          ADD COLUMN Name_Exists_Token2 TOKENLIST
-              AS (TOKENIZE_BOOL(Name_Exists, 15)) STORED HIDDEN)sql"}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("function SPANNER:TOKENIZE_BOOL")));
-}
-
-TEST_F(SearchTest, TokenizeFullTextSupportHtml) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
-      R"sql(
-          ALTER TABLE Albums
-          ADD COLUMN Summary_Tokens2 TOKENLIST
-              AS (TOKENIZE_FULLTEXT(
-                    Summary,
-                    language_tag=>"en-us",
-                    content_type=>"text/html")) STORED HIDDEN)sql"}));
-  ZETASQL_EXPECT_OK(UpdateSchema({
-      R"sql(
-          ALTER TABLE Albums DROP COLUMN Summary_Tokens2)sql"}));
-}
-
-TEST_F(SearchTest, TokenizeFullTextSupportsPlainText) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
-      R"sql(
-          ALTER TABLE Albums
-          ADD COLUMN Summary_Tokens2 TOKENLIST
-              AS (TOKENIZE_FULLTEXT(
-                    Summary,
-                    language_tag=>"en-us",
-                    content_type=>"text/plain")) STORED HIDDEN)sql"}));
-  ZETASQL_EXPECT_OK(UpdateSchema({
-      R"sql(
-          ALTER TABLE Albums DROP COLUMN Summary_Tokens2)sql"}));
-}
-
-TEST_F(SearchTest, TokenizeFullTextWrongArguments) {
-  EXPECT_THAT(UpdateSchema({
-                  R"sql(
-          ALTER TABLE Albums ADD COLUMN Name_Token2 TOKENLIST
-              AS (TOKENIZE_FULLTEXT(Summary,
-                                    "en-us",
-                                    "text/html",
-                                    true)) STORED HIDDEN)sql"}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("No matching signature for function "
-                                 "SPANNER:TOKENIZE_FULLTEXT")));
-}
-
-TEST_F(SearchTest, SearchFunctionSupportOptionalArguments) {
-  ZETASQL_EXPECT_OK(Query(
-      R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "top", enhance_query=>true)
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"));
-  ZETASQL_EXPECT_OK(Query(
-      R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens,
+  std::string query2 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens,
                        "top",
                        enhance_query=>true,
                        language_tag=>"en-us")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"));
-  ZETASQL_EXPECT_OK(Query(
-      R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens,
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query2)));
+
+  std::string query3 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens,
                        "top",
                       enhance_query=>false,
                       language_tag=>"en-us")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"));
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query3)));
 }
 
-TEST_F(SearchTest, SearchFunctionWrongArguments) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens)
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("function SPANNER:SEARCH")));
+TEST_P(SearchTest, SearchFunctionWrongArguments) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens)
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  auto expected_status =
+      IsGoogleStandardSql()
+          ? StatusIs(absl::StatusCode::kInvalidArgument,
+                     HasSubstr("function SPANNER:SEARCH"))
+          : StatusIs(
+                in_prod_env() ? absl::StatusCode::kInvalidArgument
+                              : absl::StatusCode::kNotFound,
+                HasSubstr("function spanner.search"));
+  EXPECT_THAT(Query(GetSqlQueryString(query)), expected_status);
 }
 
-TEST_F(SearchTest, TokenizeSubstringSupportHtml) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
-      R"sql(
-          ALTER TABLE Albums
-          ADD COLUMN Summary_SubStr_Tokens2 TOKENLIST
-              AS (TOKENIZE_SUBSTRING(Summary,
-                  ngram_size_max=>3,
-                  ngram_size_min=>2,
-                  content_type=>"text/html")) STORED HIDDEN)sql"}));
-}
-
-TEST_F(SearchTest, TokenizeSubstringSupportsPlainText) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
-      R"sql(
-          ALTER TABLE Albums
-          ADD COLUMN Summary_SubStr_Tokens2 TOKENLIST
-              AS (TOKENIZE_SUBSTRING(Summary,
-                  ngram_size_max=>3,
-                  ngram_size_min=>2,
-                  content_type=>"text/plain")) STORED HIDDEN)sql"}));
-  ZETASQL_EXPECT_OK(UpdateSchema({
-      R"sql(
-            ALTER TABLE Albums DROP COLUMN Summary_SubStr_Tokens2)sql"}));
-}
-
-TEST_F(SearchTest, TokenizeSubstringWrongArguments) {
-  EXPECT_THAT(UpdateSchema({
-                  R"sql(
-          ALTER TABLE Albums
-          ADD COLUMN Summary_SubStr_Tokens2 TOKENLIST
-              AS (TOKENIZE_SUBSTRING(
-                  Summary,
-                  3,
-                  2,
-                  true,
-                  "text/html",
-                  true)) STORED HIDDEN)sql"}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("No matching signature for function "
-                                 "SPANNER:TOKENIZE_SUBSTRING")));
-}
-
-TEST_F(SearchTest, SearchSubStringRelativeSearch) {
-  ZETASQL_EXPECT_OK(Query(
-      R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summary_SubStr_Relative_Tokens, "son",
+TEST_P(SearchTest, SearchSubStringRelativeSearch) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summary_substr_relative_tokens, "son",
                                  relative_search_type=>"word_prefix")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"));
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
-TEST_F(SearchTest, SearchSubStringRelativeSearchNotSupported) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, "son",
+TEST_P(SearchTest, SearchSubStringRelativeSearchNotSupported) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summary_substr_tokens, "son",
                                  relative_search_type=>"word_prefix")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SearchTest, SearchSubstringWrongArguments) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summary_SubStr_Relative_Tokens,
+TEST_P(SearchTest, SearchSubstringWrongArguments) {
+  std::string query1 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summary_substr_relative_tokens,
                                   "son",
                                   relative_search_type=>"word_prefix",
                                   language_tag=>"en-us",
-                                  true)
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("function SPANNER:SEARCH_SUBSTRING")));
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens)
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("function SPANNER:SEARCH_SUBSTRING")));
+                                  invalid_argument=>true)
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+
+  auto expected_status =
+      IsGoogleStandardSql()
+          ? StatusIs(absl::StatusCode::kInvalidArgument,
+                     HasSubstr("function SPANNER:SEARCH_SUBSTRING"))
+          : StatusIs(
+                in_prod_env() ? absl::StatusCode::kInvalidArgument
+                              : absl::StatusCode::kNotFound,
+                HasSubstr("function spanner.search_substring"));
+
+  EXPECT_THAT(Query(GetSqlQueryString(query1)), expected_status);
+
+  std::string query2 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summary_substr_tokens)
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query2)), expected_status);
 }
 
-TEST_F(SearchTest, UnableToSearchOnExactToken) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Name_Tokens, 'name1')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
+TEST_P(SearchTest, UnableToSearchOnExactToken) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(name_tokens, 'name1')
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SearchTest, UnableToSearchOnNumericToken) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Length_Tokens, 'name1')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
+TEST_P(SearchTest, UnableToSearchOnNumericToken) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(length_tokens, 'name1')
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SearchTest, UnableToSearchSubstringOnNumericToken) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Length_Tokens, 'name1')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
+TEST_P(SearchTest, UnableToSearchSubstringOnNumericToken) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(length_tokens, 'name1')
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 // failed comformance
-TEST_F(SearchTest, UnableToSearchOnMixedConcatToken) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, UnableToSearchOnMixedConcatToken) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH(
-                  TOKENLIST_CONCAT([Summary_Tokens, Summary_SubStr_Tokens]),
+                  TOKENLIST_CONCAT([summary_tokens, summary_substr_tokens]),
                   'foo')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 // failed comformance
-TEST_F(SearchTest, UnableToSearchSubstringOnMixedConcatToken) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, UnableToSearchSubstringOnMixedConcatToken) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_SUBSTRING(
-                  TOKENLIST_CONCAT([Summary_SubStr_Tokens, Summary_Tokens]),
+                  TOKENLIST_CONCAT([summary_substr_tokens, summary_tokens]),
                   'foo')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SearchTest, BasicSearch) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "global")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{1}, {2}}));
+TEST_P(SearchTest, BasicSearch) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "global")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{1}, {2}}));
 }
 
-TEST_F(SearchTest, BasicSearchOnTokenlistConcat) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, BasicSearchOnTokenlistConcat) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH(Summaries_Tokens, "global foo")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{1}}));
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{1}}));
 }
 
-TEST_F(SearchTest, BasicSearchConnectedPhraseOnTokenlistConcat) {
+TEST_P(SearchTest, BasicSearchConnectedPhraseOnTokenlistConcat) {
   // Phrase will not match across tokenlists.
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH(Summaries_Tokens, "global-foo")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, BasicSearchAnd) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "global US")
-            AND UserId = 2
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{5}}));
+TEST_P(SearchTest, BasicSearchAnd) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "global US")
+            AND userid = 2
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{5}}));
 }
 
-TEST_F(SearchTest, BasicSearchOr) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "global | US")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
+TEST_P(SearchTest, BasicSearchOr) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "global | US")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               IsOkAndHoldsRows({{1}, {2}, {4}, {7}}));
 }
 
-TEST_F(SearchTest, BasicSearchNot) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "-global")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
+TEST_P(SearchTest, BasicSearchNot) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "-global")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               IsOkAndHoldsRows(
                   {{0}, {4}, {6}, {7}, {9}, {10}, {12}, {13}, {16}, {17}}));
 }
 
-TEST_F(SearchTest, BasicSearchAround) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "global AROUND(2) song")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{1}, {2}}));
+TEST_P(SearchTest, BasicSearchAround) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "global AROUND(2) song")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{1}, {2}}));
 }
 
-TEST_F(SearchTest, BasicSearchConnectedPhrase) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "top-song")
-            AND UserId = 2
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{5}}));
+TEST_P(SearchTest, BasicSearchConnectedPhrase) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "top-song")
+            AND userid = 2
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{5}}));
 }
 
-TEST_F(SearchTest, BasicSearchQuotedPhrase) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "\"global and US\"")
-            AND UserId = 2
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{5}}));
+TEST_P(SearchTest, BasicSearchQuotedPhrase) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "\"global and US\"")
+            AND userid = 2
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{5}}));
 }
 
-TEST_F(SearchTest, CompositeSearch) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "top 1000 global | US")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{4}, {7}}));
+TEST_P(SearchTest, CompositeSearch) {
+  std::string query1 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "top 1000 global | US")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query1)), IsOkAndHoldsRows({{4}, {7}}));
 
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "global | US 50")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{1}}));
+  std::string query2 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "global | US 50")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query2)), IsOkAndHoldsRows({{1}}));
 
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "global top-song")
-            AND UserId = 2
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{5}}));
+  std::string query3 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "global top-song")
+            AND userid = 2
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query3)), IsOkAndHoldsRows({{5}}));
 
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "top-1000 -global")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{4}, {7}}));
+  std::string query4 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "top-1000 -global")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query4)), IsOkAndHoldsRows({{4}, {7}}));
 
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "\"top 1000\" -US")
-            AND UserId = 2
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{8}}));
+  std::string query5 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "\"top 1000\" -US")
+            AND userid = 2
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query5)), IsOkAndHoldsRows({{8}}));
 }
 
 // If there are multiple AROUND distances, use default 5
@@ -633,569 +442,550 @@ TEST_F(SearchTest, CompositeSearch) {
 // matches neither of the AROUND condition but since there are two distances
 // provided, the code falls back to default distance, and return row 5 as a
 // match.
-TEST_F(SearchTest, MultipleAroundDistanceFallBackToDefault) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "global AROUND(1) top AROUND(2) song")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{1}, {2}}));
+TEST_P(SearchTest, MultipleAroundDistanceFallBackToDefault) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "global AROUND(1) top AROUND(2) song")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{1}, {2}}));
 }
 
-TEST_F(SearchTest, SearchIsCaseInsensitive) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "GLObal us song")
-            AND UserId = 2
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{5}}));
+TEST_P(SearchTest, SearchIsCaseInsensitive) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "GLObal us song")
+            AND userid = 2
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{5}}));
 }
 
-TEST_F(SearchTest, SearchPhraseNotAcrossArrayBoundary) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Tracks_Tokens, "\"track1 track2\"")
-            AND UserId = 2
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{5}}));
+TEST_P(SearchTest, SearchPhraseNotAcrossArrayBoundary) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(Tracks_Tokens, '"track1 track2"')
+            AND userid = 2
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{5}}));
 }
 
-TEST_F(SearchTest, SearchAroundNotAcrossArrayBoundary) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, SearchAroundNotAcrossArrayBoundary) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH(Tracks_Tokens, "track1 AROUND(2) track2")
-            AND UserId = 2
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{5}}));
+            AND userid = 2
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{5}}));
 }
 
-TEST_F(SearchTest, EmptyQueryAlwaysReturnFalse) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
+TEST_P(SearchTest, EmptyQueryAlwaysReturnFalse) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               // Row 15 has NULL summary so it does not show up in the result
               IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, NullQueryAlwaysReturnFalse) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, CAST(NULL AS STRING))
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+TEST_P(SearchTest, NullQueryAlwaysReturnFalse) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, CAST(NULL AS STRING))
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, NullTokenListAlwaysReturnFalse) {
-  // Trying to perform search on row 16 (AlbumId = 15), where Summary is null.
-  EXPECT_THAT(Query(
-                  R"sql(
+TEST_P(SearchTest, NullTokenListAlwaysReturnFalse) {
+  // Trying to perform search on row 16 (albumid = 15), where Summary is null.
+  std::string query1 = R"sql(
           SELECT Name
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "US")
-            AND UserId = 1
-            AND AlbumId > 13
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "US")
+            AND userid = 1
+            AND albumid > 13
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query1)), IsOkAndHoldsRows({}));
 
-  EXPECT_THAT(Query(
-                  R"sql(
+  std::string query2 = R"sql(
           SELECT Name
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, CAST(NULL AS STRING))
-            AND UserId = 1
-            AND AlbumId > 13
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, CAST(NULL AS STRING))
+            AND userid = 1
+            AND albumid > 13
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query2)), IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, BasicSearchSubstring) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, 'son')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
+TEST_P(SearchTest, BasicSearchSubstring) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summary_substr_tokens, 'son')
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               IsOkAndHoldsRows({{1}, {2}, {4}, {6}, {7}}));
 }
 
-TEST_F(SearchTest, BasicSearchSubstringWithTokenlistConcat) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summaries_SubStr_Tokens, 'son')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
+TEST_P(SearchTest, BasicSearchSubstringWithTokenlistConcat) {
+  std::string query1 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summaries_substr_tokens, 'son')
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query1)),
               IsOkAndHoldsRows({{1}, {2}, {4}, {6}, {7}}));
 
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summaries_SubStr_Tokens, 'foo')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{1}, {4}}));
+  std::string query2 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summaries_substr_tokens, 'foo')
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query2)), IsOkAndHoldsRows({{1}, {4}}));
 }
 
-TEST_F(SearchTest, BasicSearchSubstringSubstringInMiddle) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, 'loba')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{1}, {2}}));
+TEST_P(SearchTest, BasicSearchSubstringSubstringInMiddle) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summary_substr_tokens, 'loba')
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{1}, {2}}));
 }
 
-TEST_F(SearchTest, BasicSearchSubstringMultiSubstrings) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, 'loba 100')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{2}}));
+TEST_P(SearchTest, BasicSearchSubstringMultiSubstrings) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summary_substr_tokens, 'loba 100')
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{2}}));
 }
 
-TEST_F(SearchTest, SearchSubstringWithMatchingPartition) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, 'son')
-            AND UserId = 1
-            AND AlbumId > 3
-            AND AlbumId < 7
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{4}, {6}}));
+TEST_P(SearchTest, SearchSubstringWithMatchingPartition) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summary_substr_tokens, 'son')
+            AND userid = 1
+            AND albumid > 3
+            AND albumid < 7
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{4}, {6}}));
 }
 
-TEST_F(SearchTest, SearchSubstringWithUnMatchingPartition) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, 'loba')
-            AND UserId = 1
-            AND AlbumId > 8
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+TEST_P(SearchTest, SearchSubstringWithUnMatchingPartition) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summary_substr_tokens, 'loba')
+            AND userid = 1
+            AND albumid > 8
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, SearchSubstringWithWordPrefix) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, SearchSubstringWithWordPrefix) {
+  std::string query1 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_SUBSTRING(Summary_SubStr_Relative_All_Tokens,
                                  'son',
                                  relative_search_type=>"word_prefix")
-            AND UserId = 1
-            AND AlbumId < 7
-          ORDER BY AlbumId ASC)sql"),
+            AND userid = 1
+            AND albumid < 7
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query1)),
               IsOkAndHoldsRows({{1}, {2}, {4}, {6}}));
 
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+  std::string query2 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_SUBSTRING(Summary_SubStr_Relative_All_Tokens,
                                  'ong',
                                  relative_search_type=>"word_prefix")
-            AND UserId = 1
-            AND AlbumId < 7
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+            AND userid = 1
+            AND albumid < 7
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query2)), IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, SearchSubstringWithWordSuffix) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, SearchSubstringWithWordSuffix) {
+  std::string query1 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_SUBSTRING(Summary_SubStr_Relative_All_Tokens,
                                  'son',
                                  relative_search_type=>"word_suffix")
-            AND UserId = 1
-            AND AlbumId < 7
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+            AND userid = 1
+            AND albumid < 7
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query1)), IsOkAndHoldsRows({}));
 
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+  std::string query2 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_SUBSTRING(Summary_SubStr_Relative_All_Tokens,
                                  'ong',
                                  relative_search_type=>"word_suffix")
-            AND UserId = 1
-            AND AlbumId < 7
-          ORDER BY AlbumId ASC)sql"),
+            AND userid = 1
+            AND albumid < 7
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query2)),
               IsOkAndHoldsRows({{1}, {2}, {4}, {6}}));
 }
 
-TEST_F(SearchTest, SearchSubstringWithValuePrefix) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, SearchSubstringWithValuePrefix) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_SUBSTRING(Summary_SubStr_Relative_All_Tokens,
                                  'son',
                                  relative_search_type=>"value_prefix")
-            AND UserId = 1
-            AND AlbumId < 7
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{4}}));
+            AND userid = 1
+            AND albumid < 7
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{4}}));
 }
 
-TEST_F(SearchTest, SearchSubstringWithValueSuffix) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, SearchSubstringWithValueSuffix) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_SUBSTRING(Summary_SubStr_Relative_All_Tokens,
                                  'ong',
                                  relative_search_type=>"value_suffix")
-            AND UserId = 1
-            AND AlbumId < 7
-          ORDER BY AlbumId ASC)sql"),
+            AND userid = 1
+            AND albumid < 7
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               IsOkAndHoldsRows({{1}, {2}, {6}}));
 }
 
-TEST_F(SearchTest, SearchSubstringWithPhrase) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, SearchSubstringWithPhrase) {
+  std::string query1 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_SUBSTRING(Summary_SubStr_Relative_All_Tokens,
                                  'US to',
                                  relative_search_type=>"phrase")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{7}}));
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query1)), IsOkAndHoldsRows({{7}}));
 
   // Even though the length of 'us' is less than ngrams_size_min, when
   // considering the leading and trailing space ' us ', it's still a match.
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+  std::string query2 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_SUBSTRING(Summary_SubStr_Relative_All_Tokens,
                                  'us',
                                  relative_search_type=>"phrase")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{4}, {7}}));
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query2)), IsOkAndHoldsRows({{4}, {7}}));
 
   // There's no phrase/word matches "to".
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+  std::string query3 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_SUBSTRING(Summary_SubStr_Relative_All_Tokens,
                                  'to',
                                  relative_search_type=>"phrase")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query3)), IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, SearchTooShortSubstring) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, 'ba')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+TEST_P(SearchTest, SearchTooShortSubstring) {
+  std::string query1 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summary_substr_tokens, 'ba')
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query1)), IsOkAndHoldsRows({}));
 
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, 'bal us')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+  std::string query2 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summary_substr_tokens, 'bal us')
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query2)), IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, SearchEmptySubstringAlwaysReturnEmpty) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, '')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+TEST_P(SearchTest, SearchEmptySubstringAlwaysReturnEmpty) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summary_substr_tokens, '')
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, SearchNullSubstringAlwaysReturnEmpty) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, CAST(NULL AS STRING))
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+TEST_P(SearchTest, SearchNullSubstringAlwaysReturnEmpty) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summary_substr_tokens, CAST(NULL AS STRING))
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, SearchNormalizedEmptySubstring) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, '*^& %- // ')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+TEST_P(SearchTest, SearchNormalizedEmptySubstring) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(summary_substr_tokens, '*^& %- // ')
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, BasicSearchNgrams) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, BasicSearchNgrams) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_NGRAMS(Name_Ngrams_Tokens, 'rock')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{16}, {17}}));
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{16}, {17}}));
 }
 
-TEST_F(SearchTest, FuzzySearchNgrams) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, FuzzySearchNgrams) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_NGRAMS(Name_Ngrams_Tokens, 'electronci')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{17}}));
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{17}}));
 }
 
-TEST_F(SearchTest, FuzzySearchNgramsOnDiffLargerThanMinNgramsReturnsEmpty) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, FuzzySearchNgramsOnDiffLargerThanMinNgramsReturnsEmpty) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_NGRAMS(Name_Ngrams_Tokens, 'elcetrnoci', min_ngrams=>5)
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, SearchEmptyNgramsAlwaysReturnEmpty) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, SearchEmptyNgramsAlwaysReturnEmpty) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_NGRAMS(Name_Ngrams_Tokens, '')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, SearchNullNgramsAlwaysReturnEmpty) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, SearchNullNgramsAlwaysReturnEmpty) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_NGRAMS(Name_Ngrams_Tokens, CAST(NULL AS STRING))
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, SearchNormalizedEmptyNgrams) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, SearchNormalizedEmptyNgrams) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SEARCH_NGRAMS(Name_Ngrams_Tokens, '*^& %- // ')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({}));
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({}));
 }
 
-TEST_F(SearchTest, SearchSupportsEnhanceQueryHint) {
-  EXPECT_THAT(Query(
-                  R"sql(
+TEST_P(SearchTest, SearchSupportsEnhanceQueryHint) {
+  std::string query = R"sql(
           @{require_enhance_query=true, enhance_query_timeout_ms=300}
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(Summary_Tokens, "GLObal us song")
-            AND UserId = 2
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{5}}));
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "GLObal us song")
+            AND userid = 2
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{5}}));
 }
 
 // The logic of SNIPPET, SCORE, and SCORE_NGRAMS functions are different between
 // the Cloud Spanner and the Emulator. It is expected that the Cloud Spanner and
 // the Emulator return different results for those functions. Thus we only check
 // if the call is successful.
-TEST_F(SearchTest, BasicScore) {
-  ZETASQL_EXPECT_OK(Query(R"sql(
-      SELECT SCORE(Summary_Tokens, 'top')
-      FROM Albums
-      WHERE UserId = 1 AND SEARCH(Summary_Tokens, 'top'))sql"));
+TEST_P(SearchTest, BasicScore) {
+  std::string query = R"sql(
+      SELECT SCORE(summary_tokens, 'top')
+      FROM albums
+      WHERE userid = 1 AND SEARCH(summary_tokens, 'top'))sql";
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
-TEST_F(SearchTest, ScoreFunctionSupportOptionalArguments) {
-  ZETASQL_EXPECT_OK(Query(
-      R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SCORE(Summary_Tokens, "top", enhance_query=>true) >= 1
-            AND UserId = 1
-            AND SEARCH(Summary_Tokens, "top")
-          ORDER BY AlbumId ASC)sql"));
-  ZETASQL_EXPECT_OK(Query(
-      R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SCORE(Summary_Tokens,
+TEST_P(SearchTest, ScoreFunctionSupportOptionalArguments) {
+  std::string query1 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SCORE(summary_tokens, "top", enhance_query=>true) >= 1
+            AND userid = 1
+            AND SEARCH(summary_tokens, "top")
+          ORDER BY albumid ASC)sql";
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query1)));
+
+  std::string query2 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SCORE(summary_tokens,
                       "top",
                       enhance_query=>false,
                       language_tag=>"en-us") >= 1
-            AND UserId = 1
-            AND SEARCH(Summary_Tokens, "top")
-          ORDER BY AlbumId ASC)sql"));
+            AND userid = 1
+            AND SEARCH(summary_tokens, "top")
+          ORDER BY albumid ASC)sql";
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query2)));
 }
 
-TEST_F(SearchTest, ScoreFunctionWrongArguments) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SCORE(Summary_Tokens, "top", "en-us") >= 1
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+TEST_P(SearchTest, ScoreFunctionWrongArguments) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SCORE(summary_tokens, "top", "en-us") >= 1
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  auto expected_error = dialect_ == database_api::DatabaseDialect::POSTGRESQL
+                            ? absl::StatusCode::kNotFound
+                            : absl::StatusCode::kInvalidArgument;
+  EXPECT_THAT(Query(GetSqlQueryString(query)), StatusIs(expected_error));
 }
 
-TEST_F(SearchTest, BasicScoreNgrams) {
-  ZETASQL_EXPECT_OK(Query(R"sql(
+TEST_P(SearchTest, BasicScoreNgrams) {
+  std::string query = R"sql(
       SELECT SCORE_NGRAMS(Tracks_Substring_Tokens, "top")
-      FROM Albums
-      WHERE UserId = 1 AND SEARCH(Summary_Tokens, "top"))sql"));
+      FROM albums
+      WHERE userid = 1 AND SEARCH(summary_tokens, "top"))sql";
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
-TEST_F(SearchTest, ScoreNgramsFunctionSupportOptionalArguments) {
-  ZETASQL_EXPECT_OK(Query(
-      R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, ScoreNgramsFunctionSupportOptionalArguments) {
+  std::string query1 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SCORE_NGRAMS(Tracks_Substring_Tokens, "top") >= 0.25
-            AND UserId = 1
-            AND SEARCH(Summary_Tokens, "top")
-          ORDER BY AlbumId ASC)sql"));
-  ZETASQL_EXPECT_OK(Query(
-      R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+            AND userid = 1
+            AND SEARCH(summary_tokens, "top")
+          ORDER BY albumid ASC)sql";
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query1)));
+
+  std::string query2 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SCORE_NGRAMS(Tracks_Substring_Tokens,
                       "top",
                       algorithm=>"trigrams",
                       language_tag=>"en-us") >= 0.25
-            AND UserId = 1
-            AND SEARCH(Summary_Tokens, "top")
-          ORDER BY AlbumId ASC)sql"));
+            AND userid = 1
+            AND SEARCH(summary_tokens, "top")
+          ORDER BY albumid ASC)sql";
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query2)));
 }
 
-TEST_F(SearchTest, ScoreNgramsFunctionWrongArguments) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, ScoreNgramsFunctionWrongArguments) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SCORE_NGRAMS(Tracks_Substring_Tokens, "trigrams", "en-us") >= 0.25
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SearchTest, ScoreNgramsFunctionWrongTokenListType) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
+TEST_P(SearchTest, ScoreNgramsFunctionWrongTokenListType) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
           WHERE SCORE_NGRAMS(Tracks_Tokens, "top") >= 0.25
-            AND UserId = 1
-            AND SEARCH(Summary_Tokens, "top")
-          ORDER BY AlbumId ASC)sql"),
+            AND userid = 1
+            AND SEARCH(summary_tokens, "top")
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SearchTest, BasicSnippet) {
-  ZETASQL_EXPECT_OK(Query(R"sql(
+TEST_P(SearchTest, BasicSnippet) {
+  std::string query = R"sql(
       SELECT SNIPPET(Summary, 'top')
-      FROM Albums
-      WHERE UserId = 1)sql"));
+      FROM albums
+      WHERE userid = 1)sql";
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
-TEST_F(SearchTest, InvalidMaxSnippets) {
-  EXPECT_THAT(Query(R"sql(
+TEST_P(SearchTest, InvalidMaxSnippets) {
+  std::string query1 = R"sql(
       SELECT SNIPPET(Summary, 'top', max_snippets=>2147483648)
-      FROM Albums
-      WHERE UserId = 1)sql"),
+      FROM albums
+      WHERE userid = 1)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query1)),
               StatusIs(absl::StatusCode::kInvalidArgument));
 
-  EXPECT_THAT(Query(R"sql(
+  std::string query2 = R"sql(
       SELECT SNIPPET(Summary, 'top', max_snippets=>-1)
-      FROM Albums
-      WHERE UserId = 1)sql"),
+      FROM albums
+      WHERE userid = 1)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query2)),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SearchTest, InvalidMaxSnippetWidth) {
-  EXPECT_THAT(Query(R"sql(
+TEST_P(SearchTest, InvalidMaxSnippetWidth) {
+  std::string query1 = R"sql(
       SELECT SNIPPET(Summary, 'top', max_snippet_width=>2147483648)
-      FROM Albums
-      WHERE UserId = 1)sql"),
+      FROM albums
+      WHERE userid = 1)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query1)),
               StatusIs(absl::StatusCode::kInvalidArgument));
 
-  EXPECT_THAT(Query(R"sql(
+  std::string query2 = R"sql(
       SELECT SNIPPET(Summary, 'top', max_snippet_width=>-1)
-      FROM Albums
-      WHERE UserId = 1)sql"),
+      FROM albums
+      WHERE userid = 1)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query2)),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SearchTest, SnippetNamedArgumentShuffledOrder) {
-  ZETASQL_EXPECT_OK(Query(R"sql(
+TEST_P(SearchTest, SnippetNamedArgumentShuffledOrder) {
+  std::string query = R"sql(
       SELECT SNIPPET(language_tag=>'',
                      query=>'foo',
                      max_snippet_width=>10,
                      value=>Summary,
                      enhance_query=>false,
                      max_snippets=>4)
-      FROM Albums
-      WHERE UserId = 1)sql"));
+      FROM albums
+      WHERE userid = 1)sql";
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
-TEST_F(SearchTest, WrongSnippetContentType) {
-  EXPECT_THAT(
-      Query(R"sql(
+TEST_P(SearchTest, WrongSnippetContentType) {
+  std::string query = R"sql(
       SELECT SNIPPET(Summary,
                      'foo',
                      enhance_query=>false,
@@ -1203,8 +993,10 @@ TEST_F(SearchTest, WrongSnippetContentType) {
                      max_snippet_width=>10,
                      max_snippets=>4,
                      content_type=>'unsupported')
-      FROM Albums
-      WHERE UserId = 1)sql"),
+      FROM albums
+      WHERE userid = 1)sql";
+  EXPECT_THAT(
+      Query(GetSqlQueryString(query)),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr(
@@ -1212,8 +1004,8 @@ TEST_F(SearchTest, WrongSnippetContentType) {
               "supported content type.")));
 }
 
-TEST_F(SearchTest, SnippetContentTypeCaseInsensitive) {
-  ZETASQL_EXPECT_OK(Query(R"sql(
+TEST_P(SearchTest, SnippetContentTypeCaseInsensitive) {
+  std::string query = R"sql(
       SELECT SNIPPET(Summary,
                      'foo',
                      enhance_query=>false,
@@ -1221,182 +1013,199 @@ TEST_F(SearchTest, SnippetContentTypeCaseInsensitive) {
                      max_snippet_width=>10,
                      max_snippets=>4,
                      content_type=>'text/HTML')
-      FROM Albums
-      WHERE UserId = 1)sql"));
+      FROM albums
+      WHERE userid = 1)sql";
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
-TEST_F(SearchTest, SearchWithExistingSearchIndexHint) {
+TEST_P(SearchTest, SearchWithExistingSearchIndexHint) {
   ZETASQL_EXPECT_OK(UpdateSchema({
       R"sql(
-      CREATE SEARCH INDEX Summary_idx
-      ON Albums(Summary_Tokens, Summary_SubStr_Tokens))sql"}));
-  EXPECT_THAT(Query(
-                  R"sql(
-      SELECT AlbumId
-      FROM Albums@{force_index=Summary_idx}
-      WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, 'son')
-        AND UserId = 1
-      ORDER BY AlbumId ASC)sql"),
+      CREATE SEARCH INDEX summary_idx
+      ON albums(summary_tokens, summary_substr_tokens))sql"}));
+  std::string query = R"sql(
+      SELECT albumid
+      FROM albums@{force_index=summary_idx}
+      WHERE SEARCH_SUBSTRING(summary_substr_tokens, 'son')
+        AND userid = 1
+      ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               IsOkAndHoldsRows({{1}, {2}, {4}, {6}, {7}}));
 }
 
-TEST_F(SearchTest, SearchWithComplicatedSearchIndexHint) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
-      R"sql(
-        CREATE SEARCH INDEX Summary_idx
-        ON Albums(Summary_Tokens, Summary_SubStr_Tokens)
-        STORING(Length)
-        PARTITION BY UserId
-        ORDER BY ReleaseTimestamp
+TEST_P(SearchTest, SearchWithComplicatedSearchIndexHint) {
+  auto index_schema = dialect_ == database_api::DatabaseDialect::POSTGRESQL
+                          ?
+                          R"sql(
+        CREATE SEARCH INDEX summary_idx
+        ON albums(summary_tokens, summary_substr_tokens)
+        INCLUDE(length)
+        PARTITION BY userid
+        ORDER BY releasetimestamp
+        WITH (
+          sort_order_sharding = true,
+          disable_automatic_uid_column=true
+        )
+      )sql"
+                          :
+                          R"sql(
+        CREATE SEARCH INDEX summary_idx
+        ON albums(summary_tokens, summary_substr_tokens)
+        STORING(length)
+        PARTITION BY userid
+        ORDER BY releasetimestamp
         OPTIONS (sort_order_sharding = true, disable_automatic_uid_column=true)
-      )sql"}));
-  EXPECT_THAT(Query(
-                  R"sql(
-      SELECT AlbumId
-      FROM Albums@{force_index=Summary_idx}
-      WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, 'loba')
-        AND UserId = 1
-      ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{1}, {2}}));
+      )sql";
+  ZETASQL_EXPECT_OK(UpdateSchema({index_schema}));
+  std::string query = R"sql(
+      SELECT albumid
+      FROM albums@{force_index=summary_idx}
+      WHERE SEARCH_SUBSTRING(summary_substr_tokens, 'loba')
+        AND userid = 1
+      ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{1}, {2}}));
 }
 
-TEST_F(SearchTest, TokenlistConcatInSearch) {
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH(TOKENLIST_CONCAT([Summary_Tokens, Summary2_Tokens]), "global foo")
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
-              IsOkAndHoldsRows({{1}}));
+TEST_P(SearchTest, TokenlistConcatInSearch) {
+  std::string query1 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(TOKENLIST_CONCAT(ARRAY[summary_tokens, summary2_tokens]), "global foo")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query1)), IsOkAndHoldsRows({{1}}));
 
-  EXPECT_THAT(Query(
-                  R"sql(
-          SELECT AlbumId
-          FROM Albums@{force_index=AlbumIndex}
-          WHERE SEARCH_SUBSTRING(TOKENLIST_CONCAT([Summary_SubStr_Tokens, Summary2_SubStr_Tokens]), 'son')
-            AND UserId = 1
-          ORDER BY AlbumId ASC)sql"),
+  std::string query2 = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH_SUBSTRING(TOKENLIST_CONCAT(ARRAY[summary_substr_tokens, summary2_substr_tokens]), 'son')
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query2)),
               IsOkAndHoldsRows({{1}, {2}, {4}, {6}, {7}}));
 }
 
 // The emulator's query_validator does not have the table name when fail the
 // hint value check. Thus just try to match a portion of the error message.
-TEST_F(SearchTest, SearchWithNonExistingSearchIndexFails) {
-  EXPECT_THAT(Query(
-                  R"sql(
-      SELECT AlbumId
-      FROM Albums@{force_index=Summary_idx}
-      WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, 'son')
-        AND UserId = 1
-      ORDER BY AlbumId ASC)sql"),
+TEST_P(SearchTest, SearchWithNonExistingSearchIndexFails) {
+  std::string query = R"sql(
+      SELECT albumid
+      FROM albums@{force_index=summary_idx}
+      WHERE SEARCH_SUBSTRING(summary_substr_tokens, 'son')
+        AND userid = 1
+      ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("index called Summary_idx")));
+                       HasSubstr("index called summary_idx")));
 }
 
 // The emulator's query_validator does not have the table name when fail the
 // hint value check. Thus just try to match a portion of the error message.
-TEST_F(SearchTest, SearchFailAfterDropSearchIndex) {
-  ZETASQL_EXPECT_OK(UpdateSchema({R"sql(
-      CREATE SEARCH INDEX Summary_idx
-      ON Albums(Summary_Tokens, Summary_SubStr_Tokens))sql"}));
-  EXPECT_THAT(Query(R"sql(
-      SELECT AlbumId
-      FROM Albums@{force_index=Summary_idx}
-      WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, 'son')
-        AND UserId = 1
-      ORDER BY AlbumId ASC)sql"),
+TEST_P(SearchTest, SearchFailAfterDropSearchIndex) {
+  std::string create_index_query = R"sql(
+      CREATE SEARCH INDEX summary_idx
+      ON albums(summary_tokens, summary_substr_tokens))sql";
+  ZETASQL_EXPECT_OK(UpdateSchema({create_index_query}));
+  std::string search_query = R"sql(
+      SELECT albumid
+      FROM albums@{force_index=summary_idx}
+      WHERE SEARCH_SUBSTRING(summary_substr_tokens, 'son')
+        AND userid = 1
+      ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(search_query)),
               IsOkAndHoldsRows({{1}, {2}, {4}, {6}, {7}}));
 
-  ZETASQL_EXPECT_OK(UpdateSchema({R"sql(
-      DROP SEARCH INDEX Summary_idx)sql"}));
-  EXPECT_THAT(Query(R"sql(
-      SELECT AlbumId
-      FROM Albums@{force_index=Summary_idx}
-      WHERE SEARCH_SUBSTRING(Summary_SubStr_Tokens, 'son')
-        AND UserId = 1
-      ORDER BY AlbumId ASC)sql"),
+  std::string drop_index_query = R"sql(
+      DROP SEARCH INDEX summary_idx)sql";
+  ZETASQL_EXPECT_OK(UpdateSchema({drop_index_query}));
+  EXPECT_THAT(Query(GetSqlQueryString(search_query)),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("index called Summary_idx")));
+                       HasSubstr("index called summary_idx")));
 }
 
-TEST_F(SearchTest, ProjectTokenlistFailColRef) {
-  EXPECT_THAT(Query(R"sql(
-      SELECT AlbumId, Length_Tokens
-      FROM Albums)sql"),
+TEST_P(SearchTest, ProjectTokenlistFailColRef) {
+  std::string query = R"sql(
+      SELECT albumid, length_tokens
+      FROM albums)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SearchTest, ProjectTokenlistFailFunctionCall) {
-  EXPECT_THAT(Query(R"sql(
+TEST_P(SearchTest, ProjectTokenlistFailFunctionCall) {
+  std::string query = R"sql(
       SELECT TOKEN("name1") AS col1
-      FROM Albums)sql"),
+      FROM albums)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SearchTest, ProjectAll) {
-  ZETASQL_EXPECT_OK(Query(R"sql(
+TEST_P(SearchTest, ProjectAll) {
+  std::string query = R"sql(
       SELECT *
-      FROM Albums
-      WHERE AlbumId = 1)sql"));
+      FROM albums
+      WHERE albumid = 1)sql";
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
-TEST_F(SearchTest, ArrayIncludesSupported) {
-  EXPECT_THAT(Query(R"sql(
-    SELECT a.AlbumId
-    FROM Albums@{force_index=AlbumIndex} a
+TEST_P(SearchTest, ArrayIncludesSupported) {
+  std::string query1 = R"sql(
+    SELECT a.albumid
+    FROM albums@{force_index=albumindex} a
     WHERE ARRAY_INCLUDES(a.Tracks, "track2")
-      AND a.UserId = 1
-    ORDER BY a.AlbumId
-  )sql"),
+      AND a.userid = 1
+    ORDER BY a.albumid
+  )sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query1)),
               IsOkAndHoldsRows({{2}, {4}, {6}, {9}}));
 
-  EXPECT_THAT(Query(R"sql(
-    SELECT a.AlbumId
-    FROM Albums@{force_index=AlbumIndex} a
+  std::string query2 = R"sql(
+    SELECT a.albumid
+    FROM albums@{force_index=albumindex} a
     WHERE ARRAY_INCLUDES_ANY(a.Tracks, ["track1", "track2"])
-      AND a.UserId = 1
-    ORDER BY a.AlbumId
-  )sql"),
+      AND a.userid = 1
+    ORDER BY a.albumid
+  )sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query2)),
               IsOkAndHoldsRows({{2}, {4}, {6}, {9}, {12}}));
 
-  EXPECT_THAT(Query(R"sql(
-    SELECT a.AlbumId
-    FROM Albums@{force_index=AlbumIndex} a
+  std::string query3 = R"sql(
+    SELECT a.albumid
+    FROM albums@{force_index=albumindex} a
     WHERE ARRAY_INCLUDES_ALL(a.Tracks, ["track1", "track2"])
-      AND a.UserId = 1
-    ORDER BY a.AlbumId
-  )sql"),
+      AND a.userid = 1
+    ORDER BY a.albumid
+  )sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query3)),
               IsOkAndHoldsRows({{2}, {4}, {6}, {9}}));
 }
 
-TEST_F(SearchTest, ArrayIncludesNullOrEmpty) {
-  EXPECT_THAT(Query(R"sql(
-    SELECT a.AlbumId
-    FROM Albums@{force_index=AlbumIndex} a
+TEST_P(SearchTest, ArrayIncludesNullOrEmpty) {
+  std::string query1 = R"sql(
+    SELECT a.albumid
+    FROM albums@{force_index=albumindex} a
     WHERE ARRAY_INCLUDES(a.Tracks, NULL)
-      AND a.UserId = 1
-    ORDER BY a.AlbumId
-  )sql"),
-              IsOkAndHoldsRows({}));
+      AND a.userid = 1
+    ORDER BY a.albumid
+  )sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query1)), IsOkAndHoldsRows({}));
 
-  EXPECT_THAT(Query(R"sql(
-    SELECT a.AlbumId
-    FROM Albums@{force_index=AlbumIndex} a
+  std::string query2 = R"sql(
+    SELECT a.albumid
+    FROM albums@{force_index=albumindex} a
     WHERE ARRAY_INCLUDES_ANY(a.Tracks, NULL)
-      AND a.UserId = 1
-    ORDER BY a.AlbumId
-  )sql"),
-              IsOkAndHoldsRows({}));
+      AND a.userid = 1
+    ORDER BY a.albumid
+  )sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query2)), IsOkAndHoldsRows({}));
 
-  EXPECT_THAT(Query(R"sql(
-    SELECT a.AlbumId
-    FROM Albums@{force_index=AlbumIndex} a
+  std::string query3 = R"sql(
+    SELECT a.albumid
+    FROM albums@{force_index=albumindex} a
     WHERE ARRAY_INCLUDES_ANY(a.Tracks, [])
-      AND a.UserId = 1
-    ORDER BY a.AlbumId
-  )sql"),
-              IsOkAndHoldsRows({}));
+      AND a.userid = 1
+    ORDER BY a.albumid
+  )sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query3)), IsOkAndHoldsRows({}));
 }
 
 static constexpr char kSearchQueryFormat[] = R"sql(
@@ -1407,7 +1216,7 @@ static constexpr char kSearchQueryFormat[] = R"sql(
 static constexpr char kSearchIndexHint[] =
     "@{force_index=SqlSearchCountriesIndex}";
 
-static constexpr char kSearchPredicate[] = "SEARCH(a.Name_Tokens, 'foo')";
+static constexpr char kSearchPredicate[] = "SEARCH(a.name_tokens, 'foo')";
 static constexpr char kNonSearchPrediate[] = "CountryId = 1";
 
 static constexpr char kAllowSearchInTransactionHint[] =
@@ -1452,7 +1261,7 @@ class SearchInTransactionTest
           CountryId INT64 NOT NULL,
           Name STRING(MAX),
           Population INT64,
-          Name_Tokens TOKENLIST AS (TOKENIZE_FULLTEXT(Name)) STORED HIDDEN,
+          name_tokens TOKENLIST AS (TOKENIZE_FULLTEXT(Name)) STORED HIDDEN,
           Name_Substring_Tokens TOKENLIST AS (TOKENIZE_SUBSTRING(Name)) STORED HIDDEN,
           Population_Tokens TOKENLIST AS (TOKENIZE_NUMBER(Population)) STORED HIDDEN,
           ) PRIMARY KEY(CountryId)
@@ -1460,7 +1269,7 @@ class SearchInTransactionTest
     return SetSchema({
         R"sql(
           CREATE SEARCH INDEX SqlSearchCountriesIndex ON
-          SqlSearchCountries(Name_Tokens,
+          SqlSearchCountries(name_tokens,
                              Name_Substring_Tokens,
                              Population_Tokens)
           OPTIONS (sort_order_sharding = true)
@@ -1549,7 +1358,7 @@ static constexpr char kQueryWithoutSearch[] = R"sql(
       FROM SqlSearchCountries a
       WHERE name = 'foo')sql";
 
-TEST_F(SearchInTransactionTest, NonSearchQuerySucceedInTransaction) {
+TEST_P(SearchInTransactionTest, NonSearchQuerySucceedInTransaction) {
   auto txn = Transaction(Transaction::ReadWriteOptions());
   ZETASQL_EXPECT_OK(QueryTransaction(txn, kQueryWithoutSearch));
 
@@ -1557,17 +1366,17 @@ TEST_F(SearchInTransactionTest, NonSearchQuerySucceedInTransaction) {
   ZETASQL_EXPECT_OK(PartitionQuery(txn, kQueryWithoutSearch));
 }
 
-TEST_F(SearchInTransactionTest, SearchNotSupportedInPartitionedDML) {
+TEST_P(SearchInTransactionTest, SearchNotSupportedInPartitionedDML) {
   EXPECT_THAT(ExecutePartitionedDml(
                   SqlStatement("UPDATE SqlSearchCountries SET Name = NULL "
-                               "WHERE SEARCH_SUBSTRING(Name_Tokens, 'foo')")),
+                               "WHERE SEARCH_SUBSTRING(name_tokens, 'foo')")),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SearchInTransactionTest, SearchNotSupportedInBatchDML) {
+TEST_P(SearchInTransactionTest, SearchNotSupportedInBatchDML) {
   EXPECT_THAT(CommitBatchDml(
                   {SqlStatement("UPDATE SqlSearchCountries SET Name = NULL "
-                                "WHERE SEARCH_SUBSTRING(Name_Tokens, 'foo')")}),
+                                "WHERE SEARCH_SUBSTRING(name_tokens, 'foo')")}),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
@@ -1631,6 +1440,10 @@ class TokenizeNumberParametersTest
                  "to the difference between min and max (1, 10)"))},
         {.query = "SELECT TOKENIZE_NUMBER(2.567, min=>-1.0, max=>5.0, "
                   "algorithm=>'floatingpoint', precision=>16)",
+         .expected_error = ContainsRegex("TOKENIZE_NUMBER: precision must be "
+                                         "in the range \\[1, 15\\], got: 16")},
+        {.query = "SELECT TOKENIZE_NUMBER(2.567, min=>-1.0, max=>5.0, "
+                  "algorithm=>'floatingpoint', ieee_precision=>16)",
          .expected_error = ContainsRegex("TOKENIZE_NUMBER: precision must be "
                                          "in the range \\[1, 15\\], got: 16")},
         {.query = "SELECT TOKENIZE_NUMBER(2, min=>-1, max=>5, "

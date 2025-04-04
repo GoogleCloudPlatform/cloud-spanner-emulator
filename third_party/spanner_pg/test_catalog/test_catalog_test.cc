@@ -80,7 +80,7 @@ TEST(TestCatalogTest, TableColumns) {
   const zetasql::Table* spangres_table;
   ZETASQL_ASSERT_OK(test_catalog->FindTable({"AllSpangresTypes"}, &spangres_table));
   ASSERT_NE(spangres_table, nullptr);
-  int all_types_num_columns = 10;
+  int all_types_num_columns = 11;
   EXPECT_EQ(spangres_table->NumColumns(), all_types_num_columns);
   const zetasql::Column* int64_column =
       spangres_table->FindColumnByName("int64_value");

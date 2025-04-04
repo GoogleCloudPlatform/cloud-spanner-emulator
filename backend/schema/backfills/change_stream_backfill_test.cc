@@ -39,15 +39,17 @@ namespace emulator {
 namespace backend {
 namespace {
 
+constexpr char kDatabaseId[] = "test-db";
+
 class ChangeStreamBackfillTest : public ::testing::Test {
  protected:
   void SetUp() override {
     std::vector<std::string> create_statements = {R"(
                               CREATE CHANGE STREAM C FOR ALL)"};
     ZETASQL_ASSERT_OK_AND_ASSIGN(
-        database_,
-        Database::Create(
-            &clock_, SchemaChangeOperation{.statements = create_statements}));
+        database_, Database::Create(
+                       &clock_, kDatabaseId,
+                       SchemaChangeOperation{.statements = create_statements}));
   }
   // Test components.
   Clock clock_;

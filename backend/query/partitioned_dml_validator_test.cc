@@ -30,6 +30,7 @@
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
 #include "backend/query/queryable_table.h"
+#include "common/constants.h"
 #include "common/errors.h"
 #include "tests/common/schema_constructor.h"
 
@@ -43,7 +44,7 @@ namespace {
 class PartitionedDMLValidatorTest : public testing::Test {
  public:
   PartitionedDMLValidatorTest()
-      : analyzer_options_(MakeGoogleSqlAnalyzerOptions()),
+      : analyzer_options_(MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone)),
         fn_catalog_(&type_factory_),
         schema_(test::CreateSchemaWithMultiTables(&type_factory_)),
         catalog_(std::make_unique<Catalog>(

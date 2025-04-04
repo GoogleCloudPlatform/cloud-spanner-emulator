@@ -1210,6 +1210,7 @@ _readCreateStmt(void)
 	READ_NODE_FIELD(options);
 	READ_ENUM_FIELD(oncommit, OnCommitAction);
 	READ_STRING_FIELD(tablespacename);
+	READ_NODE_FIELD(locality_group_name);
 	READ_STRING_FIELD(accessMethod);
 	READ_BOOL_FIELD(if_not_exists);
 	READ_NODE_FIELD(interleavespec);
@@ -1244,6 +1245,7 @@ _readColumnDef(void)
 	READ_NODE_FIELD(constraints);
 	READ_NODE_FIELD(fdwoptions);
 	READ_LOCATION_FIELD(location);
+	READ_NODE_FIELD(locality_group_name);
 
   READ_DONE();
  }
@@ -2195,6 +2197,85 @@ _readAlterChangeStreamStmt(void)
   READ_BOOL_FIELD(drop_for_all);
 
 	READ_DONE();
+}
+
+// SPANGRES BEGIN
+static CreateSearchIndexStmt*
+_readCreateSearchIndexStmt(void)
+{
+  READ_LOCALS(CreateSearchIndexStmt);
+	READ_STRING_FIELD(search_index_name);
+	READ_NODE_FIELD(table_name);
+	READ_NODE_FIELD(token_columns);
+	READ_NODE_FIELD(storing);
+	READ_NODE_FIELD(partition);
+	READ_NODE_FIELD(order);
+	READ_NODE_FIELD(null_filters);
+	READ_NODE_FIELD(interleave);
+	READ_NODE_FIELD(options);
+
+	READ_DONE();
+}
+
+static AlterSearchIndexStmt*
+_readAlterSearchIndexStmt(void)
+{
+  READ_LOCALS(AlterSearchIndexStmt);
+
+	READ_NODE_FIELD(search_index_name);
+	READ_NODE_FIELD(alter_search_index_cmd);
+
+	READ_DONE();
+}
+
+static AlterSearchIndexCmd*
+_readAlterSearchIndexCmd(void)
+{
+  READ_LOCALS(AlterSearchIndexCmd);
+
+	READ_ENUM_FIELD(cmd_type, AlterSearchIndexCmdType);
+	READ_STRING_FIELD(column_name);
+
+	READ_DONE();
+}
+
+// SPANGRES END
+
+static LocalityGroupOption* _readLocalityGroupOption(void) {
+  READ_LOCALS(LocalityGroupOption);
+  READ_STRING_FIELD(value);
+	READ_BOOL_FIELD(is_null);
+
+	READ_DONE();
+}
+
+static CreateLocalityGroupStmt* _readCreateLocalityGroupStmt(void) {
+  READ_LOCALS(CreateLocalityGroupStmt);
+  READ_NODE_FIELD(locality_group_name);
+  READ_NODE_FIELD(storage);
+  READ_NODE_FIELD(ssd_to_hdd_spill_timespan);
+  READ_BOOL_FIELD(if_not_exists);
+
+  READ_DONE();
+}
+
+static AlterLocalityGroupStmt* _readAlterLocalityGroupStmt(void) {
+  READ_LOCALS(AlterLocalityGroupStmt);
+  READ_NODE_FIELD(locality_group_name);
+  READ_NODE_FIELD(storage);
+  READ_NODE_FIELD(ssd_to_hdd_spill_timespan);
+  READ_BOOL_FIELD(if_exists);
+
+  READ_DONE();
+}
+
+static AlterColumnLocalityGroupStmt* _readAlterColumnLocalityGroupStmt(void) {
+  READ_LOCALS(AlterColumnLocalityGroupStmt);
+  READ_NODE_FIELD(relation);
+  READ_STRING_FIELD(column);
+  READ_NODE_FIELD(locality_group_name);
+
+  READ_DONE();
 }
 
 static CreateRoleStmt*
@@ -3708,6 +3789,7 @@ _readIndexStmt(void)
 	READ_NODE_FIELD(indexParams);
 	READ_NODE_FIELD(indexIncludingParams);
 	READ_NODE_FIELD(options);
+	READ_NODE_FIELD(locality_group_name);
   READ_NODE_FIELD(interleavespec);
 	READ_NODE_FIELD(whereClause);
 	READ_NODE_FIELD(excludeOpNames);
@@ -3755,6 +3837,7 @@ _readAlterTableCmd(void)
 	READ_NODE_FIELD(def);
 	READ_ENUM_FIELD(behavior, DropBehavior);
 	READ_BOOL_FIELD(missing_ok);
+	READ_NODE_FIELD(locality_group_name);
 	READ_STRING_FIELD(raw_expr_string);
 
 	READ_DONE();
@@ -4323,6 +4406,22 @@ parseNodeString(void)
 		return_value = _readChangeStreamTrackedTable();
   else if (MATCH("ALTERCHANGESTREAMSTMT", 21))
     return_value = _readAlterChangeStreamStmt();
+	// SPANGRES BEGIN
+	else if (MATCH("CREATESEARCHINDEXSTMT", 21))
+		return_value = _readCreateSearchIndexStmt();
+	else if (MATCH("ALTERSEARCHINDEXSTMT", 20))
+		return_value = _readAlterSearchIndexStmt();
+	else if (MATCH("ALTERSEARCHINDEXCMD", 19))
+		return_value = _readAlterSearchIndexCmd();
+	// SPANGRES END
+	else if (MATCH("LOCALITYGROUPOPTION", 19))
+		return_value = _readLocalityGroupOption();
+	else if (MATCH("CREATELOCALITYGROUPSTMT", 23))
+		return_value = _readCreateLocalityGroupStmt();
+	else if (MATCH("ALTERLOCALITYGROUPSTMT", 22))
+		return_value = _readAlterLocalityGroupStmt();
+	else if (MATCH("ALTERCOLUMNLOCALITYGROUPSTMT", 28))
+		return_value = _readAlterColumnLocalityGroupStmt();
 	else if (MATCH("CREATEROLESTMT", 14))
 		return_value = _readCreateRoleStmt();
 	else if (MATCH("DROPROLESTMT", 12))

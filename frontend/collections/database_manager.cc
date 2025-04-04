@@ -80,8 +80,9 @@ absl::StatusOr<std::shared_ptr<Database>> DatabaseManager::CreateDatabase(
       ParseDatabaseUri(database_uri, &project_id, &instance_id, &database_id));
   std::string instance_uri = MakeInstanceUri(project_id, instance_id);
 
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<backend::Database> backend_db,
-                   backend::Database::Create(clock_, schema_change_operation));
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<backend::Database> backend_db,
+      backend::Database::Create(clock_, database_id, schema_change_operation));
   auto database = std::make_shared<Database>(
       database_uri, std::move(backend_db), clock_->Now());
 

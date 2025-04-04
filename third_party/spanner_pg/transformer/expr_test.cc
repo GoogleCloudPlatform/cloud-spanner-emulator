@@ -184,6 +184,46 @@ absl::StatusOr<ValuePairVector> ConstValuePairs() {
       zetasql::MakeResolvedLiteral(zetasql::types::BytesType(),
                                      zetasql::Value::NullBytes()));
 
+  // interval <-> interval
+  ZETASQL_ASSIGN_OR_RETURN(void* p, CheckedPgPalloc(sizeof(Interval)));
+  Interval* interval = reinterpret_cast<Interval*>(p);
+  interval->month = 10;
+  interval->day = -50;
+  interval->time = 5057089;
+
+  ZETASQL_ASSIGN_OR_RETURN(auto interval_const,
+                   CheckedPgMakeConst(
+                       /*consttype=*/INTERVALOID,
+                       /*consttypmod=*/-1,
+                       /*constcollid=*/InvalidOid,
+                       /*constlen=*/sizeof(Interval),
+                       /*constvalue=*/IntervalPGetDatum(interval),
+                       /*constisnull=*/false,
+                       /*constbyval=*/false));
+
+  value_pairs.emplace_back(
+      PostgresCastToExpr(interval_const),
+      zetasql::MakeResolvedLiteral(
+          zetasql::types::IntervalType(),
+          zetasql::Value::Interval(
+              *zetasql::IntervalValue::FromMonthsDaysMicros(
+                  interval->month, interval->day, interval->time))));
+
+  ZETASQL_ASSIGN_OR_RETURN(interval_const,
+                   CheckedPgMakeConst(
+                       /*consttype=*/INTERVALOID,
+                       /*consttypmod=*/-1,
+                       /*constcollid=*/InvalidOid,
+                       /*constlen=*/sizeof(Interval),
+                       /*constvalue=*/IntervalPGetDatum(nullptr),
+                       /*constisnull=*/true,
+                       /*constbyval=*/false));
+
+  value_pairs.emplace_back(
+      PostgresCastToExpr(interval_const),
+      zetasql::MakeResolvedLiteral(zetasql::types::IntervalType(),
+                                     zetasql::Value::NullInterval()));
+
   // numeric <-> PG.NUMERIC
   ZETASQL_ASSIGN_OR_RETURN(auto numeric_const,
                    MakeNumericConst("-13.1357315957913513502000"));

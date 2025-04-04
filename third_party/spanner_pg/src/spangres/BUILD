@@ -32,12 +32,10 @@
 # Files which are Spangres specific implementations applied in the PostgreSQL backend code.
 
 package(
-    default_visibility = [
-        "//:__subpackages__",
-    ],
+    default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["notice"])
+licenses(["restricted"])
 
 # Memory intercepts Postgres malloc calls and makes a corresponding
 # reservation in Spanner before performing the allocation.

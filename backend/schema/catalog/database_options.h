@@ -46,6 +46,11 @@ class DatabaseOptions : public SchemaNode {
   std::optional<std::string> default_sequence_kind() const {
     return default_sequence_kind_;
   }
+
+  std::optional<std::string> default_time_zone() const {
+    return default_time_zone_;
+  }
+
   // SchemaNode interface implementation.
   // ------------------------------------
   std::optional<SchemaNameInfo> GetSchemaNameInfo() const override {
@@ -90,6 +95,8 @@ class DatabaseOptions : public SchemaNode {
   ::google::protobuf::RepeatedPtrField<ddl::SetOption> options_;
   // Default sequence kind.
   std::optional<std::string> default_sequence_kind_;
+  // Default time zone for the database.
+  std::optional<std::string> default_time_zone_;
 };
 }  // namespace backend
 }  // namespace emulator

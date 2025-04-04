@@ -30,6 +30,7 @@
 #include "backend/query/function_catalog.h"
 #include "backend/query/queryable_table.h"
 #include "backend/schema/catalog/schema.h"
+#include "common/constants.h"
 #include "common/errors.h"
 #include "tests/common/schema_constructor.h"
 
@@ -43,7 +44,7 @@ namespace {
 class IndexHintValidatorTest : public testing::Test {
  public:
   IndexHintValidatorTest()
-      : analyzer_options_(MakeGoogleSqlAnalyzerOptions()),
+      : analyzer_options_(MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone)),
         fn_catalog_(&type_factory_) {}
 
   void SetUp() override {
