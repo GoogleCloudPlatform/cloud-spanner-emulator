@@ -49,9 +49,15 @@ TEST(SpannerTestCatalogTest, SchemaTables) {
   const zetasql::Table* sql_table;
   ZETASQL_ASSERT_OK(
       sql_catalog->FindTable({"INFORMATION_SCHEMA", "TABLES"}, &sql_table));
-  std::string full_name = "TABLES";
+  std::string full_name = "INFORMATION_SCHEMA.TABLES";
   EXPECT_EQ(sql_table->FullName(), full_name);
   EXPECT_EQ(sql_table->Name(), "TABLES");
+
+  ZETASQL_ASSERT_OK(sql_catalog->FindTable(
+      {"SPANNER_SYS", "SUPPORTED_OPTIMIZER_VERSIONS"}, &sql_table));
+  full_name = "SPANNER_SYS.SUPPORTED_OPTIMIZER_VERSIONS";
+  EXPECT_EQ(sql_table->FullName(), full_name);
+  EXPECT_EQ(sql_table->Name(), "SUPPORTED_OPTIMIZER_VERSIONS");
 }
 
 }  // namespace

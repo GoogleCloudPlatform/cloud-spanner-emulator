@@ -101,6 +101,46 @@ static auto kTypeMap =
     {google::spanner::emulator::backend::ddl::ColumnDefinition::TOKENLIST, "spanner.tokenlist"},
 });
 
+// LINT.IfChange(supported_statements)
+// If you add a new statement, make sure to handle its printing on the method
+// PrintDDLStatement.
+
+static auto kSupportedStatements =
+  std::set<google::spanner::emulator::backend::ddl::DDLStatement::StatementCase>({
+    // clang-format on
+    google::spanner::emulator::backend::ddl::DDLStatement::kCreateDatabase,
+    google::spanner::emulator::backend::ddl::DDLStatement::kAlterDatabase,
+    google::spanner::emulator::backend::ddl::DDLStatement::kAlterTable,
+    google::spanner::emulator::backend::ddl::DDLStatement::kCreateTable,
+    google::spanner::emulator::backend::ddl::DDLStatement::kDropTable,
+    google::spanner::emulator::backend::ddl::DDLStatement::kDropIndex,
+    google::spanner::emulator::backend::ddl::DDLStatement::kCreateIndex,
+    google::spanner::emulator::backend::ddl::DDLStatement::kAlterIndex,
+    google::spanner::emulator::backend::ddl::DDLStatement::kCreateSchema,
+    google::spanner::emulator::backend::ddl::DDLStatement::kDropSchema,
+
+    google::spanner::emulator::backend::ddl::DDLStatement::kAnalyze,
+    google::spanner::emulator::backend::ddl::DDLStatement::kCreateFunction,
+    google::spanner::emulator::backend::ddl::DDLStatement::kDropFunction,
+    google::spanner::emulator::backend::ddl::DDLStatement::kSetColumnOptions,
+    google::spanner::emulator::backend::ddl::DDLStatement::kCreateChangeStream,
+    google::spanner::emulator::backend::ddl::DDLStatement::kAlterChangeStream,
+    google::spanner::emulator::backend::ddl::DDLStatement::kDropChangeStream,
+
+    google::spanner::emulator::backend::ddl::DDLStatement::kCreateSearchIndex,
+
+    google::spanner::emulator::backend::ddl::DDLStatement::kDropSearchIndex,
+
+    google::spanner::emulator::backend::ddl::DDLStatement::kCreateSequence,
+    google::spanner::emulator::backend::ddl::DDLStatement::kAlterSequence,
+    google::spanner::emulator::backend::ddl::DDLStatement::kDropSequence,
+    google::spanner::emulator::backend::ddl::DDLStatement::kRenameTable,
+    google::spanner::emulator::backend::ddl::DDLStatement::kCreateLocalityGroup,
+    google::spanner::emulator::backend::ddl::DDLStatement::kAlterLocalityGroup,
+    google::spanner::emulator::backend::ddl::DDLStatement::kDropLocalityGroup,
+});
+// LINT.ThenChange(:print_sdl_statement)
+
 std::string CreateNotNullCondition(const absl::string_view column) {
   return StrCat(QuoteIdentifier(column), " IS NOT NULL");
 }
@@ -266,6 +306,16 @@ SpangresSchemaPrinterImpl::PrintDDLStatements(
 absl::StatusOr<std::vector<std::string>>
 SpangresSchemaPrinterImpl::PrintDDLStatement(
     const google::spanner::emulator::backend::ddl::DDLStatement& statement) const {
+  // We use find() instead of contains() because the latter is not available in
+  // the open-source data structure (std::set).
+  if (kSupportedStatements.find(statement.statement_case()) ==
+      kSupportedStatements.end()) {
+    return StatementTranslationError("Unsupported statement");
+  }
+
+  // LINT.IfChange(print_sdl_statement)
+  // If you need to add a new statement, make sure to update the
+  // `kSupportedStatements` set.
   switch (statement.statement_case()) {
     case google::spanner::emulator::backend::ddl::DDLStatement::kCreateDatabase:
       return PrintCreateDatabase(statement.create_database());
@@ -330,6 +380,7 @@ SpangresSchemaPrinterImpl::PrintDDLStatement(
       // Ignore unsupported statements
       return StatementTranslationError("Unsupported statement");
   }
+  // LINT.ThenChange(:supported_statements)
 }
 
 absl::StatusOr<std::vector<std::string>>
@@ -1801,6 +1852,12 @@ std::string RowDeletionPolicyToInterval(
   return RowDeletionPolicyToInterval(
       policy.older_than().unit() * policy.older_than().count(),
       policy.column_name());
+}
+
+std::vector<google::spanner::emulator::backend::ddl::DDLStatement::StatementCase>
+TEST_GetSupportedDDLStatements() {
+  return std::vector<google::spanner::emulator::backend::ddl::DDLStatement::StatementCase>(
+      kSupportedStatements.begin(), kSupportedStatements.end());
 }
 
 }  // namespace spangres

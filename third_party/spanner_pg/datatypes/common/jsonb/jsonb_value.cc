@@ -753,8 +753,6 @@ void PgJsonbValue::SetValue(const PgJsonbValue& value) {
   (*rep_).tag = value.rep_->tag;
   max_depth_estimate_ = value.max_depth_estimate_;
   total_bytes_estimate_ = value.total_bytes_estimate_;
-  ABSL_LOG(ERROR) << "value rep: " << PrintTreeNode(value.rep_);
-  ABSL_LOG(ERROR) << "CURRENT REP: " << PrintTreeNode(rep_);
 }
 
 absl::StatusOr<PgJsonbValue> PgJsonbValue::Parse(
@@ -766,6 +764,20 @@ absl::StatusOr<PgJsonbValue> PgJsonbValue::Parse(
                            std::int64_t, std::uint64_t, long double>;
   jsonb_parser::sax_parse(jsonb, &parser);
   return std::move(parser).GetRepresentation();
+}
+
+PgJsonbValue PgJsonbValue::CreateEmptyArray(
+    std::vector<std::unique_ptr<TreeNode>>* tree_nodes) {
+  tree_nodes->push_back(std::make_unique<TreeNode>(NodeType::kArray));
+  return PgJsonbValue(tree_nodes->back().get(), tree_nodes,
+                      /*max_depth_estimate=*/0, /*total_bytes_estimate=*/0);
+}
+
+PgJsonbValue PgJsonbValue::CreateEmptyObject(
+    std::vector<std::unique_ptr<TreeNode>>* tree_nodes) {
+  tree_nodes->push_back(std::make_unique<TreeNode>(NodeType::kObject));
+  return PgJsonbValue(tree_nodes->back().get(), tree_nodes,
+                      /*max_depth_estimate=*/0, /*total_bytes_estimate=*/0);
 }
 
 TreeNode* PgJsonbValue::CreateTreeNode(NodeType tag) {

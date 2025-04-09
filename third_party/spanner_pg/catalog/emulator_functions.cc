@@ -1701,6 +1701,12 @@ std::unique_ptr<zetasql::Function> MapFloatToIntFunction(
 // PG Cast functions
 absl::StatusOr<zetasql::Value> EvalToJsonbFromValue(zetasql::Value arg);
 
+absl::StatusOr<zetasql::Value> EvalToJsonb(
+    absl::Span<const zetasql::Value> args) {
+  ZETASQL_RET_CHECK(args.size() == 1);
+  return EvalToJsonbFromValue(args[0]);
+}
+
 // Converts a `Value` to its unquoted string representation. `null` value is
 // printed as a `null_string`. The return string from certain Value types may be
 // normalized later when converted to PG.JSONB by calling
@@ -2337,9 +2343,61 @@ std::unique_ptr<zetasql::Function> JsonbBuildObjectFunction(
       function_options);
 }
 
+bool HasNullValue(absl::Span<const zetasql::Value> args) {
+  return absl::c_any_of(
+      args, [](const zetasql::Value& arg) { return arg.is_null(); });
+}
+
 absl::StatusOr<zetasql::Value> EvalJsonbDelete(
     absl::Span<const zetasql::Value> args) {
-  return absl::UnimplementedError("jsonb_delete is not implemented");
+  if (HasNullValue(args)) {
+    return zetasql::Value::Null(
+        postgres_translator::spangres::datatypes::GetPgJsonbType());
+  }
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSIGN_OR_RETURN(std::string jsonb, GetStringRepresentation(args[0]));
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue jsonb_value,
+                   PgJsonbValue::Parse(jsonb, &tree_nodes));
+
+  if (!jsonb_value.IsObject() && !jsonb_value.IsArray()) {
+    return absl::InvalidArgumentError("cannot delete from scalar");
+  }
+
+  if (jsonb_value.IsObject()) {
+    if (args[1].type_kind() == zetasql::TYPE_STRING) {
+      std::string key = args[1].string_value();
+      jsonb_value.RemoveMember(key);
+    } else if (args[1].type_kind() == zetasql::TYPE_INT64) {
+      return absl::InvalidArgumentError(
+          "cannot delete from object using integer index");
+    } else if (args[1].type_kind() == zetasql::TYPE_ARRAY) {
+      return absl::InvalidArgumentError(
+          "Deleting from array not currently supported");
+    }
+  } else if (jsonb_value.IsArray()) {
+    if (args[1].type_kind() == zetasql::TYPE_STRING) {
+      std::string del_string = args[1].string_value();
+      for (int i = 0; i < jsonb_value.GetArraySize(); ++i) {
+        if (jsonb_value.GetArrayElementIfExists(i)->IsString()) {
+          std::string serialized_delete_string =
+              NormalizeJsonbString(del_string);
+          absl::string_view element_string =
+              jsonb_value.GetArrayElementIfExists(i)->GetSerializedString();
+          if (element_string == serialized_delete_string) {
+            jsonb_value.RemoveArrayElement(i);
+            --i;
+          }
+        }
+      }
+    } else if (args[1].type_kind() == zetasql::TYPE_INT64) {
+      int64_t index = args[1].int64_value();
+      jsonb_value.RemoveArrayElement(index);
+    } else if (args[1].type_kind() == zetasql::TYPE_ARRAY) {
+      return absl::UnimplementedError(
+          "jsonb_delete(jsonb, array) is currently not supported");
+    }
+  }
+  return CreatePgJsonbValueFromNormalized(jsonb_value.Serialize());
 }
 
 std::unique_ptr<zetasql::Function> JsonbDeleteFunction(
@@ -2364,9 +2422,67 @@ std::unique_ptr<zetasql::Function> JsonbDeleteFunction(
       function_options);
 }
 
+absl::StatusOr<std::optional<PgJsonbValue>> GetRootJsonbHelper(
+    PgJsonbValue jsonb_value, const zetasql::Value& path_value,
+    std::vector<std::string>& path_vector) {
+  if (path_value.is_null()) {
+    return std::nullopt;
+  }
+  ABSL_CHECK(path_value.type_kind() == zetasql::TYPE_ARRAY);
+  for (int i = 0; i < path_value.num_elements(); ++i) {
+    if (path_value.element(i).is_null()) {
+      return absl::InvalidArgumentError(
+          absl::Substitute("path element at position $0 is null", i + 1));
+    }
+    const zetasql::Value& path_element = path_value.element(i);
+    std::string path_element_string = path_element.string_value();
+    path_vector.push_back(path_element_string);
+  }
+
+  // We need to find the parent of the final element of the path in order to
+  // do operations such as delete or set. Thus we construct a std::span as it
+  // provides a subspan method and then convert to an absl::Span.
+  return jsonb_value.FindAtPath(
+      {absl::MakeSpan(path_vector).subspan(0, path_vector.size() - 1)});
+}
+
 absl::StatusOr<zetasql::Value> EvalJsonbDeletePath(
     absl::Span<const zetasql::Value> args) {
-  return absl::UnimplementedError("jsonb_delete_path is not implemented");
+  if (HasNullValue(args)) {
+    return zetasql::Value::Null(
+        postgres_translator::spangres::datatypes::GetPgJsonbType());
+  }
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSIGN_OR_RETURN(std::string jsonb, GetStringRepresentation(args[0]));
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue jsonb_value,
+                   PgJsonbValue::Parse(jsonb, &tree_nodes));
+
+  if (!jsonb_value.IsObject() && !jsonb_value.IsArray()) {
+    return absl::InvalidArgumentError("cannot delete path in scalar");
+  }
+
+  if (jsonb_value.IsEmpty()) {
+    return CreatePgJsonbValueFromNormalized(jsonb_value.Serialize());
+  }
+
+  std::vector<std::string> path_vector;
+  ZETASQL_ASSIGN_OR_RETURN(std::optional<PgJsonbValue> root_jsonb_optional,
+                   GetRootJsonbHelper(jsonb_value, args[1], path_vector));
+  if (!root_jsonb_optional.has_value()) {
+    return CreatePgJsonbValueFromNormalized(jsonb_value.Serialize());
+  }
+  PgJsonbValue root_jsonb = std::move(root_jsonb_optional).value();
+  if (root_jsonb.IsObject()) {
+    root_jsonb.RemoveMember(path_vector.back());
+  } else if (root_jsonb.IsArray()) {
+    auto index_or =
+        root_jsonb.PathElementToIndex(path_vector.back(), path_vector.size());
+    if (!index_or.ok()) {
+      return index_or.status();
+    }
+    root_jsonb.RemoveArrayElement(index_or.value());
+  }
+  return CreatePgJsonbValueFromNormalized(jsonb_value.Serialize());
 }
 
 std::unique_ptr<zetasql::Function> JsonbDeletePathFunction(
@@ -2386,7 +2502,56 @@ std::unique_ptr<zetasql::Function> JsonbDeletePathFunction(
 
 absl::StatusOr<zetasql::Value> EvalJsonbSet(
     absl::Span<const zetasql::Value> args) {
-  return absl::UnimplementedError("jsonb_set is not implemented");
+  // In the case we pass in 5 arguments, this means we called this function from
+  // the jsonb_set_lax function and wish to treat the new value as a JSONB null.
+  ABSL_CHECK(args.size() == 4 || args.size() == 5);
+  if (HasNullValue(args) && args.size() == 4) {
+    return zetasql::Value::Null(
+        postgres_translator::spangres::datatypes::GetPgJsonbType());
+  }
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSIGN_OR_RETURN(std::string jsonb, GetStringRepresentation(args[0]));
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue jsonb_value,
+                   PgJsonbValue::Parse(jsonb, &tree_nodes));
+  if (!jsonb_value.IsObject() && !jsonb_value.IsArray()) {
+    return absl::InvalidArgumentError("cannot set path in scalar");
+  }
+  std::vector<std::string> path_vector;
+  ZETASQL_ASSIGN_OR_RETURN(std::optional<PgJsonbValue> root_jsonb_optional,
+                   GetRootJsonbHelper(jsonb_value, args[1], path_vector));
+  if (!root_jsonb_optional.has_value()) {
+    return CreatePgJsonbValueFromNormalized(jsonb_value.Serialize());
+  }
+  PgJsonbValue root_jsonb = std::move(root_jsonb_optional).value();
+  ZETASQL_ASSIGN_OR_RETURN(std::string new_value_string,
+                   GetStringRepresentation(args[2]));
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue new_value,
+                   PgJsonbValue::Parse(new_value_string, &tree_nodes));
+  bool create_if_missing = args[3].bool_value();
+  if (root_jsonb.IsObject()) {
+    if (root_jsonb.HasMember(path_vector.back())) {
+      root_jsonb.GetMemberIfExists(path_vector.back())->SetValue(new_value);
+    } else if (create_if_missing) {
+      ZETASQL_RETURN_IF_ERROR(root_jsonb.CreateMemberIfNotExists(path_vector.back()));
+      root_jsonb.GetMemberIfExists(path_vector.back())->SetValue(new_value);
+    }
+  } else if (root_jsonb.IsArray()) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        int32_t index,
+        root_jsonb.PathElementToIndex(path_vector.back(), path_vector.size()));
+    if (root_jsonb.GetArrayElementIfExists(index).has_value()) {
+      root_jsonb.GetArrayElementIfExists(index)->SetValue(new_value);
+    } else if (create_if_missing) {
+      ZETASQL_RETURN_IF_ERROR(root_jsonb.InsertArrayElement(new_value, index));
+      // We may have inserted an index at the either end of the array.
+      if (index < 0) index = 0;
+      if (index >= root_jsonb.GetArraySize()) {
+        index = root_jsonb.GetArraySize() - 1;
+      }
+      root_jsonb.GetArrayElementIfExists(index)->SetValue(new_value);
+    }
+  }
+  return CreatePgJsonbValueFromNormalized(jsonb_value.Serialize());
 }
 
 std::unique_ptr<zetasql::Function> JsonbSetFunction(
@@ -2406,7 +2571,35 @@ std::unique_ptr<zetasql::Function> JsonbSetFunction(
 
 absl::StatusOr<zetasql::Value> EvalJsonbSetLax(
     absl::Span<const zetasql::Value> args) {
-  return absl::UnimplementedError("jsonb_set_lax is not implemented");
+  if (args[0].is_null() || args[1].is_null() || args[3].is_null()) {
+    return zetasql::Value::Null(
+        postgres_translator::spangres::datatypes::GetPgJsonbType());
+  }
+  if (args[4].is_null()) {
+    return absl::InvalidArgumentError(
+        "null_value_treatment must be \"delete_key\", "
+        "\"return_target\", \"use_json_null\", or \"raise_exception\"");
+  }
+  if (args[2].is_null()) {
+    const std::string& null_value_treatment = args[4].string_value();
+    if (null_value_treatment == "delete_key") {
+      return EvalJsonbDeletePath(args.subspan(0, 2));
+    } else if (null_value_treatment == "return_target") {
+      return EvalToJsonb(args.subspan(0, 1));
+    } else if (null_value_treatment == "use_json_null") {
+      // Passing in 5 arguments will let JsonbSet know to treat the new value as
+      // a JSONB null.
+      return EvalJsonbSet(args);
+    } else if (null_value_treatment == "raise_exception") {
+      return absl::InvalidArgumentError("JSON value must not be null");
+    } else {
+      return absl::InvalidArgumentError(
+          "null_value_treatment must be \"delete_key\", "
+          "\"return_target\", \"use_json_null\", or \"raise_exception\"");
+    }
+  } else {
+    return EvalJsonbSet(args.subspan(0, 4));
+  }
 }
 
 std::unique_ptr<zetasql::Function> JsonbSetLaxFunction(
@@ -2427,7 +2620,51 @@ std::unique_ptr<zetasql::Function> JsonbSetLaxFunction(
 
 absl::StatusOr<zetasql::Value> EvalJsonbConcat(
     absl::Span<const zetasql::Value> args) {
-  return absl::UnimplementedError("jsonb_concat is not implemented");
+  if (HasNullValue(args)) {
+    return zetasql::Value::Null(
+        postgres_translator::spangres::datatypes::GetPgJsonbType());
+  }
+  ZETASQL_ASSIGN_OR_RETURN(std::string jsonb_1, GetStringRepresentation(args[0]));
+  ZETASQL_ASSIGN_OR_RETURN(std::string jsonb_2, GetStringRepresentation(args[1]));
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue left_jsonb,
+                   PgJsonbValue::Parse(jsonb_1, &tree_nodes));
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue right_jsonb,
+                   PgJsonbValue::Parse(jsonb_2, &tree_nodes));
+  bool create_object = left_jsonb.IsObject() && right_jsonb.IsObject();
+  PgJsonbValue result = create_object
+                            ? PgJsonbValue::CreateEmptyObject(&tree_nodes)
+                            : PgJsonbValue::CreateEmptyArray(&tree_nodes);
+  if (result.IsObject()) {
+    result.SetValue(left_jsonb);
+    for (auto& [key, value] : right_jsonb.GetMembers()) {
+      if (result.HasMember(key)) {
+        result.GetMemberIfExists(key)->SetValue(value);
+      } else {
+        ZETASQL_RETURN_IF_ERROR(result.CreateMemberIfNotExists(key));
+        result.GetMemberIfExists(key)->SetValue(value);
+      }
+    }
+    return CreatePgJsonbValueFromNormalized(result.Serialize());
+  }
+  if (left_jsonb.IsArray()) {
+    for (int i = 0; i < left_jsonb.GetArraySize(); ++i) {
+      ZETASQL_RETURN_IF_ERROR(result.InsertArrayElement(
+          left_jsonb.GetArrayElementIfExists(i).value(), i));
+    }
+  } else {
+    ZETASQL_RETURN_IF_ERROR(result.InsertArrayElement(left_jsonb, 0));
+  }
+  if (right_jsonb.IsArray()) {
+    for (int i = 0; i < right_jsonb.GetArraySize(); ++i) {
+      ZETASQL_RETURN_IF_ERROR(result.InsertArrayElement(
+          right_jsonb.GetArrayElementIfExists(i).value(), i));
+    }
+  } else {
+    ZETASQL_RETURN_IF_ERROR(
+        result.InsertArrayElement(right_jsonb, result.GetArraySize()));
+  }
+  return CreatePgJsonbValueFromNormalized(result.Serialize());
 }
 
 std::unique_ptr<zetasql::Function> JsonbConcatFunction(
@@ -2447,7 +2684,50 @@ std::unique_ptr<zetasql::Function> JsonbConcatFunction(
 
 absl::StatusOr<zetasql::Value> EvalJsonbInsert(
     absl::Span<const zetasql::Value> args) {
-  return absl::UnimplementedError("jsonb_insert is not implemented");
+  if (HasNullValue(args)) {
+    return zetasql::Value::Null(
+        postgres_translator::spangres::datatypes::GetPgJsonbType());
+  }
+  ZETASQL_ASSIGN_OR_RETURN(std::string jsonb_string, GetStringRepresentation(args[0]));
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue jsonb_value,
+                   PgJsonbValue::Parse(jsonb_string, &tree_nodes));
+  if (!jsonb_value.IsObject() && !jsonb_value.IsArray()) {
+    // matches pg error message
+    return absl::InvalidArgumentError("cannot set path in scalar");
+  }
+  std::vector<std::string> path_vector;
+  ZETASQL_ASSIGN_OR_RETURN(std::optional<PgJsonbValue> root_jsonb_optional,
+                   GetRootJsonbHelper(jsonb_value, args[1], path_vector));
+  if (!root_jsonb_optional.has_value()) {
+    return CreatePgJsonbValueFromNormalized(jsonb_value.Serialize());
+  }
+  PgJsonbValue root_jsonb = std::move(root_jsonb_optional).value();
+  ZETASQL_ASSIGN_OR_RETURN(std::string new_value_string,
+                   GetStringRepresentation(args[2]));
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue new_value,
+                   PgJsonbValue::Parse(new_value_string, &tree_nodes));
+  bool insert_after = args[3].bool_value();
+  if (root_jsonb.IsObject()) {
+    if (root_jsonb.HasMember(path_vector.back())) {
+      return absl::InvalidArgumentError("cannot replace existing key");
+    }
+    ZETASQL_RETURN_IF_ERROR(root_jsonb.CreateMemberIfNotExists(path_vector.back()));
+    root_jsonb.GetMemberIfExists(path_vector.back())->SetValue(new_value);
+  } else if (root_jsonb.IsArray()) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        int32_t index,
+        root_jsonb.PathElementToIndex(path_vector.back(), path_vector.size()));
+    // Deal with edge cases for the index. GetArraySize() should never be
+    // past the numeric limit but even if it is, InsertArrayElement will fail.
+    if (index == -1) index = root_jsonb.GetArraySize() - 1;
+    if (index == std::numeric_limits<int32_t>::max()) {
+      index = root_jsonb.GetArraySize();
+    }
+    index = insert_after ? index + 1 : index;
+    ZETASQL_RETURN_IF_ERROR(root_jsonb.InsertArrayElement(new_value, index));
+  }
+  return CreatePgJsonbValueFromNormalized(jsonb_value.Serialize());
 }
 
 std::unique_ptr<zetasql::Function> JsonbInsertFunction(
@@ -2465,9 +2745,31 @@ std::unique_ptr<zetasql::Function> JsonbInsertFunction(
       function_options);
 }
 
+void JsonbStripNullsImpl(PgJsonbValue& jsonb_value) {
+  if (jsonb_value.IsArray()) {
+    for (auto element : jsonb_value.GetArrayElements()) {
+      JsonbStripNullsImpl(element);
+    }
+  } else if (jsonb_value.IsObject()) {
+    for (auto& [key, value] : jsonb_value.GetMembers()) {
+      JsonbStripNullsImpl(value);
+    }
+    jsonb_value.CleanUpJsonbObject();
+  }
+}
+
 absl::StatusOr<zetasql::Value> EvalJsonbStripNulls(
     absl::Span<const zetasql::Value> args) {
-  return absl::UnimplementedError("jsonb_strip_nulls is not implemented");
+  if (HasNullValue(args)) {
+    return zetasql::Value::Null(
+        postgres_translator::spangres::datatypes::GetPgJsonbType());
+  }
+  ZETASQL_ASSIGN_OR_RETURN(std::string jsonb_string, GetStringRepresentation(args[0]));
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue jsonb_value,
+                   PgJsonbValue::Parse(jsonb_string, &tree_nodes));
+  JsonbStripNullsImpl(jsonb_value);
+  return CreatePgJsonbValueFromNormalized(jsonb_value.Serialize());
 }
 
 std::unique_ptr<zetasql::Function> JsonbStripNullsFunction(
@@ -3865,12 +4167,6 @@ absl::StatusOr<zetasql::Value> EvalCastToNumeric(
                                 input_to_string, precision, scale);
 }
 
-absl::StatusOr<zetasql::Value> EvalToJsonb(
-    absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK(args.size() == 1);
-  return EvalToJsonbFromValue(args[0]);
-}
-
 absl::StatusOr<zetasql::Value> EvalCastToOid(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(!args.empty() && args.size() < 2);
@@ -4015,11 +4311,6 @@ std::unique_ptr<zetasql::Function> FloatArithmeticFunction(
                                                  {gsql_float, gsql_float},
                                                  /*context_ptr=*/nullptr}},
       function_options);
-}
-
-bool HasNullValue(absl::Span<const zetasql::Value> args) {
-  return absl::c_any_of(
-      args, [](const zetasql::Value& arg) { return arg.is_null(); });
 }
 
 std::unique_ptr<zetasql::Function> IntervalAddSubtractFunction(

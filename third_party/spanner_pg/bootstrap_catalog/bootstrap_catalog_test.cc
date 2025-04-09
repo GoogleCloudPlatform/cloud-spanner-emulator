@@ -666,5 +666,16 @@ TEST(BootstrapCatalog, TimestampFromUnixMillisProc) {
   }
 }
 
+TEST(BootstrapCatalog, GetLanguageByName) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_language* language,
+                       PgBootstrapCatalog::Default()->GetLanguageByName("sql"));
+  EXPECT_EQ(language->oid, SQLlanguageId);
+}
+
+TEST(BootstrapCatalog, FailedGetLanguageByName) {
+  EXPECT_THAT(PgBootstrapCatalog::Default()->GetLanguageByName("FAKELANGUAGE"),
+              StatusIs(absl::StatusCode::kNotFound));
+}
+
 }  // namespace
 }  // namespace postgres_translator

@@ -874,6 +874,16 @@ TEST(GetOpclass, BTreeAccessMethod) {
   }
 }
 
+TEST(GetLanguage, PgLanguage) {
+  const FormData_pg_language* language =
+      GetLanguageByNameFromBootstrapCatalog("sql");
+  ASSERT_NE(language, nullptr);
+  EXPECT_EQ(language->lanvalidator, F_FMGR_SQL_VALIDATOR);
+
+  language = GetLanguageByNameFromBootstrapCatalog("invalid_language");
+  EXPECT_EQ(language, nullptr);
+}
+
 TEST(GetAccessMethodOperator, Basic) {
   // Get a sample opfamily.
   ZETASQL_ASSERT_OK_AND_ASSIGN(

@@ -339,6 +339,8 @@ cc_library(
         ":tables_from_metadata",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
         "@com_google_zetasql//zetasql/base:no_destructor",
         "@com_google_zetasql//zetasql/public:simple_catalog",
         "@com_google_zetasql//zetasql/public:value",

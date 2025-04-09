@@ -162,6 +162,14 @@ class PgJsonbValue {
       absl::string_view jsonb,
       std::vector<std::unique_ptr<TreeNode>>* tree_nodes);
 
+  // Returns a new PgJsonbValue representing an empty array.
+  static PgJsonbValue CreateEmptyArray(
+      std::vector<std::unique_ptr<TreeNode>>* tree_nodes);
+
+  // Returns a new PgJsonbValue representing an empty object.
+  static PgJsonbValue CreateEmptyObject(
+      std::vector<std::unique_ptr<TreeNode>>* tree_nodes);
+
   // Returns a string view of a JSONB string value.
   // Requires IsString() to be true.
   std::string GetString() const;

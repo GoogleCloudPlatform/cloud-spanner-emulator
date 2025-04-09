@@ -187,7 +187,8 @@ absl::StatusOr<zetasql::Value> EvalTokenizeNumber(
 }
 
 std::unique_ptr<zetasql::Function> TokenizeNumberFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
+    zetasql::TypeFactory* type_factory, const std::string& catalog_name,
+    database_api::DatabaseDialect dialect) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
       zetasql::FunctionEvaluator(EvalTokenizeNumber));
@@ -211,7 +212,11 @@ std::unique_ptr<zetasql::Function> TokenizeNumberFunction(
                                                     double_type};
 
   std::vector<zetasql::FunctionSignature> signatures;
-  for (auto& precision_name : {"precision", "ieee_precision"}) {
+  std::vector<std::string> precision_names = {"ieee_precision"};
+  if (dialect == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    precision_names.push_back("precision");
+  }
+  for (auto& precision_name : precision_names) {
     for (auto type : numeric_types) {
       const zetasql::FunctionArgumentTypeList tokenize_number_args = {
           {string_type, GetNamedOptionalArgTypeOptions("comparison_type")},
@@ -755,7 +760,7 @@ GetSearchFunctions(zetasql::TypeFactory* type_factory,
   function_map[token_func->Name()] = std::move(token_func);
 
   auto tokenize_number_func =
-      TokenizeNumberFunction(type_factory, catalog_name);
+      TokenizeNumberFunction(type_factory, catalog_name, dialect);
   function_map[tokenize_number_func->Name()] = std::move(tokenize_number_func);
 
   auto tokenize_bool_func = TokenizeBoolFunction(type_factory, catalog_name);
