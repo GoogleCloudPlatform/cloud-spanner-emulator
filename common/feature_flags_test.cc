@@ -126,16 +126,16 @@ TEST(EmulatorFeatureFlags, PostgresqlInterfaceFlag) {
 TEST(EmulatorFeatureFlags, SearchIndexFlag) {
   const EmulatorFeatureFlags& features = EmulatorFeatureFlags::instance();
 
-  EXPECT_FALSE(features.flags().enable_search_index);
+  EXPECT_TRUE(features.flags().enable_search_index);
 
   {
     EmulatorFeatureFlags::Flags flags;
-    flags.enable_search_index = true;
+    flags.enable_search_index = false;
     test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-    EXPECT_TRUE(features.flags().enable_search_index);
+    EXPECT_FALSE(features.flags().enable_search_index);
   }
 
-  EXPECT_FALSE(features.flags().enable_search_index);
+  EXPECT_TRUE(features.flags().enable_search_index);
 }
 
 TEST(EmulatorFeatureFlags, HiddenColumnFlag) {

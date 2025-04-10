@@ -2351,14 +2351,19 @@ TEST_F(EmulatorFunctionsTest, ArrayUpperWithPGJsonb) {
               IsOkAndHolds(zetasql::values::Int64(3)));
 }
 
-// Tested separately from the parameterized tests as we need a memory context
-// before creating a PG.JSONB value.
 TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
-      auto pg_jsonb_array,
+      zetasql::Value pg_jsonb_array,
       zetasql::Value::MakeArray(
-          spangres::datatypes::GetPgJsonbArrayType(),
-          {spangres::datatypes::CreatePgJsonbValue("{\"a\": \"b\"}").value()}));
+          zetasql::types::StringArrayType(),
+          {zetasql::values::String("a"), zetasql::values::String("b")}));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      zetasql::Value pg_jsonb_object,
+      CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": 2}"));
+
+  zetasql::Value jsonb_typed_null =
+      zetasql::values::Null(spangres::datatypes::GetPgJsonbType());
 
   const zetasql::Function* jsonb_delete_function =
       functions_[kPGJsonbDeleteFunctionName].get();
@@ -2368,8 +2373,25 @@ TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {pg_jsonb_array, zetasql::values::String("a")})),
-              StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("jsonb_delete is not implemented")));
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"b\"]")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_array, zetasql::values::String("c")})),
+      IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"a\", \"b\"]")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_array, zetasql::values::Int64(0)})),
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"b\"]")));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      zetasql::Value string_array,
+      zetasql::Value::MakeArray(
+          zetasql::types::StringArrayType(),
+          {zetasql::values::String("a"), zetasql::values::String("b")}));
+
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan({pg_jsonb_array, string_array})),
+      StatusIs(
+          absl::StatusCode::kUnimplemented,
+          HasSubstr("jsonb_delete(jsonb, array) is currently not supported")));
 
   const zetasql::Function* jsonb_delete_path_function =
       functions_[kPGJsonbDeletePathFunctionName].get();
@@ -2379,8 +2401,20 @@ TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {pg_jsonb_array, zetasql::values::StringArray({"0"})})),
-              StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("jsonb_delete_path is not implemented")));
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"b\"]")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_array, zetasql::values::StringArray({"3"})})),
+      IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"a\", \"b\"]")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_array, zetasql::values::StringArray({"a"})})),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("path element at position 1 is not an integer: \"a\"")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_object, zetasql::values::StringArray({"a"})})),
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("{\"b\": 2}")));
 
   const zetasql::Function* jsonb_set_function =
       functions_[kPGJsonbSetFunctionName].get();
@@ -2391,8 +2425,34 @@ TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {pg_jsonb_array, zetasql::values::StringArray({"0"}),
                    pg_jsonb_array, zetasql::values::Bool(true)})),
-              StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("jsonb_set is not implemented")));
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
+                  "[[\"a\", \"b\"], \"b\"]")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_array, zetasql::values::StringArray({"-4"}),
+                   pg_jsonb_array, zetasql::values::Bool(true)})),
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
+                  "[[\"a\", \"b\"], \"a\", \"b\"]")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_object, zetasql::values::StringArray({"a"}),
+                   pg_jsonb_array, zetasql::values::Bool(true)})),
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
+                  "{\"a\": [\"a\", \"b\"], \"b\": 2}")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_object, zetasql::values::StringArray({"a"}),
+                   pg_jsonb_array, zetasql::values::Bool(true)})),
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
+                  "{\"a\": [\"a\", \"b\"], \"b\": 2}")));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_object, zetasql::values::StringArray({"c"}),
+                   pg_jsonb_array, zetasql::values::Bool(true)})),
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
+                  "{\"a\": 1, \"b\": 2, \"c\": [\"a\", \"b\"]}")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_object, zetasql::values::StringArray({"c", "0"}),
+                   pg_jsonb_array, zetasql::values::Bool(true)})),
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
+                  "{\"a\": 1, \"b\": 2}")));
 
   const zetasql::Function* jsonb_set_lax_function =
       functions_[kPGJsonbSetLaxFunctionName].get();
@@ -2400,12 +2460,35 @@ TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {
                        (jsonb_set_lax_function->GetFunctionEvaluatorFactory())(
                            jsonb_set_lax_function->signatures().front()));
 
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_array, zetasql::values::StringArray({"0"}),
+           jsonb_typed_null, zetasql::values::Bool(true),
+           zetasql::values::String("use_json_null")})),
+      IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[null, \"b\"]")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_array, zetasql::values::StringArray({"0"}),
+           jsonb_typed_null, zetasql::values::Bool(true),
+           zetasql::values::String("return_target")})),
+      IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"a\", \"b\"]")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {pg_jsonb_array, zetasql::values::StringArray({"0"}),
-                   pg_jsonb_array, zetasql::values::Bool(true),
-                   zetasql::values::String("use_json_null")})),
-              StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("jsonb_set_lax is not implemented")));
+                   jsonb_typed_null, zetasql::values::Bool(true),
+                   zetasql::values::String("delete_key")})),
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"b\"]")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_array, zetasql::values::StringArray({"0"}),
+                   jsonb_typed_null, zetasql::values::Bool(true),
+                   zetasql::values::String("raise_exception")})),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("JSON value must not be null")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_array, zetasql::values::StringArray({"0"}),
+                   jsonb_typed_null, zetasql::values::Bool(true),
+                   zetasql::values::String("invalid_value")})),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("null_value_treatment must be")));
 
   const zetasql::Function* jsonb_concat_function =
       functions_[kPGJsonbConcatFunctionName].get();
@@ -2414,8 +2497,24 @@ TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {
                            jsonb_concat_function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({pg_jsonb_array, pg_jsonb_array})),
-              StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("jsonb_concat is not implemented")));
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
+                  "[\"a\", \"b\", \"a\", \"b\"]")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan({pg_jsonb_object, pg_jsonb_object})),
+      IsOkAndHolds(
+          *CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": 2}")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan({pg_jsonb_array, pg_jsonb_object})),
+      IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
+          "[\"a\", \"b\", {\"a\": 1, \"b\": 2}]")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_array, zetasql::values::Bool(true)})),
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
+                  "[\"a\", \"b\", true]")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_object, zetasql::values::Bool(true)})),
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
+                  "[{\"a\": 1, \"b\": 2}, true]")));
 
   const zetasql::Function* jsonb_insert_function =
       functions_[kPGJsonbInsertFunctionName].get();
@@ -2423,11 +2522,36 @@ TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {
                        (jsonb_insert_function->GetFunctionEvaluatorFactory())(
                            jsonb_insert_function->signatures().front()));
 
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_array, zetasql::values::StringArray({"0"}),
+           zetasql::values::String("\"c\""), zetasql::values::Bool(true)})),
+      IsOkAndHolds(
+          *CreatePgJsonbValueWithMemoryContext("[\"a\", \"c\", \"b\"]")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {pg_jsonb_array, zetasql::values::StringArray({"0"}),
-                   pg_jsonb_array, zetasql::values::Bool(true)})),
-              StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("jsonb_insert is not implemented")));
+                   zetasql::values::String("\"c\""),
+                   zetasql::values::Bool(false)})),
+              IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
+                  "[\"c\", \"a\", \"b\"]")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_array, zetasql::values::StringArray({"-4"}),
+           zetasql::values::String("\"c\""), zetasql::values::Bool(true)})),
+      IsOkAndHolds(
+          *CreatePgJsonbValueWithMemoryContext("[\"c\", \"a\", \"b\"]")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_object, zetasql::values::StringArray({"c"}),
+           zetasql::values::Int64(3), zetasql::values::Bool(true)})),
+      IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
+          "{\"a\": 1, \"b\": 2, \"c\": 3}")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_object, zetasql::values::StringArray({"a"}),
+           zetasql::values::Int64(3), zetasql::values::Bool(false)})),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("cannot replace existing key")));
 
   const zetasql::Function* jsonb_strip_nulls_function =
       functions_[kPGJsonbStripNullsFunctionName].get();
@@ -2435,9 +2559,15 @@ TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {
       evaluator_, (jsonb_strip_nulls_function->GetFunctionEvaluatorFactory())(
                       jsonb_strip_nulls_function->signatures().front()));
 
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan({pg_jsonb_array})),
-              StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("jsonb_strip_nulls is not implemented")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan({pg_jsonb_array})),
+      IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"a\", \"b\"]")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan({*CreatePgJsonbValueWithMemoryContext(
+          "{\"a\": null, \"b\": 2, \"c\": [null, 2], \"d\": {\"e\": null, "
+          "\"f\": 2}}")})),
+      IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
+          "{\"b\": 2, \"c\": [null, 2], \"d\": {\"f\": 2}}")));
 }
 
 // Tested separately from the parameterized tests as we need a memory context

@@ -86,6 +86,7 @@ const zetasql::Type* gsql_string = zetasql::types::StringType();
 const zetasql::Type* gsql_date = zetasql::types::DateType();
 const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
 const zetasql::Type* gsql_interval = zetasql::types::IntervalType();
+const zetasql::Type* gsql_tokenlist = zetasql::types::TokenListType();
 const zetasql::Type* gsql_int64_array = zetasql::types::Int64ArrayType();
 const zetasql::Type* gsql_string_array = zetasql::types::StringArrayType();
 const zetasql::Type* gsql_bool_array = zetasql::types::BoolArrayType();
@@ -97,6 +98,8 @@ const zetasql::Type* gsql_timestamp_array =
     zetasql::types::TimestampArrayType();
 const zetasql::Type* gsql_interval_array =
     zetasql::types::IntervalArrayType();
+const zetasql::Type* gsql_tokenlist_array =
+    zetasql::types::TokenListArrayType();
 
 static zetasql::LanguageOptions GetLanguageOptions() {
   zetasql::LanguageOptions options;
@@ -219,12 +222,14 @@ TEST_F(SpangresSystemCatalogTest, GetTypes) {
       gsql_bool, gsql_int64, gsql_float, gsql_double, gsql_string, gsql_bytes,
       gsql_date, gsql_timestamp,
       gsql_interval,
+      gsql_tokenlist,
       types::PgNumericMapping()->mapped_type(),
       types::PgJsonbMapping()->mapped_type(),
       types::PgOidMapping()->mapped_type(), gsql_bool_array, gsql_int64_array,
       gsql_float_array, gsql_double_array, gsql_string_array, gsql_bytes_array,
       gsql_date_array, gsql_timestamp_array,
       gsql_interval_array,
+      gsql_tokenlist_array,
       GetPgNumericArrayType(), GetPgJsonbArrayType(), GetPgOidArrayType()};
 
   EXPECT_THAT(types, UnorderedPointwise(TypeEquals(), expected_types));

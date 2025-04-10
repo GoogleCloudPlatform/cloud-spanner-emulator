@@ -72,6 +72,7 @@
 #include "third_party/spanner_pg/src/include/catalog/pg_constraint.h"
 #include "third_party/spanner_pg/src/include/catalog/pg_class.h"
 #include "third_party/spanner_pg/src/include/catalog/pg_inherits.h"
+#include "third_party/spanner_pg/src/include/catalog/pg_language.h"
 #include "third_party/spanner_pg/src/include/catalog/pg_opclass.h"
 #include "third_party/spanner_pg/src/include/catalog/pg_operator.h"
 #include "third_party/spanner_pg/src/include/catalog/pg_proc.h"

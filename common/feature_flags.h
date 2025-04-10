@@ -47,7 +47,7 @@ class EmulatorFeatureFlags {
     bool enable_serial_auto_increment = true;
     bool enable_user_defined_functions = false;
     bool enable_fk_enforcement_option = true;
-    bool enable_search_index = false;
+    bool enable_search_index = true;
     bool enable_hidden_column = true;
     bool enable_default_time_zone = false;
   };

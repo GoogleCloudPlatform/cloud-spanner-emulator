@@ -72,7 +72,8 @@ PgBootstrapCatalog::PgBootstrapCatalog(
     absl::Span<const FormData_pg_opclass> pg_opclass_data,
     absl::Span<const FormData_pg_am> pg_am_data,
     absl::Span<const FormData_pg_amop> pg_amop_data,
-    absl::Span<const FormData_pg_amproc> pg_amproc_data) {
+    absl::Span<const FormData_pg_amproc> pg_amproc_data,
+    absl::Span<const FormData_pg_language> pg_language_data) {
   collation_by_name_.reserve(pg_collation_data.size());
   for (const FormData_pg_collation& data : pg_collation_data) {
     collation_by_name_[NameStr(data.collname)] = &data;
@@ -216,6 +217,11 @@ PgBootstrapCatalog::PgBootstrapCatalog(
                            .lefttype = data.amproclefttype}]
         .push_back(&data);
   }
+
+  language_by_name_.reserve(pg_language_data.size());
+  for (const FormData_pg_language& data : pg_language_data) {
+    language_by_name_[NameStr(data.lanname)] = &data;
+  }
 }
 
 const PgBootstrapCatalog* PgBootstrapCatalog::Default() {
@@ -223,12 +229,12 @@ const PgBootstrapCatalog* PgBootstrapCatalog::Default() {
       {pg_collation_data, pg_collation_data_size},
       {pg_namespace_data, pg_namespace_data_size},
       {pg_type_data, pg_type_data_size}, {pg_proc_data, pg_proc_data_size},
-      pg_proc_textproto_data,
-      {pg_cast_data, pg_cast_data_size},
+      pg_proc_textproto_data, {pg_cast_data, pg_cast_data_size},
       {pg_operator_data, pg_operator_data_size},
       {pg_aggregate_data, pg_aggregate_data_size},
       {pg_opclass_data, pg_opclass_data_size}, {pg_am_data, pg_am_data_size},
-      {pg_amop_data, pg_amop_data_size}, {pg_amproc_data, pg_amproc_data_size});
+      {pg_amop_data, pg_amop_data_size}, {pg_amproc_data, pg_amproc_data_size},
+      {pg_language_data, pg_language_data_size});
   return &default_catalog;
 }
 
@@ -543,6 +549,16 @@ PgBootstrapCatalog::GetAmprocsByFamily(Oid opfamily, Oid lefttype) const {
     return absl::NotFoundError(
         absl::StrCat("Access Method Procedure for opfamily ", opfamily,
                      ", input data type ", lefttype, " not found"));
+  }
+  return it->second;
+}
+
+absl::StatusOr<const FormData_pg_language*>
+PgBootstrapCatalog::GetLanguageByName(absl::string_view language_name) const {
+  auto it = language_by_name_.find(language_name);
+  if (it == language_by_name_.end()) {
+    return absl::NotFoundError(absl::StrCat("Language ", language_name,
+                                            " is not found or not supported."));
   }
   return it->second;
 }

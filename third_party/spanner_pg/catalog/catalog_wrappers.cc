@@ -861,6 +861,13 @@ const FormData_pg_opclass* GetOpclassFromBootstrapCatalog(Oid opclass_id) {
       .value_or(nullptr);
 }
 
+const FormData_pg_language* GetLanguageByNameFromBootstrapCatalog(
+    const char* name) {
+  return postgres_translator::PgBootstrapCatalog::Default()
+      ->GetLanguageByName(name)
+      .value_or(nullptr);
+}
+
 extern "C" Oid GetNamespaceByNameFromBootstrapCatalog(const char* name) {
   return postgres_translator::PgBootstrapCatalog::Default()
       ->GetNamespaceOid(name)

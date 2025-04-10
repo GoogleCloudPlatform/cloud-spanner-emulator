@@ -625,6 +625,31 @@ class PostgresIntervalMapping : public PostgresTypeMapping {
   }
 };
 
+class PostgresTokenlistMapping : public PostgresTypeMapping {
+ public:
+  explicit PostgresTokenlistMapping(const zetasql::TypeFactory* factory)
+      : PostgresTypeMapping(factory, 50001) {}
+
+  const zetasql::Type* mapped_type() const override {
+    return zetasql::types::TokenListType();
+  }
+
+  absl::StatusOr<zetasql::Value> MakeGsqlValue(
+      const Const* pg_const) const override {
+    return absl::UnimplementedError("Tokenlist constants are not supported");
+  }
+
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    return absl::UnimplementedError("Tokenlist constants are not supported");
+  }
+
+  absl::StatusOr<Const*> MakePgConst(
+      const zetasql::Value& val) const override {
+    return absl::UnimplementedError("Tokenlist constants are not supported");
+  }
+};
+
 absl::StatusOr<zetasql::Value> PostgresExtendedArrayMapping::MakeGsqlValue(
     const Const* pg_const) const {
   // Technically this means we support multi-dimensional NULL arrays, but PG
@@ -876,6 +901,12 @@ const PostgresTypeMapping* PgIntervalMapping() {
   return s_pg_interval_mapping.get();
 }
 
+const PostgresTypeMapping* PgTokenlistMapping() {
+  static const zetasql_base::NoDestructor<PostgresTokenlistMapping>
+      s_pg_tokenlist_mapping(GetTypeFactory());
+  return s_pg_tokenlist_mapping.get();
+}
+
 // Supported Array Types.
 const PostgresTypeMapping* PgBoolArrayMapping() {
   static const zetasql_base::NoDestructor<PostgresExtendedArrayMapping>
@@ -978,6 +1009,17 @@ const PostgresTypeMapping* PgIntervalArrayMapping() {
           /*mapped_type=*/zetasql::types::IntervalArrayType(),
           /*requires_nan_handling=*/false);
   return s_pg_interval_array_mapping.get();
+}
+
+const PostgresTypeMapping* PgTokenlistArrayMapping() {
+  static const zetasql_base::NoDestructor<PostgresExtendedArrayMapping>
+      s_pg_tokenlist_array_mapping(
+          /*type_factory=*/GetTypeFactory(),
+          /*array_type_oid=*/50002,
+          /*element_type=*/types::PgTokenlistMapping(),
+          /*mapped_type=*/zetasql::types::TokenListArrayType(),
+          /*requires_nan_handling=*/false);
+  return s_pg_tokenlist_array_mapping.get();
 }
 
 }  // namespace types

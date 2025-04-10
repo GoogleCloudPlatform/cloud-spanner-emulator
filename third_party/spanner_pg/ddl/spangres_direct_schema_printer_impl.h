@@ -32,8 +32,11 @@
 #ifndef DDL_SPANGRES_DIRECT_SCHEMA_PRINTER_IMPL_H_
 #define DDL_SPANGRES_DIRECT_SCHEMA_PRINTER_IMPL_H_
 
-#include <memory>
 #include <stdint.h>
+
+#include <memory>
+#include <string>
+#include <vector>
 
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -56,6 +59,9 @@ std::string RowDeletionPolicyToInterval(int64_t secs, absl::string_view column);
 
 std::string RowDeletionPolicyToInterval(
     const google::spanner::emulator::backend::ddl::RowDeletionPolicy& policy);
+
+std::vector<google::spanner::emulator::backend::ddl::DDLStatement::StatementCase>
+TEST_GetSupportedDDLStatements();
 
 }  // namespace spangres
 }  // namespace postgres_translator

@@ -514,6 +514,8 @@ InformationSchemaCatalog::InformationSchemaCatalog(
   }
 
   for (auto& [name, table] : tables_by_name_) {
+    ABSL_CHECK_OK(table->set_full_name(absl::StrCat(  // Crash OK
+        catalog_name, ".", name)));
     AddTable(table.get());
   }
 

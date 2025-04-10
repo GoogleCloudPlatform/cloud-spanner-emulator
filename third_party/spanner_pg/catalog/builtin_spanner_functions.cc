@@ -787,6 +787,320 @@ void AddFloatFunctions(std::vector<PostgresFunctionArguments>& functions) {
   AddFloatNewFunctions(functions);
 }
 
+static void AddFullTextSearchNewFunctions(
+    std::vector<PostgresFunctionArguments>& functions) {
+  const zetasql::Type* gsql_tokenlist = zetasql::types::TokenListType();
+  const zetasql::Type* gsql_tokenlist_array =
+      zetasql::types::TokenListArrayType();
+  const zetasql::Type* gsql_pg_jsonb = types::PgJsonbMapping()->mapped_type();
+
+    functions.push_back({"token",
+                         "token",
+                         {{{gsql_tokenlist,
+                            {gsql_string},
+                            /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50020},
+                          {{gsql_tokenlist,
+                            {gsql_bytes},
+                            /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50022}},
+                         /*mode=*/zetasql::Function::SCALAR,
+                         /*postgres_namespace=*/"spanner"});
+  zetasql::FunctionArgumentTypeOptions value =
+      GetRequiredNamedArgumentOptions("value");
+  zetasql::FunctionArgumentTypeOptions language_tag =
+      GetOptionalNamedArgumentOptions("language_tag");
+  zetasql::FunctionArgumentTypeOptions content_type =
+      GetOptionalNamedArgumentOptions("content_type");
+  zetasql::FunctionArgumentTypeOptions token_category =
+      GetOptionalNamedArgumentOptions("token_category");
+
+  functions.push_back({"tokenize_fulltext",
+                       "tokenize_fulltext",
+                       {{{gsql_tokenlist,
+                          {{gsql_string, value},
+                           {gsql_string, language_tag},
+                           {gsql_string, content_type},
+                           {gsql_string, token_category}},
+                          /*context_ptr=*/nullptr},
+                          /*has_mapped_function=*/true,
+                          /*explicit_mapped_function_name=*/"",
+                          /*postgres_proc_oid=*/50016},
+                        {{gsql_tokenlist,
+                          {{gsql_string_array, value},
+                           {gsql_string, language_tag},
+                           {gsql_string, content_type},
+                           {gsql_string, token_category}},
+                          /*context_ptr=*/nullptr},
+                          /*has_mapped_function=*/true,
+                          /*explicit_mapped_function_name=*/"",
+                          /*postgres_proc_oid=*/50017}},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
+
+  zetasql::FunctionArgumentTypeOptions ngram_size_max =
+      GetOptionalNamedArgumentOptions("ngram_size_max");
+  zetasql::FunctionArgumentTypeOptions ngram_size_min =
+      GetOptionalNamedArgumentOptions("ngram_size_min");
+  zetasql::FunctionArgumentTypeOptions relative_search_types =
+      GetOptionalNamedArgumentOptions("relative_search_types");
+  zetasql::FunctionArgumentTypeOptions short_tokens_only_for_anchors =
+      GetOptionalNamedArgumentOptions("short_tokens_only_for_anchors");
+  zetasql::FunctionArgumentTypeOptions remove_diacritics =
+      GetOptionalNamedArgumentOptions("remove_diacritics");
+
+  functions.push_back({"tokenize_substring",
+                       "tokenize_substring",
+                       {{{gsql_tokenlist,
+                          {{gsql_string, value},
+                           {gsql_int64, ngram_size_max},
+                           {gsql_int64, ngram_size_min},
+                           {gsql_string, content_type},
+                           {gsql_string_array, relative_search_types},
+                           {gsql_bool, short_tokens_only_for_anchors},
+                           {gsql_string, language_tag},
+                           {gsql_bool, remove_diacritics}},
+                          /*context_ptr=*/nullptr},
+                          /*has_mapped_function=*/true,
+                          /*explicit_mapped_function_name=*/"",
+                          /*postgres_proc_oid=*/50018},
+                        {{gsql_tokenlist,
+                          {{gsql_string_array, value},
+                           {gsql_int64, ngram_size_max},
+                           {gsql_int64, ngram_size_min},
+                           {gsql_string, content_type},
+                           {gsql_string_array, relative_search_types},
+                           {gsql_bool, short_tokens_only_for_anchors},
+                           {gsql_string, language_tag},
+                           {gsql_bool, remove_diacritics}},
+                          /*context_ptr=*/nullptr},
+                          /*has_mapped_function=*/true,
+                          /*explicit_mapped_function_name=*/"",
+                          /*postgres_proc_oid=*/50019}},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
+
+  zetasql::FunctionArgumentTypeOptions comparison_type =
+      GetOptionalNamedArgumentOptions("comparison_type");
+  zetasql::FunctionArgumentTypeOptions algorithm =
+      GetOptionalNamedArgumentOptions("algorithm");
+  zetasql::FunctionArgumentTypeOptions min =
+      GetOptionalNamedArgumentOptions("min");
+  zetasql::FunctionArgumentTypeOptions max =
+      GetOptionalNamedArgumentOptions("max");
+  zetasql::FunctionArgumentTypeOptions granularity =
+      GetOptionalNamedArgumentOptions("granularity");
+  zetasql::FunctionArgumentTypeOptions tree_base =
+      GetOptionalNamedArgumentOptions("tree_base");
+  zetasql::FunctionArgumentTypeOptions ieee_precision =
+      GetOptionalNamedArgumentOptions("ieee_precision");
+  zetasql::FunctionSignatureOptions deprecated_options;
+
+    functions.push_back({"tokenize_number",
+                         "tokenize_number",
+                         {{{gsql_tokenlist,
+                            {{gsql_int64, value},
+                             {gsql_string, comparison_type},
+                             {gsql_string, algorithm},
+                             {gsql_int64, min},
+                             {gsql_int64, max},
+                             {gsql_int64, granularity},
+                             {gsql_int64, tree_base},
+                             {gsql_int64, ieee_precision}},
+                            /*context_id=*/0,
+                            deprecated_options},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50026}},
+                         /*mode=*/zetasql::Function::SCALAR,
+                         /*postgres_namespace=*/"spanner"});
+
+  functions.push_back({"tokenize_bool",
+                       "tokenize_bool",
+                       {{{gsql_tokenlist,
+                          {{gsql_bool, value}}, /*context_ptr=*/nullptr},
+                          /*has_mapped_function=*/true,
+                          /*explicit_mapped_function_name=*/"",
+                          /*postgres_proc_oid=*/50030}},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
+
+  functions.push_back({"tokenize_ngrams",
+                       "tokenize_ngrams",
+                       {{{gsql_tokenlist,
+                          {{gsql_string, value},
+                           {gsql_int64, ngram_size_max},
+                           {gsql_int64, ngram_size_min},
+                           {gsql_bool, remove_diacritics}},
+                          /*context_ptr=*/nullptr},
+                          /*has_mapped_function=*/true,
+                          /*explicit_mapped_function_name=*/"",
+                          /*postgres_proc_oid=*/50031},
+                        {{gsql_tokenlist,
+                          {{gsql_string_array, value},
+                           {gsql_int64, ngram_size_max},
+                           {gsql_int64, ngram_size_min},
+                           {gsql_bool, remove_diacritics}},
+                          /*context_ptr=*/nullptr},
+                          /*has_mapped_function=*/true,
+                          /*explicit_mapped_function_name=*/"",
+                          /*postgres_proc_oid=*/50057}},
+                      /*mode=*/zetasql::Function::SCALAR,
+                      /*postgres_namespace=*/"spanner"});
+
+  zetasql::FunctionArgumentTypeOptions tokens =
+      GetRequiredNamedArgumentOptions("tokens");
+
+  functions.push_back({"tokenlist_concat",
+                       "tokenlist_concat",
+                       {{{gsql_tokenlist,
+                          {{gsql_tokenlist_array, tokens}},
+                          /*context_ptr=*/nullptr},
+                          /*has_mapped_function=*/true,
+                          /*explicit_mapped_function_name=*/"",
+                          /*postgres_proc_oid=*/50032}},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
+
+  zetasql::FunctionArgumentTypeOptions query =
+      GetRequiredNamedArgumentOptions("query");
+  zetasql::FunctionArgumentTypeOptions relative_search_type =
+      GetOptionalNamedArgumentOptions("relative_search_type");
+
+  functions.push_back({"search_substring",
+                       "search_substring",
+                       {{{gsql_bool,
+                          {{gsql_tokenlist, tokens},
+                           {gsql_string, query},
+                           {gsql_string, relative_search_type},
+                           {gsql_string, language_tag}},
+                          /*context_ptr=*/nullptr},
+                          /*has_mapped_function=*/true,
+                          /*explicit_mapped_function_name=*/"",
+                          /*postgres_proc_oid=*/50034}},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
+
+  zetasql::FunctionArgumentTypeOptions ngrams_query =
+      GetRequiredNamedArgumentOptions("ngrams_query");
+  zetasql::FunctionArgumentTypeOptions min_ngrams =
+      GetOptionalNamedArgumentOptions("min_ngrams");
+  zetasql::FunctionArgumentTypeOptions min_ngrams_percent =
+      GetOptionalNamedArgumentOptions("min_ngrams_percent");
+
+  functions.push_back({"search_ngrams",
+                       "search_ngrams",
+                       {{{gsql_bool,
+                          {{gsql_tokenlist, tokens},
+                           {gsql_string, ngrams_query},
+                           {gsql_int64, min_ngrams},
+                           {gsql_double, min_ngrams_percent},
+                           {gsql_string, language_tag}},
+                          /*context_ptr=*/nullptr},
+                          /*has_mapped_function=*/true,
+                          /*explicit_mapped_function_name=*/"",
+                          /*postgres_proc_oid=*/50035}},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
+
+  functions.push_back({"score_ngrams",
+                       "score_ngrams",
+                       {{{gsql_double,
+                          {{gsql_tokenlist, tokens},
+                           {gsql_string, ngrams_query},
+                           {gsql_string, algorithm},
+                           {gsql_string, language_tag}},
+                          /*context_ptr=*/nullptr},
+                          /*has_mapped_function=*/true,
+                          /*explicit_mapped_function_name=*/"",
+                          /*postgres_proc_oid=*/50036}},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
+
+  functions.push_back({"soundex",
+                       "soundex",
+                         {{{gsql_string,
+                            {gsql_string},
+                            /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50037}},
+                         /*mode=*/zetasql::Function::SCALAR,
+                         /*postgres_namespace=*/"spanner"});
+
+    zetasql::FunctionArgumentTypeOptions enhance_query =
+        GetOptionalNamedArgumentOptions("enhance_query");
+    zetasql::FunctionArgumentTypeOptions dialect =
+        GetOptionalNamedArgumentOptions("dialect");
+    zetasql::FunctionArgumentTypeOptions enhance_query_options =
+        GetOptionalNamedArgumentOptions("enhance_query_options");
+    functions.push_back({"search",
+                         "search",
+                         {{{gsql_bool,
+                            {{gsql_tokenlist, tokens},
+                             {gsql_string, query},
+                             {gsql_bool, enhance_query},
+                             {gsql_string, language_tag},
+                             {gsql_string, dialect},
+                             {gsql_pg_jsonb, enhance_query_options}},
+                            /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50033}},
+                         /*mode=*/zetasql::Function::SCALAR,
+                         /*postgres_namespace=*/"spanner"});
+
+    zetasql::FunctionArgumentTypeOptions options =
+        GetOptionalNamedArgumentOptions("options");
+    functions.push_back({"score",
+                         "score",
+                         {{{gsql_double,
+                            {{gsql_tokenlist, tokens},
+                             {gsql_string, query},
+                             {gsql_bool, enhance_query},
+                             {gsql_string, language_tag},
+                             {gsql_string, dialect},
+                             {gsql_pg_jsonb, enhance_query_options},
+                             {gsql_pg_jsonb, options}},
+                            /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50058}},
+                         /*mode=*/zetasql::Function::SCALAR,
+                         /*postgres_namespace=*/"spanner"});
+
+    zetasql::FunctionArgumentTypeOptions max_snippet_width =
+        GetOptionalNamedArgumentOptions("max_snippet_width");
+    zetasql::FunctionArgumentTypeOptions max_snippets =
+        GetOptionalNamedArgumentOptions("max_snippets");
+    functions.push_back({"snippet",
+                         "snippet",
+                         {{{gsql_pg_jsonb,
+                            {{gsql_string, value},
+                             {gsql_string, query},
+                             {gsql_bool, enhance_query},
+                             {gsql_string, language_tag},
+                             {gsql_int64, max_snippet_width},
+                             {gsql_int64, max_snippets},
+                             {gsql_string, content_type},
+                             {gsql_pg_jsonb, enhance_query_options}},
+                            /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50059}},
+                         /*mode=*/zetasql::Function::SCALAR,
+                         /*postgres_namespace=*/"spanner"});
+};
+
+void AddFullTextSearchFunctions(
+    std::vector<PostgresFunctionArguments>& functions) {
+  AddFullTextSearchNewFunctions(functions);
+};
+
 void AddPgArrayFunctions(std::vector<PostgresFunctionArguments>& functions) {
   const zetasql::Type* gsql_pg_jsonb_arr =
       types::PgJsonbArrayMapping()->mapped_type();

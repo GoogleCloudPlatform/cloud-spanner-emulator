@@ -486,6 +486,11 @@ absl::Status SpangresSystemCatalog::AddTypes(
   ZETASQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgFloat4ArrayMapping(), language_options));
 
+    ZETASQL_RETURN_IF_ERROR(
+        AddType(builtin_types::PgTokenlistMapping(), language_options));
+    ZETASQL_RETURN_IF_ERROR(
+        AddType(builtin_types::PgTokenlistArrayMapping(), language_options));
+
   return absl::OkStatus();
 }
 
@@ -543,6 +548,8 @@ absl::Status SpangresSystemCatalog::AddFunctions(
   spangres::AddPgFormattingFunctions(functions);
   spangres::AddPgStringFunctions(functions);
   spangres::AddFloatFunctions(functions);
+
+    spangres::AddFullTextSearchFunctions(functions);
 
     ZETASQL_RETURN_IF_ERROR(AddCastOverrideFunction(
         zetasql::types::StringType(), zetasql::types::IntervalType(),

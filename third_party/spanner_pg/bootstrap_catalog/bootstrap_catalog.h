@@ -57,19 +57,19 @@ namespace postgres_translator {
 class PgBootstrapCatalog {
  public:
   // Constructs a bootstrap catalog from arrays of raw catalog data
-  PgBootstrapCatalog(
-      absl::Span<const FormData_pg_collation> pg_collation_data,
-      absl::Span<const FormData_pg_namespace> pg_namespace_data,
-      absl::Span<const FormData_pg_type> pg_type_data,
-      absl::Span<const FormData_pg_proc> pg_proc_data,
-      absl::Span<const std::string> pg_proc_textproto_data,
-      absl::Span<const FormData_pg_cast> pg_cast_data,
-      absl::Span<const FormData_pg_operator> pg_operator_data,
-      absl::Span<const FormData_pg_aggregate> pg_aggregate_data,
-      absl::Span<const FormData_pg_opclass> pg_opclass_data,
-      absl::Span<const FormData_pg_am> pg_am_data,
-      absl::Span<const FormData_pg_amop> pg_amop_data,
-      absl::Span<const FormData_pg_amproc> pg_amproc_data);
+  PgBootstrapCatalog(absl::Span<const FormData_pg_collation> pg_collation_data,
+                     absl::Span<const FormData_pg_namespace> pg_namespace_data,
+                     absl::Span<const FormData_pg_type> pg_type_data,
+                     absl::Span<const FormData_pg_proc> pg_proc_data,
+                     absl::Span<const std::string> pg_proc_textproto_data,
+                     absl::Span<const FormData_pg_cast> pg_cast_data,
+                     absl::Span<const FormData_pg_operator> pg_operator_data,
+                     absl::Span<const FormData_pg_aggregate> pg_aggregate_data,
+                     absl::Span<const FormData_pg_opclass> pg_opclass_data,
+                     absl::Span<const FormData_pg_am> pg_am_data,
+                     absl::Span<const FormData_pg_amop> pg_amop_data,
+                     absl::Span<const FormData_pg_amproc> pg_amproc_data,
+                     absl::Span<const FormData_pg_language> pg_language_data);
 
   // The default catalog. Constructed using compiled-in data.
   static const PgBootstrapCatalog* Default();
@@ -188,6 +188,10 @@ class PgBootstrapCatalog {
   // pg_amprocs.
   absl::StatusOr<absl::Span<const FormData_pg_amproc* const>>
   GetAmprocsByFamily(Oid opfamily, Oid lefttype) const;
+
+  // Given a language name, return the corresponding pg_language.
+  absl::StatusOr<const FormData_pg_language*> GetLanguageByName(
+      absl::string_view language_name) const;
 
  private:
   // CastKey is a key for looking up pg_cast structs keyed on a Source Oid and
@@ -329,6 +333,9 @@ class PgBootstrapCatalog {
       updated_proc_by_oid_;
   absl::flat_hash_map<Oid, std::unique_ptr<FormData_pg_operator>>
       updated_operator_by_oid_;
+
+  absl::flat_hash_map<std::string, const FormData_pg_language*>
+      language_by_name_;
 };
 
 }  // namespace postgres_translator

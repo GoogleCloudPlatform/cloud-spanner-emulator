@@ -202,6 +202,32 @@ TEST_F(JsonbValueTest, NullJson) {
   EXPECT_FALSE(member.has_value());
 }
 
+TEST_F(JsonbValueTest, CreateEmptyArray) {
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  PgJsonbValue jsonb = PgJsonbValue::CreateEmptyArray(&tree_nodes);
+  EXPECT_THAT(jsonb.IsObject(), false);
+  EXPECT_THAT(jsonb.IsArray(), true);
+  EXPECT_THAT(jsonb.IsNull(), false);
+  EXPECT_THAT(jsonb.IsBoolean(), false);
+  EXPECT_THAT(jsonb.IsNumeric(), false);
+  EXPECT_THAT(jsonb.IsString(), false);
+  EXPECT_THAT(jsonb.IsEmpty(), true);
+  EXPECT_THAT(jsonb.Serialize(), "[]");
+}
+
+TEST_F(JsonbValueTest, CreateEmptyObject) {
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  PgJsonbValue jsonb = PgJsonbValue::CreateEmptyObject(&tree_nodes);
+  EXPECT_THAT(jsonb.IsObject(), true);
+  EXPECT_THAT(jsonb.IsArray(), false);
+  EXPECT_THAT(jsonb.IsNull(), false);
+  EXPECT_THAT(jsonb.IsBoolean(), false);
+  EXPECT_THAT(jsonb.IsNumeric(), false);
+  EXPECT_THAT(jsonb.IsString(), false);
+  EXPECT_THAT(jsonb.IsEmpty(), true);
+  EXPECT_THAT(jsonb.Serialize(), "{}");
+}
+
 TEST_F(JsonbValueTest, ParseJsonbObject) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
   ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,

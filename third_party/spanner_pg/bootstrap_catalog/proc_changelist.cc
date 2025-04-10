@@ -95,6 +95,63 @@ absl::flat_hash_map<Oid, PgProcSignature> proc_signatures_to_update = {
 // Metadata to identify procs in the boostrap catalog with default arguments.
 absl::flat_hash_map<Oid, std::vector<std::string>> proc_default_args_to_update =
     {
+        {/*tokenize_fulltext=*/50016,
+         {"null::text", "null::text", "null::text"}},
+        {/*tokenize_fulltext=*/50017,
+         {"null::text", "null::text", "null::text"}},
+
+        {/*tokenize_substring=*/50018,
+         {"null::bigint", "null::bigint", "null::text", "null::text[]",
+          "null::boolean", "null::text", "null::boolean"}},
+        {/*tokenize_substring=*/50019,
+         {"null::bigint", "null::bigint", "null::text", "null::text[]",
+          "null::boolean", "null::text", "null::boolean"}},
+
+        {/*=tokenize_number=*/50024,
+         {"null::text", "null::text", "null::double precision",
+          "null::double precision", "null::double precision", "null::bigint",
+          "null::bigint"}},
+        {/*tokenize_number=*/50025,
+         {"null::text", "null::text", "null::double precision",
+          "null::double precision", "null::double precision", "null::bigint",
+          "null::bigint"}},
+        {/*tokenize_number=*/50026,
+         {"null::text", "null::text", "null::bigint", "null::bigint",
+          "null::bigint", "null::bigint", "null::bigint"}},
+        {/*tokenize_number=*/50027,
+         {"null::text", "null::text", "null::bigint", "null::bigint",
+          "null::bigint", "null::bigint", "null::bigint"}},
+        {/*tokenize_number=*/50028,
+         {"null::text", "null::text", "null::double precision",
+          "null::double precision", "null::double precision", "null::bigint",
+          "null::bigint"}},
+        {/*tokenize_number=*/50029,
+         {"null::text", "null::text", "null::double precision",
+          "null::double precision", "null::double precision", "null::bigint",
+          "null::bigint"}},
+
+        {/*tokenize_ngrams=*/50031,
+         {"null::bigint", "null::bigint", "null::boolean"}},
+        {/*tokenize_ngrams=*/50057,
+         {"null::bigint", "null::bigint", "null::boolean"}},
+
+        {/*search=*/50033,
+         {"null::boolean", "null::text", "null::text", "null::jsonb"}},
+
+        {/*search_substring=*/50034, {"null::text", "null::text"}},
+
+        {/*score=*/50058,
+         {"null::boolean", "null::text", "null::text", "null::jsonb",
+          "null::jsonb"}},
+
+        {/*snippet=*/50059,
+         {"null::boolean", "null::text", "null::bigint", "null::bigint",
+          "null::text", "null::jsonb"}},
+
+        {/*search_ngrams=*/50035,
+         {"null::bigint", "null::double precision", "null::text"}},
+
+        {/*score_ngrams=*/50036, {"null::text", "null::text"}},
 };
 
 // Metadata to identify procs in the bootstrap catalog whose argument names

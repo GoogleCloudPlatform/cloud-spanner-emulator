@@ -146,6 +146,8 @@ const FormData_pg_type* GetTypeFromBootstrapCatalog(Oid type_id);
 const FormData_pg_operator* GetOperatorFromBootstrapCatalog(Oid operator_id);
 const FormData_pg_aggregate* GetAggregateFromBootstrapCatalog(Oid agg_id);
 const FormData_pg_opclass* GetOpclassFromBootstrapCatalog(Oid opclass_id);
+const FormData_pg_language* GetLanguageByNameFromBootstrapCatalog(
+    const char* name);
 Oid GetNamespaceByNameFromBootstrapCatalog(const char* name);
 Oid GetCollationOidByNameFromBootstrapCatalog(const char* name);
 char* GetNamespaceNameByOidFromBootstrapCatalog(Oid namespace_oid);
