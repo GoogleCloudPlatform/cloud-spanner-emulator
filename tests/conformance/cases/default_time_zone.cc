@@ -400,6 +400,157 @@ TEST_F(DefaultTimeZoneTest, QueryParameterExtractDateUTC) {
               IsOkAndHoldsRow({expected_date}));
 }
 
+class PgDefaultTimeZoneTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<DefaultTimezoneTestCase> {
+ public:
+  PgDefaultTimeZoneTest()
+      : feature_flags_({.enable_default_time_zone = true}) {}
+
+  void SetUp() override {
+    dialect_ = database_api::DatabaseDialect::POSTGRESQL;
+    DatabaseTest::SetUp();
+  }
+
+  absl::Status SetUpDatabase() override { return absl::OkStatus(); }
+
+ private:
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
+};
+
+TEST_F(PgDefaultTimeZoneTest, StringLiteral) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
+                       ParseRFC3339TimeSeconds("2008-12-25T23:30:00Z"));
+  EXPECT_THAT(Query("select '2008-12-25 15:30:00'::timestamptz"),
+              IsOkAndHoldsRows({{expected_result_timestamp}}));
+
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+      ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(expected_result_timestamp,
+                       ParseRFC3339TimeSeconds("2008-12-25T15:30:00Z"));
+  EXPECT_THAT(Query("select '2008-12-25 15:30:00'::timestamptz"),
+              IsOkAndHoldsRows({{expected_result_timestamp}}));
+}
+
+TEST_F(PgDefaultTimeZoneTest, CastTimestamptzToText) {
+  EXPECT_THAT(
+      Query("select cast('2008-12-25 15:30:00+00'::timestamptz as text)"),
+      IsOkAndHoldsRows({{"2008-12-25 07:30:00-08"}}));
+
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+      ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
+  EXPECT_THAT(
+      Query("select cast('2008-12-25 15:30:00+00'::timestamptz as text)"),
+      IsOkAndHoldsRows({{"2008-12-25 15:30:00+00"}}));
+}
+
+TEST_F(PgDefaultTimeZoneTest, DateTruncation) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
+                       ParseRFC3339TimeSeconds("2008-12-25T08:00:00Z"));
+  EXPECT_THAT(
+      Query("select date_trunc('day', timestamptz '2008-12-25 15:30:00+00')"),
+      IsOkAndHoldsRows({{expected_result_timestamp}}));
+
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+      ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(expected_result_timestamp,
+                       ParseRFC3339TimeSeconds("2008-12-25T00:00:00Z"));
+}
+
+TEST_F(PgDefaultTimeZoneTest, Extract) {
+  EXPECT_THAT(Query("select extract(hour from timestamptz '2008-12-25 "
+                    "15:30:00+00')::text"),
+              IsOkAndHoldsRows({{"7"}}));
+
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+      ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
+  EXPECT_THAT(Query("select extract(hour from timestamptz '2008-12-25 "
+                    "15:30:00+00')::text"),
+              IsOkAndHoldsRows({{"15"}}));
+}
+
+TEST_F(PgDefaultTimeZoneTest, ToChar) {
+  EXPECT_THAT(Query("select to_char('1902-07-21T06:07:15.42172Z'::timestamptz, "
+                    "'YYYY-MM-DD HH24:MI:SS.USOF')"),
+              IsOkAndHoldsRows({{"1902-07-20 22:07:15.421720-08"}}));
+
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+      ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
+  EXPECT_THAT(Query("select to_char('1902-07-21T06:07:15.42172Z'::timestamptz, "
+                    "'YYYY-MM-DD HH24:MI:SS.USOF')"),
+              IsOkAndHoldsRows({{"1902-07-21 06:07:15.421720+00"}}));
+}
+
+TEST_F(PgDefaultTimeZoneTest, ToCharAnotherCase) {
+  EXPECT_THAT(Query("SELECT to_char('1970-01-01 02:03:04'::timestamptz, "
+                    "'YYYY-MM-DD HH24 MI SS')"),
+              IsOkAndHoldsRows({{"1970-01-01 02 03 04"}}));
+
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+      ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
+  EXPECT_THAT(Query("SELECT to_char('1970-01-01 02:03:04'::timestamptz, "
+                    "'YYYY-MM-DD HH24 MI SS')"),
+              IsOkAndHoldsRows({{"1970-01-01 02 03 04"}}));
+}
+
+TEST_F(PgDefaultTimeZoneTest, QueryParameterTimestampToString) {
+  EXPECT_THAT(
+      QueryWithParams(
+          "SELECT cast($1 as text)",
+          {{"p1", Value(google::cloud::spanner::MakeTimestamp(
+                            absl::FromUnixMicros(kTestTimestampInMicrosecond))
+                            .value())}}),
+      IsOkAndHoldsRow({"1978-02-13 17:48:23.673001-08"}));
+
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+      ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
+  EXPECT_THAT(
+      QueryWithParams(
+          "SELECT cast($1 as text)",
+          {{"p1", Value(google::cloud::spanner::MakeTimestamp(
+                            absl::FromUnixMicros(kTestTimestampInMicrosecond))
+                            .value())}}),
+      IsOkAndHoldsRow({"1978-02-14 01:48:23.673001+00"}));
+}
+
+TEST_F(PgDefaultTimeZoneTest, InsertDMLWithTimestampParameter) {
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(CREATE TABLE test (
+        id bigint primary key,
+        value timestamptz
+      ))"}));
+
+  Timestamp timestamp = google::cloud::spanner::MakeTimestamp(
+                            absl::FromUnixMicros(kTestTimestampInMicrosecond))
+                            .value();
+  ZETASQL_EXPECT_OK(CommitDml(
+      {SqlStatement("INSERT INTO test (id, value) VALUES (1, $1)",
+                    SqlStatement::ParamType{{"p1", Value(timestamp)}})}));
+
+  EXPECT_THAT(Query("SELECT value FROM test WHERE id = 1"),
+              IsOkAndHoldsRows({{timestamp}}));
+}
+
+TEST_F(PgDefaultTimeZoneTest, InsertDMLWithTimestampParameterUTC) {
+  // Since we provide a timestamp value explicitly, no timezone-related
+  // functions are needed and changing the default timezone has no impact.
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+      ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(CREATE TABLE test (
+        id bigint primary key,
+        value timestamptz
+      ))"}));
+
+  Timestamp timestamp = google::cloud::spanner::MakeTimestamp(
+                            absl::FromUnixMicros(kTestTimestampInMicrosecond))
+                            .value();
+  ZETASQL_EXPECT_OK(CommitDml(
+      {SqlStatement("INSERT INTO test (id, value) VALUES (1, $1)",
+                    SqlStatement::ParamType{{"p1", Value(timestamp)}})}));
+
+  EXPECT_THAT(Query("SELECT value FROM test WHERE id = 1"),
+              IsOkAndHoldsRows({{timestamp}}));
+}
+
 }  // namespace
 
 }  // namespace test

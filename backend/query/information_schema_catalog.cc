@@ -16,6 +16,7 @@
 
 #include "backend/query/information_schema_catalog.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -34,11 +35,11 @@
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
-#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
+#include "backend/query/analyzer_options.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
 #include "backend/query/spanner_sys_catalog.h"
 #include "backend/query/tables_from_metadata.h"
@@ -46,15 +47,18 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/model.h"
+#include "backend/schema/catalog/property_graph.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/parser/ddl_parser.h"
 #include "backend/schema/printer/print_ddl.h"
 #include "backend/schema/updater/ddl_type_conversion.h"
+#include "common/feature_flags.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 #include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
+#include "google/protobuf/util/json_util.h"
 
 namespace google {
 namespace spanner {
@@ -70,6 +74,7 @@ using ::zetasql::types::Int64Type;
 using ::zetasql::types::StringType;
 using ::zetasql::values::Bool;
 using ::zetasql::values::Int64;
+using ::zetasql::values::Json;
 using zetasql::values::NullBytes;
 using ::zetasql::values::NullInt64;
 using ::zetasql::values::NullString;
@@ -205,6 +210,7 @@ static constexpr char kModelColumns[] = "MODEL_COLUMNS";
 static constexpr char kModelColumnOptions[] = "MODEL_COLUMN_OPTIONS";
 static constexpr char kLocalityGroupOptions[] = "LOCALITY_GROUP_OPTIONS";
 static constexpr char kLocalityGroup[] = "locality_group";
+static constexpr char kPropertyGraphs[] = "PROPERTY_GRAPHS";
 
 static int kFloatNumericPrecision = 24;
 static int kDoubleNumericPrecision = 53;
@@ -214,39 +220,64 @@ static int kBigintNumericPrecision = 64;
 static int kBinaryRepresentedNumericPrecisionRadix = 2;
 static int kDecimalRepresentedNumericPrecisionRadix = 10;
 
-static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
-    // For now, this is a set of tables that are created from metadata. Once the
-    // migration to auto-create tables is complete, it'll be the tables from
-    // https://cloud.google.com/spanner/docs/information-schema.
-    kSupportedGSQLTables{{
-        kChangeStreams,
-        kChangeStreamColumns,
-        kChangeStreamOptions,
-        kChangeStreamTables,
-        kCheckConstraints,
-        kColumnColumnUsage,
-        kColumnOptions,
-        kColumns,
-        kConstraintColumnUsage,
-        kConstraintTableUsage,
-        kDatabaseOptions,
-        kIndexes,
-        kIndexColumns,
-        kKeyColumnUsage,
-        kLocalityGroupOptions,
-        kModels,
-        kModelOptions,
-        kModelColumns,
-        kModelColumnOptions,
-        kReferentialConstraints,
-        kSchemata,
-        kSequences,
-        kSequenceOptions,
-        kSpannerStatistics,
-        kTableConstraints,
-        kTables,
-        kViews,
-    }};
+// For now, this is a set of tables that are created from metadata. Once the
+// migration to auto-create tables is complete, it'll be the tables from
+// https://cloud.google.com/spanner/docs/information-schema.
+absl::flat_hash_set<std::string> GetSupportedGSQLTables() {
+  absl::flat_hash_set<std::string> supported_tables = {
+      kChangeStreams,
+      kChangeStreamColumns,
+      kChangeStreamOptions,
+      kChangeStreamTables,
+      kCheckConstraints,
+      kColumnColumnUsage,
+      kColumnOptions,
+      kColumns,
+      kConstraintColumnUsage,
+      kConstraintTableUsage,
+      kDatabaseOptions,
+      kIndexes,
+      kIndexColumns,
+      kKeyColumnUsage,
+      kLocalityGroupOptions,
+      kModels,
+      kModelOptions,
+      kModelColumns,
+      kModelColumnOptions,
+      kReferentialConstraints,
+      kSchemata,
+      kSequences,
+      kSequenceOptions,
+      kSpannerStatistics,
+      kTableConstraints,
+      kTables,
+      kViews,
+      kPropertyGraphs,
+  };
+  if (!EmulatorFeatureFlags::instance()
+           .flags()
+           .enable_property_graph_information_schema) {
+    supported_tables.erase(kPropertyGraphs);
+  }
+  return supported_tables;
+}
+
+// TODO: cleanup the feature flag and revert the functions back
+std::vector<ColumnsMetaEntry> GetColumnsMetadata() {
+  std::vector<ColumnsMetaEntry> metadata_entries = ColumnsMetadata();
+  if (!EmulatorFeatureFlags::instance()
+           .flags()
+           .enable_property_graph_information_schema) {
+    metadata_entries.erase(
+        std::remove_if(metadata_entries.begin(), metadata_entries.end(),
+                       [](const ColumnsMetaEntry& entry) {
+                         return std::string(entry.table_name) ==
+                                "PROPERTY_GRAPHS";
+                       }),
+        metadata_entries.end());
+  }
+  return metadata_entries;
+}
 
 static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
     // For now, this is a set of tables that are created from metadata. Once the
@@ -292,7 +323,7 @@ bool IsNullable(const ColumnsMetaEntry& column) {
 }
 
 // Searches for a metadata entry from metadata_entries. Returns the iterator
-// position to the entry if found, or the interator end if not.
+// position to the entry if found, or the iterator end if not.
 template <typename T>
 typename std::vector<T>::const_iterator FindMetadata(
     const std::vector<T>& metadata_entries, const std::string& table_name,
@@ -305,11 +336,11 @@ typename std::vector<T>::const_iterator FindMetadata(
   return metadata_entries.cend();
 }
 
-// Returns a reference to an information schema column's metadata. The column's
+// Returns a copy of an information schema column's metadata. The column's
 // metadata must exist; otherwise, the process crashes with a fatal message.
-const ColumnsMetaEntry& GetColumnMetadata(const DatabaseDialect& dialect,
-                                          const zetasql::Table* table,
-                                          const zetasql::Column* column) {
+ColumnsMetaEntry GetColumnMetadata(const DatabaseDialect& dialect,
+                                   const zetasql::Table* table,
+                                   const zetasql::Column* column) {
   std::string error = "Missing metadata for column ";
   if (dialect == DatabaseDialect::POSTGRESQL) {
     std::string table_name = absl::AsciiStrToLower(table->Name());
@@ -321,8 +352,9 @@ const ColumnsMetaEntry& GetColumnMetadata(const DatabaseDialect& dialect,
     return *m;
   }
 
-  auto m = FindMetadata(ColumnsMetadata(), table->Name(), column->Name());
-  if (m == ColumnsMetadata().end()) {
+  std::vector<ColumnsMetaEntry> columns_metadata = GetColumnsMetadata();
+  auto m = FindMetadata(columns_metadata, table->Name(), column->Name());
+  if (m == columns_metadata.end()) {
     ABSL_LOG(FATAL) << error << table->Name() << "." << column->Name();
   }
   return *m;
@@ -509,13 +541,19 @@ InformationSchemaCatalog::InformationSchemaCatalog(
     tables_by_name_ = AddTablesFromMetadata(
         PGColumnsMetadata(), *kSpannerPGTypeToGSQLType, *kSupportedPGTables);
   } else {
-    tables_by_name_ = AddTablesFromMetadata(
-        ColumnsMetadata(), *kSpannerTypeToGSQLType, *kSupportedGSQLTables);
+    auto metadata = GetColumnsMetadata();
+    auto tables = GetSupportedGSQLTables();
+    tables_by_name_ =
+        AddTablesFromMetadata(GetColumnsMetadata(), *kSpannerTypeToGSQLType,
+                              GetSupportedGSQLTables());
   }
 
   for (auto& [name, table] : tables_by_name_) {
-    ABSL_CHECK_OK(table->set_full_name(absl::StrCat(  // Crash OK
-        catalog_name, ".", name)));
+    auto full_name = absl::StrCat(catalog_name, ".", name);
+    ABSL_CHECK_OK(table->set_full_name(  // Crash OK
+        dialect_ == DatabaseDialect::POSTGRESQL
+            ? absl::AsciiStrToLower(full_name)
+            : full_name));
     AddTable(table.get());
   }
 
@@ -551,6 +589,11 @@ InformationSchemaCatalog::InformationSchemaCatalog(
   FillModelOptionsTable();
   FillModelColumnsTable();
   FillModelColumnOptionsTable();
+  if (EmulatorFeatureFlags::instance()
+          .flags()
+          .enable_property_graph_information_schema) {
+    FillPropertyGraphsTable();
+  }
 }
 
 inline std::string InformationSchemaCatalog::GetNameForDialect(
@@ -2862,6 +2905,35 @@ void InformationSchemaCatalog::FillLocalityGroupOptionsTable() {
   }
   tables_by_name_.at(GetNameForDialect(kLocalityGroupOptions))
       ->SetContents(rows);
+}
+
+void InformationSchemaCatalog::FillPropertyGraphsTable() {
+  if (dialect_ == DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+
+  std::vector<std::vector<zetasql::Value>> rows;
+  for (const PropertyGraph* property_graph :
+       default_schema_->property_graphs()) {
+    const auto& [property_graph_schema_part, property_graph_name_part] =
+        GetSchemaAndNameForInformationSchema(property_graph->Name());
+    std::string property_graph_json;
+    QCHECK_OK(
+        google::protobuf::util::MessageToJsonString(property_graph->ToProto(),
+                                          &property_graph_json));  // Crash OK
+    rows.push_back({
+        // property_graph_catalog
+        String(""),
+        // property_graph_schema
+        String(property_graph_schema_part),
+        // property_graph_name
+        String(property_graph_name_part),
+        // json metadata
+        Json(
+            zetasql::JSONValue::ParseJSONString(property_graph_json).value()),
+    });
+  }
+  tables_by_name_.at(GetNameForDialect(kPropertyGraphs))->SetContents(rows);
 }
 
 }  // namespace backend

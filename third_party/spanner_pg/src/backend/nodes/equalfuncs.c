@@ -1490,6 +1490,7 @@ _equalFunctionParameter(const FunctionParameter *a, const FunctionParameter *b)
 	COMPARE_NODE_FIELD(argType);
 	COMPARE_SCALAR_FIELD(mode);
 	COMPARE_NODE_FIELD(defexpr);
+	COMPARE_STRING_FIELD(def_expr_string);
 
 	return true;
 }
@@ -2518,11 +2519,12 @@ _equalAlterSearchIndexStmt(const AlterSearchIndexStmt *a,
 // SPANGRES END
 
 static bool _equalLocalityGroupOption(const LocalityGroupOption *a,
-                                       const LocalityGroupOption *b) {
+                                      const LocalityGroupOption *b) {
   COMPARE_STRING_FIELD(value);
 	COMPARE_SCALAR_FIELD(is_null);
   return true;
 }
+
 static bool _equalCreateLocalityGroupStmt(const CreateLocalityGroupStmt *a,
                                           const CreateLocalityGroupStmt *b) {
   COMPARE_NODE_FIELD(locality_group_name);

@@ -1,36 +1,21 @@
 //
-// PostgreSQL is released under the PostgreSQL License, a liberal Open Source
-// license, similar to the BSD or MIT licenses.
+// Copyright 2020 Google LLC
 //
-// PostgreSQL Database Management System
-// (formerly known as Postgres, then as Postgres95)
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// Portions Copyright © 1996-2020, The PostgreSQL Global Development Group
+//      http://www.apache.org/licenses/LICENSE-2.0
 //
-// Portions Copyright © 1994, The Regents of the University of California
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
-// Portions Copyright 2023 Google LLC
-//
-// Permission to use, copy, modify, and distribute this software and its
-// documentation for any purpose, without fee, and without a written agreement
-// is hereby granted, provided that the above copyright notice and this
-// paragraph and the following two paragraphs appear in all copies.
-//
-// IN NO EVENT SHALL THE UNIVERSITY OF CALIFORNIA BE LIABLE TO ANY PARTY FOR
-// DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, INCLUDING
-// LOST PROFITS, ARISING OUT OF THE USE OF THIS SOFTWARE AND ITS DOCUMENTATION,
-// EVEN IF THE UNIVERSITY OF CALIFORNIA HAS BEEN ADVISED OF THE POSSIBILITY OF
-// SUCH DAMAGE.
-//
-// THE UNIVERSITY OF CALIFORNIA SPECIFICALLY DISCLAIMS ANY WARRANTIES,
-// INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
-// FITNESS FOR A PARTICULAR PURPOSE. THE SOFTWARE PROVIDED HEREUNDER IS ON AN
-// "AS IS" BASIS, AND THE UNIVERSITY OF CALIFORNIA HAS NO OBLIGATIONS TO PROVIDE
-// MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
-//------------------------------------------------------------------------------
 
-#ifndef CATALOG_EMULATOR_PG_CATALOG_H_
-#define CATALOG_EMULATOR_PG_CATALOG_H_
+#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_PG_CATALOG_H_
+#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_PG_CATALOG_H_
 
 #include <memory>
 #include <string>
@@ -96,4 +81,4 @@ class PGCatalog : public zetasql::SimpleCatalog {
 
 }  // namespace postgres_translator
 
-#endif  // CATALOG_EMULATOR_PG_CATALOG_H_
+#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_PG_CATALOG_H_

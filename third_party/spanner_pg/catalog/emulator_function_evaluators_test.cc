@@ -40,10 +40,12 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/functional/any_invocable.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "third_party/spanner_pg/interface/datetime_evaluators.h"
+#include "third_party/spanner_pg/interface/pg_timezone.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"
@@ -82,8 +84,9 @@ TEST(PGFunctionEvaluators, SetUpPGMemoryArena) {
 
 TEST(PGFunctionEvaluators, CallsGivenCleanupFunction) {
   bool function_called = false;
-  zetasql::FunctionEvaluator evaluator = PGFunctionEvaluator(
-      EvalPgAlloc, [&function_called]() { function_called = true; });
+  zetasql::FunctionEvaluator evaluator =
+      PGFunctionEvaluator(EvalPgAlloc, InitializePGTimezoneToDefault,
+                          [&function_called]() { function_called = true; });
 
   EXPECT_THAT(evaluator({zetasql::values::Int64(1)}),
               IsOkAndHolds(zetasql::values::Int64(123)));
@@ -101,8 +104,11 @@ TEST(PGFunctionEvaluators, TestTimeZoneDefault) {
 }
 
 TEST(PGFunctionEvaluators, TestTimeZoneUTC) {
+  auto initialize_pg_timezone = [&]() {
+    absl::Status status = interfaces::InitPGTimezone("UTC");
+  };
   zetasql::FunctionEvaluator evaluator =
-      PGFunctionEvaluator(EvalCastToTimestamp, []() {}, "UTC");
+      PGFunctionEvaluator(EvalCastToTimestamp, initialize_pg_timezone, []() {});
 
   EXPECT_THAT(evaluator({zetasql::values::String("2008-12-25 15:30:00")}),
               IsOkAndHolds(zetasql::values::Timestamp(

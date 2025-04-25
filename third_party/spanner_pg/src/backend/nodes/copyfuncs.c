@@ -3818,6 +3818,7 @@ _copyFunctionParameter(const FunctionParameter *from)
 	COPY_NODE_FIELD(argType);
 	COPY_SCALAR_FIELD(mode);
 	COPY_NODE_FIELD(defexpr);
+	COPY_STRING_FIELD(def_expr_string);
 
 	return newnode;
 }
@@ -5142,6 +5143,7 @@ _copyLocalityGroupOption(const LocalityGroupOption *from) {
   COPY_SCALAR_FIELD(is_null);
   return newnode;
 }
+
 static CreateLocalityGroupStmt *_copyCreateLocalityGroupStmt(
     const CreateLocalityGroupStmt *from) {
   CreateLocalityGroupStmt *newnode = makeNode(CreateLocalityGroupStmt);

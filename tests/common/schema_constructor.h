@@ -65,6 +65,11 @@ CreateSchemaWithOneTableAndOneChangeStream(
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
+std::unique_ptr<const backend::Schema> CreateSchemaWithOneTableAndOnePlacement(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+
 absl::StatusOr<std::unique_ptr<const backend::Schema>>
 CreateSchemaWithOneSequence(
     zetasql::TypeFactory* type_factory,

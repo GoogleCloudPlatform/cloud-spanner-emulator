@@ -36,6 +36,8 @@
 
 #include "zetasql/public/function.h"
 #include "zetasql/public/value.h"
+#include "absl/log/log.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
@@ -47,11 +49,20 @@
 
 namespace postgres_translator {
 
+void InitializePGTimezoneToDefault() {
+  absl::Status status =
+      interfaces::InitPGTimezone(kDefaultTimeZone);
+  if (!status.ok()) {
+    ABSL_LOG(ERROR) << "Failed to initialize PG timezone to default: " << status;
+  }
+}
+
 zetasql::FunctionEvaluator PGFunctionEvaluator(
     const zetasql::FunctionEvaluator& function,
-    const std::function<void()>& on_compute_end, const std::string& time_zone) {
-  return [function, on_compute_end,
-          time_zone](absl::Span<const zetasql::Value> args)
+    const std::function<void()>& on_compute_begin,
+    const std::function<void()>& on_compute_end) {
+  return [function, on_compute_begin,
+          on_compute_end](absl::Span<const zetasql::Value> args)
              -> absl::StatusOr<zetasql::Value> {
     // Binds PG memory context arena to thread local
     ZETASQL_VLOG(1) << "Creating PG arena and Evaluating PG function";
@@ -62,9 +73,8 @@ zetasql::FunctionEvaluator PGFunctionEvaluator(
                    << status_or.status();
     }
 
-    // Initializes the thread local timezone
-    ZETASQL_RETURN_IF_ERROR(
-        postgres_translator::interfaces::InitPGTimezone(time_zone.c_str()));
+    // Call registered function for starting
+    on_compute_begin();
 
     absl::StatusOr<zetasql::Value> result = function(args);
 

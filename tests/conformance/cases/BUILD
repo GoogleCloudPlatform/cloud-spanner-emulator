@@ -92,6 +92,7 @@ cc_library(
         "//tests/conformance/data/schemas:schema_files",
     ],
     deps = [
+        "//backend/schema/catalog:property_graph_cc_proto",
         "//common:clock",
         "//common:config",
         "//common:errors",

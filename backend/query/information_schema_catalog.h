@@ -30,7 +30,7 @@
 #include "backend/query/spanner_sys_catalog.h"
 #include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/schema.h"
-#include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
+#include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
 
 namespace google {
 namespace spanner {
@@ -129,6 +129,8 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
       std::vector<std::vector<zetasql::Value>>* rows);
   zetasql::Value ParseLocalityGroupOptions(ddl::SetOption option);
   void FillLocalityGroupOptionsTable();
+
+  void FillPropertyGraphsTable();
 };
 
 }  // namespace backend

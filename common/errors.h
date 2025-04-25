@@ -462,6 +462,8 @@ absl::Status TableNotFoundAtTimestamp(absl::string_view table_name,
 absl::Status IndexNotFound(absl::string_view index_name);
 
 absl::Status ChangeStreamNotFound(absl::string_view change_stream_name);
+absl::Status UnknownPlacement(absl::string_view placement_name);
+absl::Status PlacementNotFound(absl::string_view placement_name);
 absl::Status ModelNotFound(absl::string_view model_name);
 absl::Status TableValuedFunctionNotFound(absl::string_view tvf_name);
 absl::Status SequenceNotFound(absl::string_view sequence_name);

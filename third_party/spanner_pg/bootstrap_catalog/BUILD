@@ -45,7 +45,10 @@ cc_library(
     name = "bootstrap_catalog",
     srcs = ["bootstrap_catalog.cc"],
     hdrs = ["bootstrap_catalog.h"],
-    visibility = ["//:__subpackages__"],
+    visibility = [
+        "//:__subpackages__",
+        "//backend/query:__subpackages__",
+    ],
     deps = [
         ":bootstrap_catalog_info",
         ":proc_changelist",
@@ -226,6 +229,7 @@ cc_library(
     name = "bootstrap_catalog_accessor_impl",
     srcs = ["bootstrap_catalog_accessor.cc"],
     visibility = [
+        "//backend/query:__subpackages__",
         "//tests/conformance/common:__subpackages__",
         "//third_party/spanner_pg/catalog:__subpackages__",
         "//third_party/spanner_pg/interface:__subpackages__",

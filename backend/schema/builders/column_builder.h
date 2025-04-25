@@ -73,6 +73,11 @@ class Column::Builder {
     return *this;
   }
 
+  Builder& set_is_placement_key(bool is_placement_key) {
+    instance_->is_placement_key_ = is_placement_key;
+    return *this;
+  }
+
   Builder& set_expression(const std::string& expression) {
     instance_->expression_ = expression;
     return *this;

@@ -716,7 +716,8 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 
 	CACHE CALL CALLED CASCADE CASCADED CASE CAST CATALOG_P CHAIN CHANGE CHAR_P
 	CHARACTER CHARACTERISTICS CHECK CHECKPOINT CLASS CLOSE
-	CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
+	CLUSTER COALESCE COLLATE COLLATION COLUMN
+	COLUMNS COMMENT COMMENTS COMMIT
 	COMMITTED COMPRESSION CONCURRENTLY CONFIGURATION CONFLICT
 	CONNECTION CONSTRAINT	CONSTRAINTS CONTENT_P CONTINUE_P CONVERSION_P COPY
 	COST COUNTER CREATE	CROSS CSV CUBE CURRENT_P
@@ -2465,7 +2466,7 @@ alter_table_cmd:
 					n->missing_ok = false;
 					$$ = (Node *) n;
 				}
-            /* ALTER TABLE <name> ADD IF NOT EXISTS <coldef> */
+			/* ALTER TABLE <name> ADD IF NOT EXISTS <coldef> */
 			| ADD_P IF_P NOT EXISTS columnDef
 				{
 					AlterTableCmd *n = makeNode(AlterTableCmd);
@@ -2495,18 +2496,18 @@ alter_table_cmd:
 					n->missing_ok = true;
 					$$ = (Node *) n;
 				}
-            /* ALTER TABLE <name> ADD TTL INTERVAL 'interval' ON <coldef> */
-            | ADD_P OptTtl
-			    {
+			/* ALTER TABLE <name> ADD TTL INTERVAL 'interval' ON <coldef> */
+			| ADD_P OptTtl
+			  {
 					AlterTableCmd *n = makeNode(AlterTableCmd);
 					n->subtype = AT_AddTtl;
 					Ttl *t = $2;
 					n->def = (Node *)t;
 					$$ = (Node *)n;
 				}
-            /* ALTER TABLE <name> ALTER TTL INTERVAL 'interval' ON <coldef> */
-            | ALTER OptTtl
-			    {
+			/* ALTER TABLE <name> ALTER TTL INTERVAL 'interval' ON <coldef> */
+			| ALTER OptTtl
+				{
 					AlterTableCmd *n = makeNode(AlterTableCmd);
 					n->subtype = AT_AlterTtl;
 					Ttl *t = $2;
@@ -8837,11 +8838,29 @@ func_arg_with_default:
 				{
 					$$ = $1;
 					$$->defexpr = $3;
+					// Spangres extract raw string from the default expression
+					int query_start_location = @3;
+					int query_end_location =
+							pg_yyget_extra(yyscanner)->current_yylloc;
+					$$->def_expr_string =
+							pnstrdup(
+								pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf
+									+ query_start_location,
+								query_end_location - query_start_location);
 				}
 		| func_arg '=' a_expr
 				{
 					$$ = $1;
 					$$->defexpr = $3;
+					// Spangres extract raw string from the default expression
+					int query_start_location = @3;
+					int query_end_location =
+							pg_yyget_extra(yyscanner)->current_yylloc;
+					$$->def_expr_string =
+							pnstrdup(
+								pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf
+									+ query_start_location,
+								query_end_location - query_start_location);
 				}
 		;
 

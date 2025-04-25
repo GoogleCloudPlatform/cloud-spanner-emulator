@@ -1981,6 +1981,11 @@ absl::Status ChangeStreamNotFound(absl::string_view change_stream_name) {
       absl::StrCat("Change Stream not found: ", change_stream_name));
 }
 
+absl::Status PlacementNotFound(absl::string_view placement_name) {
+  return absl::Status(absl::StatusCode::kNotFound,
+                      absl::StrCat("Placement not found: ", placement_name));
+}
+
 absl::Status ModelNotFound(absl::string_view model_name) {
   return absl::Status(absl::StatusCode::kNotFound,
                       absl::StrCat("Model `", model_name, "` not found."));
@@ -2271,6 +2276,12 @@ absl::Status NonNullValueNotSpecifiedForInsert(absl::string_view table_name,
           "A new row in table $0 does not specify a non-null value "
           "for NOT NULL column: $1",
           table_name, column_name));
+}
+
+absl::Status UnknownPlacement(absl::string_view placement_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Unknown placement: $0", placement_name));
 }
 
 absl::Status KeyTooLarge(absl::string_view table_name, int64_t key_size,

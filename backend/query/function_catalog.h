@@ -70,6 +70,21 @@ class FunctionCatalog {
   void AddSpannerPGFunctions();
   void AddFunctionAliases();
 
+  std::unique_ptr<zetasql::Function> GetReplacedPGFunction(
+      const std::string& function_name);
+
+  std::unique_ptr<zetasql::Function> GetPGToCharFunction(
+      const std::string& catalog_name);
+
+  std::unique_ptr<zetasql::Function> GetPGExtractFunction(
+      const std::string& catalog_name);
+
+  std::unique_ptr<zetasql::Function> GetPGCastToTimestampFunction(
+      const std::string& catalog_name);
+
+  std::unique_ptr<zetasql::Function> GetPGCastToStringFunction(
+      const std::string& catalog_name);
+
   std::unique_ptr<zetasql::Function> GetInternalSequenceStateFunction(
       const std::string& catalog_name);
 

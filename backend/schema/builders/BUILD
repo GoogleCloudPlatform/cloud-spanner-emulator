@@ -32,6 +32,7 @@ cc_library(
         "locality_group_builder.h",
         "model_builder.h",
         "named_schema_builder.h",
+        "placement_builder.h",
         "property_graph_builder.h",
         "sequence_builder.h",
         "table_builder.h",

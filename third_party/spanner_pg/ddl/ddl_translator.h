@@ -90,6 +90,8 @@ struct TranslationOptions {
   // Allows the use of ANALYZE statemtn.
   // TODO: remove after rollout.
   bool enable_analyze = false;
+  // enable_create_function allows translation of <CREATE FUNCTION>.
+  bool enable_create_function = false;
   // enable_create_view allows translation of <CREATE VIEW>.
   bool enable_create_view = false;
   // enable_ttl allows the use of the TTL clause on CREATE TABLE

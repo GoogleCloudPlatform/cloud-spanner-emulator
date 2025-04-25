@@ -31,6 +31,7 @@
 
 #include "third_party/spanner_pg/ddl/pg_parse_tree_validator.h"
 
+#include <stdbool.h>
 #include <string.h>
 
 #include <cstdint>
@@ -157,26 +158,26 @@ absl::Status ValidateParseTreeNode(const Ttl& node) {
 absl::Status ValidateParseTreeNode(const ColumnDef& node,
                                    const bool alter_column) {
   // Make sure that if ColumnDef structure changes we update the translator.
-  AssertPGNodeConsistsOf(node, FieldTypeChecker<char*>(node.colname),
-                         FieldTypeChecker<TypeName*>(node.typeName),
-                         FieldTypeChecker<char*>(node.compression),
-                         FieldTypeChecker<int>(node.inhcount),
-                         FieldTypeChecker<bool>(node.is_local),
-                         FieldTypeChecker<bool>(node.is_not_null),
-                         FieldTypeChecker<bool>(node.is_from_type),
-                         FieldTypeChecker<char>(node.storage),
-                         FieldTypeChecker<Node*>(node.raw_default),
-                         FieldTypeChecker<Node*>(node.cooked_default),
-                         FieldTypeChecker<char>(node.identity),
-                         FieldTypeChecker<RangeVar*>(node.identitySequence),
-                         FieldTypeChecker<char>(node.generated),
-                         FieldTypeChecker<CollateClause*>(node.collClause),
-                         FieldTypeChecker<Oid>(node.collOid),
-                         FieldTypeChecker<List*>(node.constraints),
-                         FieldTypeChecker<List*>(node.fdwoptions),
-                         FieldTypeChecker<LocalityGroupOption*>(
-                             node.locality_group_name),
-                         FieldTypeChecker<int>(node.location));
+  AssertPGNodeConsistsOf(
+      node, FieldTypeChecker<char*>(node.colname),
+      FieldTypeChecker<TypeName*>(node.typeName),
+      FieldTypeChecker<char*>(node.compression),
+      FieldTypeChecker<int>(node.inhcount),
+      FieldTypeChecker<bool>(node.is_local),
+      FieldTypeChecker<bool>(node.is_not_null),
+      FieldTypeChecker<bool>(node.is_from_type),
+      FieldTypeChecker<char>(node.storage),
+      FieldTypeChecker<Node*>(node.raw_default),
+      FieldTypeChecker<Node*>(node.cooked_default),
+      FieldTypeChecker<char>(node.identity),
+      FieldTypeChecker<RangeVar*>(node.identitySequence),
+      FieldTypeChecker<char>(node.generated),
+      FieldTypeChecker<CollateClause*>(node.collClause),
+      FieldTypeChecker<Oid>(node.collOid),
+      FieldTypeChecker<List*>(node.constraints),
+      FieldTypeChecker<List*>(node.fdwoptions),
+      FieldTypeChecker<LocalityGroupOption*>(node.locality_group_name),
+      FieldTypeChecker<int>(node.location));
 
   ZETASQL_RET_CHECK_EQ(node.type, T_ColumnDef);
 
@@ -264,16 +265,15 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
                                    const TranslationOptions& options) {
   // Make sure that if AlterTableCmd structure changes we update the
   // translator.
-  AssertPGNodeConsistsOf(node, FieldTypeChecker<AlterTableType>(node.subtype),
-                         FieldTypeChecker<char*>(node.name),
-                         FieldTypeChecker<int16_t>(node.num),
-                         FieldTypeChecker<RoleSpec*>(node.newowner),
-                         FieldTypeChecker<Node*>(node.def),
-                         FieldTypeChecker<DropBehavior>(node.behavior),
-                         FieldTypeChecker<bool>(node.missing_ok),
-                         FieldTypeChecker<LocalityGroupOption*>(
-                             node.locality_group_name),
-                         FieldTypeChecker<char*>(node.raw_expr_string));
+  AssertPGNodeConsistsOf(
+      node, FieldTypeChecker<AlterTableType>(node.subtype),
+      FieldTypeChecker<char*>(node.name), FieldTypeChecker<int16_t>(node.num),
+      FieldTypeChecker<RoleSpec*>(node.newowner),
+      FieldTypeChecker<Node*>(node.def),
+      FieldTypeChecker<DropBehavior>(node.behavior),
+      FieldTypeChecker<bool>(node.missing_ok),
+      FieldTypeChecker<LocalityGroupOption*>(node.locality_group_name),
+      FieldTypeChecker<char*>(node.raw_expr_string));
 
   ZETASQL_RET_CHECK_EQ(node.type, T_AlterTableCmd);
 
@@ -1386,22 +1386,22 @@ absl::Status ValidateParseTreeNode(const TableRenameOp& node) {
 absl::Status ValidateParseTreeNode(const CreateStmt& node,
                                    const TranslationOptions& options) {
   // Make sure that if CreateStmt structure changes we update the translator.
-  AssertPGNodeConsistsOf(node, FieldTypeChecker<RangeVar*>(node.relation),
-                         FieldTypeChecker<List*>(node.tableElts),
-                         FieldTypeChecker<List*>(node.inhRelations),
-                         FieldTypeChecker<PartitionBoundSpec*>(node.partbound),
-                         FieldTypeChecker<PartitionSpec*>(node.partspec),
-                         FieldTypeChecker<TypeName*>(node.ofTypename),
-                         FieldTypeChecker<List*>(node.constraints),
-                         FieldTypeChecker<List*>(node.options),
-                         FieldTypeChecker<OnCommitAction>(node.oncommit),
-                         FieldTypeChecker<char*>(node.tablespacename),
-                         FieldTypeChecker<char*>(node.accessMethod),
-                         FieldTypeChecker<bool>(node.if_not_exists),
-                         FieldTypeChecker<InterleaveSpec*>(node.interleavespec),
-                         FieldTypeChecker<Ttl*>(node.ttl),
-                          FieldTypeChecker<LocalityGroupOption*>(
-                              node.locality_group_name));
+  AssertPGNodeConsistsOf(
+      node, FieldTypeChecker<RangeVar*>(node.relation),
+      FieldTypeChecker<List*>(node.tableElts),
+      FieldTypeChecker<List*>(node.inhRelations),
+      FieldTypeChecker<PartitionBoundSpec*>(node.partbound),
+      FieldTypeChecker<PartitionSpec*>(node.partspec),
+      FieldTypeChecker<TypeName*>(node.ofTypename),
+      FieldTypeChecker<List*>(node.constraints),
+      FieldTypeChecker<List*>(node.options),
+      FieldTypeChecker<OnCommitAction>(node.oncommit),
+      FieldTypeChecker<char*>(node.tablespacename),
+      FieldTypeChecker<char*>(node.accessMethod),
+      FieldTypeChecker<bool>(node.if_not_exists),
+      FieldTypeChecker<InterleaveSpec*>(node.interleavespec),
+      FieldTypeChecker<Ttl*>(node.ttl),
+      FieldTypeChecker<LocalityGroupOption*>(node.locality_group_name));
 
   ZETASQL_RET_CHECK_EQ(node.type, T_CreateStmt);
 
@@ -1543,8 +1543,7 @@ absl::Status ValidateParseTreeNode(const VacuumStmt& node) {
 }
 
 absl::Status ValidateParseTreeNode(const ViewStmt& node) {
-  // Make sure that if AlterSpangresStatsStmt structure changes we update the
-  // translator.
+  // Make sure that if ViewStmt structure changes we update the translator.
   AssertPGNodeConsistsOf(
       node, FieldTypeChecker<RangeVar*>(node.view),
       FieldTypeChecker<List*>(node.aliases),

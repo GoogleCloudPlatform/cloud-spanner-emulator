@@ -55,7 +55,12 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
+#include "third_party/spanner_pg/catalog/emulator_function_evaluators.h"
 #include "third_party/spanner_pg/catalog/emulator_functions.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/interface/datetime_evaluators.h"
+#include "third_party/spanner_pg/interface/formatting_evaluators.h"
+#include "third_party/spanner_pg/interface/pg_timezone.h"
 #include "zetasql/base/ret_check.h"
 
 namespace google {
@@ -68,6 +73,16 @@ using postgres_translator::GetSpannerPGFunctions;
 using postgres_translator::GetSpannerPGTVFs;
 using postgres_translator::SpannerPGFunctions;
 using postgres_translator::SpannerPGTVFs;
+
+using postgres_translator::function_evaluators::CleanupPostgresDateTimeCache;
+using postgres_translator::function_evaluators::CleanupPostgresNumberCache;
+
+const zetasql::Type* gsql_float = zetasql::types::FloatType();
+const zetasql::Type* gsql_double = zetasql::types::DoubleType();
+const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
+const zetasql::Type* gsql_string = zetasql::types::StringType();
+const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
+const zetasql::Type* gsql_interval = zetasql::types::IntervalType();
 
 absl::StatusOr<zetasql::Value> EvalPendingCommitTimestamp(
     absl::Span<const zetasql::Value> args) {
@@ -268,6 +283,14 @@ void FunctionCatalog::AddSpannerPGFunctions() {
       GetSpannerPGFunctions(catalog_name_);
 
   for (auto& function : spanner_pg_functions) {
+    // Since some date/timestamp functions depend on the default time zone in
+    // the schema, we need to replace them with a new version which can access
+    // the latest schema.
+    auto replaced_func = GetReplacedPGFunction(function->Name());
+    if (replaced_func != nullptr) {
+      functions_[function->Name()] = std::move(replaced_func);
+      continue;
+    }
     // If function exists, add extra signatures instead of overwriting.
     // Needed for JSONB.
     if (auto f = functions_.find(function->Name()); f != functions_.end()) {
@@ -329,6 +352,166 @@ void FunctionCatalog::AddFunctionAliases() {
   for (auto& alias : aliases) {
     functions_.insert(std::move(alias));
   }
+}
+
+std::unique_ptr<zetasql::Function> FunctionCatalog::GetReplacedPGFunction(
+    const std::string& function_name) {
+  if (function_name == postgres_translator::kPGToCharFunctionName) {
+    return GetPGToCharFunction(catalog_name_);
+  } else if (function_name == postgres_translator::kPGExtractFunctionName) {
+    return GetPGExtractFunction(catalog_name_);
+  } else if (function_name ==
+             postgres_translator::kPGCastToTimestampFunctionName) {
+    return GetPGCastToTimestampFunction(catalog_name_);
+  } else if (function_name ==
+             postgres_translator::kPGCastToStringFunctionName) {
+    return GetPGCastToStringFunction(catalog_name_);
+  }
+  return nullptr;
+}
+
+std::unique_ptr<zetasql::Function> FunctionCatalog::GetPGToCharFunction(
+    const std::string& catalog_name) {
+  static const zetasql::Type* gsql_pg_numeric =
+      postgres_translator::spangres::datatypes::GetPgNumericType();
+  // Defines the function as a lambda, so it has access to the schema.
+  auto initialize_pg_timezone = [&]() {
+    std::string default_time_zone = latest_schema_ != nullptr
+                                        ? latest_schema_->default_time_zone()
+                                        : kDefaultTimeZone;
+    absl::Status status = postgres_translator::interfaces::InitPGTimezone(
+        default_time_zone.c_str());
+    if (!status.ok()) {
+      ABSL_LOG(ERROR) << "Failed to initialize PG timezone for to_char function: "
+                 << status;
+    }
+  };
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(postgres_translator::PGFunctionEvaluator(
+      postgres_translator::EvalToChar, initialize_pg_timezone, [] {
+        CleanupPostgresNumberCache();
+        CleanupPostgresDateTimeCache();
+      }));
+  return std::make_unique<zetasql::Function>(
+      postgres_translator::kPGToCharFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{
+              gsql_string, {gsql_int64, gsql_string}, /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{gsql_string,
+                                       {gsql_timestamp, gsql_string},
+                                       /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{gsql_string,
+                                       {gsql_double, gsql_string},
+                                       /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{gsql_string,
+                                       {gsql_float, gsql_string},
+                                       /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{gsql_string,
+                                       {gsql_pg_numeric, gsql_string},
+                                       /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{gsql_string,
+                                       {gsql_interval, gsql_string},
+                                       /*context_ptr=*/nullptr},
+      },
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function> FunctionCatalog::GetPGExtractFunction(
+    const std::string& catalog_name) {
+  static const zetasql::Type* gsql_pg_numeric =
+      postgres_translator::spangres::datatypes::GetPgNumericType();
+  // Defines the function as a lambda, so it has access to the schema.
+  auto initialize_pg_timezone = [&]() {
+    std::string default_time_zone = latest_schema_ != nullptr
+                                        ? latest_schema_->default_time_zone()
+                                        : kDefaultTimeZone;
+    absl::Status status = postgres_translator::interfaces::InitPGTimezone(
+        default_time_zone.c_str());
+    if (!status.ok()) {
+      ABSL_LOG(ERROR) << "Failed to initialize PG timezone for to_char function: "
+                 << status;
+    }
+  };
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(postgres_translator::PGFunctionEvaluator(
+      postgres_translator::EvalExtract, initialize_pg_timezone,
+      CleanupPostgresDateTimeCache));
+
+  return std::make_unique<zetasql::Function>(
+      postgres_translator::kPGExtractFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_pg_numeric,
+                                       {zetasql::types::StringType(),
+                                        zetasql::types::TimestampType()},
+                                       nullptr},
+          zetasql::FunctionSignature{
+              gsql_pg_numeric,
+              {zetasql::types::StringType(), zetasql::types::DateType()},
+              nullptr}},
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function>
+FunctionCatalog::GetPGCastToTimestampFunction(const std::string& catalog_name) {
+  // Defines the function as a lambda, so it has access to the schema.
+  auto initialize_pg_timezone = [&]() {
+    std::string default_time_zone = latest_schema_ != nullptr
+                                        ? latest_schema_->default_time_zone()
+                                        : kDefaultTimeZone;
+    absl::Status status = postgres_translator::interfaces::InitPGTimezone(
+        default_time_zone.c_str());
+    if (!status.ok()) {
+      ABSL_LOG(ERROR) << "Failed to initialize PG timezone for to_char function: "
+                 << status;
+    }
+  };
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(postgres_translator::PGFunctionEvaluator(
+      postgres_translator::EvalCastToTimestamp, initialize_pg_timezone,
+      CleanupPostgresDateTimeCache));
+
+  return std::make_unique<zetasql::Function>(
+      postgres_translator::kPGCastToTimestampFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{zetasql::types::TimestampType(),
+                                       {zetasql::types::StringType()},
+                                       nullptr}},
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function> FunctionCatalog::GetPGCastToStringFunction(
+    const std::string& catalog_name) {
+  static const zetasql::Type* gsql_pg_numeric =
+      postgres_translator::spangres::datatypes::GetPgNumericType();
+  // Defines the function as a lambda, so it has access to the schema.
+  auto initialize_pg_timezone = [&]() {
+    std::string default_time_zone = latest_schema_ != nullptr
+                                        ? latest_schema_->default_time_zone()
+                                        : kDefaultTimeZone;
+    absl::Status status = postgres_translator::interfaces::InitPGTimezone(
+        default_time_zone.c_str());
+    if (!status.ok()) {
+      ABSL_LOG(ERROR) << "Failed to initialize PG timezone for to_char function: "
+                 << status;
+    }
+  };
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(postgres_translator::PGFunctionEvaluator(
+      postgres_translator::EvalCastToString, initialize_pg_timezone));
+
+  return std::make_unique<zetasql::Function>(
+      postgres_translator::kPGCastToStringFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{
+              gsql_string, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{
+              gsql_string, {gsql_interval}, /*context_ptr=*/nullptr},
+      },
+      function_options);
 }
 
 std::unique_ptr<zetasql::Function>

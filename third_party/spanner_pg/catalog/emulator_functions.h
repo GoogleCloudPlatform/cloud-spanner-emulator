@@ -128,6 +128,11 @@ inline constexpr char kPGJsonbInsertFunctionName[] = "pg.jsonb_insert";
 inline constexpr char kPGJsonbStripNullsFunctionName[] = "pg.jsonb_strip_nulls";
 inline constexpr char kPGJsonbSetFunctionName[] = "pg.jsonb_set";
 inline constexpr char kPGJsonbSetLaxFunctionName[] = "pg.jsonb_set_lax";
+inline constexpr char kPGJsonbContainsFunctionName[] = "pg.jsonb_contains";
+inline constexpr char kPGJsonbContainedFunctionName[] = "pg.jsonb_contained";
+inline constexpr char kPGJsonbExistsFunctionName[] = "pg.jsonb_exists";
+inline constexpr char kPGJsonbExistsAnyFunctionName[] = "pg.jsonb_exists_any";
+inline constexpr char kPGJsonbExistsAllFunctionName[] = "pg.jsonb_exists_all";
 
 // PG float functions.
 inline constexpr char kPGFloatAddFunctionName[] = "pg.float_add";
@@ -196,9 +201,7 @@ using SpannerPGTVFs =
     std::vector<std::unique_ptr<zetasql::TableValuedFunction>>;
 
 // Returns Spanner-specific implementations of PG functions.
-SpannerPGFunctions GetSpannerPGFunctions(
-    const std::string& catalog_name,
-    const std::string& time_zone = kDefaultTimeZone);
+SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name);
 
 // Returns Spanner-specific implementations of PG TVFs.
 SpannerPGTVFs GetSpannerPGTVFs(const std::string& catalog_name);
@@ -237,6 +240,17 @@ absl::StatusOr<zetasql::Value> EvalCastIntervalToString(
 absl::StatusOr<zetasql::Value> EvalCastStringToInterval(
     absl::Span<const zetasql::Value> args);
 
+absl::StatusOr<zetasql::Value> EvalToChar(
+    absl::Span<const zetasql::Value> args);
+
+absl::StatusOr<zetasql::Value> EvalExtract(
+    absl::Span<const zetasql::Value> args);
+
+absl::StatusOr<zetasql::Value> EvalCastToTimestamp(
+    absl::Span<const zetasql::Value> args);
+
+absl::StatusOr<zetasql::Value> EvalCastToString(
+    absl::Span<const zetasql::Value> args);
 }  // namespace postgres_translator
 
 #endif  // CATALOG_EMULATOR_FUNCTIONS_H_

@@ -51,7 +51,8 @@ class JsonbArrayElementsTableValuedFunction
             /*function_name_path=*/{"pg.jsonb_array_elements"},
             zetasql::FunctionSignature(
                 zetasql::FunctionArgumentType::RelationWithSchema(
-                    zetasql::TVFRelation({{"", GetPgJsonbType()}}),
+                    zetasql::TVFRelation(
+                        {{"jsonb_array_elements", GetPgJsonbType()}}),
                     /*extra_relation_input_columns_allowed=*/false),
                 {GetPgJsonbType()}, nullptr),
             /*result_schema=*/

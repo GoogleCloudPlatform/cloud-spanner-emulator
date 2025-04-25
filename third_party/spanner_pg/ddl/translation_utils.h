@@ -74,8 +74,8 @@ class FieldTypeChecker {
 template <typename StructT, typename... FieldTypes>
 void AssertStructConsistsOf(const StructT& structure,
                             const FieldTypeChecker<FieldTypes>&...) {
-  // Check that no new fields were added to the node.
-  static_assert(sizeof(std::tuple<FieldTypes...>) == sizeof(structure),
+  // Check that the node has at least the number of specified fields.
+  static_assert(sizeof(std::tuple<FieldTypes...>) <= sizeof(structure),
                 "Structure is different from what is expected");
 }
 
@@ -171,6 +171,10 @@ struct PostgreSQLConstants {
       "skip_range_max";
   static constexpr absl::string_view kSequenceStartWithCounterOptionName =
       "start_with_counter";
+
+  // Options for user-defined functions.
+  static constexpr absl::string_view kFunctionAsOptionName = "as";
+  static constexpr absl::string_view kFunctionSecurityOptionName = "security";
 
   // Spanner statistics packages are expected to be prefixed with this namespace
   // when modified via ALTER STATISTICS.

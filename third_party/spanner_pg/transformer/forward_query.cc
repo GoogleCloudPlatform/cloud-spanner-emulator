@@ -29,7 +29,9 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
+#include <stdbool.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include <climits>
 #include <memory>
@@ -41,6 +43,7 @@
 #include "zetasql/analyzer/expr_matching_helpers.h"
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
+#include "zetasql/public/function_signature.h"
 #include "zetasql/public/id_string.h"
 #include "zetasql/public/input_argument_type.h"
 #include "zetasql/public/language_options.h"
@@ -572,6 +575,8 @@ absl::Status ForwardTransformer::PrepareTVFInputArguments(
   const int total_args = signature_size > list_length(func_expr.args) ?
       signature_size : list_length(func_expr.args);
   resolved_tvf_args->reserve(total_args);
+  zetasql::FunctionArgumentTypeList concrete_arg_types;
+  concrete_arg_types.reserve(total_args);
   absl::flat_hash_map<int, std::unique_ptr<zetasql::ResolvedExpr>>
   index_to_arg;
   int arg_index = 0;
@@ -589,13 +594,15 @@ absl::Status ForwardTransformer::PrepareTVFInputArguments(
   }
   for (int i = 0; i < total_args; ++i) {
     std::unique_ptr<zetasql::ResolvedExpr> expr;
+    const zetasql::FunctionArgumentType& arg = signature.argument(i);
     if (!index_to_arg.contains(i)) {
-      auto& arg = tvf_catalog_entry->GetSignature(0)->argument(i);
       expr = zetasql::MakeResolvedLiteral(arg.type(),
                                             arg.GetDefault().value());
     } else {
       expr = std::move(index_to_arg[i]);
     }
+    concrete_arg_types.emplace_back(expr->type(), arg.options(),
+                                    /*num_occurrences=*/1);
     resolved_tvf_args->push_back(zetasql::MakeResolvedTVFArgument(
         std::move(expr), /*scan=*/nullptr,
         /*model=*/nullptr, /*connection=*/nullptr,
@@ -626,8 +633,9 @@ absl::Status ForwardTransformer::PrepareTVFInputArguments(
   // We're not going to resolve templated types here, just make sure there
   // aren't any.
   ZETASQL_RET_CHECK(signature.IsConcrete());
-  result_signature->reset();
-  *result_signature = std::make_unique<zetasql::FunctionSignature>(signature);
+  *result_signature = std::make_unique<zetasql::FunctionSignature>(
+      signature.result_type(), std::move(concrete_arg_types),
+      signature.context_id());
 
   return absl::OkStatus();
 }
@@ -1236,9 +1244,27 @@ absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
 ForwardTransformer::BuildGsqlResolvedScanForQueryExpression(
     const Query& query, bool is_top_level_query, const VarIndexScope* scope,
     absl::string_view alias, std::vector<NamedColumn>* output_name_list) {
+  bool query_contains_ann_function = false;
+  if (query.targetList != nullptr) {
+    // Check if the query contains a Vector Search ANN function.
+    for (int i = 0; i < list_length(query.targetList); ++i) {
+      TargetEntry* target_entry =
+          (TargetEntry*)list_nth(query.targetList, i);
+      if (IsA(target_entry->expr, FuncExpr)) {
+        FuncExpr* func_expr =
+            PostgresCastNode(FuncExpr, (void*)target_entry->expr);
+        auto is_ann_function = internal::IsAnnFunction(func_expr);
+        if (is_ann_function.ok() && is_ann_function.value()) {
+          query_contains_ann_function = true;
+          break;
+        }
+      }
+    }
+  }
   if (query.setOperations == nullptr) {
     return BuildGsqlResolvedScanForSelect(query, is_top_level_query, scope,
-                                          alias, output_name_list);
+                                          alias, output_name_list,
+                                          query_contains_ann_function);
   } else {
     std::unique_ptr<zetasql::ResolvedScan> current_scan;
     VarIndexScope output_scope;
@@ -1522,7 +1548,8 @@ ForwardTransformer::BuildGsqlResolvedTVFScan(
   std::string alias = rte.alias == nullptr ? "" : rte.alias->aliasname;
   return zetasql::MakeResolvedTVFScan(
       resolved_column_list, tvf_catalog_entry, tvf_signature,
-      std::move(resolved_tvf_args), column_index_list, alias);
+      std::move(resolved_tvf_args), column_index_list, alias,
+      std::move(result_signature));
 }
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedLockMode>>
@@ -1552,7 +1579,7 @@ absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
 ForwardTransformer::BuildGsqlResolvedScanForSelect(
     const Query& query, bool is_top_level_query,
     const VarIndexScope* external_scope, absl::string_view alias,
-    std::vector<NamedColumn>* output_name_list) {
+    std::vector<NamedColumn>* output_name_list, bool is_ann_function) {
   // Returns an unimplemented error if a query feature is not yet supported.
   // Query features that are partially supported are handled seperately.
   ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedFeatures(query, is_top_level_query));
@@ -1730,7 +1757,8 @@ ForwardTransformer::BuildGsqlResolvedScanForSelect(
       BuildGsqlRemainingScansForSelect(
           query.sortClause, query.limitCount, query.limitOffset,
           having_and_order_by_scope.get(), std::move(resolved_having_expr),
-          std::move(current_scan), transformer_info.get(), output_name_list));
+          std::move(current_scan), transformer_info.get(), output_name_list,
+          is_ann_function));
 
   // Any columns produced in a SELECT list (for the final query or any subquery)
   // count as referenced and cannot be pruned.
@@ -2332,7 +2360,7 @@ ForwardTransformer::BuildGsqlRemainingScansForSelect(
     std::unique_ptr<const zetasql::ResolvedExpr> resolved_having_expr,
     std::unique_ptr<zetasql::ResolvedScan> current_scan,
     TransformerInfo* transformer_info,
-    std::vector<NamedColumn>* output_name_list) {
+    std::vector<NamedColumn>* output_name_list, bool is_ann_function) {
   if (!transformer_info->select_list_columns_to_compute_before_aggregation()
            ->empty()) {
     current_scan = AddGsqlProjectScanForComputedColumns(
@@ -2441,11 +2469,12 @@ ForwardTransformer::BuildGsqlRemainingScansForSelect(
           transformer_info->release_order_by_columns_to_compute());
     }
 
-    ZETASQL_ASSIGN_OR_RETURN(current_scan,
-                     BuildGsqlResolvedOrderByScan(
-                         transformer_info->select_list_transform_state()
-                             ->resolved_column_list(),
-                         std::move(current_scan), transformer_info));
+    ZETASQL_ASSIGN_OR_RETURN(
+        current_scan,
+        BuildGsqlResolvedOrderByScan(
+            transformer_info->select_list_transform_state()
+                ->resolved_column_list(),
+            std::move(current_scan), transformer_info, is_ann_function));
   }
 
   if (!transformer_info->has_order_by()) {
@@ -2602,7 +2631,7 @@ absl::StatusOr<std::unique_ptr<zetasql::ResolvedOrderByScan>>
 ForwardTransformer::BuildGsqlResolvedOrderByScan(
     zetasql::ResolvedColumnList output_column_list,
     std::unique_ptr<zetasql::ResolvedScan> current_scan,
-    TransformerInfo* transformer_info) {
+    TransformerInfo* transformer_info, bool is_ann_function) {
   // For each ORDER BY item, wrap it in a ColumnRef and build a
   // ResolvedOrderByItem.
   std::vector<std::unique_ptr<const zetasql::ResolvedOrderByItem>>
@@ -2633,13 +2662,15 @@ ForwardTransformer::BuildGsqlResolvedOrderByScan(
                                          std::move(current_scan),
                                          std::move(order_by_item_list));
   order_by_scan->set_is_ordered(true);
-  return RewriteResolvedOrderByScanIfNeeded(std::move(order_by_scan));
+  return RewriteResolvedOrderByScanIfNeeded(std::move(order_by_scan),
+                                            is_ann_function);
 }
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedOrderByScan>>
 ForwardTransformer::BuildGsqlResolvedOrderByScanAfterSetOperation(
     List* sortClause, const VarIndexScope* scope,
-    std::unique_ptr<zetasql::ResolvedScan> current_scan) {
+    std::unique_ptr<zetasql::ResolvedScan> current_scan,
+    bool is_ann_function) {
   static const char clause_name[] = "ORDER BY clause after set operation";
   auto transformer_info = std::make_unique<TransformerInfo>();
   auto expr_transformer_info = ExprTransformerInfo(
@@ -2676,14 +2707,16 @@ ForwardTransformer::BuildGsqlResolvedOrderByScanAfterSetOperation(
   ZETASQL_ASSIGN_OR_RETURN(
       std::unique_ptr<zetasql::ResolvedOrderByScan> order_by_scan,
       BuildGsqlResolvedOrderByScan(column_list, std::move(current_scan),
-                                   transformer_info.get()));
+                                   transformer_info.get(), is_ann_function));
   return order_by_scan;
 }
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedOrderByScan>>
 ForwardTransformer::RewriteResolvedOrderByScanIfNeeded(
-    std::unique_ptr<zetasql::ResolvedOrderByScan> order_by_scan) {
-  if (!IsTransformationRequiredForOrderByScan(*order_by_scan)) {
+    std::unique_ptr<zetasql::ResolvedOrderByScan> order_by_scan,
+    bool is_ann_function) {
+  if (!IsTransformationRequiredForOrderByScan(*order_by_scan) ||
+      is_ann_function) {
     return order_by_scan;
   }
 
@@ -3481,6 +3514,7 @@ ForwardTransformer::BuildGsqlResolvedStatement(const Query& query) {
         case T_IndexStmt:
         case T_CreateSchemaStmt:
         case T_AlterSpangresStatsStmt:
+        case T_CreateFunctionStmt:
         case T_ViewStmt:
         case T_AlterOwnerStmt:
         case T_AlterStatsStmt:

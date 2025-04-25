@@ -3195,6 +3195,12 @@ typedef struct FunctionParameter
 	TypeName   *argType;		/* TypeName for parameter type */
 	FunctionParameterMode mode; /* IN/OUT/etc */
 	Node	   *defexpr;		/* raw default expr, or NULL if not given */
+	// SPANGRES BEGIN
+	char *def_expr_string;  // sql string of the default expression, it is set
+													// in gram.y by using token location
+													// information and extracted from the
+													// <CREATE FUNCTION> string.
+	// SPANGRES END
 } FunctionParameter;
 
 typedef struct AlterFunctionStmt

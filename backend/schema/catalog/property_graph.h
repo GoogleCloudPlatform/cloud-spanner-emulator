@@ -30,6 +30,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
+#include "backend/schema/catalog/property_graph.pb.h"
 #include "backend/schema/graph/schema_node.h"
 
 namespace google {
@@ -180,6 +181,8 @@ class PropertyGraph : public SchemaNode {
   absl::Status ValidateUpdate(const SchemaNode* orig,
                               SchemaValidationContext* context) const override;
   std::string DebugString() const override;
+  catalog::PropertyGraphProto ToProto() const;
+
   class Builder;
   class Editor;
 

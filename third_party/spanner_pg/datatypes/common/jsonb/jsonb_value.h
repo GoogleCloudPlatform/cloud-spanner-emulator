@@ -179,6 +179,10 @@ class PgJsonbValue {
   // Requires IsString() to be true.
   absl::string_view GetSerializedString() const;
 
+  // Returns a boolean value of a JSONB boolean value.
+  // Requires IsBoolean() to be true.
+  bool GetBoolean() const;
+
   // Returns a string view of a JSONB numeric value.
   // Requires IsNumeric() to be true.
   absl::string_view GetNumeric() const;
@@ -357,10 +361,13 @@ absl::StatusOr<absl::Cord> ParseJsonb(absl::string_view json);
 
 // Normalizes a string to conform to PG.JSONB's normalization rules, for
 // dealing with escaping characters and rejecting \u0000.
-std::string NormalizeJsonbString(absl::string_view value);
+std::string SerializeJsonbString(absl::string_view value);
 
 // Checks if an input Jsonb string contains unicode 0 (\0).
 bool IsValidJsonbString(absl::string_view str);
+
+// Checks if a JSONB value is contained in another JSONB value.
+bool JsonbContains(PgJsonbValue& input, PgJsonbValue& target);
 
 }  // namespace postgres_translator::spangres::datatypes::common::jsonb
 

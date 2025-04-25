@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_SCHEMA_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_SCHEMA_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -32,6 +33,7 @@
 #include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/named_schema.h"
+#include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/property_graph.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/sequence.h"
@@ -121,6 +123,11 @@ class Schema {
   // comparison is case-insensitive.
   const ChangeStream* FindChangeStream(
       const std::string& change_stream_name) const;
+
+  // Finds a Placement by its name. Returns a const pointer of the
+  // change stream, or nullptr if the placement is not found. Name
+  // comparison is case-insensitive.
+  const Placement* FindPlacement(const std::string& placement_name) const;
 
   // Finds a sequence by its name. Returns a const pointer of the sequence, or
   // a nullptr if the sequence is not found. Name comparison is
@@ -231,6 +238,8 @@ class Schema {
   // Returns the number of locality groups in the schema.
   int num_locality_groups() const { return locality_groups_map_.size(); }
 
+  absl::Span<const Placement* const> placements() const { return placements_; }
+
   // Returns the shared pointer to the ProtoBundle holding the proto types.
   std::shared_ptr<const ProtoBundle> proto_bundle() const {
     return proto_bundle_;
@@ -299,6 +308,13 @@ class Schema {
   // A map that owns all the change streams. Key is the name of the change
   // stream. Hash and comparison on the keys are case-insensitive.
   CaseInsensitiveStringMap<const ChangeStream*> change_streams_map_;
+
+  // A vector that maintains the original order of placements in the DDL.
+  std::vector<const Placement*> placements_;
+
+  // A map that owns all the placements. Key is the name of the placement. Hash
+  // and comparison on the keys are case-insensitive.
+  CaseInsensitiveStringMap<const Placement*> placements_map_;
 
   // A vector that maintains the original order of models in the DDL.
   std::vector<const Model*> models_;

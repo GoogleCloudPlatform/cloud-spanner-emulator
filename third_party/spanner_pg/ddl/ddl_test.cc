@@ -37,6 +37,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "backend/schema/ddl/operations.pb.h"
@@ -232,7 +233,7 @@ TEST_F(DdlTest, UnsupportedDropTypeDomain) {
 }
 
 // For unsupported by Spangres statements SchemaPrinter should error out
-TEST_F(DdlTest, UnsupportedCreateViewStatement) {
+TEST_F(DdlTest, UnsupportedCreateFunctionStatement) {
   google::spanner::emulator::backend::ddl::DDLStatement input;
   auto create_function = input.mutable_create_function();
   create_function->set_function_name("Test");

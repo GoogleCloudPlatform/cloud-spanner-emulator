@@ -103,14 +103,14 @@ absl::StatusOr<TableName> EngineUserCatalog::GetTableNameForGsqlTable(
     auto mapped_back = MapSchemaName(lowered_if_upper, name_path);
     ZETASQL_RET_CHECK_OK(mapped_back.status())
             << "Attempting to get postgres name from table in hidden or blocked"
-               "schemas: " << table.FullName();
+               " schemas: " << table.FullName();
 
     return is_upper_case_path ?
         TableName({lowered_if_upper, absl::AsciiStrToLower(name_path[1])}) :
         TableName({lowered_if_upper, name_path[1]});
   } else {
     ZETASQL_RET_CHECK(!is_upper_case_path)
-        << "Table at the top level shouldn't be InUpperCaseCatalogPath"
+        << "Table at the top level shouldn't be InUpperCaseCatalogPath "
         << table.FullName();
     return TableName({name_path[0]});
   }

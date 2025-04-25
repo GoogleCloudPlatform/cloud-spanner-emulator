@@ -47,7 +47,6 @@
 #include "absl/flags/flag.h"
 #include "absl/functional/function_ref.h"
 #include "absl/log/log.h"
-#include "absl/meta/type_traits.h"
 #include "absl/random/random.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -83,6 +82,7 @@
 #include "backend/schema/builders/locality_group_builder.h"
 #include "backend/schema/builders/model_builder.h"
 #include "backend/schema/builders/named_schema_builder.h"
+#include "backend/schema/builders/placement_builder.h"
 #include "backend/schema/builders/property_graph_builder.h"
 #include "backend/schema/builders/sequence_builder.h"
 #include "backend/schema/builders/table_builder.h"
@@ -97,6 +97,7 @@
 #include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/named_schema.h"
+#include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/property_graph.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/schema.h"
@@ -380,6 +381,10 @@ class SchemaUpdaterImpl {
       const ddl::ChangeStreamForClause& change_stream_for_clause,
       absl::FunctionRef<absl::Status(Table::Editor*)> table_cb,
       absl::FunctionRef<absl::Status(Column::Editor*)> column_cb);
+  template <typename PlacementModifier>
+  absl::Status SetPlacementOptions(
+      const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+      PlacementModifier* modifier);
   template <typename ChangeStreamModifier>
   absl::Status SetChangeStreamOptions(
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
@@ -1015,6 +1020,58 @@ SchemaUpdaterImpl::ApplyDDLStatement(
     case ddl::DDLStatement::kDropPropertyGraph:
       ZETASQL_RETURN_IF_ERROR(DropPropertyGraph(ddl_statement->drop_property_graph()));
       break;
+    case ddl::DDLStatement::kCreatePlacement: {
+      const Placement* placement = latest_schema_->FindPlacement(
+          ddl_statement->create_placement().placement_name());
+      if (placement != nullptr) {
+        return error::SchemaObjectAlreadyExists(
+            "Placement", ddl_statement->create_placement().placement_name());
+      }
+      Placement::Builder placement_builder;
+      placement_builder.set_name(
+          ddl_statement->create_placement().placement_name());
+
+      const auto& set_options = ddl_statement->create_placement().set_options();
+      if (!set_options.empty()) {
+        ZETASQL_RETURN_IF_ERROR(AlterNode<Placement>(
+            placement_builder.get(),
+            [this, set_options](Placement::Editor* editor) -> absl::Status {
+              // Set placement options
+              return SetPlacementOptions(set_options, editor);
+            }));
+      }
+      ZETASQL_RETURN_IF_ERROR(AddNode(placement_builder.build()));
+      break;
+    }
+    case ddl::DDLStatement::kAlterPlacement: {
+      const Placement* placement = latest_schema_->FindPlacement(
+          ddl_statement->alter_placement().placement_name());
+      if (placement == nullptr) {
+        return error::PlacementNotFound(
+            ddl_statement->alter_placement().placement_name());
+      }
+      const auto& set_options = ddl_statement->alter_placement().set_options();
+      ddl_statement->create_placement().set_options();
+      if (!set_options.empty()) {
+        ZETASQL_RETURN_IF_ERROR(AlterNode<Placement>(
+            placement,
+            [this, set_options](Placement::Editor* editor) -> absl::Status {
+              // Set change stream options
+              return SetPlacementOptions(set_options, editor);
+            }));
+      }
+      break;
+    }
+    case ddl::DDLStatement::kDropPlacement: {
+      const Placement* placement = latest_schema_->FindPlacement(
+          ddl_statement->drop_placement().placement_name());
+      if (placement == nullptr) {
+        return error::PlacementNotFound(
+            ddl_statement->drop_placement().placement_name());
+      }
+      ZETASQL_RETURN_IF_ERROR(DropNode(placement));
+      break;
+    }
     default:
       ZETASQL_RET_CHECK(false) << "Unsupported ddl statement: "
                        << ddl_statement->statement_case();
@@ -1219,6 +1276,27 @@ absl::Status SchemaUpdaterImpl::SetChangeStreamOptions(
     } else if (ddl::kChangeStreamBooleanOptions->contains(
                    option.option_name())) {
       modifier->set_boolean_option(option.option_name(), option.bool_value());
+    }
+  }
+  return absl::OkStatus();
+}
+
+template <typename PlacementModifier>
+absl::Status SchemaUpdaterImpl::SetPlacementOptions(
+    const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+    PlacementModifier* modifier) {
+  modifier->set_options(set_options);
+  for (const ddl::SetOption& option : set_options) {
+    if (option.has_null_value()) {
+      continue;
+    }
+    if (option.option_name() == ddl::kPlacementDefaultLeaderOptionName) {
+      std::optional<std::string> default_leader = option.string_value();
+      modifier->set_default_leader(default_leader);
+    } else if (option.option_name() ==
+               ddl::kPlacementInstancePartitionOptionName) {
+      std::optional<std::string> instance_partition = option.string_value();
+      modifier->set_instance_partition(instance_partition);
     }
   }
   return absl::OkStatus();
@@ -1790,6 +1868,8 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
   ZETASQL_RETURN_IF_ERROR(SetColumnDefinition(ddl_column, table, ddl_table, dialect,
                                       /*is_alter=*/false, &builder));
   builder.set_hidden(ddl_column.has_hidden() && ddl_column.hidden());
+  builder.set_is_placement_key(ddl_column.has_placement_key() &&
+                               ddl_column.placement_key());
   const Column* column = builder.get();
   builder.set_table(table);
   if (column->is_generated() || column->has_default_value()) {
