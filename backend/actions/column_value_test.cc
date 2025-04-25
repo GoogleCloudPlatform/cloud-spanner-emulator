@@ -17,33 +17,41 @@
 #include "backend/actions/column_value.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "zetasql/public/functions/string.h"
+#include "zetasql/public/json_value.h"
+#include "zetasql/public/numeric_value.h"
+#include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "absl/memory/memory.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/random/distributions.h"
 #include "absl/random/random.h"
-#include "absl/strings/str_cat.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "absl/time/clock.h"
-#include "absl/types/variant.h"
-#include "backend/actions/context.h"
-#include "backend/actions/ops.h"
+#include "absl/types/span.h"
+#include "backend/actions/action.h"
+#include "backend/datamodel/key.h"
+#include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/schema.h"
+#include "backend/schema/catalog/table.h"
+#include "common/feature_flags.h"
 #include "common/limits.h"
 #include "tests/common/actions.h"
 #include "tests/common/schema_constructor.h"
 #include "tests/common/scoped_feature_flags_setter.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -73,6 +81,7 @@ using zetasql::values::Numeric;
 using zetasql::values::String;
 using zetasql::values::StringArray;
 using zetasql::values::Timestamp;
+using testing::HasSubstr;
 using zetasql_base::testing::StatusIs;
 
 struct Values {
@@ -499,6 +508,76 @@ TEST_F(ColumnValueTest, ValidateUTF8StringEncoding) {
                 StatusIs(absl::StatusCode::kInvalidArgument));
     EXPECT_THAT(ValidateUpdate(values),
                 StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+}
+
+class PlacementKeyColumnValueTest : public test::ActionsTest {
+ public:
+  PlacementKeyColumnValueTest() {
+    EmulatorFeatureFlags::Flags flags;
+    emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+    std::string_view column_def_joiner = ",\n";
+    const std::string columns = absl::StrJoin(
+        {
+            "int64_col INT64 NOT NULL",
+            "string_col STRING(MAX) NOT NULL PLACEMENT KEY",
+        },
+        column_def_joiner);
+
+    const std::string table = absl::Substitute(
+        "CREATE TABLE TestTable ($0) PRIMARY KEY (int64_col)", columns);
+    const std::string placement =
+        "CREATE PLACEMENT us OPTIONS (instance_partition = 'us-central1')";
+
+    schema_ =
+        emulator::test::CreateSchemaFromDDL({table, placement}, &type_factory_)
+            .value();
+
+    absl::flat_hash_set<std::string> placements;
+    placements.insert("test");
+    validator_ = std::make_unique<ColumnValueValidator>(placements);
+    table_ = schema_->FindTable("TestTable");
+    base_columns_ = table_->columns();
+  }
+
+  absl::Status ValidateInsert(const Values& values) {
+    return validator_->Validate(ctx(),
+                                Insert(table_, Key({Int64(1)}), base_columns_,
+                                       {values.int64_col, values.string_col}));
+  }
+
+  absl::Status ValidateUpdate(const Values& values) {
+    return validator_->Validate(ctx(),
+                                Update(table_, Key({Int64(1)}), base_columns_,
+                                       {values.int64_col, values.string_col}));
+  }
+
+ protected:
+  // Test components.
+  zetasql::TypeFactory type_factory_;
+  std::unique_ptr<const Schema> schema_;
+
+  // Test variables.
+  const Table* table_;
+  absl::Span<const Column* const> base_columns_;
+  std::unique_ptr<Validator> validator_;
+};
+
+TEST_F(PlacementKeyColumnValueTest, ValidatePlacementKeyColumn) {
+  Values values;
+  ZETASQL_EXPECT_OK(ValidateInsert(values));
+  {
+    Values values;
+    values.string_col = NullString();
+    EXPECT_THAT(ValidateInsert(values),
+                StatusIs(absl::StatusCode::kFailedPrecondition));
+  }
+  {
+    Values values;
+    values.string_col = String("us-central1");
+    EXPECT_THAT(ValidateInsert(values),
+                StatusIs(absl::StatusCode::kInvalidArgument,
+                         HasSubstr("Unknown placement")));
   }
 }
 

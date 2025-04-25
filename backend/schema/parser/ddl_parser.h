@@ -17,7 +17,6 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_PARSER_DDL_PARSER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_PARSER_DDL_PARSER_H_
 
-#include <memory>
 #include <string>
 
 #include "zetasql/base/no_destructor.h"
@@ -70,6 +69,9 @@ extern const char kLocalityGroupSpillTimeSpanOptionName[];
 extern const char kInternalLocalityGroupStorageOptionName[];
 extern const char kInternalLocalityGroupSpillTimeSpanOptionName[];
 extern const char kDefaultLocalityGroupName[];
+
+extern const char kPlacementDefaultLeaderOptionName[];
+extern const char kPlacementInstancePartitionOptionName[];
 
 absl::Status ParseDDLStatement(absl::string_view ddl, DDLStatement* statement);
 

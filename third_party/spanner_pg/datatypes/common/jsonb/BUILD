@@ -45,6 +45,7 @@ cc_library(
     deps = [
         "//third_party/spanner_pg/datatypes/common:numeric_core",
         "//third_party/spanner_pg/datatypes/common:pg_numeric_parse",
+        "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",

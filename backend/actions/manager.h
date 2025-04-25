@@ -21,10 +21,13 @@
 #include <string>
 #include <vector>
 
+#include "zetasql/public/types/type_factory.h"
+#include "zetasql/public/value.h"
+#include "absl/base/thread_annotations.h"
 #include "absl/container/node_hash_map.h"
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/synchronization/mutex.h"
 #include "backend/access/write.h"
 #include "backend/actions/action.h"
 #include "backend/actions/context.h"
@@ -32,6 +35,7 @@
 #include "backend/actions/ops.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
+#include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
 

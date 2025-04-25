@@ -230,7 +230,8 @@ class ForwardTransformer {
   BuildGsqlResolvedScanForSelect(const Query& query, bool is_top_level_query,
                                  const VarIndexScope* external_scope,
                                  absl::string_view alias,
-                                 std::vector<NamedColumn>* output_name_list);
+                                 std::vector<NamedColumn>* output_name_list,
+                                 bool is_ann_function = false);
 
   // Note that this is a LOSSY conversion!  In particular, only some of the
   // information on `query->targetList` can be stored on a `ResolvedScan`.
@@ -524,7 +525,7 @@ class ForwardTransformer {
       std::unique_ptr<const zetasql::ResolvedExpr> resolved_having_expr,
       std::unique_ptr<zetasql::ResolvedScan> current_scan,
       TransformerInfo* transformer_info,
-      std::vector<NamedColumn>* output_name_list);
+      std::vector<NamedColumn>* output_name_list, bool is_ann_function = false);
 
   // Build a ResolvedAggregateScan.
   // Modeled off of ZetaSQL's AddAggregateScan.
@@ -547,14 +548,15 @@ class ForwardTransformer {
   BuildGsqlResolvedOrderByScan(
       zetasql::ResolvedColumnList output_column_list,
       std::unique_ptr<zetasql::ResolvedScan> current_scan,
-      TransformerInfo* transformer_info);
+      TransformerInfo* transformer_info, bool is_ann_function = false);
 
   // Build a ResolvedOrderByScan after a set operation.
   // Modeled off of ZetaSQL's ResolveOrderByAfterSetOperation
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedOrderByScan>>
   BuildGsqlResolvedOrderByScanAfterSetOperation(
       List* sortClause, const VarIndexScope* scope,
-      std::unique_ptr<zetasql::ResolvedScan> current_scan);
+      std::unique_ptr<zetasql::ResolvedScan> current_scan,
+      bool is_ann_function = false);
 
   // Build a ResolvedSetOperationScan.
   // `is_top_level_query` is used to run CheckForUnsupportedFeatures since some
@@ -979,7 +981,8 @@ class ForwardTransformer {
   // sure that they follow Postgres' comparison semantics.
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedOrderByScan>>
   RewriteResolvedOrderByScanIfNeeded(
-      std::unique_ptr<zetasql::ResolvedOrderByScan> order_by_scan);
+      std::unique_ptr<zetasql::ResolvedOrderByScan> order_by_scan,
+      bool is_ann_function);
 
   // Checks if any of the column in ORDER BY clause requires transformation for
   // comparison.

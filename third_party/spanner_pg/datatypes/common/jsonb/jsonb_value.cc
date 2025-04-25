@@ -60,6 +60,7 @@
 #include "nlohmann/json.hpp"
 #include "third_party/spanner_pg/datatypes/common/numeric_core.h"
 #include "third_party/spanner_pg/datatypes/common/pg_numeric_parse.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -475,6 +476,11 @@ absl::string_view PgJsonbValue::GetSerializedString() const {
   return std::get<std::string>(rep_->value);
 }
 
+bool PgJsonbValue::GetBoolean() const {
+  CheckRepresentation({NodeType::kTrue, NodeType::kFalse});
+  return rep_->tag == NodeType::kTrue;
+}
+
 absl::string_view PgJsonbValue::GetNumeric() const {
   CheckRepresentation({NodeType::kNumeric});
   return std::get<std::string>(rep_->value);
@@ -575,7 +581,7 @@ bool PgJsonbValue::Exists(absl::string_view text) const {
 
   // JSONB string is serialized with additional quotation marks.
   std::string serialized_text =
-      datatypes::common::jsonb::NormalizeJsonbString(text);
+      datatypes::common::jsonb::SerializeJsonbString(text);
 
   if (IsArray()) {
     for (const auto& elem : std::get<JsonbArray>(rep_->value)) {
@@ -793,12 +799,117 @@ absl::StatusOr<absl::Cord> ParseJsonb(absl::string_view json) {
   return result_cord;
 }
 
-std::string NormalizeJsonbString(absl::string_view value) {
+std::string SerializeJsonbString(absl::string_view value) {
   return nlohmann::json(value).dump();
 }
 
 bool IsValidJsonbString(absl::string_view str) {
   return !absl::StrContains(str, '\0');
+}
+
+bool ScalarJsonbEquals(PgJsonbValue& input, PgJsonbValue& target) {
+  ABSL_DCHECK(!input.IsObject());
+  ABSL_DCHECK(!input.IsArray());
+
+  if (input.IsNull()) {
+    return target.IsNull();
+  }
+  if (input.IsBoolean()) {
+    if (!target.IsBoolean()) {
+      return false;
+    }
+    return input.GetBoolean() == target.GetBoolean();
+  }
+  if (input.IsNumeric()) {
+    if (!target.IsNumeric()) {
+      return false;
+    }
+
+    // Use the PG.NUMERIC implementation to compare the numeric values.
+    auto in1_numeric = CreatePgNumericValue(input.GetNumeric());
+    ABSL_DCHECK(in1_numeric.ok()) << "Failed to create PG.NUMERIC value from input: "
+                             << input.GetNumeric();
+    auto in2_numeric = CreatePgNumericValue(target.GetNumeric());
+    ABSL_DCHECK(in2_numeric.ok())
+        << "Failed to create PG.NUMERIC value from target: "
+        << target.GetNumeric();
+
+    return in1_numeric.value() == in2_numeric.value();
+  }
+  if (input.IsString()) {
+    if (!target.IsString()) {
+      return false;
+    }
+    return input.GetString() == target.GetString();
+  }
+  ABSL_DCHECK(false) << "ScalarJsonbEquals called with non-scalar input: "
+                << input.Serialize();
+  return false;
+}
+
+bool JsonbContainsImpl(PgJsonbValue& input, PgJsonbValue& target,
+                       bool is_top_level) {
+  if (target.IsObject()) {
+    if (!input.IsObject()) {
+      return false;
+    }
+
+    for (auto& [key, value] : target.GetMembers()) {
+      if (!input.HasMember(key)) {
+        return false;
+      }
+      PgJsonbValue value_for_key = input.GetMemberIfExists(key).value();
+      if (!JsonbContainsImpl(value_for_key, value,
+                             /*is_top_level=*/false)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (target.IsArray()) {
+    if (!input.IsArray()) {
+      return false;
+    }
+    for (auto& element : target.GetArrayElements()) {
+      // Find element from input JSON array.
+      bool exists = false;
+      for (auto& source : input.GetArrayElements()) {
+        if (JsonbContainsImpl(source, element, /*is_top_level=*/false)) {
+          exists = true;
+          break;
+        }
+      }
+      if (!exists) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // The `target` is a scalar value.
+  if (input.IsObject()) {
+    return false;
+  }
+  if (input.IsArray()) {
+    if (!is_top_level) {
+      // Only top-level array `input` will be checked with scalar `target`.
+      return false;
+    }
+    for (auto& source : input.GetArrayElements()) {
+      if (JsonbContainsImpl(source, target, /*is_top_level=*/false)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // The `input` and `target` are both a scalar value.
+  return ScalarJsonbEquals(input, target);
+}
+
+bool JsonbContains(PgJsonbValue& input, PgJsonbValue& target) {
+  return JsonbContainsImpl(input, target, /*is_top_level=*/true);
 }
 
 }  // namespace postgres_translator::spangres::datatypes::common::jsonb

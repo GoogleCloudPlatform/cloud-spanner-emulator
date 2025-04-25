@@ -172,6 +172,38 @@ CreateSchemaWithOneTableAndOneChangeStream(
   return std::move(maybe_schema.value());
 }
 
+std::unique_ptr<const backend::Schema> CreateSchemaWithOneTableAndOnePlacement(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect) {
+  absl::StatusOr<std::unique_ptr<const backend::Schema>> maybe_schema;
+  std::string test_table =
+      R"(
+          CREATE TABLE test_table (
+            int64_col INT64 NOT NULL,
+            string_col STRING(MAX),
+            location STRING(MAX) NOT NULL PLACEMENT KEY
+          ) PRIMARY KEY (int64_col)
+      )";
+  std::string test_placement =
+      R"(
+          CREATE PLACEMENT test_placement OPTIONS (
+            instance_partition = 'test_instance_partition',
+            default_leader = 'us-central1'
+          )
+      )";
+  maybe_schema = CreateSchemaFromDDL(
+      {
+          test_table,
+          test_placement,
+      },
+      type_factory, "" /*proto_descriptor_bytes*/
+      ,
+      dialect);
+
+  ABSL_CHECK_OK(maybe_schema.status());
+  return std::move(maybe_schema.value());
+}
+
 absl::StatusOr<std::unique_ptr<const backend::Schema>>
 CreateSchemaWithOneSequence(zetasql::TypeFactory* type_factory,
                             database_api::DatabaseDialect dialect) {

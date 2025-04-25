@@ -32,7 +32,7 @@ TEST(InformationSchemaCatalogTest, ColumnsMetadataCount) {
   SpannerSysCatalog spanner_sys_catalog;
   InformationSchemaCatalog catalog(InformationSchemaCatalog::kName, &schema,
                                    &spanner_sys_catalog);
-  EXPECT_EQ(ColumnsMetadata().size(), 257);
+  EXPECT_EQ(ColumnsMetadata().size(), 261);
 }
 
 TEST(InformationSchemaCatalogTest, IndexColumnsMetadataCount) {
@@ -40,7 +40,7 @@ TEST(InformationSchemaCatalogTest, IndexColumnsMetadataCount) {
   SpannerSysCatalog spanner_sys_catalog;
   InformationSchemaCatalog catalog(InformationSchemaCatalog::kName, &schema,
                                    &spanner_sys_catalog);
-  EXPECT_EQ(IndexColumnsMetadata().size(), 165);
+  EXPECT_EQ(IndexColumnsMetadata().size(), 168);
 }
 
 TEST(InformationSchemaCatalogTest, SpannerSysColumnsMetadataCount) {

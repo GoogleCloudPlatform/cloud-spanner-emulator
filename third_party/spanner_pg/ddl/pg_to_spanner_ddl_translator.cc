@@ -65,6 +65,7 @@
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
 #include "google/protobuf/repeated_ptr_field.h"
+#include "re2/re2.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 

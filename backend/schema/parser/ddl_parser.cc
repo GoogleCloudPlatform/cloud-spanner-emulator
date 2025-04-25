@@ -19,32 +19,26 @@
 
 #include <cstdint>
 #include <functional>
-#include <limits>
-#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "google/protobuf/descriptor.h"
 #include "absl/algorithm/container.h"
 #include "zetasql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
-#include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/escaping.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "backend/common/utils.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/parser/DDLParserTokenManager.h"
-#include "backend/schema/parser/DDLParserTree.h"
 #include "backend/schema/parser/DDLParserTreeConstants.h"
 #include "backend/schema/parser/JavaCC.h"
 #include "backend/schema/parser/ddl_char_stream.h"
@@ -55,7 +49,6 @@
 #include "common/feature_flags.h"
 #include "common/limits.h"
 #include "google/protobuf/repeated_ptr_field.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -100,6 +93,9 @@ const char kVectorIndexDistanceType[] = "distance_type";
 const char kVectorIndexLeafScatterFactor[] = "leaf_scatter_factor";
 const char kVectorIndexMinBranchSplits[] = "min_branch_splits";
 const char kVectorIndexMinLeafSplits[] = "min_leaf_splits";
+
+const char kPlacementDefaultLeaderOptionName[] = "default_leader";
+const char kPlacementInstancePartitionOptionName[] = "instance_partition";
 
 const char kLocalityGroupOptionName[] = "locality_group";
 const char kLocalityGroupStorageOptionName[] = "storage";
@@ -982,6 +978,9 @@ void VisitColumnNode(const SimpleNode* node, absl::string_view ddl_text,
         column->mutable_identity_column();
         break;
       }
+      case JJTPLACEMENT_KEY:
+        column->set_placement_key(true);
+        break;
       default:
         ABSL_LOG(FATAL) << "Unexpected column info: " << child->toString();
     }
@@ -3020,6 +3019,144 @@ void VisitAlterLocalityGroupNode(const SimpleNode* node,
   }
 }
 
+void VisitInstancePartitionPlacementOptionValNode(
+    const SimpleNode* value_node, SetOption* option,
+    std::vector<std::string>* errors) {
+  ABSL_DCHECK_EQ(option->option_name(), kPlacementInstancePartitionOptionName);
+  std::string error = "";
+  if (value_node->getId() == JJTSTR_VAL &&
+      ValidateStringLiteralImage(value_node->image(), /*force=*/true, nullptr)
+          .ok()) {
+    std::string string_value;
+    if (!UnescapeStringLiteral(value_node->image(), &string_value, &error)) {
+      errors->push_back(LogicalError(
+          value_node,
+          absl::StrCat("Cannot parse string literal: ", value_node->image())));
+      return;
+    }
+    if (string_value.empty()) {
+      errors->push_back(
+          "Empty string is an invalid value for instance_partition. If you'd "
+          "like to clear a previously set value, use NULL.");
+      return;
+    }
+    option->set_string_value(string_value);
+  } else if (value_node->getId() == JJTNULLL) {
+    errors->push_back("Placements must have a non-NULL instance_partition.");
+    return;
+  } else {
+    errors->push_back(absl::StrCat(
+        "Unexpected value for option: ", kPlacementInstancePartitionOptionName,
+        ". Supported option values are strings and NULL."));
+    return;
+  }
+}
+
+// Handle default_leader for PLACEMENT statement options
+void VisitDefaultLeaderPlacementOptionValNode(
+    const SimpleNode* value_node, SetOption* option,
+    std::vector<std::string>* errors) {
+  VisitDefaultLeaderDatabaseOptionValNode(value_node, option, errors);
+}
+
+void VisitPlacementOptionKeyValNode(
+    const SimpleNode* node, OptionList* options,
+    std::vector<std::string>* errors,
+    bool* instance_partition_visited = nullptr) {
+  std::string name = CheckOptionKeyValNodeAndGetName(node);
+  if (absl::c_find_if(*options, [&name](const SetOption& option) {
+        return option.option_name() == name;
+      }) != options->end()) {
+    errors->push_back(absl::StrCat("Duplicate option: ", name));
+    return;
+  }
+
+  const SimpleNode* value_node = GetChildNode(node, 1);
+
+  if (name == kPlacementInstancePartitionOptionName) {
+    SetOption* option = options->Add();
+    option->set_option_name(name);
+    VisitInstancePartitionPlacementOptionValNode(value_node, option, errors);
+    if (instance_partition_visited != nullptr) {
+      *instance_partition_visited = true;
+    }
+  } else if (name == kPlacementDefaultLeaderOptionName) {
+    SetOption* option = options->Add();
+    option->set_option_name(name);
+    VisitDefaultLeaderPlacementOptionValNode(value_node, option, errors);
+  } else {
+    errors->push_back(absl::StrCat("Option: ", name, " is unknown."));
+  }
+}
+
+void VisitCreatePlacementNode(const SimpleNode* node,
+                              CreatePlacement* placement,
+                              std::vector<std::string>* errors) {
+  CheckNode(node, JJTCREATE_PLACEMENT_STATEMENT);
+
+  int offset = 0;
+  // We may have an optional IF NOT EXISTS node before the name.
+  if (GetChildNode(node, offset)->getId() == JJTIF_NOT_EXISTS) {
+    placement->set_existence_modifier(IF_NOT_EXISTS);
+    offset++;
+  }
+
+  placement->set_placement_name(
+      GetQualifiedIdentifier(GetChildNode(node, offset, JJTNAME)));
+  offset++;
+
+  bool has_instance_partition = false;
+
+  if (node->jjtGetNumChildren() == offset + 1) {
+    const SimpleNode* options_clause =
+        GetChildNode(node, offset, JJTOPTIONS_CLAUSE);
+
+    OptionList* options = placement->mutable_set_options();
+    bool instance_partition_visited = false;
+
+    for (int i = 0; i < options_clause->jjtGetNumChildren(); ++i) {
+      VisitPlacementOptionKeyValNode(
+          GetChildNode(options_clause, i, JJTOPTION_KEY_VAL), options, errors,
+          &instance_partition_visited);
+      if (instance_partition_visited) {
+        has_instance_partition = true;
+      }
+    }
+  }
+  if (!has_instance_partition) {
+    errors->push_back(
+        "CREATE PLACEMENT statements require option `instance_partition` to be "
+        "set");
+  }
+}
+
+void VisitAlterPlacementNode(const SimpleNode* node, AlterPlacement* placement,
+                             std::vector<std::string>* errors) {
+  CheckNode(node, JJTALTER_PLACEMENT_STATEMENT);
+
+  int offset = 0;
+  // We may have an optional IF EXISTS node before the name.
+  if (GetChildNode(node, offset)->getId() == JJTIF_EXISTS) {
+    placement->set_existence_modifier(IF_EXISTS);
+    offset++;
+  }
+
+  placement->set_placement_name(
+      GetQualifiedIdentifier(GetChildNode(node, offset, JJTNAME)));
+  offset++;
+  if (node->jjtGetNumChildren() == offset + 1) {
+    const SimpleNode* options_clause =
+        GetChildNode(node, offset, JJTOPTIONS_CLAUSE);
+
+    OptionList* options = placement->mutable_set_options();
+
+    for (int i = 0; i < options_clause->jjtGetNumChildren(); ++i) {
+      VisitPlacementOptionKeyValNode(
+          GetChildNode(options_clause, i, JJTOPTION_KEY_VAL), options, errors);
+    }
+  }
+}
+
 // End Visit functions
 //////////////////////////////////////////////////////////////////////////
 
@@ -3047,6 +3184,14 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
       break;
     case JJTCREATE_INDEX_STATEMENT:
       VisitCreateIndexNode(stmt, statement->mutable_create_index(), errors);
+      break;
+    case JJTCREATE_PLACEMENT_STATEMENT:
+      VisitCreatePlacementNode(stmt, statement->mutable_create_placement(),
+                               errors);
+      break;
+    case JJTALTER_PLACEMENT_STATEMENT:
+      VisitAlterPlacementNode(stmt, statement->mutable_alter_placement(),
+                              errors);
       break;
     case JJTALTER_INDEX_STATEMENT: {
       VisitAlterIndexNode(stmt, statement->mutable_alter_index(), errors);
@@ -3214,6 +3359,9 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
           }
           statement->mutable_drop_locality_group()->set_locality_group_name(
               name);
+          break;
+        case JJTPLACEMENT:
+          statement->mutable_drop_placement()->set_placement_name(name);
           break;
         default:
           ABSL_LOG(FATAL) << "Unexpected object type: "

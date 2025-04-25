@@ -47,6 +47,7 @@
 #include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/named_schema.h"
+#include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/property_graph.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/schema.h"
@@ -148,6 +149,9 @@ std::string PrintColumn(const Column* column) {
       ColumnTypeToString(column->GetType(), column->declared_max_length()));
   if (!column->is_nullable()) {
     absl::StrAppend(&ddl_string, " NOT NULL");
+  }
+  if (column->is_placement_key()) {
+    absl::StrAppend(&ddl_string, " PLACEMENT KEY");
   }
   if (column->is_generated()) {
     absl::StrAppend(&ddl_string,
@@ -329,6 +333,19 @@ std::string PrintChangeStream(const ChangeStream* change_stream) {
   }
 
   return change_stream_string;
+}
+
+std::string PrintPlacement(const Placement* placement) {
+  std::string placement_string = absl::Substitute(
+      "CREATE PLACEMENT $0", PrintName(placement->PlacementName()));
+
+  // Options with null values shouldn't be printed out.
+  if (placement->HasExplicitValidOptions()) {
+    absl::StrAppend(&placement_string, " ", "OPTIONS ( ",
+                    PrintOptions(placement->options()), " )");
+  }
+
+  return placement_string;
 }
 
 std::string PrintModelColumnOptions(const Model::ModelColumn& model_column) {
@@ -596,6 +613,11 @@ void TopologicalOrderSchemaNodes(
     statements->push_back(PrintChangeStream(change_stream));
   }
 
+  if (const Placement* placement = node->As<Placement>();
+      placement != nullptr) {
+    statements->push_back(PrintPlacement(placement));
+  }
+
   if (const Model* model = node->As<const Model>(); model != nullptr) {
     statements->push_back(PrintModel(model));
   }
@@ -809,6 +831,9 @@ absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
 
   // Print schema nodes while ensuring that dependencies are printed first.
   absl::flat_hash_set<const SchemaNode*> visited;
+  for (const Placement* placement : schema->placements()) {
+    TopologicalOrderSchemaNodes(placement, &visited, &statements);
+  }
   for (const Sequence* sequence : schema->user_visible_sequences()) {
     TopologicalOrderSchemaNodes(sequence, &visited, &statements);
   }

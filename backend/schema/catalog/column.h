@@ -118,6 +118,9 @@ class Column : public SchemaNode {
   // Returns whether the column is an identity column.
   bool is_identity_column() const { return is_identity_column_; }
 
+  // Returns whether the column is a placement key column.
+  bool is_placement_key() const { return is_placement_key_; }
+
   // Returns if a generated column is stored.
   // Valid only if is_generated() is true.
   bool is_stored() const { return is_stored_; }
@@ -244,6 +247,9 @@ class Column : public SchemaNode {
 
   // Whether null values are allowed.
   bool is_nullable_ = true;
+
+  // Whether the column is a placement key column.
+  bool is_placement_key_ = false;
 
   // A tri state boolean indicating whether commit timestamp can be stored.
   // If allows_commit_timestamp is not set, it represents that the option isn't

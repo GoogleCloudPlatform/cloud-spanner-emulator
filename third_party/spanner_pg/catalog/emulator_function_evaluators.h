@@ -46,10 +46,13 @@ namespace postgres_translator {
 // The default timezone used by the emulator query engine.
 inline constexpr char kDefaultTimeZone[] = "America/Los_Angeles";
 
+void InitializePGTimezoneToDefault();
+
 zetasql::FunctionEvaluator PGFunctionEvaluator(
     const zetasql::FunctionEvaluator& function,
-    const std::function<void()>& on_compute_end = []() {},
-    const std::string& time_zone = kDefaultTimeZone);
+    const std::function<void()>& on_compute_begin =
+        InitializePGTimezoneToDefault,
+    const std::function<void()>& on_compute_end = []() {});
 
 // This function calls `F_JSONB_ARRAY_ELEMENT_TEXT` to compute the results on
 // arguments `jsonb` and `element`. The function returns `Value::String`

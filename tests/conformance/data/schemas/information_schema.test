@@ -93,6 +93,23 @@ REMOTE OPTIONS (
   default_batch_size = 1
 );
 
+CREATE TABLE node_table(
+  Id INT64 NOT NULL,
+) PRIMARY KEY(Id);
+CREATE TABLE edge_table(
+  FromId INT64 NOT NULL,
+  ToId INT64 NOT NULL,
+) PRIMARY KEY(FromId, ToId);
+CREATE PROPERTY GRAPH test_graph
+    NODE TABLES(
+      node_table KEY(Id)
+        LABEL Test PROPERTIES(Id))
+    EDGE TABLES(
+      edge_table
+        KEY(FromId, ToId)
+        SOURCE KEY(FromId) REFERENCES node_table(Id)
+        DESTINATION KEY(ToId) REFERENCES node_table(Id)
+        DEFAULT LABEL PROPERTIES ALL COLUMNS);
 ===
 @Dialect=POSTGRESQL
 ALTER DATABASE db SET spanner.default_sequence_kind = 'bit_reversed_positive';

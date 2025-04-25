@@ -443,6 +443,7 @@ cc_library(
         "bootstrap_catalog_accessor.h",
     ],
     visibility = [
+        "//backend/query:__subpackages__",
         "//tests/conformance/common:__subpackages__",
         "//third_party/spanner_pg/bootstrap_catalog:__subpackages__",
         "//third_party/spanner_pg/catalog:__subpackages__",

@@ -529,6 +529,38 @@ static void AddPgJsonbNewFunctions(
                        {{{gsql_string,
                           {gsql_pg_jsonb, gsql_string},
                           /*context_ptr=*/nullptr}}}});
+
+    // Register new function mapping '@>' operator on JSONB.
+  functions.push_back({"jsonb_contains",
+                       "pg.jsonb_contains",
+                       {{{gsql_bool,
+                          {gsql_pg_jsonb, gsql_pg_jsonb},
+                          /*context_ptr=*/nullptr}}}});
+  // Register new function mapping for '@<' operator on JSONB.
+  functions.push_back({"jsonb_contained",
+                       "pg.jsonb_contained",
+                       {{{gsql_bool,
+                          {gsql_pg_jsonb, gsql_pg_jsonb},
+                          /*context_ptr=*/nullptr}}}});
+
+  // Register new function mapping for '?' operator on JSONB.
+  functions.push_back({"jsonb_exists",
+                       "pg.jsonb_exists",
+                       {{{gsql_bool,
+                          {gsql_pg_jsonb, gsql_string},
+                          /*context_ptr=*/nullptr}}}});
+  // Register new function mapping for '?|' operator on JSONB.
+  functions.push_back({"jsonb_exists_any",
+                       "pg.jsonb_exists_any",
+                       {{{gsql_bool,
+                          {gsql_pg_jsonb, gsql_string_arr},
+                          /*context_ptr=*/nullptr}}}});
+  // Register new function mapping for '?&' operator on JSONB.
+  functions.push_back({"jsonb_exists_all",
+                       "pg.jsonb_exists_all",
+                       {{{gsql_bool,
+                          {gsql_pg_jsonb, gsql_string_arr},
+                          /*context_ptr=*/nullptr}}}});
 }
 
 void AddPgJsonbFunctions(std::vector<PostgresFunctionArguments>& functions) {

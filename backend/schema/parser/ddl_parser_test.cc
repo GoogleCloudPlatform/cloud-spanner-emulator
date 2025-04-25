@@ -3816,6 +3816,76 @@ TEST(CreateChangeStream, CanParseCreateChangeStreamForExplicitEntireTable) {
                 })pb")));
 }
 
+TEST(CreatePlacement, CanParseCreatePlacement) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE PLACEMENT p1 OPTIONS (instance_partition = 'us-central1'))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_placement {
+          placement_name: "p1"
+          set_options {
+            option_name: "instance_partition"
+            string_value: "us-central1"
+          }
+        })pb")));
+}
+
+TEST(CreatePlacement, CanParseCreatePlacementWithDefaultLeader) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(CREATE PLACEMENT p1 OPTIONS (instance_partition = 'us-central1', default_leader = 'us-central1'))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_placement {
+          placement_name: "p1"
+          set_options {
+            option_name: "instance_partition"
+            string_value: "us-central1"
+          }
+          set_options {
+            option_name: "default_leader"
+            string_value: "us-central1"
+          }
+        })pb")));
+}
+
+TEST(CreatePlacement, CanParseAlterPlacement) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER PLACEMENT p1 SET OPTIONS (instance_partition = 'us-central1'))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_placement {
+          placement_name: "p1"
+          set_options {
+            option_name: "instance_partition"
+            string_value: "us-central1"
+          }
+        })pb")));
+}
+
+TEST(CreatePlacement, CanParseAlterPlacementWithDefaultLeader) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER PLACEMENT p1 SET OPTIONS (instance_partition = 'us-central1', default_leader = 'us-central1'))sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_placement {
+          placement_name: "p1"
+          set_options {
+            option_name: "instance_partition"
+            string_value: "us-central1"
+          }
+          set_options {
+            option_name: "default_leader"
+            string_value: "us-central1"
+          }
+        })pb")));
+}
+
+TEST(CreatePlacement, CanParseDropPlacement) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(DROP PLACEMENT p1)sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                drop_placement { placement_name: "p1" })pb")));
+}
+
 TEST(CreateChangeStream, CanParseCreateChangeStreamForExplicitTablePkOnly) {
   EXPECT_THAT(ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
       TestTable())sql"),

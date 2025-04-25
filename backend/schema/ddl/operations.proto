@@ -95,6 +95,11 @@ message DDLStatement {
     RevokePrivilege revoke_privilege = 64;
     GrantMembership grant_membership = 65;
     RevokeMembership revoke_membership = 66;
+
+    // Placement statements.
+    CreatePlacement create_placement = 80;
+    AlterPlacement alter_placement = 81;
+    DropPlacement drop_placement = 82;
   }
 }
 
@@ -210,6 +215,8 @@ message ColumnDefinition {
   // True if the column is marked as hidden. Hidden columns won't show up in
   // SELECT * queries.
   optional bool hidden = 10;
+
+  optional bool placement_key = 15;
 
   // Stores information about generated columns.
   message GeneratedColumnDefinition {
@@ -1011,5 +1018,25 @@ message CreatePropertyGraph {
 // Operation definition for "DROP PROPERTY GRAPH".
 message DropPropertyGraph {
   optional string name = 1;
+  optional ExistenceModifier existence_modifier = 2;
+}
+
+message CreatePlacement {
+  // Required.
+  optional string placement_name = 1;
+  optional ExistenceModifier existence_modifier = 2;
+  repeated SetOption set_options = 3;
+}
+
+message AlterPlacement {
+  // Required.
+  optional string placement_name = 1;
+  optional ExistenceModifier existence_modifier = 2;
+  repeated SetOption set_options = 3;
+}
+
+message DropPlacement {
+  // Required.
+  optional string placement_name = 1;
   optional ExistenceModifier existence_modifier = 2;
 }

@@ -112,6 +112,7 @@ void create_statement() #void :
     | create_or_replace_statement()
     | create_change_stream_statement()
     | create_sequence_statement()
+    | create_placement_statement()
     | create_role_statement()
     | create_locality_group_statement()
   )
@@ -288,6 +289,7 @@ void column_def() :
   | identity_column_clause()
   | <AUTO_INCREMENT> #auto_increment
   ]
+  [ <PLACEMENT> <KEY> #placement_key ]
   [ <HIDDEN> #hidden ]
   [ <PRIMARY> <KEY> #primary_key ]
   [ options_clause() ]
@@ -322,6 +324,7 @@ void column_def_alter_attrs() :
   | column_default_clause()
   | identity_column_clause()
   ]
+  [ <PLACEMENT> <KEY> #placement_key ]
 }
 
 void column_def_alter() :
@@ -330,9 +333,11 @@ void column_def_alter() :
     LOOKAHEAD(2) <SET> ( options_clause()
                          | column_default_clause()
                          | (<NOT> <NULLL> #set_not_null )
+                         | (<PLACEMENT> <KEY> #set_placement_key )
                        )
   | LOOKAHEAD(2) <DROP>  ( <DEFAULTT> #drop_column_default
                           | ( <NOT> <NULLL> #drop_not_null )
+                          | (<PLACEMENT> <KEY> #drop_placement_key )
                         )
   | <ALTER> <IDENTITY> ( <RESTART> <COUNTER> <WITH> int_value() #restart_counter
                          | <SET> ( <SKIPP> <RANGE> int_value() #skip_range_min
@@ -689,6 +694,15 @@ void create_sequence_statement() :
   [ options_clause() ]
 }
 
+void create_placement_statement() :
+{}
+{
+  <PLACEMENT>
+  [ if_not_exists() ]
+  qualified_identifier() #name
+  [ options_clause() ]
+}
+
 void key() #void :
 {}
 {
@@ -847,6 +861,7 @@ void drop_statement() :
       | <FUNCTION> #function [ if_exists() ]
       | <CHANGE> <STREAM> #change_stream
       | <ROLE> #role
+      | <PLACEMENT> #placement [ if_exists() ]
       | <SEQUENCE> #sequence [ if_exists() ]
       | <MODEL> #model [ if_exists() ]
       | <SCHEMA> #schema [ if_exists() ]
@@ -871,6 +886,7 @@ void alter_statement() #void :
     | alter_model_statement()
     | alter_schema_statement()
     | alter_locality_group_statement()
+    | alter_placement_statement()
     | alter_vector_index_statement()
   )
 }
@@ -953,6 +969,13 @@ void alter_model_statement() :
 {}
 {
   <MODEL> [ if_exists() ] (qualified_identifier() #name)
+  [<SET> options_clause()]
+}
+
+void alter_placement_statement() :
+{}
+{
+  <PLACEMENT> [ if_exists() ] (qualified_identifier() #name)
   [<SET> options_clause()]
 }
 

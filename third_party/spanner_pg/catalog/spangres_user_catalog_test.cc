@@ -267,7 +267,7 @@ TEST(FindTable, SchemaNameMappingCaseSensitivity) {
           absl::StatusCode::kInternal,
           testing::HasSubstr(
               "Attempting to get postgres name from table in hidden or "
-              "blockedschemas: INFORMATION_SCHEMA.SCHEMATA")));
+              "blocked schemas: INFORMATION_SCHEMA.SCHEMATA")));
 }
 
   // Disabled in the emualtor since SPANNER_SYS is not yet supported in the

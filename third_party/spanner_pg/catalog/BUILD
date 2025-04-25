@@ -546,11 +546,16 @@ cc_library(
     name = "emulator_function_evaluators",
     srcs = ["emulator_function_evaluators.cc"],
     hdrs = ["emulator_function_evaluators.h"],
+    visibility = [
+        "//:__subpackages__",
+        "//backend/query:__subpackages__",
+    ],
     deps = [
         "//third_party/spanner_pg/function_evaluators:pg_evaluators_implementations",  # build_cleaner: keep
         "//third_party/spanner_pg/interface:pg_evaluators",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:error_shim",
+        "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -674,36 +679,6 @@ cc_test(
         "@com_google_zetasql//zetasql/public:value",
         "@com_google_zetasql//zetasql/public/functions:date_time_util",
         "@com_google_zetasql//zetasql/public/types:timestamp_util",
-    ],
-)
-
-cc_library(
-    name = "pg_catalog",
-    srcs = ["pg_catalog.cc"],
-    hdrs = [
-        "pg_catalog.h",
-    ],
-    visibility = [
-        "//backend/query:__subpackages__",
-    ],
-    deps = [
-        "//backend/query:info_schema_columns_metadata_values",
-        "//backend/query:tables_from_metadata",
-        "//backend/schema/catalog:schema",
-        "//third_party/spanner_pg/bootstrap_catalog",
-        "//third_party/spanner_pg/bootstrap_catalog:bootstrap_catalog_accessor_impl",  # build_cleaner: keep
-        "//third_party/spanner_pg/catalog:engine_system_catalog",
-        "//third_party/spanner_pg/catalog:type",
-        "//third_party/spanner_pg/datatypes/extended:pg_oid_type",
-        "//third_party/spanner_pg/interface:bootstrap_catalog_accessor",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/base:no_destructor",
-        "@com_google_zetasql//zetasql/public:catalog",
-        "@com_google_zetasql//zetasql/public:simple_catalog",
-        "@com_google_zetasql//zetasql/public:type",
-        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 

@@ -20,6 +20,16 @@ package(
 
 licenses(["notice"])
 
+proto_library(
+    name = "property_graph_proto",
+    srcs = ["property_graph.proto"],
+)
+
+cc_proto_library(
+    name = "property_graph_cc_proto",
+    deps = [":property_graph_proto"],
+)
+
 cc_library(
     name = "schema",
     srcs = [
@@ -32,6 +42,7 @@ cc_library(
         "locality_group.cc",
         "model.cc",
         "named_schema.cc",
+        "placement.cc",
         "property_graph.cc",
         "schema.cc",
         "sequence.cc",
@@ -49,6 +60,7 @@ cc_library(
         "locality_group.h",
         "model.h",
         "named_schema.h",
+        "placement.h",
         "property_graph.h",
         "schema.h",
         "sequence.h",
@@ -57,6 +69,7 @@ cc_library(
         "view.h",
     ],
     deps = [
+        ":property_graph_cc_proto",
         ":proto_bundle",
         "//backend/common:case",
         "//backend/common:ids",

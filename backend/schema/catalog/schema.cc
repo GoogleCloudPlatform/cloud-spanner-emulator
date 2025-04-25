@@ -25,7 +25,6 @@
 #include "zetasql/public/types/type.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
-#include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
 #include "backend/schema/catalog/change_stream.h"
@@ -37,6 +36,7 @@
 #include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/named_schema.h"
+#include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/property_graph.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/sequence.h"
@@ -165,6 +165,15 @@ const ChangeStream* Schema::FindChangeStream(
     const std::string& change_stream_name) const {
   auto itr = change_streams_map_.find(change_stream_name);
   if (itr == change_streams_map_.end()) {
+    return nullptr;
+  }
+  return itr->second;
+}
+
+const Placement* Schema::FindPlacement(
+    const std::string& placement_name) const {
+  auto itr = placements_map_.find(placement_name);
+  if (itr == placements_map_.end()) {
     return nullptr;
   }
   return itr->second;
@@ -730,6 +739,13 @@ Schema::Schema(const SchemaGraph* graph,
     if (change_stream != nullptr) {
       change_streams_.push_back(change_stream);
       change_streams_map_[change_stream->Name()] = change_stream;
+      continue;
+    }
+
+    const Placement* placement = node->As<Placement>();
+    if (placement != nullptr) {
+      placements_.push_back(placement);
+      placements_map_[placement->PlacementName()] = placement;
       continue;
     }
 

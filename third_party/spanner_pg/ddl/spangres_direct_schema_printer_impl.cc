@@ -700,6 +700,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateTable(
     }
   }
   StrAppend(&after_create, locality_group);
+
   output.push_back(std::move(after_create));
 
   return absl::StrJoin(output, "\n");
@@ -1408,7 +1409,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateFunction(
     const google::spanner::emulator::backend::ddl::CreateFunction& statement) const {
   switch (statement.function_kind()) {
     case google::spanner::emulator::backend::ddl::Function_Kind::Function_Kind_VIEW: {
-      std::string view_teamplate =
+      std::string view_template =
           statement.is_or_replace()
               ? "CREATE OR REPLACE VIEW $0 SQL SECURITY $1 AS $2"
               : "CREATE VIEW $0 SQL SECURITY $1 AS $2";
@@ -1416,14 +1417,13 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateFunction(
       ZETASQL_ASSIGN_OR_RETURN(absl::string_view security_type,
                        PrintSQLSecurityType(statement.sql_security()));
 
-      return Substitute(view_teamplate,
-                        QuoteQualifiedIdentifier(statement.function_name()),
-                        security_type,
-                        statement.sql_body_origin().original_expression()
-      );
+      return Substitute(
+          view_template, QuoteQualifiedIdentifier(statement.function_name()),
+          security_type, statement.sql_body_origin().original_expression());
     }
     case google::spanner::emulator::backend::ddl::Function_Kind::Function_Kind_INVALID_KIND:
-      ZETASQL_RET_CHECK_FAIL() << "Only VIEW is supported as a function kind.";
+      ZETASQL_RET_CHECK_FAIL()
+          << "Only VIEW and scalar FUNCTION are supported as function types.";
   }
   // Should never get here.
   ZETASQL_RET_CHECK_FAIL() << "Unknown Function type:"

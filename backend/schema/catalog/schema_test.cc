@@ -36,6 +36,7 @@
 #include "backend/schema/builders/index_builder.h"
 #include "backend/schema/builders/locality_group_builder.h"
 #include "backend/schema/builders/named_schema_builder.h"
+#include "backend/schema/builders/placement_builder.h"
 #include "backend/schema/builders/sequence_builder.h"
 #include "backend/schema/builders/table_builder.h"
 #include "backend/schema/builders/udf_builder.h"
@@ -47,6 +48,7 @@
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/named_schema.h"
+#include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/udf.h"
@@ -115,6 +117,12 @@ class SchemaTest : public testing::Test {
     ChangeStream::Builder c;
     c.set_name(name).set_id(name);
     return c;
+  }
+
+  Placement::Builder placement_builder(const std::string& name) {
+    Placement::Builder p;
+    p.set_name(name);
+    return p;
   }
 
   Sequence::Builder sequence_builder(const std::string& name) {
@@ -217,6 +225,17 @@ TEST_F(SchemaTest, Basic) {
   EXPECT_TRUE(index_data_table->primary_key()[0]->is_descending());
   EXPECT_EQ(index_data_table->primary_key()[1]->column(), index_col2);
   EXPECT_FALSE(index_data_table->primary_key()[1]->is_descending());
+}
+
+TEST_F(SchemaTest, PlacementBasic) {
+  EXPECT_EQ(base_schema_->placements().size(), 0);
+  base_schema_ =
+      test::CreateSchemaWithOneTableAndOnePlacement(type_factory_.get());
+  EXPECT_EQ(base_schema_->placements().size(), 1);
+  const Placement* placement = base_schema_->FindPlacement("test_placement");
+  ASSERT_NE(placement, nullptr);
+  EXPECT_EQ(placement->PlacementName(), "test_placement");
+  EXPECT_EQ(placement->DefaultLeader(), "us-central1");
 }
 
 TEST_F(SchemaTest, ChangeStreamBasic) {
@@ -465,6 +484,18 @@ TEST_F(SchemaTest, TableSynonymBuilder) {
   auto t2 = table_builder("T1", synonym).build();
   EXPECT_EQ(t2->Validate(&context_),
             error::InvalidSchemaName("Synonym", synonym));
+}
+
+TEST_F(SchemaTest, PlacementBuilder) {
+  auto p = placement_builder("P").build();
+  ZETASQL_EXPECT_OK(p->Validate(&context_));
+}
+
+TEST_F(SchemaTest, PlacementBuilderInvalid) {
+  const std::string placement_name(130, 'P');
+  auto invalid_p = placement_builder(placement_name).build();
+  EXPECT_EQ(invalid_p->Validate(&context_),
+            error::InvalidSchemaName("Placement", placement_name));
 }
 
 TEST_F(SchemaTest, ChangeStreamBuilderValid) {

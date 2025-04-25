@@ -46,6 +46,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/errors.h"
 #include "zetasql/base/status_macros.h"
@@ -113,8 +114,12 @@ ActionRegistry::ActionRegistry(const Schema* schema,
 void ActionRegistry::BuildActionRegistry() {
   for (const Table* table : schema_->tables()) {
     // Column value checks for all tables.
+    absl::flat_hash_set<std::string> placements;
+    for (const Placement* placement : schema_->placements()) {
+      placements.insert(placement->PlacementName());
+    }
     table_validators_[table].emplace_back(
-        std::make_unique<ColumnValueValidator>());
+        std::make_unique<ColumnValueValidator>(placements));
 
     // Row existence checks for all tables.
     table_validators_[table].emplace_back(

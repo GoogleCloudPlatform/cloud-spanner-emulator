@@ -30,7 +30,7 @@
 //------------------------------------------------------------------------------
 
 #include "third_party/spanner_pg/util/postgres.h"
-
+#include <stdbool.h>
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -53,6 +53,15 @@ TEST(PostgresUtilsTest, ArrayUnnestProcOid) {
   EXPECT_EQ(proc_proto->proargtypes(0), ANYARRAYOID);
   EXPECT_EQ(proc_proto->proargtypes().size(), 1);  // Single arg.
   EXPECT_EQ(proc_proto->prorettype(), ANYELEMENTOID);
+}
+
+TEST(PostgresUtilsTest, IsAnnFunction) {
+  // Verify that provided OID maps to the expected function.
+  FuncExpr func_expr;
+  func_expr.funcid = 50062;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+    const bool is_ann_function, IsAnnFunction(&func_expr));
+  EXPECT_TRUE(is_ann_function);
 }
 
 }  // namespace

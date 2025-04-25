@@ -78,6 +78,7 @@ cc_library(
         "@com_google_protobuf//:protobuf_lite",
         "@com_google_zetasql//zetasql/base",
         "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_googlesource_code_re2//:re2",
     ],
 )
 
@@ -126,6 +127,7 @@ cc_test(
         "//third_party/spanner_pg/interface:parser_interface",
         "//third_party/spanner_pg/shims:memory_context_pg_arena",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_googletest//:gtest",

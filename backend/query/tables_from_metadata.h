@@ -48,6 +48,7 @@ static const zetasql_base::NoDestructor<
         {"STRING(100)", zetasql::types::StringType()},
         {"STRING(MAX)", zetasql::types::StringType()},
         {"TIMESTAMP", zetasql::types::TimestampType()},
+        {"JSON", zetasql::types::JsonType()},
     }};
 
 // Maps the type specified in the information catalog metadata for a Spanner

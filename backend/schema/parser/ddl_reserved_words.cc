@@ -18,6 +18,7 @@
 
 #include <string>
 
+#include "absl/strings/string_view.h"
 #include "backend/common/case.h"
 
 namespace google {
@@ -99,6 +100,7 @@ static const CaseInsensitiveStringSet* const reserved_words =
     "OUTER",
     "OVER",
     "PARTITION",
+    "PLACEMENT",
     "PRECEDING",
     "PROTO",
     "RANGE",

@@ -25,7 +25,6 @@
 
 #include "zetasql/public/types/type.h"
 #include "absl/status/statusor.h"
-#include "absl/types/optional.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
 #include "backend/schema/catalog/column.h"
@@ -33,6 +32,7 @@
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/named_schema.h"
+#include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
@@ -57,7 +57,7 @@ std::string PrintIndex(const Index* index);
 // Prints the DDL statements for a table.
 std::string PrintTable(const Table* table);
 
-// Prints the DDL statemetns for options.
+// Prints the DDL statements for options.
 std::string PrintOptions(::google::protobuf::RepeatedPtrField<ddl::SetOption> options);
 
 // Prints the DDL statements for a change stream.
@@ -97,6 +97,9 @@ std::string PrintLocalityGroup(const LocalityGroup* locality_group);
 // Prints the DDL statements for a locality group options.
 std::string PrintLocalityGroupOptions(
     ::google::protobuf::RepeatedPtrField<ddl::SetOption> options);
+
+// Prints the DDL statements for a placement.
+std::string PrintPlacement(const Placement* placement);
 
 // Prints the DDL statements for all tables and indexes within the given schema.
 absl::StatusOr<std::vector<std::string>> PrintDDLStatements(

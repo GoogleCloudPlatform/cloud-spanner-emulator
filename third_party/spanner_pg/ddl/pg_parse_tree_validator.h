@@ -101,6 +101,8 @@ absl::Status ValidateParseTreeNode(const CreateStmt& node,
 absl::Status ValidateParseTreeNode(const CreateSchemaStmt& node);
 absl::Status ValidateParseTreeNode(const AlterSpangresStatsStmt& node);
 absl::Status ValidateParseTreeNode(const VacuumStmt& node);
+absl::Status ValidateParseTreeNode(const CreateFunctionStmt& node);
+absl::Status ValidateParseTreeNode(const FunctionParameter& node);
 absl::Status ValidateParseTreeNode(const ViewStmt& node);
 absl::Status ValidateParseTreeNode(const CreateChangeStreamStmt& node);
 absl::Status ValidateParseTreeNode(const AlterChangeStreamStmt& node);

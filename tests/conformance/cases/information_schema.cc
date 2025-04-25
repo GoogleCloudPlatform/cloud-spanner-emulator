@@ -35,8 +35,10 @@
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "google/cloud/spanner/value.h"
+#include "backend/schema/catalog/property_graph.pb.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
+#include "google/protobuf/util/json_util.h"
 
 namespace google {
 namespace spanner {
@@ -51,13 +53,6 @@ class InformationSchemaTest
     : public DatabaseTest,
       public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
-  InformationSchemaTest()
-      : feature_flags_(
-            {.enable_postgresql_interface = true,
-             .enable_bit_reversed_positive_sequences = true,
-             .enable_bit_reversed_positive_sequences_postgresql = true,
-             .enable_identity_columns = true}) {}
-
   void SetUp() override {
     dialect_ = GetParam();
     DatabaseTest::SetUp();
@@ -148,6 +143,11 @@ class InformationSchemaTest
   }
 
   // Helper function to make error results readable.
+  // This function divides the results into groups based on the value of the
+  // column at col_index and checks that each group has the same rows as the
+  // expected results.
+  // The col_index is the index of the column to group by, and it can be
+  // overridden to use the distinguishing column from the testing query.
   inline void CheckResultsAgainstExpected(
       absl::StatusOr<std::vector<ValueRow>>& results_or,
       std::vector<ValueRow>& expected, size_t col_index = 2) {
@@ -218,6 +218,8 @@ class InformationSchemaTest
                                   value.get<bool>().value() ? "true" : "false");
                 } else if (value.get<std::optional<Bytes>>().ok()) {
                   absl::StrAppend(out, "Nb()");
+                } else if (value.get<Json>().ok()) {
+                  absl::StrAppend(out, std::string(value.get<Json>().value()));
                 } else {
                   absl::StrAppend(out, "?");
                 }
@@ -264,8 +266,11 @@ class InformationSchemaTest
   cloud::spanner::Value Ns() { return Null<std::string>(); }
   cloud::spanner::Value Ni() { return Null<std::int64_t>(); }
 
- private:
-  test::ScopedEmulatorFeatureFlagsSetter feature_flags_;
+  bool PropertyGraphInformationSchemaEnabled() {
+    return EmulatorFeatureFlags::instance()
+        .flags()
+        .enable_property_graph_information_schema;
+  }
 };
 
 INSTANTIATE_TEST_SUITE_P(
@@ -405,6 +410,9 @@ TEST_P(InformationSchemaTest, MetaTables) {
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODEL_COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODEL_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODELS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    if (PropertyGraphInformationSchemaEnabled()) {
+      expected.push_back({"", table_schema, "VIEW", GetNameForDialect("PROPERTY_GRAPHS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    }
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("REFERENTIAL_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SCHEMATA"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SEQUENCE_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
@@ -650,7 +658,12 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
     {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
   });
-
+  if (PropertyGraphInformationSchemaEnabled()) {
+    expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns());  // NOLINT
+    expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_METADATA_JSON", Ns(), Ns(), "YES", "JSON", "NEVER", Ns(), Ns(), Ns());  // NOLINT
+    expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns());  // NOLINT
+    expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns());  // NOLINT
+  }
   // clang-format on
   CheckResultsAgainstExpected(results, expected);
 }
@@ -781,10 +794,12 @@ TEST_P(InformationSchemaTest, MetaIndexes) {
         {"", "INFORMATION_SCHEMA", "TABLES", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
     });
+    if (PropertyGraphInformationSchemaEnabled()) {
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns());  // NOLINT
+    }
     // clang-format on
     results = QueryWithParams(query, {kUnsupportedTables});
-    LogResults(results);
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+    CheckResultsAgainstExpected(results, expected);
   }
 }
 
@@ -941,10 +956,15 @@ TEST_P(InformationSchemaTest, MetaIndexColumns) {
       {"INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "PRIMARY_KEY", "PRIMARY_KEY", "CONSTRAINT_SCHEMA", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "PRIMARY_KEY", "PRIMARY_KEY", "CONSTRAINT_NAME", 3, "ASC", "NO", "STRING(MAX)"},  // NOLINT
     });
+    if (PropertyGraphInformationSchemaEnabled()) {
+      expected.emplace_back("INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "PROPERTY_GRAPH_CATALOG", 1, "ASC", "NO", "STRING(MAX)");  // NOLINT
+      expected.emplace_back("INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "PROPERTY_GRAPH_SCHEMA", 2, "ASC", "NO", "STRING(MAX)");  // NOLINT
+      expected.emplace_back("INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "PROPERTY_GRAPH_NAME", 3, "ASC", "NO", "STRING(MAX)");  // NOLINT
+    }
     // clang-format on
     results = QueryWithParams(query, {kUnsupportedTables});
     LogResults(results);
-    CheckResultsAgainstExpected(results, expected);
+    CheckResultsAgainstExpected(results, expected, 1);
   }
 }
 
@@ -1173,6 +1193,13 @@ TEST_P(InformationSchemaTest, MetaTableConstraints) {
       {"", "INFORMATION_SCHEMA", "PK_TABLES", "", "INFORMATION_SCHEMA", "TABLES", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_TABLE_CONSTRAINTS", "", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
     });
+    if (PropertyGraphInformationSchemaEnabled()) {
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY KEY", "NO", "NO", "YES");  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "CHECK", "NO", "NO", "YES");  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "CHECK", "NO", "NO", "YES");  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "CHECK", "NO", "NO", "YES");  // NOLINT
+    }
+
     // clang-format on
     CheckResultsAgainstExpected(results, expected);
   }
@@ -1344,6 +1371,11 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_TABLE_CONSTRAINTS_TABLE_NAME", "TABLE_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_TABLE_CONSTRAINTS_TABLE_SCHEMA", "TABLE_SCHEMA IS NOT NULL", "COMMITTED"},  // NOLINT
     });
+    if (PropertyGraphInformationSchemaEnabled()) {
+      expected.emplace_back("", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG", "PROPERTY_GRAPH_CATALOG IS NOT NULL", "COMMITTED");  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME", "PROPERTY_GRAPH_NAME IS NOT NULL", "COMMITTED");  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA", "PROPERTY_GRAPH_SCHEMA IS NOT NULL", "COMMITTED");  // NOLINT
+    }
     // clang-format on
     CheckResultsAgainstExpected(results, expected);
   }
@@ -1575,6 +1607,12 @@ TEST_P(InformationSchemaTest, MetaConstraintTableUsage) {
       {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_TABLE_CONSTRAINTS_TABLE_SCHEMA"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "", "INFORMATION_SCHEMA", "PK_TABLE_CONSTRAINTS"},  // NOLINT
     });
+    if (PropertyGraphInformationSchemaEnabled()) {
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG");  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME");  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA");  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS");  // NOLINT
+    }
     // clang-format on
     CheckResultsAgainstExpected(results, expected);
   }
@@ -1758,6 +1796,11 @@ TEST_P(InformationSchemaTest, MetaKeyColumnUsage) {
       {"", "INFORMATION_SCHEMA", "PK_TABLE_CONSTRAINTS", "", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CONSTRAINT_SCHEMA", 2, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_TABLE_CONSTRAINTS", "", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CONSTRAINT_NAME", 3, Ni()},  // NOLINT
     });
+    if (PropertyGraphInformationSchemaEnabled()) {
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", 1, Ni());  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_SCHEMA", 2, Ni());  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", 3, Ni());  // NOLINT
+    }
     // clang-format on
     CheckResultsAgainstExpected(results, expected);
   }
@@ -2071,7 +2114,14 @@ TEST_P(InformationSchemaTest, MetaConstraintColumnUsage) {
       {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_TABLE_CONSTRAINTS_TABLE_NAME"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_SCHEMA", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_TABLE_CONSTRAINTS_TABLE_SCHEMA"},  // NOLINT
     });
-    // clang-format off
+    if (PropertyGraphInformationSchemaEnabled()) {
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG");  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", "", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS");  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME");  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", "", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS");  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_SCHEMA", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA");  // NOLINT
+      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_SCHEMA", "", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS");  // NOLINT
+    }
     CheckResultsAgainstExpected(results, expected);
   }
 }
@@ -2079,8 +2129,32 @@ TEST_P(InformationSchemaTest, MetaConstraintColumnUsage) {
 TEST_P(InformationSchemaTest, DefaultTables) {
   // GSQL uses an empty string for the default schema and PG doesn't.
   std::string filter = "";
+  std::vector<ValueRow> expected;
   if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    std::string expected_interval = "OLDER_THAN(created_at, INTERVAL 7 DAY)";
     filter = "t.table_catalog = '' and ";
+    // clang-format off
+    expected = std::vector<ValueRow>({
+      {"BASE TABLE", "base", Ns(), "COMMITTED", Ns(), Ns()},
+      {"VIEW", "base_view", Ns(), Ns(), Ns(), Ns()},
+      {"BASE TABLE", "cascade_child", "base", "COMMITTED", "CASCADE", Ns()}, // NOLINT
+      {"BASE TABLE", "edge_table", Ns(), "COMMITTED", Ns(), Ns()},  // NOLINT
+      {"BASE TABLE", "no_action_child", "base", "COMMITTED", "NO ACTION", Ns()},
+      {"BASE TABLE", "node_table", Ns(), "COMMITTED", Ns(), Ns()},  // NOLINT
+      {"BASE TABLE", "row_deletion_policy", Ns(), "COMMITTED", Ns(), expected_interval}, // NOLINT
+    });
+    // clang-format on
+  } else {
+    std::string expected_interval = "INTERVAL '7 DAYS' ON created_at";
+    // clang-format off
+    expected = std::vector<ValueRow>({
+      {"BASE TABLE", "base", Ns(), "COMMITTED", Ns(), Ns()},
+      {"VIEW", "base_view", Ns(), Ns(), Ns(), Ns()},
+      {"BASE TABLE", "cascade_child", "base", "COMMITTED", "CASCADE", Ns()}, // NOLINT
+      {"BASE TABLE", "no_action_child", "base", "COMMITTED", "NO ACTION", Ns()},
+      {"BASE TABLE", "row_deletion_policy", Ns(), "COMMITTED", Ns(), expected_interval}, // NOLINT
+    });
+    // clang-format on
   }
   auto results = Query(absl::Substitute(
       R"(
@@ -2105,19 +2179,6 @@ TEST_P(InformationSchemaTest, DefaultTables) {
       (GetParam() == POSTGRESQL ? "public" :
        "")));
   LogResults(results);
-  std::string expected_interval =
-      (GetParam() == POSTGRESQL)
-      ?  "INTERVAL '7 DAYS' ON created_at"
-      : "OLDER_THAN(created_at, INTERVAL 7 DAY)";
-  // clang-format off
-  auto expected = std::vector<ValueRow>({
-    {"BASE TABLE", "base", Ns(), "COMMITTED", Ns(), Ns()},
-    {"VIEW", "base_view", Ns(), Ns(), Ns(), Ns()},
-    {"BASE TABLE", "cascade_child", "base", "COMMITTED", "CASCADE", Ns()}, // NOLINT
-    {"BASE TABLE", "no_action_child", "base", "COMMITTED", "NO ACTION", Ns()},
-    {"BASE TABLE", "row_deletion_policy", Ns(), "COMMITTED", Ns(), expected_interval}, // NOLINT
-  });
-  // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
@@ -2222,9 +2283,12 @@ TEST_P(InformationSchemaTest, GSQLDefaultColumns) {
     {"", "", "no_action_child", "value", 4, Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "row_deletion_policy", "key", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "row_deletion_policy", "created_at", 2, Ns(), Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "edge_table", "FromId", 1, Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "edge_table", "ToId", 2, Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "node_table", "Id", 1, Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
   });
   // clang-format on
-  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  CheckResultsAgainstExpected(results, expected);
 }
 
 TEST_P(InformationSchemaTest, PGDefaultColumns) {
@@ -2397,17 +2461,19 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
   } else {
     // clang-format off
     auto expected = ExpectedRows(results, {
-      {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "INDEX", "", false, true, "READ_WRITE", true},  // NOLINT
-      {"", "", "base", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-      {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", true, true, "READ_WRITE", true},  // NOLINT
-      {"", "", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-      {"", "", "cascade_child", "cascade_child_by_value", "INDEX", "base", true, true, "READ_WRITE", false},  // NOLINT
-      {"", "", "no_action_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-      {"", "", "no_action_child", "no_action_child_by_value", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
-      {"", "", "row_deletion_policy", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+        {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "INDEX", "", false, true, "READ_WRITE", true},  // NOLINT
+        {"", "", "base", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+        {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", true, true, "READ_WRITE", true},  // NOLINT
+        {"", "", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+        {"", "", "cascade_child", "cascade_child_by_value", "INDEX", "base", true, true, "READ_WRITE", false},  // NOLINT
+        {"", "", "no_action_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+        {"", "", "no_action_child", "no_action_child_by_value", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
+        {"", "", "row_deletion_policy", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+        {"", "", "edge_table", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+        {"", "", "node_table", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
     });
     // clang-format on
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+    CheckResultsAgainstExpected(results, expected);
   }
 }
 
@@ -2517,24 +2583,27 @@ TEST_P(InformationSchemaTest, DefaultIndexColumns) {
   } else {
     // clang-format off
     auto expected = ExpectedRows(results, {
-      {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "bool_value", 1, "ASC", "NO", "BOOL"},  // NOLINT
-      {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "key2", 2, "DESC", "NO", "STRING(256)"},  // NOLINT
-      {"", "", "base", "PRIMARY_KEY", "key1", 1, "ASC", "YES", "INT64"},  // NOLINT
-      {"", "", "base", "PRIMARY_KEY", "key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
-      {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "child_key", 1, "ASC", "NO", "BOOL"},  // NOLINT
-      {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "value1", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
-      {"", "", "cascade_child", "PRIMARY_KEY", "key1", 1, "ASC", "YES", "INT64"},  // NOLINT
-      {"", "", "cascade_child", "PRIMARY_KEY", "key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
-      {"", "", "cascade_child", "PRIMARY_KEY", "child_key", 3, "ASC", "YES", "BOOL"},  // NOLINT
-      {"", "", "cascade_child", "cascade_child_by_value", "value1", Ni(), Ns(), "NO", "STRING(MAX)"},  // NOLINT
-      {"", "", "cascade_child", "cascade_child_by_value", "key1", 1, "ASC", "NO", "INT64"},  // NOLINT
-      {"", "", "cascade_child", "cascade_child_by_value", "key2", 2, "DESC", "NO", "STRING(256)"},  // NOLINT
-      {"", "", "cascade_child", "cascade_child_by_value", "value2", 3, "ASC", "NO", "BOOL"},  // NOLINT
-      {"", "", "no_action_child", "PRIMARY_KEY", "key1", 1, "ASC", "YES", "INT64"},  // NOLINT
-      {"", "", "no_action_child", "PRIMARY_KEY", "key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
-      {"", "", "no_action_child", "PRIMARY_KEY", "child_key", 3, "ASC", "YES", "BOOL"},  // NOLINT
-      {"", "", "no_action_child", "no_action_child_by_value", "value", 1, "ASC", "YES", "STRING(MAX)"},  // NOLINT
-      {"", "", "row_deletion_policy", "PRIMARY_KEY", "key", 1, "ASC", "YES", "INT64"},  // NOLINT
+        {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "bool_value", 1, "ASC", "NO", "BOOL"},  // NOLINT
+        {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "key2", 2, "DESC", "NO", "STRING(256)"},  // NOLINT
+        {"", "", "base", "PRIMARY_KEY", "key1", 1, "ASC", "YES", "INT64"},  // NOLINT
+        {"", "", "base", "PRIMARY_KEY", "key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
+        {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "child_key", 1, "ASC", "NO", "BOOL"},  // NOLINT
+        {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "value1", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
+        {"", "", "cascade_child", "PRIMARY_KEY", "key1", 1, "ASC", "YES", "INT64"},  // NOLINT
+        {"", "", "cascade_child", "PRIMARY_KEY", "key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
+        {"", "", "cascade_child", "PRIMARY_KEY", "child_key", 3, "ASC", "YES", "BOOL"},  // NOLINT
+        {"", "", "cascade_child", "cascade_child_by_value", "value1", Ni(), Ns(), "NO", "STRING(MAX)"},  // NOLINT
+        {"", "", "cascade_child", "cascade_child_by_value", "key1", 1, "ASC", "NO", "INT64"},  // NOLINT
+        {"", "", "cascade_child", "cascade_child_by_value", "key2", 2, "DESC", "NO", "STRING(256)"},  // NOLINT
+        {"", "", "cascade_child", "cascade_child_by_value", "value2", 3, "ASC", "NO", "BOOL"},  // NOLINT
+        {"", "", "no_action_child", "PRIMARY_KEY", "key1", 1, "ASC", "YES", "INT64"},  // NOLINT
+        {"", "", "no_action_child", "PRIMARY_KEY", "key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
+        {"", "", "no_action_child", "PRIMARY_KEY", "child_key", 3, "ASC", "YES", "BOOL"},  // NOLINT
+        {"", "", "no_action_child", "no_action_child_by_value", "value", 1, "ASC", "YES", "STRING(MAX)"},  // NOLINT
+        {"", "", "row_deletion_policy", "PRIMARY_KEY", "key", 1, "ASC", "YES", "INT64"},  // NOLINT
+        {"", "", "edge_table", "PRIMARY_KEY", "FromId", 1, "ASC", "NO", "INT64"},  // NOLINT
+        {"", "", "edge_table", "PRIMARY_KEY", "ToId", 2, "ASC", "NO", "INT64"},  // NOLINT
+        {"", "", "node_table", "PRIMARY_KEY", "Id", 1, "ASC", "NO", "INT64"},  // NOLINT
     });
     // clang-format on
     CheckResultsAgainstExpected(results, expected);
@@ -2733,22 +2802,45 @@ TEST_P(InformationSchemaTest, DefaultTableConstraints) {
     // clang-format on
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   } else {
+    auto expected = ExpectedRows(
+        results,
+        {
+            {"", "", "CK_IS_NOT_NULL_base_bool_array", "", "", "base", "CHECK",
+             "NO", "NO", "YES"},  // NOLINT
+            {"", "", "CK_IS_NOT_NULL_base_int_value", "", "", "base", "CHECK",
+             "NO", "NO", "YES"},  // NOLINT
+            {"", "", "CK_IS_NOT_NULL_cascade_child_value1", "", "",
+             "cascade_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
+            {"", "", "CK_base_\\w{16}_1", "", "", "base", "CHECK", "NO", "NO",
+             "YES"},  // NOLINT
+            {"", "", "IDX_cascade_child_child_key_value1_U_\\w{16}", "", "",
+             "cascade_child", "UNIQUE", "NO", "NO", "YES"},  // NOLINT
+            {"", "", "PK_base", "", "", "base", "PRIMARY KEY", "NO", "NO",
+             "YES"},  // NOLINT
+            {"", "", "PK_cascade_child", "", "", "cascade_child", "PRIMARY KEY",
+             "NO", "NO", "YES"},  // NOLINT
+            {"", "", "PK_no_action_child", "", "", "no_action_child",
+             "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+            {"", "", "PK_row_deletion_policy", "", "", "row_deletion_policy",
+             "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+            {"", "", "check_constraint_name", "", "", "base", "CHECK", "NO",
+             "NO", "YES"},  // NOLINT
+            {"", "", "fk_base_cascade_child", "", "", "base", "FOREIGN KEY",
+             "NO", "NO", "YES"},  // NOLINT
+            {"", "", "CK_IS_NOT_NULL_edge_table_FromId", "", "", "edge_table",
+             "CHECK", "NO", "NO", "YES"},  // NOLINT
+            {"", "", "CK_IS_NOT_NULL_edge_table_ToId", "", "", "edge_table",
+             "CHECK", "NO", "NO", "YES"},  // NOLINT
+            {"", "", "CK_IS_NOT_NULL_node_table_Id", "", "", "node_table",
+             "CHECK", "NO", "NO", "YES"},  // NOLINT
+            {"", "", "PK_edge_table", "", "", "edge_table", "PRIMARY KEY", "NO",
+             "NO", "YES"},  // NOLINT
+            {"", "", "PK_node_table", "", "", "node_table", "PRIMARY KEY", "NO",
+             "NO", "YES"},  // NOLINT
+        });
     // clang-format off
-    auto expected = ExpectedRows(results, {
-      {"", "", "CK_IS_NOT_NULL_base_bool_array", "", "", "base", "CHECK", "NO", "NO", "YES"},  // NOLINT
-      {"", "", "CK_IS_NOT_NULL_base_int_value", "", "", "base", "CHECK", "NO", "NO", "YES"},  // NOLINT
-      {"", "", "CK_IS_NOT_NULL_cascade_child_value1", "", "", "cascade_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
-      {"", "", "CK_base_\\w{16}_1", "", "", "base", "CHECK", "NO", "NO", "YES"},  // NOLINT
-      {"", "", "IDX_cascade_child_child_key_value1_U_\\w{16}", "", "", "cascade_child", "UNIQUE", "NO", "NO", "YES"},  // NOLINT
-      {"", "", "PK_base", "", "", "base", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
-      {"", "", "PK_cascade_child", "", "", "cascade_child", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
-      {"", "", "PK_no_action_child", "", "", "no_action_child", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
-      {"", "", "PK_row_deletion_policy", "", "", "row_deletion_policy", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
-      {"", "", "check_constraint_name", "", "", "base", "CHECK", "NO", "NO", "YES"},  // NOLINT
-      {"", "", "fk_base_cascade_child", "", "", "base", "FOREIGN KEY", "NO", "NO", "YES"},  // NOLINT
-    });
     // clang-format on
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+    CheckResultsAgainstExpected(results, expected);
   }
 }
 
@@ -2853,9 +2945,14 @@ TEST_P(InformationSchemaTest, DefaultConstraintTableUsage) {
       {"", "", "cascade_child", "", "", "fk_base_cascade_child"},  // NOLINT
       {"", "", "no_action_child", "", "", "PK_no_action_child"},  // NOLINT
       {"", "", "row_deletion_policy", "", "", "PK_row_deletion_policy"},  // NOLINT
+      {"", "", "edge_table", "", "", "CK_IS_NOT_NULL_edge_table_FromId"},  // NOLINT
+      {"", "", "edge_table", "", "", "CK_IS_NOT_NULL_edge_table_ToId"},  // NOLINT
+      {"", "", "edge_table", "", "", "PK_edge_table"},  // NOLINT
+      {"", "", "node_table", "", "", "CK_IS_NOT_NULL_node_table_Id"},  // NOLINT
+      {"", "", "node_table", "", "", "PK_node_table"},  // NOLINT
     });
     // clang-format on
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+    CheckResultsAgainstExpected(results, expected);
   }
 }
 
@@ -3084,9 +3181,12 @@ TEST_P(InformationSchemaTest, DefaultKeyColumnUsage) {
       {"", "", "PK_row_deletion_policy", "", "", "row_deletion_policy", "key", 1, Ni()},  // NOLINT
       {"", "", "fk_base_cascade_child", "", "", "base", "bool_value", 1, 1},  // NOLINT
       {"", "", "fk_base_cascade_child", "", "", "base", "key2", 2, 2},  // NOLINT
+      {"", "", "PK_edge_table", "", "", "edge_table", "FromId", 1, Ni()},  // NOLINT
+      {"", "", "PK_edge_table", "", "", "edge_table", "ToId", 2, Ni()},  // NOLINT
+      {"", "", "PK_node_table", "", "", "node_table", "Id", 1, Ni()},  // NOLINT
     });
     // clang-format on
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+    CheckResultsAgainstExpected(results, expected);
   }
 }
 
@@ -3213,7 +3313,7 @@ TEST_P(InformationSchemaTest, DefaultConstraintColumnUsage) {
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   } else {
     // clang-format off
-    auto expected = ExpectedRows(results, {
+    auto expected = ExpectedRows(results, std::vector<ValueRow>{
       {"", "", "base", "bool_array", "", "", "CK_IS_NOT_NULL_base_bool_array"},  // NOLINT
       {"", "", "base", "int_value", "", "", "CK_IS_NOT_NULL_base_int_value"},  // NOLINT
       {"", "", "base", "int_value", "", "", "CK_base_\\w{16}_1"},  // NOLINT
@@ -3232,9 +3332,15 @@ TEST_P(InformationSchemaTest, DefaultConstraintColumnUsage) {
       {"", "", "no_action_child", "key1", "", "", "PK_no_action_child"},  // NOLINT
       {"", "", "no_action_child", "key2", "", "", "PK_no_action_child"},  // NOLINT
       {"", "", "row_deletion_policy", "key", "", "", "PK_row_deletion_policy"},  // NOLINT
+      {"", "", "edge_table", "FromId", "", "", "CK_IS_NOT_NULL_edge_table_FromId"},  // NOLINT
+      {"", "", "edge_table", "FromId", "", "", "PK_edge_table"},  // NOLINT
+      {"", "", "edge_table", "ToId", "", "", "CK_IS_NOT_NULL_edge_table_ToId"},  // NOLINT
+      {"", "", "edge_table", "ToId", "", "", "PK_edge_table"},  // NOLINT
+      {"", "", "node_table", "Id", "", "", "CK_IS_NOT_NULL_node_table_Id"},  // NOLINT
+      {"", "", "node_table", "Id", "", "", "PK_node_table"},  // NOLINT
     });
     // clang-format on
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+    CheckResultsAgainstExpected(results, expected);
   }
 }
 
@@ -3425,10 +3531,13 @@ TEST_P(InformationSchemaTest, DefaultCheckConstraints) {
       {"" , "", "CK_IS_NOT_NULL_base_int_value", "int_value IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "", "CK_IS_NOT_NULL_cascade_child_value1", "value1 IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "", "CK_base_\\w{16}_1", "int_value > 0", "COMMITTED"},  // NOLINT
-      {"", "", "check_constraint_name", "int_value > 0", "COMMITTED"}  // NOLINT
+      {"", "", "check_constraint_name", "int_value > 0", "COMMITTED"},  // NOLINT
+      {"", "", "CK_IS_NOT_NULL_edge_table_FromId", "FromId IS NOT NULL", "COMMITTED"},  // NOLINT
+      {"", "", "CK_IS_NOT_NULL_edge_table_ToId", "ToId IS NOT NULL", "COMMITTED"},  // NOLINT
+      {"", "", "CK_IS_NOT_NULL_node_table_Id", "Id IS NOT NULL", "COMMITTED"},  // NOLINT
     }));
     // clang-format on
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+    CheckResultsAgainstExpected(results, expected);
   }
 }
 
@@ -3958,6 +4067,82 @@ TEST_P(InformationSchemaTest, DefaultModelColumnOptions) {
        "FALSE"},  // NOLINT
   });
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+}
+
+TEST_P(InformationSchemaTest, DefaultPropertyGraphs) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL ||
+      !PropertyGraphInformationSchemaEnabled()) {
+    return;
+  }
+
+  auto results = Query(R"(
+      select *
+      from information_schema.property_graphs AS t
+      order by property_graph_name
+    )");
+  LogResults(results);
+  ZETASQL_ASSERT_OK(results);
+  Json property_graph_json = results.value()[0].values()[3].get<Json>().value();
+  google::spanner::emulator::backend::catalog::PropertyGraphProto proto;
+  ZETASQL_ASSERT_OK(google::protobuf::util::JsonStringToMessage(std::string(property_graph_json),
+                                              &proto));
+  EXPECT_THAT(
+      proto,
+      test::proto::IgnoringRepeatedFieldOrdering(test::EqualsProto(R"pb(
+        catalog: ""
+        schema: ""
+        name: "test_graph"
+        node_tables {
+          name: "node_table"
+          kind: NODE
+          base_catalog_name: ""
+          base_schema_name: ""
+          base_table_name: "node_table"
+          key_columns: "Id"
+          label_names: "Test"
+          property_definitions {
+            property_declaration_name: "Id"
+            value_expression_sql: "Id"
+          }
+        }
+        edge_tables {
+          name: "edge_table"
+          kind: EDGE
+          base_catalog_name: ""
+          base_schema_name: ""
+          base_table_name: "edge_table"
+          key_columns: "FromId"
+          key_columns: "ToId"
+          label_names: "edge_table"
+          property_definitions {
+            property_declaration_name: "FromId"
+            value_expression_sql: "FromId"
+          }
+          property_definitions {
+            property_declaration_name: "ToId"
+            value_expression_sql: "ToId"
+          }
+          source_node_table {
+            node_table_name: "node_table"
+            edge_table_columns: "FromId"
+            node_table_columns: "Id"
+          }
+          destination_node_table {
+            node_table_name: "node_table"
+            edge_table_columns: "ToId"
+            node_table_columns: "Id"
+          }
+        }
+        labels { name: "Test" property_declaration_names: "Id" }
+        labels {
+          name: "edge_table"
+          property_declaration_names: "FromId"
+          property_declaration_names: "ToId"
+        }
+        property_declarations { name: "Id" type: "INT64" }
+        property_declarations { name: "FromId" type: "INT64" }
+        property_declarations { name: "ToId" type: "INT64" }
+      )pb")));
 }
 
 // Tests information schema behavior in the presence of a sequence.

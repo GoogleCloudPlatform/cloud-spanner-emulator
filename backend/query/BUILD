@@ -399,6 +399,7 @@ cc_library(
         "information_schema_catalog.h",
     ],
     deps = [
+        ":analyzer_options",
         ":info_schema_columns_metadata_values",
         ":spanner_sys_catalog",
         ":tables_from_metadata",
@@ -407,6 +408,7 @@ cc_library(
         "//backend/schema/parser:ddl_parser",
         "//backend/schema/printer:print_ddl",
         "//backend/schema/updater:ddl_type_conversion",
+        "//common:feature_flags",
         "//third_party/spanner_pg/catalog:spangres_type",
         "//third_party/spanner_pg/ddl:spangres_direct_schema_printer_impl",
         "//third_party/spanner_pg/ddl:spangres_schema_printer",
@@ -416,6 +418,7 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
+        "@com_google_protobuf//:protobuf",
         "@com_google_zetasql//zetasql/base:no_destructor",
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:simple_catalog",
@@ -440,6 +443,33 @@ cc_test(
 )
 
 cc_library(
+    name = "pg_catalog",
+    srcs = ["pg_catalog.cc"],
+    hdrs = [
+        "pg_catalog.h",
+    ],
+    deps = [
+        ":info_schema_columns_metadata_values",
+        ":tables_from_metadata",
+        "//backend/schema/catalog:schema",
+        "//third_party/spanner_pg/bootstrap_catalog",
+        "//third_party/spanner_pg/bootstrap_catalog:bootstrap_catalog_accessor_impl",  # build_cleaner: keep
+        "//third_party/spanner_pg/catalog:engine_system_catalog",
+        "//third_party/spanner_pg/catalog:type",
+        "//third_party/spanner_pg/datatypes/extended:pg_oid_type",
+        "//third_party/spanner_pg/interface:bootstrap_catalog_accessor",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/strings",
+        "@com_google_zetasql//zetasql/base:no_destructor",
+        "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_zetasql//zetasql/public:simple_catalog",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_library(
     name = "catalog",
     srcs = [
         "catalog.cc",
@@ -451,6 +481,7 @@ cc_library(
         ":analyzer_options",
         ":function_catalog",
         ":information_schema_catalog",
+        ":pg_catalog",
         ":queryable_model",
         ":queryable_named_schema",
         ":queryable_property_graph",
@@ -465,7 +496,6 @@ cc_library(
         "//backend/schema/catalog:schema",
         "//common:constants",
         "//common:errors",
-        "//third_party/spanner_pg/catalog:pg_catalog",
         "//third_party/spanner_pg/datatypes/extended:conversion_finder",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
@@ -715,8 +745,11 @@ cc_library(
         "//common:constants",
         "//common:errors",
         "//common:feature_flags",
+        "//third_party/spanner_pg/catalog:emulator_function_evaluators",
         "//third_party/spanner_pg/catalog:emulator_functions",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
+        "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
+        "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/log",

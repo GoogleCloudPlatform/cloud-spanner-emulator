@@ -49,7 +49,8 @@ class EmulatorFeatureFlags {
     bool enable_fk_enforcement_option = true;
     bool enable_search_index = true;
     bool enable_hidden_column = true;
-    bool enable_default_time_zone = false;
+    bool enable_default_time_zone = true;
+    bool enable_property_graph_information_schema = false;
   };
 
   static const EmulatorFeatureFlags& instance() {

@@ -31,6 +31,8 @@
 
 #include "third_party/spanner_pg/catalog/emulator_functions.h"
 
+#include <stdbool.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -39,6 +41,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -107,7 +110,7 @@ using spangres::datatypes::GetPgJsonbNormalizedValue;
 using spangres::datatypes::GetPgNumericNormalizedValue;
 using spangres::datatypes::GetPgOidValue;
 using spangres::datatypes::common::jsonb::IsValidJsonbString;
-using spangres::datatypes::common::jsonb::NormalizeJsonbString;
+using spangres::datatypes::common::jsonb::SerializeJsonbString;
 using spangres::datatypes::common::jsonb::PgJsonbValue;
 using spangres::datatypes::common::jsonb::TreeNode;
 
@@ -204,6 +207,8 @@ using ::postgres_translator::function_evaluators::PgIntervalOut;
 using ::postgres_translator::function_evaluators::PgIntervalToChar;
 using ::postgres_translator::function_evaluators::PgMakeInterval;
 
+using ::postgres_translator::InitializePGTimezoneToDefault;
+
 // PG array functions
 
 // Used by both array_upper and array_length because they return the same
@@ -299,8 +304,8 @@ absl::StatusOr<zetasql::Value> EvalTextregexne(
 std::unique_ptr<zetasql::Function> TextregexneFunction(
     absl::string_view catalog_name) {
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(
-      PGFunctionEvaluator(EvalTextregexne, CleanupRegexCache));
+  function_options.set_evaluator(PGFunctionEvaluator(
+      EvalTextregexne, InitializePGTimezoneToDefault, CleanupRegexCache));
   return std::make_unique<zetasql::Function>(
       kPGTextregexneFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
@@ -395,8 +400,8 @@ absl::StatusOr<zetasql::Value> EvalToDate(
 std::unique_ptr<zetasql::Function> ToDateFunction(
     absl::string_view catalog_name) {
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(
-      PGFunctionEvaluator(EvalToDate, CleanupPostgresDateTimeCache));
+  function_options.set_evaluator(PGFunctionEvaluator(
+      EvalToDate, InitializePGTimezoneToDefault, CleanupPostgresDateTimeCache));
   return std::make_unique<zetasql::Function>(
       kPGToDateFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
@@ -421,7 +426,8 @@ std::unique_ptr<zetasql::Function> ToTimestampFunction(
     absl::string_view catalog_name) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
-      PGFunctionEvaluator(EvalToTimestamp, CleanupPostgresDateTimeCache));
+      PGFunctionEvaluator(EvalToTimestamp, InitializePGTimezoneToDefault,
+                          CleanupPostgresDateTimeCache));
   return std::make_unique<zetasql::Function>(
       kPGToTimestampFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
@@ -437,77 +443,16 @@ absl::StatusOr<zetasql::IntervalValue> RoundPrecision(
       interval.get_months(), interval.get_days(), micros);
 }
 
-absl::StatusOr<zetasql::Value> EvalToChar(
-    absl::Span<const zetasql::Value> args) {
-  static const zetasql::Type* gsql_pg_numeric =
-      spangres::datatypes::GetPgNumericType();
-  ZETASQL_RET_CHECK(args.size() == 2);
-  if (args[0].is_null() || args[1].is_null()) {
-    return zetasql::Value::NullString();
-  }
-
-  switch (args[0].type_kind()) {
-    case zetasql::TYPE_INT64: {
-      ZETASQL_ASSIGN_OR_RETURN(std::string result, Int8ToChar(args[0].int64_value(),
-                                                      args[1].string_value()));
-      return zetasql::Value::String(result);
-    }
-    case zetasql::TYPE_TIMESTAMP: {
-      ZETASQL_ASSIGN_OR_RETURN(
-          std::unique_ptr<std::string> result,
-          PgTimestampTzToChar(args[0].ToTime(), args[1].string_value()));
-      if (result == nullptr) {
-        return zetasql::Value::NullString();
-      } else {
-        return zetasql::Value::String(*result);
-      }
-    }
-    case zetasql::TYPE_DOUBLE: {
-      ZETASQL_ASSIGN_OR_RETURN(
-          std::string result,
-          Float8ToChar(args[0].double_value(), args[1].string_value()));
-      return zetasql::Value::String(result);
-    }
-    case zetasql::TYPE_FLOAT: {
-      ZETASQL_ASSIGN_OR_RETURN(
-          std::string result,
-          Float4ToChar(args[0].float_value(), args[1].string_value()));
-      return zetasql::Value::String(result);
-    }
-    case zetasql::TYPE_INTERVAL: {
-      std::unique_ptr<std::string> result;
-      ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue interval,
-                       RoundPrecision(args[0].interval_value()));
-      ZETASQL_ASSIGN_OR_RETURN(result,
-                       PgIntervalToChar(interval, args[1].string_value()));
-      return result == nullptr ? zetasql::Value::NullString()
-                               : zetasql::Value::String(*result);
-    }
-    case zetasql::TYPE_EXTENDED:
-      if (args[0].type()->Equals(gsql_pg_numeric)) {
-        ZETASQL_ASSIGN_OR_RETURN(absl::Cord numeric_string,
-                         GetPgNumericNormalizedValue(args[0]));
-        ZETASQL_ASSIGN_OR_RETURN(
-            std::string result,
-            NumericToChar(std::string(numeric_string), args[1].string_value()));
-        return zetasql::Value::String(result);
-      }
-      [[fallthrough]];
-    default:
-      return absl::UnimplementedError(
-          absl::StrCat("to_char(", args[0].type()->DebugString(), ", text)"));
-  }
-}
-
 std::unique_ptr<zetasql::Function> ToCharFunction(
-    absl::string_view catalog_name, const std::string& time_zone) {
+    absl::string_view catalog_name) {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalToChar, [] {
-    CleanupPostgresNumberCache();
-    CleanupPostgresDateTimeCache();
-  }, time_zone));
+  function_options.set_evaluator(
+      PGFunctionEvaluator(EvalToChar, InitializePGTimezoneToDefault, [] {
+        CleanupPostgresNumberCache();
+        CleanupPostgresDateTimeCache();
+      }));
   return std::make_unique<zetasql::Function>(
       kPGToCharFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
@@ -556,8 +501,8 @@ std::unique_ptr<zetasql::Function> ToNumberFunction(
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(
-      PGFunctionEvaluator(EvalToNumber, CleanupPostgresNumberCache));
+  function_options.set_evaluator(PGFunctionEvaluator(
+      EvalToNumber, InitializePGTimezoneToDefault, CleanupPostgresNumberCache));
 
   return std::make_unique<zetasql::Function>(
       kPGToNumberFunctionName, catalog_name, zetasql::Function::SCALAR,
@@ -1017,42 +962,13 @@ std::unique_ptr<zetasql::Function> CastNumericToFloatFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalCastToString(
-    absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK(args.size() == 1);
-
-  switch (args[0].type()->kind()) {
-    case zetasql::TYPE_INTERVAL:
-      return EvalCastIntervalToString(args);
-    case zetasql::TYPE_EXTENDED: {
-      auto type_code =
-          static_cast<const spangres::datatypes::SpannerExtendedType*>(
-              args[0].type())
-              ->code();
-      switch (type_code) {
-        case spangres::datatypes::TypeAnnotationCode::PG_NUMERIC:
-          return EvalCastNumericToString(args);
-        default:
-          return absl::InvalidArgumentError(
-              absl::StrCat("Unsupported type for CAST to text: ",
-                           args[0].type()->DebugString()));
-      }
-    }
-    default:
-      return absl::InvalidArgumentError(
-          absl::StrCat("Unsupported type for CAST to text: ",
-                       args[0].type()->DebugString()));
-  }
-}
-
 std::unique_ptr<zetasql::Function> CastToStringFunction(
-    absl::string_view catalog_name, const std::string& time_zone) {
+    absl::string_view catalog_name) {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
 
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(
-      PGFunctionEvaluator(EvalCastToString, []() {}, time_zone));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalCastToString));
 
   return std::make_unique<zetasql::Function>(
       kPGCastToStringFunctionName, catalog_name, zetasql::Function::SCALAR,
@@ -1142,8 +1058,8 @@ absl::StatusOr<zetasql::Value> EvalRegexpMatch(
 std::unique_ptr<zetasql::Function> RegexpMatchFunction(
     absl::string_view catalog_name) {
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(
-      PGFunctionEvaluator(EvalRegexpMatch, CleanupRegexCache));
+  function_options.set_evaluator(PGFunctionEvaluator(
+      EvalRegexpMatch, InitializePGTimezoneToDefault, CleanupRegexCache));
   return std::make_unique<zetasql::Function>(
       kPGRegexpMatchFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
@@ -1191,7 +1107,8 @@ std::unique_ptr<zetasql::Function> RegexpSplitToArrayFunction(
     absl::string_view catalog_name) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
-      PGFunctionEvaluator(EvalRegexpSplitToArray, CleanupRegexCache));
+      PGFunctionEvaluator(EvalRegexpSplitToArray, InitializePGTimezoneToDefault,
+                          CleanupRegexCache));
   return std::make_unique<zetasql::Function>(
       kPGRegexpSplitToArrayFunctionName, catalog_name,
       zetasql::Function::SCALAR,
@@ -1226,8 +1143,8 @@ absl::StatusOr<zetasql::Value> EvalSubstring(
 std::unique_ptr<zetasql::Function> SubstringFunction(
     absl::string_view catalog_name) {
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(
-      PGFunctionEvaluator(EvalSubstring, CleanupRegexCache));
+  function_options.set_evaluator(PGFunctionEvaluator(
+      EvalSubstring, InitializePGTimezoneToDefault, CleanupRegexCache));
   return std::make_unique<zetasql::Function>(
       kPGSubstringFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
@@ -1250,7 +1167,8 @@ std::unique_ptr<zetasql::Function> CastToDateFunction(
     const std::string& catalog_name) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
-      PGFunctionEvaluator(EvalCastToDate, CleanupPostgresDateTimeCache));
+      PGFunctionEvaluator(EvalCastToDate, InitializePGTimezoneToDefault,
+                          CleanupPostgresDateTimeCache));
 
   return std::make_unique<zetasql::Function>(
       kPGCastToDateFunctionName, catalog_name, zetasql::Function::SCALAR,
@@ -1437,20 +1355,12 @@ std::unique_ptr<zetasql::Function> ArraySliceFunction(
       std::vector<FunctionSignature>{signature}, FunctionOptions());
 }
 
-absl::StatusOr<zetasql::Value> EvalCastToTimestamp(
-    absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK(args.size() == 1);
-
-  ZETASQL_ASSIGN_OR_RETURN(absl::Time time, function_evaluators::PgTimestamptzIn(
-                                        args[0].string_value()));
-  return zetasql::Value::Timestamp(time);
-}
-
 std::unique_ptr<zetasql::Function> CastToTimestampFunction(
-    const std::string& catalog_name, const std::string& time_zone) {
+    const std::string& catalog_name) {
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(
-      EvalCastToTimestamp, CleanupPostgresDateTimeCache, time_zone));
+  function_options.set_evaluator(
+      PGFunctionEvaluator(EvalCastToTimestamp, InitializePGTimezoneToDefault,
+                          CleanupPostgresDateTimeCache));
 
   return std::make_unique<zetasql::Function>(
       kPGCastToTimestampFunctionName, catalog_name, zetasql::Function::SCALAR,
@@ -1482,7 +1392,8 @@ std::unique_ptr<zetasql::Function> TimestamptzAddFunction(
     const std::string& catalog_name) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
-      PGFunctionEvaluator(EvalTimestamptzAdd, CleanupPostgresDateTimeCache));
+      PGFunctionEvaluator(EvalTimestamptzAdd, InitializePGTimezoneToDefault,
+                          CleanupPostgresDateTimeCache));
   return std::make_unique<zetasql::Function>(
       kPGTimestamptzAddFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
@@ -1520,7 +1431,8 @@ std::unique_ptr<zetasql::Function> TimestamptzSubtractFunction(
     const std::string& catalog_name) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(PGFunctionEvaluator(
-      EvalTimestamptzSubtract, CleanupPostgresDateTimeCache));
+      EvalTimestamptzSubtract, InitializePGTimezoneToDefault,
+      CleanupPostgresDateTimeCache));
 
   return std::make_unique<zetasql::Function>(
       kPGTimestamptzSubtractFunctionName, catalog_name,
@@ -1551,7 +1463,8 @@ std::unique_ptr<zetasql::Function> TimestamptzBinFunction(
     const std::string& catalog_name) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
-      PGFunctionEvaluator(EvalTimestamptzBin, CleanupPostgresDateTimeCache));
+      PGFunctionEvaluator(EvalTimestamptzBin, InitializePGTimezoneToDefault,
+                          CleanupPostgresDateTimeCache));
 
   return std::make_unique<zetasql::Function>(
       kPGTimestamptzBinFunctionName, catalog_name, zetasql::Function::SCALAR,
@@ -1583,7 +1496,8 @@ std::unique_ptr<zetasql::Function> TimestamptzTruncFunction(
     const std::string& catalog_name) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
-      PGFunctionEvaluator(EvalTimestamptzTrunc, CleanupPostgresDateTimeCache));
+      PGFunctionEvaluator(EvalTimestamptzTrunc, InitializePGTimezoneToDefault,
+                          CleanupPostgresDateTimeCache));
 
   return std::make_unique<zetasql::Function>(
       kPGTimestamptzTruncFunctionName, catalog_name,
@@ -1601,26 +1515,12 @@ std::unique_ptr<zetasql::Function> TimestamptzTruncFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalExtract(
-    absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK(args.size() == 2);
-  if (args[1].type_kind() == zetasql::TYPE_TIMESTAMP) {
-    ZETASQL_ASSIGN_OR_RETURN(
-        absl::Cord result,
-        PgTimestamptzExtract(args[0].string_value(), args[1].ToTime()));
-    return CreatePgNumericValue(std::string(result));
-  } else {
-    ZETASQL_ASSIGN_OR_RETURN(absl::Cord result, PgDateExtract(args[0].string_value(),
-                                                      args[1].date_value()));
-    return CreatePgNumericValue(std::string(result));
-  }
-}
-
 std::unique_ptr<zetasql::Function> ExtractFunction(
-    const std::string& catalog_name, const std::string& time_zone) {
+    const std::string& catalog_name) {
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(
-      EvalExtract, CleanupPostgresDateTimeCache, time_zone));
+  function_options.set_evaluator(
+      PGFunctionEvaluator(EvalExtract, InitializePGTimezoneToDefault,
+                          CleanupPostgresDateTimeCache));
 
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
@@ -1828,7 +1728,7 @@ absl::StatusOr<zetasql::Value> EvalToJsonbFromString(
     const zetasql::Value arg) {
   if (IsValidJsonbString(arg.string_value())) {
     return CreatePgJsonbValue(
-        NormalizeJsonbString(GetStringRepresentation(arg).value()));
+        SerializeJsonbString(GetStringRepresentation(arg).value()));
   }
   return absl::InvalidArgumentError(
       "unsupported Unicode escape sequence DETAIL: \\u0000 cannot "
@@ -2380,7 +2280,7 @@ absl::StatusOr<zetasql::Value> EvalJsonbDelete(
       for (int i = 0; i < jsonb_value.GetArraySize(); ++i) {
         if (jsonb_value.GetArrayElementIfExists(i)->IsString()) {
           std::string serialized_delete_string =
-              NormalizeJsonbString(del_string);
+              SerializeJsonbString(del_string);
           absl::string_view element_string =
               jsonb_value.GetArrayElementIfExists(i)->GetSerializedString();
           if (element_string == serialized_delete_string) {
@@ -2784,6 +2684,206 @@ std::unique_ptr<zetasql::Function> JsonbStripNullsFunction(
           zetasql::FunctionSignature{gsql_pg_jsonb,
                                        {gsql_pg_jsonb},
                                        /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+absl::StatusOr<zetasql::Value> EvalJsonbContains(
+    absl::Span<const zetasql::Value> args) {
+  ABSL_DCHECK_EQ(args.size(), 2);
+  if (args[0].is_null() || args[1].is_null()) {
+    return zetasql::Value::NullBool();
+  }
+
+  ABSL_DCHECK(args[0].type() == args[1].type());
+  ABSL_DCHECK(args[0].type() == GetPgJsonbType());
+
+  ZETASQL_ASSIGN_OR_RETURN(absl::Cord in_1, GetPgJsonbNormalizedValue(args[0]));
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue input,
+                   PgJsonbValue::Parse(std::string(in_1), &tree_nodes));
+
+  ZETASQL_ASSIGN_OR_RETURN(absl::Cord in_2, GetPgJsonbNormalizedValue(args[1]));
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue target,
+                   PgJsonbValue::Parse(std::string(in_2), &tree_nodes));
+
+  return zetasql::Value::Bool(JsonbContains(input, target));
+}
+
+absl::StatusOr<zetasql::Value> EvalJsonbContained(
+    absl::Span<const zetasql::Value> args) {
+  ABSL_DCHECK_EQ(args.size(), 2);
+  if (args[0].is_null() || args[1].is_null()) {
+    return zetasql::Value::NullBool();
+  }
+
+  ABSL_DCHECK(args[0].type() == args[1].type());
+  ABSL_DCHECK(args[0].type() == GetPgJsonbType());
+
+  ZETASQL_ASSIGN_OR_RETURN(absl::Cord in_1, GetPgJsonbNormalizedValue(args[0]));
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue input,
+                   PgJsonbValue::Parse(std::string(in_1), &tree_nodes));
+
+  ZETASQL_ASSIGN_OR_RETURN(absl::Cord in_2, GetPgJsonbNormalizedValue(args[1]));
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue target,
+                   PgJsonbValue::Parse(std::string(in_2), &tree_nodes));
+
+  return zetasql::Value::Bool(JsonbContains(target, input));
+}
+
+std::unique_ptr<zetasql::Function> JsonbContainsFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbContains));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonbContainsFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_bool,
+                                       {gsql_pg_jsonb, gsql_pg_jsonb},
+                                       /*context_ptr=*/nullptr},
+      },
+      function_options);
+}
+
+std::unique_ptr<zetasql::Function> JsonbContainedFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbContained));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonbContainedFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_bool,
+                                       {gsql_pg_jsonb, gsql_pg_jsonb},
+                                       /*context_ptr=*/nullptr},
+      },
+      function_options);
+}
+
+absl::StatusOr<zetasql::Value> EvalJsonbExists(
+    absl::Span<const zetasql::Value> args) {
+  ABSL_DCHECK_EQ(args.size(), 2);
+  if (args[0].is_null() || args[1].is_null()) {
+    return zetasql::Value::NullBool();
+  }
+
+  ABSL_DCHECK(args[0].type() == GetPgJsonbType());
+  ABSL_DCHECK(args[1].type() == zetasql::types::StringType());
+
+  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb_string, GetPgJsonbNormalizedValue(args[0]));
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue input,
+                   PgJsonbValue::Parse(std::string(jsonb_string), &tree_nodes));
+
+  return zetasql::Value::Bool(input.Exists(args[1].string_value()));
+}
+
+std::unique_ptr<zetasql::Function> JsonbExistsFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbExists));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonbExistsFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_bool,
+                                       {gsql_pg_jsonb, gsql_string},
+                                       /*context_ptr=*/nullptr},
+      },
+      function_options);
+}
+
+absl::StatusOr<zetasql::Value> EvalJsonbExistsAny(
+    absl::Span<const zetasql::Value> args) {
+  ABSL_DCHECK_EQ(args.size(), 2);
+  if (args[0].is_null() || args[1].is_null()) {
+    return zetasql::Value::NullBool();
+  }
+
+  ABSL_DCHECK(args[0].type() == GetPgJsonbType());
+  ABSL_DCHECK(args[1].type() == zetasql::types::StringArrayType());
+
+  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb_string, GetPgJsonbNormalizedValue(args[0]));
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue input,
+                   PgJsonbValue::Parse(std::string(jsonb_string), &tree_nodes));
+
+  for (const auto& string_key : args[1].elements()) {
+    if (string_key.is_null()) {
+      // Ignore null element matching.
+      continue;
+    }
+
+    if (input.Exists(string_key.string_value())) {
+      return zetasql::Value::Bool(true);
+    }
+  }
+
+  return zetasql::Value::Bool(false);
+}
+
+std::unique_ptr<zetasql::Function> JsonbExistsAnyFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbExistsAny));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonbExistsAnyFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_bool,
+                                       {gsql_pg_jsonb, gsql_string_array},
+                                       /*context_ptr=*/nullptr},
+      },
+      function_options);
+}
+
+absl::StatusOr<zetasql::Value> EvalJsonbExistsAll(
+    absl::Span<const zetasql::Value> args) {
+  ABSL_DCHECK_EQ(args.size(), 2);
+  if (args[0].is_null() || args[1].is_null()) {
+    return zetasql::Value::NullBool();
+  }
+
+  ABSL_DCHECK(args[0].type() == GetPgJsonbType());
+  ABSL_DCHECK(args[1].type() == zetasql::types::StringArrayType());
+
+  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb_string, GetPgJsonbNormalizedValue(args[0]));
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue input,
+                   PgJsonbValue::Parse(std::string(jsonb_string), &tree_nodes));
+
+  for (const auto& string_key : args[1].elements()) {
+    if (string_key.is_null()) {
+      // Ignore null element matching.
+      continue;
+    }
+
+    if (!input.Exists(string_key.string_value())) {
+      return zetasql::Value::Bool(false);
+    }
+  }
+
+  return zetasql::Value::Bool(true);
+}
+
+std::unique_ptr<zetasql::Function> JsonbExistsAllFunction(
+    absl::string_view catalog_name) {
+  const zetasql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  zetasql::FunctionOptions function_options;
+  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbExistsAll));
+  return std::make_unique<zetasql::Function>(
+      kPGJsonbExistsAllFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{gsql_bool,
+                                       {gsql_pg_jsonb, gsql_string_array},
+                                       /*context_ptr=*/nullptr},
+      },
       function_options);
 }
 
@@ -3996,11 +4096,125 @@ zetasql::FunctionArgumentTypeOptions GetOptionalNamedArgumentOptions(
     absl::string_view name) {
   zetasql::FunctionArgumentTypeOptions options;
   options.set_cardinality(zetasql::FunctionArgumentType::OPTIONAL);
-  options.set_argument_name(name, zetasql::kNamedOnly);
+  options.set_argument_name(name, zetasql::kPositionalOrNamed);
   return options;
 }
 
 }  // namespace
+
+absl::StatusOr<zetasql::Value> EvalToChar(
+  absl::Span<const zetasql::Value> args) {
+static const zetasql::Type* gsql_pg_numeric =
+    spangres::datatypes::GetPgNumericType();
+ZETASQL_RET_CHECK(args.size() == 2);
+if (args[0].is_null() || args[1].is_null()) {
+  return zetasql::Value::NullString();
+}
+
+switch (args[0].type_kind()) {
+  case zetasql::TYPE_INT64: {
+    ZETASQL_ASSIGN_OR_RETURN(std::string result, Int8ToChar(args[0].int64_value(),
+                                                    args[1].string_value()));
+    return zetasql::Value::String(result);
+  }
+  case zetasql::TYPE_TIMESTAMP: {
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<std::string> result,
+        PgTimestampTzToChar(args[0].ToTime(), args[1].string_value()));
+    if (result == nullptr) {
+      return zetasql::Value::NullString();
+    } else {
+      return zetasql::Value::String(*result);
+    }
+  }
+  case zetasql::TYPE_DOUBLE: {
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::string result,
+        Float8ToChar(args[0].double_value(), args[1].string_value()));
+    return zetasql::Value::String(result);
+  }
+  case zetasql::TYPE_FLOAT: {
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::string result,
+        Float4ToChar(args[0].float_value(), args[1].string_value()));
+    return zetasql::Value::String(result);
+  }
+  case zetasql::TYPE_INTERVAL: {
+    std::unique_ptr<std::string> result;
+    ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue interval,
+                     RoundPrecision(args[0].interval_value()));
+    ZETASQL_ASSIGN_OR_RETURN(result,
+                     PgIntervalToChar(interval, args[1].string_value()));
+    return result == nullptr ? zetasql::Value::NullString()
+                             : zetasql::Value::String(*result);
+  }
+  case zetasql::TYPE_EXTENDED:
+    if (args[0].type()->Equals(gsql_pg_numeric)) {
+      ZETASQL_ASSIGN_OR_RETURN(absl::Cord numeric_string,
+                       GetPgNumericNormalizedValue(args[0]));
+      ZETASQL_ASSIGN_OR_RETURN(
+          std::string result,
+          NumericToChar(std::string(numeric_string), args[1].string_value()));
+      return zetasql::Value::String(result);
+    }
+    [[fallthrough]];
+  default:
+    return absl::UnimplementedError(
+        absl::StrCat("to_char(", args[0].type()->DebugString(), ", text)"));
+}
+}
+
+absl::StatusOr<zetasql::Value> EvalExtract(
+    absl::Span<const zetasql::Value> args) {
+  ZETASQL_RET_CHECK(args.size() == 2);
+  if (args[1].type_kind() == zetasql::TYPE_TIMESTAMP) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        absl::Cord result,
+        PgTimestamptzExtract(args[0].string_value(), args[1].ToTime()));
+    return CreatePgNumericValue(std::string(result));
+  } else {
+    ZETASQL_ASSIGN_OR_RETURN(absl::Cord result, PgDateExtract(args[0].string_value(),
+                                                      args[1].date_value()));
+    return CreatePgNumericValue(std::string(result));
+  }
+}
+
+absl::StatusOr<zetasql::Value> EvalCastToTimestamp(
+    absl::Span<const zetasql::Value> args) {
+  ZETASQL_RET_CHECK(args.size() == 1);
+
+  ZETASQL_ASSIGN_OR_RETURN(absl::Time time, function_evaluators::PgTimestamptzIn(
+                                        args[0].string_value()));
+  return zetasql::Value::Timestamp(time);
+}
+
+absl::StatusOr<zetasql::Value> EvalCastToString(
+  absl::Span<const zetasql::Value> args) {
+ZETASQL_RET_CHECK(args.size() == 1);
+
+switch (args[0].type()->kind()) {
+  case zetasql::TYPE_INTERVAL:
+    return EvalCastIntervalToString(args);
+  case zetasql::TYPE_EXTENDED: {
+    auto type_code =
+        static_cast<const spangres::datatypes::SpannerExtendedType*>(
+            args[0].type())
+            ->code();
+    switch (type_code) {
+      case spangres::datatypes::TypeAnnotationCode::PG_NUMERIC:
+        return EvalCastNumericToString(args);
+      default:
+        return absl::InvalidArgumentError(
+            absl::StrCat("Unsupported type for CAST to text: ",
+                         args[0].type()->DebugString()));
+    }
+  }
+  default:
+    return absl::InvalidArgumentError(
+        absl::StrCat("Unsupported type for CAST to text: ",
+                     args[0].type()->DebugString()));
+}
+}
 
 absl::StatusOr<zetasql::Value> EvalCastNumericToInt64(
     absl::Span<const zetasql::Value> args) {
@@ -4560,18 +4774,17 @@ std::unique_ptr<zetasql::Function> CastToIntervalFunction(
       function_options);
 }
 
-SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name,
-                                         const std::string& time_zone) {
+SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   SpannerPGFunctions functions;
 
-  auto cast_to_string_func = CastToStringFunction(catalog_name, time_zone);
+  auto cast_to_string_func = CastToStringFunction(catalog_name);
   functions.push_back(std::move(cast_to_string_func));
 
   auto cast_to_date_func = CastToDateFunction(catalog_name);
   functions.push_back(std::move(cast_to_date_func));
 
   auto cast_to_timestamp_func =
-      CastToTimestampFunction(catalog_name, time_zone);
+      CastToTimestampFunction(catalog_name);
   functions.push_back(std::move(cast_to_timestamp_func));
 
   auto timestamptz_add_func = TimestamptzAddFunction(catalog_name);
@@ -4582,7 +4795,7 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name,
   functions.push_back(std::move(timestamptz_bin_func));
   auto timestamptz_trunc_func = TimestamptzTruncFunction(catalog_name);
   functions.push_back(std::move(timestamptz_trunc_func));
-  auto extract_func = ExtractFunction(catalog_name, time_zone);
+  auto extract_func = ExtractFunction(catalog_name);
   functions.push_back(std::move(extract_func));
 
   auto map_double_to_int_func = MapDoubleToIntFunction(catalog_name);
@@ -4630,7 +4843,7 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name,
   functions.push_back(std::move(to_date_func));
   auto to_timestamp_func = ToTimestampFunction(catalog_name);
   functions.push_back(std::move(to_timestamp_func));
-  auto to_char_func = ToCharFunction(catalog_name, time_zone);
+  auto to_char_func = ToCharFunction(catalog_name);
   functions.push_back(std::move(to_char_func));
   auto to_number_func = ToNumberFunction(catalog_name);
   functions.push_back(std::move(to_number_func));
@@ -4676,6 +4889,16 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name,
   functions.push_back(std::move(jsonb_set_func));
   auto jsonb_set_lax_func = JsonbSetLaxFunction(catalog_name);
   functions.push_back(std::move(jsonb_set_lax_func));
+  auto jsonb_contains_func = JsonbContainsFunction(catalog_name);
+  functions.push_back(std::move(jsonb_contains_func));
+  auto jsonb_contained_func = JsonbContainedFunction(catalog_name);
+  functions.push_back(std::move(jsonb_contained_func));
+  auto jsonb_exists_func = JsonbExistsFunction(catalog_name);
+  functions.push_back(std::move(jsonb_exists_func));
+  auto jsonb_exists_any_func = JsonbExistsAnyFunction(catalog_name);
+  functions.push_back(std::move(jsonb_exists_any_func));
+  auto jsonb_exists_all_func = JsonbExistsAllFunction(catalog_name);
+  functions.push_back(std::move(jsonb_exists_all_func));
 
   auto float_add_func =
       FloatArithmeticFunction(kPGFloatAddFunctionName, catalog_name);

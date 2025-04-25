@@ -519,6 +519,145 @@ INSTANTIATE_TEST_SUITE_P(
             {zetasql::Value::String("key"), kNullStringValue},
             *CreatePgJsonbValueWithMemoryContext("{\"key\": null}")},
 
+        // pg.jsonb_contains
+        PGScalarFunctionTestCase{
+            kPGJsonbContainsFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": -2.0}"),
+             *CreatePgJsonbValueWithMemoryContext("{\"b\": -2}")},
+            zetasql::Value::Bool(true)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbContainsFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": true}"),
+             *CreatePgJsonbValueWithMemoryContext("{\"a\": true}")},
+            zetasql::Value::Bool(false)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbContainsFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext(
+                 "[{\"a\": true, \"b\": [2, 3.3]}]"),
+             *CreatePgJsonbValueWithMemoryContext("{\"b\": [2]}")},
+            zetasql::Value::Bool(false)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbContainsFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext(
+                 "[{\"a\": true, \"b\": [2, 3.3]}]"),
+             *CreatePgJsonbValueWithMemoryContext("[{\"b\": [3.30]}]")},
+            zetasql::Value::Bool(true)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbContainedFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("[1, 1.340, 3]"),
+             *CreatePgJsonbValueWithMemoryContext("2")},
+            zetasql::Value::Bool(false)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbContainsFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("[1, 1.340, 3]"),
+             *CreatePgJsonbValueWithMemoryContext("3.0")},
+            zetasql::Value::Bool(true)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbContainsFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("[1, 1.340, 3]"),
+             *CreatePgJsonbValueWithMemoryContext("[3.0]")},
+            zetasql::Value::Bool(true)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbContainsFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("[1, 1.340, [3, 4]]"),
+             *CreatePgJsonbValueWithMemoryContext("[3.0]")},
+            zetasql::Value::Bool(false)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbContainsFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("[1, 1.340, [3, 4]]"),
+             *CreatePgJsonbValueWithMemoryContext("[[3.0]]")},
+            zetasql::Value::Bool(true)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbContainsFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": [2, 3]}"),
+             *CreatePgJsonbValueWithMemoryContext("{\"b\": 2}")},
+            zetasql::Value::Bool(false)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbContainsFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": [2, 3]}"),
+             *CreatePgJsonbValueWithMemoryContext("{\"b\": [2]}")},
+            zetasql::Value::Bool(true)},
+
+        // pg.jsonb_contained
+        PGScalarFunctionTestCase{
+            kPGJsonbContainedFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("1.340000"),
+             *CreatePgJsonbValueWithMemoryContext("[1, 1.340, 3]")},
+            zetasql::Value::Bool(true)},
+
+        // pg.jsonb_exists
+        PGScalarFunctionTestCase{
+            kPGJsonbExistsFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": -2.0}"),
+             zetasql::Value::String("a")},
+            zetasql::Value::Bool(true)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbExistsFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("[\"a\", 1, \"b\"]"),
+             zetasql::Value::String("b")},
+            zetasql::Value::Bool(true)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbExistsFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": -2.0}"),
+             zetasql::Value::String("c")},
+            zetasql::Value::Bool(false)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbExistsFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("[\"a\", 1, \"b\"]"),
+             zetasql::Value::String("c")},
+            zetasql::Value::Bool(false)},
+
+        // pg.jsonb_exists_any
+        PGScalarFunctionTestCase{
+            kPGJsonbExistsAnyFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("[\"a\", 1, \"b\"]"),
+             zetasql::Value::Array(zetasql::types::StringArrayType(),
+                                     {zetasql::Value::String("c"),
+                                      zetasql::Value::NullString(),
+                                      zetasql::Value::String("b")})},
+            zetasql::Value::Bool(true)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbExistsAnyFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("[\"a\", 1, \"b\"]"),
+             zetasql::Value::Array(zetasql::types::StringArrayType(),
+                                     {zetasql::Value::String("c"),
+                                      zetasql::Value::NullString(),
+                                      zetasql::Value::String("d")})},
+            zetasql::Value::Bool(false)},
+
+        // pg.jsonb_exists_all
+        PGScalarFunctionTestCase{
+            kPGJsonbExistsAllFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("[\"a\", 1, \"b\"]"),
+             zetasql::Value::Array(zetasql::types::StringArrayType(),
+                                     {zetasql::Value::String("a"),
+                                      zetasql::Value::NullString(),
+                                      zetasql::Value::String("b")})},
+            zetasql::Value::Bool(true)},
+
+        PGScalarFunctionTestCase{
+            kPGJsonbExistsAllFunctionName,
+            {*CreatePgJsonbValueWithMemoryContext("[\"a\", 1, \"b\"]"),
+             zetasql::Value::Array(zetasql::types::StringArrayType(),
+                                     {zetasql::Value::String("a"),
+                                      zetasql::Value::NullString(),
+                                      zetasql::Value::String("c")})},
+            zetasql::Value::Bool(false)},
+
         PGScalarFunctionTestCase{
             kPGNumericAddFunctionName,
             {CreatePgNumericNullValue(),
