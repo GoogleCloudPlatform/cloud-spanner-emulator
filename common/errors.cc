@@ -3866,7 +3866,7 @@ absl::Status ViewBodyAnalysisError(absl::string_view view_name,
                                    absl::string_view error) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
-      absl::Substitute("Error parsing the definition of view `$0`: $1",
+      absl::Substitute("Error analyzing the definition of view `$0`: $1",
                        view_name, error));
 }
 
@@ -3973,7 +3973,7 @@ absl::Status FunctionBodyAnalysisError(absl::string_view function_name,
                                        absl::string_view error) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
-      absl::Substitute("Error parsing the definition of function `$0`: $1",
+      absl::Substitute("Error analyzing the definition of function `$0`: $1",
                        function_name, error));
 }
 

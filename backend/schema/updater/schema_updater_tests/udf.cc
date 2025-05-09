@@ -53,6 +53,7 @@ namespace test {
 using absl::StatusCode;
 using database_api::DatabaseDialect::POSTGRESQL;
 using zetasql::Value;
+using ::testing::ContainsRegex;
 using ::testing::HasSubstr;
 
 TEST_P(SchemaUpdaterTest, CreateUDF_Basic) {
@@ -220,7 +221,8 @@ TEST_P(SchemaUpdaterTest, CreateUDF_InvalidBodyAnalysis) {
                       SECURITY INVOKER AS (x+func_2(x)))"}),
       ::zetasql_base::testing::StatusIs(
           StatusCode::kInvalidArgument,
-          HasSubstr("Error parsing the definition of function `func`")));
+          ContainsRegex(
+              "Error (analyzing|parsing) the definition of function `func`")));
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,

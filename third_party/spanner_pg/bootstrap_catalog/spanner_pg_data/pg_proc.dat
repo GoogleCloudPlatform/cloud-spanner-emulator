@@ -43,6 +43,10 @@
   prorettype => 'timestamptz', proargtypes => 'text timestamptz timestamptz',
   prosrc => 'timestamptz_bin' },
 
+{ oid => '50067', proname => 'date', pronamespace => 'spanner',
+  prorettype => 'date', proargtypes => 'timestamptz text',
+  prosrc => 'date' },
+
 { oid => '50056', proname => 'get_table_column_identity_state',
   pronamespace => 'spanner', prorettype => 'int8', proargtypes => 'text',
   prosrc => 'get_table_column_identity_state' },

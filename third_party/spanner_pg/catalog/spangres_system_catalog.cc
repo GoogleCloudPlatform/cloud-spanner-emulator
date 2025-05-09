@@ -565,6 +565,7 @@ absl::Status SpangresSystemCatalog::AddFunctions(
 
   // Add each function to the catalog if it is supported in Spanner.
   for (const PostgresFunctionArguments& function : functions) {
+
     bool is_builtin_sql_rewrite_function =
         IsBuiltinSqlRewriteFunction(function.mapped_function_name(),
                                     language_options, type_factory());

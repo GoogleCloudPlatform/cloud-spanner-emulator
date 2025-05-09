@@ -38,6 +38,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/catalog/function.h"
 #include "third_party/spanner_pg/interface/engine_builtin_function_catalog.h"
@@ -114,6 +115,7 @@ class SpangresSystemCatalog : public EngineSystemCatalog {
       const zetasql::LanguageOptions& language_options) override;
 
  private:
+
   SpangresSystemCatalog(
       std::unique_ptr<EngineBuiltinFunctionCatalog> builtin_function_catalog)
       : EngineSystemCatalog(kSpangresSystemCatalogName,
