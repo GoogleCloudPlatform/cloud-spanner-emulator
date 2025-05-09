@@ -313,6 +313,9 @@ void DumpColumn(const Column* column, ddl::ColumnDefinition& column_def) {
     }
   }
   column_def.set_not_null(!column->is_nullable());
+  if (column->is_placement_key()) {
+    column_def.set_placement_key(true);
+  }
   if (column->allows_commit_timestamp()) {
     ddl::SetOption* set_option = column_def.add_set_options();
     set_option->set_option_name(ddl::kPGCommitTimestampOptionName);
@@ -698,6 +701,8 @@ Schema::Schema(const SchemaGraph* graph,
   index_map_.clear();
   change_streams_.clear();
   change_streams_map_.clear();
+  placements_.clear();
+  placements_map_.clear();
   models_.clear();
   models_map_.clear();
   sequences_.clear();

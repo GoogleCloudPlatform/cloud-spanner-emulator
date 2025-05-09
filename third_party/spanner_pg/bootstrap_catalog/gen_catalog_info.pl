@@ -152,7 +152,10 @@ foreach my $oid (keys %oidcounts)
 	print STDERR "$oid\n";
 	$found++;
 }
-die "found $found duplicate OID(s) in catalog data\n" if $found;
+if ($found) {
+	my $next_oid = (reverse sort { $a <=> $b } keys %oidcounts)[0] + 1;
+	die "found $found duplicate OID(s) in catalog data.\nNext unused OID should be $next_oid.\n";
+}
 
 
 # Oids not specified in the input files are automatically assigned,

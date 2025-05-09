@@ -237,9 +237,9 @@ TEST_F(ViewsTest, ErrorCreateViewWithZetaSQLAnalysisError) {
       UpdateSchema({"CREATE VIEW Invalid SQL SECURITY INVOKER AS SELECT TRUE"}),
       zetasql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
-          testing::HasSubstr(
-              "Error parsing the definition of view `Invalid`: CREATE VIEW "
-              "columns must be named, but column 1 has no name")));
+          testing::ContainsRegex(
+              "Error (analyzing|parsing) the definition of view `Invalid`: "
+              "CREATE VIEW columns must be named, but column 1 has no name")));
 }
 
 TEST_F(ViewsTest, ErrorCreateViewReferencingMissingTable) {
@@ -248,8 +248,8 @@ TEST_F(ViewsTest, ErrorCreateViewReferencingMissingTable) {
                     "FROM MISSING"}),
       zetasql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
-          testing::HasSubstr("Error parsing the definition of view "
-                             "`Invalid`: Table not found: MISSING")));
+          testing::ContainsRegex("Error (analyzing|parsing) the definition of "
+                                 "view `Invalid`: Table not found: MISSING")));
 }
 
 TEST_F(ViewsTest, ErrorReplacingViewHasAnalysisError) {
@@ -392,12 +392,13 @@ TEST_F(ViewsTest, DropViewWithDependents) {
 }
 
 TEST_F(ViewsTest, ErrorViewDefinitionContainsInvalidType) {
-  EXPECT_THAT(UpdateSchema({"CREATE VIEW V SQL SECURITY INVOKER AS "
-                            "SELECT CAST(1 AS INT32) AS OUT"}),
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kInvalidArgument,
-                  testing::HasSubstr("Error parsing the definition of view "
-                                     "`V`: Type not found: INT32")));
+  EXPECT_THAT(
+      UpdateSchema({"CREATE VIEW V SQL SECURITY INVOKER AS "
+                    "SELECT CAST(1 AS INT32) AS OUT"}),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          testing::ContainsRegex("Error (analyzing|parsing) the definition of "
+                                 "view `V`: Type not found: INT32")));
 }
 
 TEST_F(ViewsTest, DropUnknownView) {

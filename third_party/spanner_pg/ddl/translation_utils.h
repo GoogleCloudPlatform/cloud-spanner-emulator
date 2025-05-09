@@ -104,6 +104,9 @@ struct PostgreSQLConstants {
       "spanner.default_leader";
   static constexpr absl::string_view
       kSpangresDatabaseWitnessLocationOptionName = "spanner.witness_location";
+  static constexpr absl::string_view
+      kSpangresDatabaseReadLeaseLabelsOptionName =
+          "spanner.cloud_read_lease_labels";
   static constexpr absl::string_view kSearchIndexDisableUidOptionName =
       "disable_automatic_uid_column";
   static constexpr absl::string_view kSearchIndexSortOrderOptionName =
@@ -159,6 +162,9 @@ struct PostgreSQLConstants {
   static constexpr absl::string_view
       kInternalDatabaseWitnessLocationOptionName =
           "spanner.internal.cloud_witness_location";
+  static constexpr absl::string_view
+      kInternalDatabaseReadLeaseLabelsOptionName =
+          "spanner.internal.read_lease_labels";
 
   // Options for Spanner Bit-reversed Sequences.
   // Copied from google3/spanner/common/schema/schema_util.h
@@ -174,7 +180,13 @@ struct PostgreSQLConstants {
 
   // Options for user-defined functions.
   static constexpr absl::string_view kFunctionAsOptionName = "as";
+  static constexpr absl::string_view kFunctionLanguageOptionName = "language";
   static constexpr absl::string_view kFunctionSecurityOptionName = "security";
+  static constexpr absl::string_view kFunctionVolatilityOptionName =
+      "volatility";
+  static constexpr absl::string_view kFunctionVolatile = "volatile";
+  static constexpr absl::string_view kFunctionStable = "stable";
+  static constexpr absl::string_view kFunctionImmutable = "immutable";
 
   // Spanner statistics packages are expected to be prefixed with this namespace
   // when modified via ALTER STATISTICS.

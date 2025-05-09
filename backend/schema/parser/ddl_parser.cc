@@ -97,6 +97,8 @@ const char kVectorIndexMinLeafSplits[] = "min_leaf_splits";
 const char kPlacementDefaultLeaderOptionName[] = "default_leader";
 const char kPlacementInstancePartitionOptionName[] = "instance_partition";
 
+const char kCassandraTypeOptionName[] = "cassandra_type";
+
 const char kLocalityGroupOptionName[] = "locality_group";
 const char kLocalityGroupStorageOptionName[] = "storage";
 const char kLocalityGroupStorageOptionSSDVal[] = "ssd";
@@ -414,6 +416,10 @@ void VisitColumnOptionKeyValNode(const SimpleNode* node, OptionList* options,
 
   if (option_name == kLocalityGroupOptionName) {
     VisitLocalityGroupName(node, options, errors);
+    return;
+  }
+
+  if (option_name == kCassandraTypeOptionName) {
     return;
   }
 

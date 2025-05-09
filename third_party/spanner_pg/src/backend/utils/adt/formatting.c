@@ -4901,8 +4901,15 @@ do_to_timestamp(text *date_txt, text *fmt, Oid collid, bool std,
 		}
 		// SPANGRES END
 	}
-	if (tmfc.us)
-		*fsec += tmfc.us;
+	// SPANGRES BEGIN
+	if (tmfc.us) {
+		// Updated calculation of the formula below, to protect against overflow.
+		// `*fsec += tmfc.us;`
+		if (pg_add_s32_overflow(*fsec, tmfc.us, fsec)) {
+			*fsec = -1;
+		}
+	}
+	// SPANGRES END
 	if (fprec)
 		*fprec = tmfc.ff;		/* fractional precision, if specified */
 

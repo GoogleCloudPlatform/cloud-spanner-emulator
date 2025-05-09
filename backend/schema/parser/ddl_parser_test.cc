@@ -7705,6 +7705,24 @@ comment */ Value Int64,
                   )pb")));
 }
 
+TEST(CassandraType, SupportCassandraType) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE Albums (
+      Id INT64 NOT NULL OPTIONS (cassandra_type = 'bigint'),
+      Value STRING(MAX) OPTIONS (cassandra_type = 'varchar')
+    ) PRIMARY KEY (Id)
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "Albums"
+                      column { column_name: "Id" type: INT64 not_null: true }
+                      column { column_name: "Value" type: STRING }
+                      primary_key { key_name: "Id" }
+                    }
+                  )pb")));
+}
+
 }  // namespace
 
 }  // namespace ddl

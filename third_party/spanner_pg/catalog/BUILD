@@ -119,6 +119,7 @@ cc_test(
         ":engine_system_catalog",
         ":function",
         ":function_identifier",
+        ":spangres_system_catalog",
         ":spangres_type",
         ":type",
         "//third_party/spanner_pg/bootstrap_catalog",

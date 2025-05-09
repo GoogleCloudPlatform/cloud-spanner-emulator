@@ -77,6 +77,26 @@ namespace {
 using PGConstants = internal::PostgreSQLConstants;
 using internal::FieldTypeChecker;
 using ::postgres_translator::internal::PostgresCastToNode;
+using ::google::spanner::emulator::backend::ddl::Function;
+
+namespace {
+absl::Status GetFunctionDeterminism(
+    char* const option_val,
+    absl::optional<Function::Determinism>* determinism) {
+  if (option_val == PGConstants::kFunctionVolatile) {
+    *determinism = Function::NOT_DETERMINISTIC_VOLATILE;
+  } else if (option_val == internal::PostgreSQLConstants::kFunctionStable) {
+    *determinism = Function::NOT_DETERMINISTIC_STABLE;
+  } else if (option_val == internal::PostgreSQLConstants::kFunctionImmutable) {
+    *determinism = Function::DETERMINISTIC;
+  } else {
+    return absl::InvalidArgumentError(
+        absl::Substitute("Failed to provide determinism value "
+                         "in CREATE FUNCTION statement."));
+  }
+  return absl::OkStatus();
+}
+}  // namespace
 
 // Translator from PostgreSQL DDL to Spanner schema dialect.
 class PostgreSQLToSpannerDDLTranslatorImpl
@@ -3817,6 +3837,28 @@ PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::
   }
 }
 
+template <typename SDLType>
+absl::Status ProcessLocalityGroup(const IndexStmt& create_index_statement,
+                                  SDLType& create_index_out,
+                                  const TranslationOptions& options) {
+  if (create_index_statement.locality_group_name != nullptr) {
+    if (!options.enable_locality_groups) {
+      return UnsupportedTranslationError(
+          "Locality groups are not supported in <CREATE INDEX> statement.");
+    }
+    google::spanner::emulator::backend::ddl::SetOption* set_option = create_index_out.add_set_options();
+    set_option->set_option_name("locality_group");
+    if (create_index_statement.locality_group_name->is_null) {
+      set_option->set_null_value(true);
+    } else {
+      set_option->set_string_value(
+          create_index_statement.locality_group_name->value);
+    }
+  }
+
+  return absl::OkStatus();
+}
+
   absl::Status
   PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::Translate(
       const IndexStmt& create_index_statement,
@@ -3890,20 +3932,8 @@ PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::
     create_index_out.set_interleave_in_table(relname);
   }
 
-  if (create_index_statement.locality_group_name != nullptr) {
-    if (!options.enable_locality_groups) {
-      return UnsupportedTranslationError(
-          "Locality groups are not supported in <CREATE INDEX> statement.");
-    }
-    google::spanner::emulator::backend::ddl::SetOption* set_option = create_index_out.add_set_options();
-    set_option->set_option_name("locality_group");
-    if (create_index_statement.locality_group_name->is_null) {
-      set_option->set_null_value(true);
-    } else {
-      set_option->set_string_value(
-          create_index_statement.locality_group_name->value);
-    }
-  }
+  ZETASQL_RETURN_IF_ERROR(
+      ProcessLocalityGroup(create_index_statement, create_index_out, options));
 
   if (create_index_statement.if_not_exists && options.enable_if_not_exists) {
     create_index_out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_NOT_EXISTS);

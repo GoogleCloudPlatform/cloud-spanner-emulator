@@ -180,7 +180,7 @@ ERROR: FAILED_PRECONDITION: .* Cannot drop column `g` on which there are depende
 # --regex
 CREATE VIEW V1 SQL SECURITY INVOKER AS WITH WithTable AS (SELECT 1 as one) SELECT 2 AS two;
 --
-ERROR:.* Error parsing the definition of view `V1`: WITH clauses are unsupported in view definitions.
+ERROR:.* Error (analyzing|parsing) the definition of view `V1`: WITH clauses are unsupported in view definitions.
 ==
 # CREATE OR REPLACE VIEW must preserve dependencies.
 # --regex

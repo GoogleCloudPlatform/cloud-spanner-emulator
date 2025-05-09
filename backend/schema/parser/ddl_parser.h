@@ -73,6 +73,8 @@ extern const char kDefaultLocalityGroupName[];
 extern const char kPlacementDefaultLeaderOptionName[];
 extern const char kPlacementInstancePartitionOptionName[];
 
+extern const char kCassandraTypeOptionName[];
+
 absl::Status ParseDDLStatement(absl::string_view ddl, DDLStatement* statement);
 
 }  // namespace ddl

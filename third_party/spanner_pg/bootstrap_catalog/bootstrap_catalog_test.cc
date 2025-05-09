@@ -677,5 +677,25 @@ TEST(BootstrapCatalog, FailedGetLanguageByName) {
               StatusIs(absl::StatusCode::kNotFound));
 }
 
+TEST(BootstrapCatalog, SpannerDateProc) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      Oid namespace_oid,
+      PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Span<const FormData_pg_proc* const> procs,
+                       PgBootstrapCatalog::Default()->GetProcsByName(
+                           "date"));
+  // `procs` also contains `date(timestamp)` and `date(timestamptz)` from PG so
+  // we need to filter those out.
+  int proc_count = 0;
+  for (const FormData_pg_proc* proc : procs) {
+    if (proc->pronamespace != namespace_oid) {
+      continue;
+    }
+    proc_count++;
+    EXPECT_STREQ(NameStr(proc->proname), "date");
+  }
+  EXPECT_EQ(proc_count, 1);
+}
+
 }  // namespace
 }  // namespace postgres_translator
