@@ -253,7 +253,11 @@ TEST_F(ANNTest, ANNQueryWrongOptions) {
             b.Embedding, ARRAY<FLOAT32>[1.0, 0.1],
             options => JSON '{"num_leaves": 1}')
           LIMIT 2)sql"),
-      error::ApproxDistanceFunctionInvalidJsonOption("approx_cosine_distance"));
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               testing::ContainsRegex(
+                   "Argument `options` of function APPROX_COSINE_DISTANCE is "
+                   "invalid. It must have a .*`num_leaves_to_search` "
+                   "field with an unsigned integer value.*")));
 }
 
 TEST_F(ANNTest, ANNQueryInvalidNumLeavesToSearch) {
@@ -266,7 +270,11 @@ TEST_F(ANNTest, ANNQueryInvalidNumLeavesToSearch) {
             b.Embedding, ARRAY<FLOAT32>[1.0, 0.1],
             options => JSON '{"num_leaves_to_search": "abc"}')
           LIMIT 2)sql"),
-      error::ApproxDistanceFunctionInvalidJsonOption("approx_cosine_distance"));
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               testing::ContainsRegex(
+                   "Argument `options` of function APPROX_COSINE_DISTANCE is "
+                   "invalid. It must have a .*`num_leaves_to_search` "
+                   "field with an unsigned integer value.*")));
 }
 
 TEST_F(ANNTest, ANNQueryNegativeNumLeavesToSearch) {
@@ -279,7 +287,11 @@ TEST_F(ANNTest, ANNQueryNegativeNumLeavesToSearch) {
             b.Embedding, ARRAY<FLOAT32>[1.0, 0.1],
             options => JSON '{"num_leaves_to_search": -1}')
           LIMIT 2)sql"),
-      error::ApproxDistanceFunctionInvalidJsonOption("approx_cosine_distance"));
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               testing::ContainsRegex(
+                   "Argument `options` of function APPROX_COSINE_DISTANCE is "
+                   "invalid. It must have a .*`num_leaves_to_search` "
+                   "field with an unsigned integer value.*")));
 }
 
 TEST_F(ANNTest, ANNQueryNoOrderBy) {
@@ -291,7 +303,9 @@ TEST_F(ANNTest, ANNQueryNoOrderBy) {
           FROM Base@{FORCE_INDEX=vec_index} b
           WHERE b.Embedding IS NOT NULL
           LIMIT 2)sql"),
-              error::ApproxDistanceInvalidShape("approx_cosine_distance"));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("The use of function APPROX_COSINE_DISTANCE "
+                                 "is not supported in this query")));
 }
 
 TEST_F(ANNTest, ANNQueryMustUnderOrderBy) {
@@ -304,7 +318,9 @@ TEST_F(ANNTest, ANNQueryMustUnderOrderBy) {
           WHERE b.Embedding IS NOT NULL
           ORDER BY b.MyKey
           LIMIT 2)sql"),
-              error::ApproxDistanceInvalidShape("approx_cosine_distance"));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("The use of function APPROX_COSINE_DISTANCE "
+                                 "is not supported in this query")));
 }
 
 TEST_F(ANNTest, ANNQueryNoJoin) {
@@ -329,7 +345,9 @@ TEST_F(ANNTest, ANNQueryNoJoin) {
             b.Embedding, ARRAY<FLOAT32>[1.0, 0.1],
             options => JSON '{"num_leaves_to_search": 1}')
           LIMIT 2)sql"),
-              error::ApproxDistanceInvalidShape("approx_cosine_distance"));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("The use of function APPROX_COSINE_DISTANCE "
+                                 "is not supported in this query")));
 }
 
 TEST_F(ANNTest, ANNQueryOrderByNoOtherColumns) {
@@ -342,7 +360,9 @@ TEST_F(ANNTest, ANNQueryOrderByNoOtherColumns) {
             options => JSON '{"num_leaves_to_search": 1}'),
             b.MyKey
           LIMIT 2)sql"),
-              error::ApproxDistanceInvalidShape("approx_cosine_distance"));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("The use of function APPROX_COSINE_DISTANCE "
+                                 "is not supported in this query")));
 }
 
 TEST_F(ANNTest, ANNQueryComplexJoins) {
@@ -528,7 +548,9 @@ TEST_F(ANNTest, ANNQueryWrongInput) {
             b.Embedding, b.Embedding,
             options => JSON '{"num_leaves_to_search": 1}')
           LIMIT 2)sql"),
-              error::ApproxDistanceInvalidShape("approx_cosine_distance"));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("The use of function APPROX_COSINE_DISTANCE "
+                                 "is not supported in this query")));
   EXPECT_THAT(Query(
                   R"sql(
           SELECT b.MyKey FROM Base b
@@ -537,7 +559,9 @@ TEST_F(ANNTest, ANNQueryWrongInput) {
             b.Embedding, b.Embedding2,
             options => JSON '{"num_leaves_to_search": 1}')
           LIMIT 2)sql"),
-              error::ApproxDistanceInvalidShape("approx_cosine_distance"));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("The use of function APPROX_COSINE_DISTANCE "
+                                 "is not supported in this query")));
   EXPECT_THAT(Query(
                   R"sql(
           SELECT b.MyKey FROM Base b
@@ -559,7 +583,9 @@ TEST_F(ANNTest, ANNQueryNoLimit) {
             b.Embedding, ARRAY<FLOAT32>[1.0, 0.1],
             options => JSON '{"num_leaves_to_search": 1}')
           )sql"),
-              error::ApproxDistanceInvalidShape("approx_cosine_distance"));
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("The use of function APPROX_COSINE_DISTANCE "
+                                 "is not supported in this query")));
 }
 
 TEST_F(ANNTest, AlterVectorIndex) {

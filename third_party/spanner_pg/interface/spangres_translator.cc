@@ -31,30 +31,38 @@
 
 #include "third_party/spanner_pg/interface/spangres_translator.h"
 
-#include <limits>
+#include <cstdint>
+#include <functional>
 #include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "zetasql/base/logging.h"
-#include "zetasql/parser/parser.h"
 #include "zetasql/public/analyzer.h"
+#include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/analyzer_output.h"
-#include "zetasql/public/language_options.h"
+#include "zetasql/public/analyzer_output_properties.h"
+#include "zetasql/public/function_signature.h"
 #include "zetasql/public/options.pb.h"
+#include "zetasql/public/strings.h"
+#include "zetasql/public/types/type.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_ast_visitor.h"
+#include "zetasql/resolved_ast/resolved_ast_deep_copy_visitor.h"
 #include "zetasql/resolved_ast/validator.h"
-#include "absl/cleanup/cleanup.h"
 #include "absl/flags/flag.h"
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
+#include "third_party/spanner_pg/catalog/catalog_adapter.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter_holder.h"
+#include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/catalog/spangres_system_catalog.h"
 #include "third_party/spanner_pg/catalog/spangres_user_catalog.h"
+#include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/interface/memory_reservation_manager.h"
 #include "third_party/spanner_pg/interface/parser_interface.h"
 #include "third_party/spanner_pg/interface/parser_output.h"
@@ -62,16 +70,15 @@
 #include "third_party/spanner_pg/interface/spangres_translator_interface.h"
 #include "third_party/spanner_pg/interface/sql_builder.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
-#include "third_party/spanner_pg/shims/memory_context_manager.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
-#include "third_party/spanner_pg/shims/memory_reservation_holder.h"
 #include "third_party/spanner_pg/shims/parser_output_serialization.h"
 #include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"
 #include "third_party/spanner_pg/shims/timezone_helper.h"
 #include "third_party/spanner_pg/transformer/forward_transformer.h"
 #include "third_party/spanner_pg/transformer/transformer.h"
-#include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
+#include "zetasql/base/ret_check.h"
+#include "zetasql/base/status_macros.h"
 
 ABSL_FLAG(int64_t, spangres_sql_length_limit, 100'000,
           "The maximum length of a supported SQL text.");
@@ -81,6 +88,11 @@ ABSL_FLAG(int64_t, spangres_stub_memory_reservation_size, 64'000'000,
 
 namespace postgres_translator {
 namespace spangres {
+namespace {
+const char* FormatNode(const void* obj) {
+  return pretty_format_node_dump(nodeToString(obj));
+}
+}  // namespace
 
 SpangresTranslator::SpangresTranslator() {}
 
@@ -132,6 +144,79 @@ SpangresTranslator::GetParserQueryOutput(
   return absl::InternalError(
       "TranslateParsedQueryParams did not contain serialized or deserialized "
       "parser output");
+}
+
+absl::StatusOr<std::unique_ptr<zetasql::ResolvedCreateFunctionStmt>>
+WrapInResolvedCreateFunctionStmt(
+    const zetasql::ResolvedStatement* stmt,
+    const std::vector<std::string>& input_params,
+    const std::map<std::string, const zetasql::Type*>& param_types_map) {
+  const zetasql::ResolvedExpr* expr = nullptr;
+  std::vector<const zetasql::ResolvedNode*> child_nodes;
+  stmt->GetChildNodes(&child_nodes);
+  for (const zetasql::ResolvedNode* child_node : child_nodes) {
+    std::cerr << "child_node: " << child_node->node_kind_string() << "\n";
+    // Get the ResolvedScan
+    std::vector<const zetasql::ResolvedNode*> scan_child_nodes;
+    if (child_node->IsScan()) {
+      std::cerr << "child_node is a scan\n";
+      const zetasql::ResolvedScan* scan =
+          child_node->GetAs<zetasql::ResolvedScan>();
+      scan->GetChildNodes(&scan_child_nodes);
+      if (!scan_child_nodes.empty()) {
+        const zetasql::ResolvedComputedColumn* computed_column =
+            scan_child_nodes[0]->GetAs<zetasql::ResolvedComputedColumn>();
+        expr = computed_column->expr();
+      }
+    }
+  }
+  // Create a deep copy visitor
+  zetasql::ResolvedASTDeepCopyVisitor deep_copy_visitor;
+  // Accept the visitor on the expression
+  ZETASQL_RETURN_IF_ERROR(expr->Accept(&deep_copy_visitor));
+  // Consume the copied expression
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<zetasql::ResolvedExpr> copied_expr,
+      deep_copy_visitor.ConsumeRootNode<zetasql::ResolvedExpr>());
+
+  // Get the return type from the output column list of stmt
+  const zetasql::ResolvedQueryStmt* query_stmt =
+      stmt->GetAs<zetasql::ResolvedQueryStmt>();
+  ZETASQL_RET_CHECK_NE(query_stmt, nullptr);
+  const zetasql::Type* return_type =
+      query_stmt->output_column_list()[0]->column().type();
+
+  zetasql::FunctionArgumentTypeList arg_list;
+  for (const std::string& param_name : input_params) {
+    auto it = param_types_map.find(param_name);
+    if (it == param_types_map.end()) {
+      return absl::InternalError(
+          absl::StrCat("Could not find type for parameter: ", param_name));
+    }
+    arg_list.push_back(it->second);
+  }
+  auto signature =
+      std::make_unique<zetasql::FunctionSignature>(return_type, arg_list,
+                                                     /*context_id=*/0);
+  // Create the ResolvedCreateFunctionStmt to validate the expression.
+  std::unique_ptr<zetasql::ResolvedCreateFunctionStmt> create_function_stmt =
+      zetasql::MakeResolvedCreateFunctionStmt(
+          /*name_path=*/{"foo"},
+          zetasql::ResolvedCreateStatement::CREATE_DEFAULT_SCOPE,
+          zetasql::ResolvedCreateStatement::CREATE_DEFAULT,
+          /*has_explicit_return_type=*/true, return_type, input_params,
+          *signature,
+          /*is_aggregate=*/false,
+          /*language=*/"SQL",
+          /*code=*/"",
+          /*aggregate_expression_list=*/{},
+          /*function_expression=*/std::move(copied_expr),
+          /*option_list=*/{},
+          zetasql::ResolvedCreateStatement::SQL_SECURITY_UNSPECIFIED,
+          zetasql::ResolvedCreateStatement::DETERMINISM_UNSPECIFIED,
+          /*is_remote=*/false,
+          /*connection=*/nullptr);
+  return create_function_stmt;
 }
 
 absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
@@ -201,6 +286,17 @@ SpangresTranslator::TranslateParsedTree(
                        parser_output->token_locations()));
 
   RawStmt* raw_stmt = linitial_node(RawStmt, parser_output->parse_tree());
+  std::vector<std::string> input_arguments;
+  if (IsA(raw_stmt->stmt, CreateFunctionStmt)) {
+    CreateFunctionStmt* create_function_stmt =
+        internal::PostgresCastNode(CreateFunctionStmt, raw_stmt->stmt);
+    for (ListCell* lc = list_head(create_function_stmt->parameters);
+         lc != nullptr; lc = lnext(create_function_stmt->parameters, lc)) {
+      FunctionParameter* func_param =
+          internal::PostgresCastNode(FunctionParameter, lfirst(lc));
+      input_arguments.push_back(std::string(func_param->name));
+    }
+  }
 
   // Transform the prepared statement parameter types from ZetaSQL types to
   // PostgreSQL type oids.
@@ -235,8 +331,10 @@ SpangresTranslator::TranslateParsedTree(
     ZETASQL_RETURN_IF_ERROR(query_deparser_callback(pg_query));
   }
 
+  bool is_create_function_stmt = IsA(raw_stmt->stmt, CreateFunctionStmt);
   auto transformer = std::make_unique<postgres_translator::ForwardTransformer>(
-      catalog_adapter_holder->ReleaseCatalogAdapter());
+      catalog_adapter_holder->ReleaseCatalogAdapter(), input_arguments,
+      is_create_function_stmt);
   ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedStatement> stmt,
                    transformer->BuildGsqlResolvedStatement(*pg_query));
 
@@ -244,7 +342,19 @@ SpangresTranslator::TranslateParsedTree(
 
     zetasql::Validator validator(
         params.googlesql_analyzer_options().language());
-    ZETASQL_RETURN_IF_ERROR(validator.ValidateResolvedStatement(stmt.get()));
+
+    if (is_create_function_stmt) {
+      ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedCreateFunctionStmt>
+                           create_function_stmt,
+                       WrapInResolvedCreateFunctionStmt(
+                           stmt.get(), input_arguments,
+                           transformer->create_func_arg_types()));
+
+      ZETASQL_RETURN_IF_ERROR(
+          validator.ValidateResolvedStatement(create_function_stmt.get()));
+    } else {
+      ZETASQL_RETURN_IF_ERROR(validator.ValidateResolvedStatement(stmt.get()));
+    }
 
   int max_column_id = transformer->catalog_adapter().max_column_id();
 
@@ -262,7 +372,11 @@ SpangresTranslator::TranslateParsedTree(
       max_column_id);
   // TODO: Gate this check behind a schema flag.
   if (enable_rewrite) {
-    ZETASQL_RETURN_IF_ERROR(RewriteTranslatedTree(analyzer_output.get(), params));
+    // NOTE: Unnecessary to rewrite the expression for the extracted expression
+    // in the create function statement.
+    if (!is_create_function_stmt) {
+      ZETASQL_RETURN_IF_ERROR(RewriteTranslatedTree(analyzer_output.get(), params));
+    }
   }
   return analyzer_output;
 }
@@ -286,10 +400,12 @@ SpangresTranslator::TranslateParsedQuery(
 }
 
 absl::StatusOr<interfaces::ExpressionTranslateResult>
-SpangresTranslator::TranslateTableLevelExpression(
-    interfaces::TranslateQueryParams params, absl::string_view table_name) {
+SpangresTranslator::TranslateExpression(
+    interfaces::TranslateQueryParams params,
+    std::optional<absl::string_view> table_name) {
+  std::string wrapped_expression;
   // Wrap the expression in SELECT <expression> FROM <table_name>.
-  ZETASQL_ASSIGN_OR_RETURN(std::string wrapped_expression,
+  ZETASQL_ASSIGN_OR_RETURN(wrapped_expression,
                    WrapExpressionInSelect(params.sql_expression(), table_name));
 
   // Get the parser to construct a new instance of TranslateQueryParams.
@@ -305,7 +421,7 @@ SpangresTranslator::TranslateTableLevelExpression(
   ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserOutput parser_output,
                    std::move(*parser_single_output.mutable_output()));
 
-  return TranslateParsedTableLevelExpression(
+  return TranslateParsedExpression(
       interfaces::TranslateParsedQueryParamsBuilder(
           std::move(parser_output), {}, params.engine_provided_catalog(),
           wrapped_params.TransferEngineBuiltinFunctionCatalog())
@@ -316,9 +432,9 @@ SpangresTranslator::TranslateTableLevelExpression(
 }
 
 absl::StatusOr<interfaces::ExpressionTranslateResult>
-SpangresTranslator::TranslateParsedTableLevelExpression(
+SpangresTranslator::TranslateParsedExpression(
     interfaces::TranslateParsedQueryParams params,
-    absl::string_view table_name) {
+    std::optional<absl::string_view> table_name) {
   static auto expression_deparser = [](std::string* deparsed_expression,
                                        Query* query) -> absl::Status {
     ZETASQL_RET_CHECK_NE(query->targetList, nullptr)
@@ -357,27 +473,23 @@ SpangresTranslator::TranslateParsedTableLevelExpression(
   // in the `params`. If serialized_parse_tree() is not null, then use the
   // deserializer to construct parsed tree, otherwise, get the parsed tree
   // from `params` directly.
+  std::function<decltype(GetParserQueryOutput)> parser_output_getter;
   if (params.serialized_parse_tree() != nullptr) {
-    ZETASQL_ASSIGN_OR_RETURN(
-        analyzer_output,
-        TranslateParsedTree(params,
-                            bind(GetParserExpressionOutput, table_name,
-                                 std::placeholders::_1, std::placeholders::_2),
-                            bind(expression_deparser, &deparsed_expression,
-                                 std::placeholders::_1),
-                            // See this function's comment to understand why we
-                            // disable the rewriter.
-                            /*enable_rewrite=*/false));
+    parser_output_getter =
+        std::bind(GetParserExpressionOutput, table_name, std::placeholders::_1,
+                  std::placeholders::_2);
   } else {
-    ZETASQL_ASSIGN_OR_RETURN(
-        analyzer_output,
-        TranslateParsedTree(params, GetParserQueryOutput,
-                            bind(expression_deparser, &deparsed_expression,
-                                 std::placeholders::_1),
-                            // See this function's comment to understand why we
-                            // disable the rewriter.
-                            /*enable_rewrite=*/false));
+    parser_output_getter = std::bind(
+        GetParserQueryOutput, std::placeholders::_1, std::placeholders::_2);
   }
+  ZETASQL_ASSIGN_OR_RETURN(
+      analyzer_output,
+      TranslateParsedTree(params, parser_output_getter,
+                          std::bind(expression_deparser, &deparsed_expression,
+                                    std::placeholders::_1),
+                          // See this function's comment to understand why we
+                          // disable the rewriter.
+                          /*enable_rewrite=*/false));
 
   const zetasql::ResolvedStatement* stmt =
       analyzer_output->resolved_statement();
@@ -433,11 +545,9 @@ SpangresTranslator::TranslateParsedTableLevelExpression(
 
 absl::StatusOr<interfaces::ParserOutput>
 SpangresTranslator::GetParserExpressionOutput(
-    absl::string_view table_name,
+    std::optional<absl::string_view> table_name,
     interfaces::TranslateParsedQueryParams& params,
     std::unique_ptr<interfaces::PGArena>& arena) {
-  ZETASQL_RET_CHECK(!table_name.empty()) << "Table name can not be null or empty";
-
   ZETASQL_RET_CHECK_NE(params.serialized_parse_tree(), nullptr)
       << "Expression can not be null";
   ZETASQL_ASSIGN_OR_RETURN(
@@ -454,19 +564,22 @@ SpangresTranslator::GetParserExpressionOutput(
 }
 
 absl::StatusOr<std::string> SpangresTranslator::WrapExpressionInSelect(
-    absl::string_view expression, std::string_view table_name) {
+    absl::string_view expression, std::optional<std::string_view> table_name) {
   // Always quote the table name: $1, otherwise it cause issues, for example:
   // table_name lost the case sensitivity which can cause "table not found".
-  static constexpr char select_template[] = R"(SELECT ($0) from "$1")";
+  static constexpr char select_template_with_table[] =
+      R"(SELECT ($0) from "$1")";
+  static constexpr char select_template_without_table[] = R"(SELECT ($0))";
   ZETASQL_RET_CHECK(!expression.empty()) << "Expression can not be null or empty";
-  ZETASQL_RET_CHECK(!table_name.empty()) << "Table name can not be null or empty";
-  return absl::Substitute(select_template, expression, table_name);
+  return table_name.has_value()
+             ? absl::Substitute(select_template_with_table, expression,
+                                table_name.value())
+             : absl::Substitute(select_template_without_table, expression);
 }
 
 absl::StatusOr<List*> SpangresTranslator::WrapExpressionInSelect(
-    Node* expression, std::string_view table_name) {
+    Node* expression, std::optional<absl::string_view> table_name) {
   ZETASQL_RET_CHECK_NE(expression, nullptr) << "Expression can not be null";
-  ZETASQL_RET_CHECK(!table_name.empty()) << "Table name can not be null or empty";
 
   // List of statements
   ZETASQL_ASSIGN_OR_RETURN(RawStmt * raw_stmt, CheckedPgMakeNode(RawStmt));
@@ -483,11 +596,16 @@ absl::StatusOr<List*> SpangresTranslator::WrapExpressionInSelect(
   ZETASQL_ASSIGN_OR_RETURN(List * target_list, CheckedPgLappend(/*list=*/nullptr, rt));
   select->targetList = target_list;
 
-  // Set table name in SELECT's FROM clause
-  ZETASQL_ASSIGN_OR_RETURN(RangeVar * relation, CheckedPgMakeNode(RangeVar));
-  ZETASQL_ASSIGN_OR_RETURN(relation->relname, CheckedPgPstrdup(table_name.data()));
-  ZETASQL_ASSIGN_OR_RETURN(List * from_clause, CheckedPgLappend(nullptr, relation));
-  select->fromClause = from_clause;
+  if (table_name.has_value()) {
+    // Set table name in SELECT's FROM clause
+    ZETASQL_ASSIGN_OR_RETURN(RangeVar * relation, CheckedPgMakeNode(RangeVar));
+    ZETASQL_ASSIGN_OR_RETURN(relation->relname, CheckedPgPstrdup(table_name->data()));
+    ZETASQL_ASSIGN_OR_RETURN(List * from_clause, CheckedPgLappend(nullptr, relation));
+    RawStmt* raw_stmt =
+        internal::PostgresCastNode(RawStmt, linitial(wrapped_tree));
+    SelectStmt* select = internal::PostgresCastNode(SelectStmt, raw_stmt->stmt);
+    select->fromClause = from_clause;
+  }
 
   return wrapped_tree;
 }
@@ -560,6 +678,65 @@ SpangresTranslator::TranslateParsedQueryInView(
       builder.Process(*analyzer_output.get()->resolved_statement()));
 
   return interfaces::ExpressionTranslateResult{deparsed_query, builder.sql()};
+}
+
+absl::StatusOr<interfaces::ExpressionTranslateResult>
+SpangresTranslator::TranslateFunctionBody(
+    interfaces::TranslateQueryParams params) {
+  ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserSingleOutput parser_single_output,
+                   GetQueryParserOutput(params));
+  ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserOutput parser_output,
+                   std::move(*parser_single_output.mutable_output()));
+  return TranslateParsedFunctionBody(interfaces::TranslateParsedQueryParams(
+      std::move(parser_output), params.TransferCommonParams()));
+}
+
+absl::StatusOr<interfaces::ExpressionTranslateResult>
+SpangresTranslator::TranslateParsedFunctionBody(
+    interfaces::TranslateParsedQueryParams params) {
+  // Deparse the query to standardize the formatting of the string
+  static auto query_deparser = [](std::string* deparsed_query,
+                                  Query* query) -> absl::Status {
+    ZETASQL_RET_CHECK_NE(query, nullptr) << "Query should not be null";
+
+    void* obj = list_head(query->targetList)->ptr_value;
+    Expr* expr = internal::PostgresCastNode(TargetEntry, obj)->expr;
+    ZETASQL_ASSIGN_OR_RETURN(
+        absl::string_view deparsed,
+        CheckedPgDeparseExprInQuery(internal::PostgresCastToNode(expr), query));
+
+    deparsed_query->assign(deparsed);
+    return absl::OkStatus();
+  };
+
+  std::string deparsed_query;
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<zetasql::AnalyzerOutput> analyzer_output,
+      TranslateParsedTree(
+          params, GetParserQueryOutput,
+          bind(query_deparser, &deparsed_query, std::placeholders::_1), true));
+
+  // pull the expression out of the select statement
+  const zetasql::ResolvedQueryStmt* query =
+      analyzer_output->resolved_statement()
+          ->GetAs<zetasql::ResolvedQueryStmt>();
+  // Process and extract the ResolvedExpr from statement.
+  const zetasql::ResolvedProjectScan* project_scan =
+      query->query()->GetAs<zetasql::ResolvedProjectScan>();
+
+  // Note that here for function creation we explicitly execute the statement
+  // to take advantage of the input validations found there.
+  // TODO: Fix the error message in google sql analyzer.
+  ZETASQL_RET_CHECK_EQ(project_scan->expr_list().size(), 1)
+      << "Expected 1 expression in scan from function body";
+  const zetasql::ResolvedExpr* expr = project_scan->expr_list(0)->expr();
+  ZETASQL_RET_CHECK_NE(expr, nullptr) << "Expr in ResolvedExpr should not be null";
+
+  SQLBuilder builder;
+  ZETASQL_RETURN_IF_ERROR(builder.Process(*expr));
+  ZETASQL_ASSIGN_OR_RETURN(std::string sql, builder.GetSql());
+
+  return interfaces::ExpressionTranslateResult{deparsed_query, sql};
 }
 
 }  // namespace spangres

@@ -8501,11 +8501,17 @@ index_elem: ColId index_elem_options
 				{
 					$$ = $2;
 					$$->expr = $1;
+					int expr_start = @1;
+					int expr_end  = @2 == -1 ? pg_yyget_extra(yyscanner)->current_yylloc : @2;
+					$$->expr_string = pnstrdup(pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf + expr_start, expr_end - expr_start);
 				}
 			| '(' a_expr ')' index_elem_options
 				{
 					$$ = $4;
 					$$->expr = $2;
+					int expr_start = @2;
+					int expr_end  = @3 == -1 ? pg_yyget_extra(yyscanner)->current_yylloc : @3;
+					$$->expr_string = pnstrdup(pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf + expr_start, expr_end - expr_start);
 				}
 		;
 

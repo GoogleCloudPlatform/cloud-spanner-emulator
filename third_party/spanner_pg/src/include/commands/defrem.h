@@ -50,6 +50,10 @@ extern Oid ResolveOpClass(List *opclass, Oid attrType,
 			   const char *accessMethodName, Oid accessMethodId);
 /* commands/functioncmds.c */
 extern ObjectAddress CreateFunction(ParseState *pstate, CreateFunctionStmt *stmt);
+// BEGIN SPANGRES: Used to validate and analyze create function statements.
+extern Query *CreateFunctionQuery(ParseState *pstate, CreateFunctionStmt *stmt,
+                                  Oid languageOid);
+// END SPANGRES
 extern void RemoveFunctionById(Oid funcOid);
 extern ObjectAddress AlterFunction(ParseState *pstate, AlterFunctionStmt *stmt);
 extern ObjectAddress CreateCast(CreateCastStmt *stmt);

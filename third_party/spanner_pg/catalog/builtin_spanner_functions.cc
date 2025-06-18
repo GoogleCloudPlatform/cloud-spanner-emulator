@@ -236,12 +236,6 @@ static void AddPgNumericNewFunctions(
   std::string emulator_mod_fn_name = "pg.numeric_mod";
   std::string emulator_div_trunc_fn_name = "pg.numeric_div_trunc";
   std::string emulator_uminus_fn_name = "pg.numeric_uminus";
-  std::string emulator_eq_fn_name = "pg.numeric_eq";
-  std::string emulator_neq_fn_name = "pg.numeric_ne";
-  std::string emulator_lt_fn_name = "pg.numeric_lt";
-  std::string emulator_le_fn_name = "pg.numeric_le";
-  std::string emulator_gt_fn_name = "pg.numeric_gt";
-  std::string emulator_ge_fn_name = "pg.numeric_ge";
   functions.push_back(
       {"numeric_add",
        "$add",
@@ -321,49 +315,37 @@ static void AddPgNumericNewFunctions(
        "$equal",
        {{{gsql_bool,
           {gsql_pg_numeric, gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_eq_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
   functions.push_back(
       {"numeric_ne",
        "$not_equal",
        {{{gsql_bool,
           {gsql_pg_numeric, gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_neq_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
   functions.push_back(
       {"numeric_lt",
        "$less",
        {{{gsql_bool,
           {gsql_pg_numeric, gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_lt_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
   functions.push_back(
       {"numeric_le",
        "$less_or_equal",
        {{{gsql_bool,
           {gsql_pg_numeric, gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_le_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
   functions.push_back(
       {"numeric_ge",
        "$greater_or_equal",
        {{{gsql_bool,
           {gsql_pg_numeric, gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_ge_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
   functions.push_back(
       {"numeric_gt",
        "$greater",
        {{{gsql_bool,
           {gsql_pg_numeric, gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_gt_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
 
   constexpr zetasql::Function::Mode AGGREGATE =
       zetasql::Function::AGGREGATE;
@@ -561,6 +543,98 @@ static void AddPgJsonbNewFunctions(
                        {{{gsql_bool,
                           {gsql_pg_jsonb, gsql_string_arr},
                           /*context_ptr=*/nullptr}}}});
+    // Register new function mapping for `-` operator on JSONB.
+    functions.push_back({"jsonb_delete",
+                         "pg.jsonb_delete",
+                         {{{gsql_pg_jsonb,
+                            {gsql_pg_jsonb, gsql_string},
+                            /*context_ptr=*/nullptr}},
+                          {{gsql_pg_jsonb,
+                            {gsql_pg_jsonb, gsql_int64},
+                            /*context_ptr=*/nullptr}}}});
+
+    // Register new function mapping for `#-` operator on JSONB.
+    functions.push_back({"jsonb_delete_path",
+                         "pg.jsonb_delete_path",
+                         {{{gsql_pg_jsonb,
+                            {gsql_pg_jsonb, gsql_string_arr},
+                            /*context_ptr=*/nullptr}}}});
+
+    functions.push_back(
+        {"jsonb_set",
+         "pg.jsonb_set",
+         {{{gsql_pg_jsonb,
+            {gsql_pg_jsonb, gsql_string_arr, gsql_pg_jsonb, gsql_bool},
+            /*context_ptr=*/nullptr}}}});
+
+    functions.push_back({"jsonb_set_lax",
+                         "pg.jsonb_set_lax",
+                         {{{gsql_pg_jsonb,
+                            {gsql_pg_jsonb, gsql_string_arr, gsql_pg_jsonb,
+                             gsql_bool, gsql_string},
+                            /*context_ptr=*/nullptr}}}});
+
+    functions.push_back({"jsonb_concat",
+                         "pg.jsonb_concat",
+                         {{{gsql_pg_jsonb,
+                            {gsql_pg_jsonb, gsql_pg_jsonb},
+                            /*context_ptr=*/nullptr}}}});
+
+    functions.push_back(
+        {"jsonb_insert",
+         "pg.jsonb_insert",
+         {{{gsql_pg_jsonb,
+            {gsql_pg_jsonb, gsql_string_arr, gsql_pg_jsonb, gsql_bool},
+            /*context_ptr=*/nullptr}}}});
+
+    functions.push_back({"jsonb_strip_nulls",
+                         "pg.jsonb_strip_nulls",
+                         {{{gsql_pg_jsonb,
+                            {gsql_pg_jsonb},
+                            /*context_ptr=*/nullptr}}}});
+
+  zetasql::FunctionArgumentTypeOptions repeated(
+      zetasql::FunctionArgumentType::REPEATED);
+  functions.push_back(
+      {"jsonb_build_object",
+       "pg.jsonb_build_object",
+       {{{gsql_pg_jsonb,
+          {{gsql_string, zetasql::FunctionArgumentType::REPEATED},
+           {zetasql::SignatureArgumentKind::ARG_TYPE_ARBITRARY,
+            zetasql::FunctionArgumentType::REPEATED}},
+          /*context_ptr=*/nullptr},
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/"",
+         F_JSONB_BUILD_OBJECT_ANY},
+        {{gsql_pg_jsonb, {}, /*context_ptr=*/nullptr},
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/"",
+         F_JSONB_BUILD_OBJECT_}}});
+
+  functions.push_back(
+      {"jsonb_build_array",
+        "pg.jsonb_build_array",
+        {{{gsql_pg_jsonb,
+          {{zetasql::SignatureArgumentKind::ARG_TYPE_ARBITRARY,
+            zetasql::FunctionArgumentType::REPEATED}},
+          /*context_ptr=*/nullptr},
+          /*has_mapped_function=*/true,
+          /*explicit_mapped_function_name=*/"",
+          F_JSONB_BUILD_ARRAY_ANY},
+        {{gsql_pg_jsonb, {}, /*context_ptr=*/nullptr},
+          /*has_mapped_function=*/true,
+          /*explicit_mapped_function_name=*/"",
+          F_JSONB_BUILD_ARRAY_}}});
+
+  functions.push_back(
+      {"jsonb_query_array",
+        "json_query_array",
+        {{{gsql_pg_jsonb_arr, {gsql_pg_jsonb}, /*context_ptr=*/nullptr},
+          /*has_mapped_function=*/true,
+          /*explicit_mapped_function_name=*/
+          emulator_jsonb_query_array_fn_name}},
+        /*mode=*/zetasql::Function::SCALAR,
+        /*postgres_namespace=*/"spanner"});
 }
 
 void AddPgJsonbFunctions(std::vector<PostgresFunctionArguments>& functions) {
@@ -608,56 +682,31 @@ static void AddPgOidSignaturesForExistingFunctions(
 static void AddPgOidSignaturesForNewFunctions(
     std::vector<PostgresFunctionArguments>& functions) {
   const zetasql::Type* gsql_oid = types::PgOidMapping()->mapped_type();
-  std::string emulator_eq_fn_name = "pg.oideq";
-  std::string emulator_neq_fn_name = "pg.oidne";
-  std::string emulator_lt_fn_name = "pg.oidlt";
-  std::string emulator_le_fn_name = "pg.oidle";
-  std::string emulator_gt_fn_name = "pg.oidgt";
-  std::string emulator_ge_fn_name = "pg.oidge";
 
   functions.push_back(
     {"oideq",
     "$equal",
-    {{{gsql_bool,
-        {gsql_oid, gsql_oid},
-        /*context_ptr=*/nullptr},
-      /*has_mapped_function=*/true,
-      /*explicit_mapped_function_name=*/emulator_eq_fn_name}}});
+    {{{gsql_bool, {gsql_oid, gsql_oid}, /*context_ptr=*/nullptr}}}});
   functions.push_back(
     {"oidne",
     "$not_equal",
-    {{{gsql_bool, {gsql_oid, gsql_oid},
-        /*context_ptr=*/nullptr},
-      /*has_mapped_function=*/true,
-      /*explicit_mapped_function_name=*/emulator_neq_fn_name}}});
+    {{{gsql_bool, {gsql_oid, gsql_oid}, /*context_ptr=*/nullptr}}}});
   functions.push_back(
     {"oidlt",
     "$less",
-    {{{gsql_bool, {gsql_oid, gsql_oid},
-        /*context_ptr=*/nullptr},
-      /*has_mapped_function=*/true,
-      /*explicit_mapped_function_name=*/emulator_lt_fn_name}}});
+    {{{gsql_bool, {gsql_oid, gsql_oid}, /*context_ptr=*/nullptr}}}});
   functions.push_back(
     {"oidle",
     "$less_or_equal",
-    {{{gsql_bool, {gsql_oid, gsql_oid},
-        /*context_ptr=*/nullptr},
-      /*has_mapped_function=*/true,
-      /*explicit_mapped_function_name=*/emulator_le_fn_name}}});
+    {{{gsql_bool, {gsql_oid, gsql_oid}, /*context_ptr=*/nullptr}}}});
   functions.push_back(
     {"oidgt",
     "$greater",
-    {{{gsql_bool, {gsql_oid, gsql_oid},
-        /*context_ptr=*/nullptr},
-      /*has_mapped_function=*/true,
-      /*explicit_mapped_function_name=*/emulator_gt_fn_name}}});
+    {{{gsql_bool, {gsql_oid, gsql_oid}, /*context_ptr=*/nullptr}}}});
   functions.push_back(
     {"oidge",
     "$greater_or_equal",
-    {{{gsql_bool, {gsql_oid, gsql_oid},
-        /*context_ptr=*/nullptr},
-      /*has_mapped_function=*/true,
-      /*explicit_mapped_function_name=*/emulator_ge_fn_name}}});
+    {{{gsql_bool, {gsql_oid, gsql_oid}, /*context_ptr=*/nullptr}}}});
 }
 
 void AddPgOidFunctions(std::vector<PostgresFunctionArguments>& functions) {

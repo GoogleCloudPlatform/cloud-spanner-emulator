@@ -64,6 +64,10 @@
 
 namespace postgres_translator {
 
+typedef std::pair<const zetasql::Function*,
+                  const zetasql::FunctionSignature*>
+    FunctionSigPair;
+
 ABSL_CONST_INIT static absl::Mutex engine_system_catalog_mutex(
     absl::kConstInit);
 
@@ -252,6 +256,12 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // Output should be populated with the mapped builtin functions.
   absl::Status GetFunctions(
       absl::flat_hash_set<const zetasql::Function*>* output) const override;
+
+  // GetFunctionSigPairs is used by RQG builders to get function signature pairs
+  // for a specific function by name.
+  // Output should be populated with the mapped builtin functions.
+  absl::StatusOr<std::vector<FunctionSigPair>> GetFunctionSigPairs(
+      absl::string_view function_name) const;
 
   // GetSetReturningFunctions is used to surface the registered system Set
   // Returning Functions (SRFs) for the random query generator. Output should be

@@ -50,7 +50,7 @@ class EmulatorFeatureFlags {
     bool enable_search_index = true;
     bool enable_hidden_column = true;
     bool enable_default_time_zone = true;
-    bool enable_property_graph_information_schema = false;
+    bool enable_property_graph_information_schema = true;
   };
 
   static const EmulatorFeatureFlags& instance() {

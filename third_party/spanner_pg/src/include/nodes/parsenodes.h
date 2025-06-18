@@ -763,6 +763,7 @@ typedef struct IndexElem
 	NodeTag		type;
 	char	   *name;			/* name of attribute to index, or NULL */
 	Node	   *expr;			/* expression to index, or NULL */
+  char     *expr_string;   /* string representation of expression */
 	char	   *indexcolname;	/* name for index column; NULL = default */
 	List	   *collation;		/* name of collation; NIL = default */
 	List	   *opclass;		/* name of desired opclass; NIL = default */

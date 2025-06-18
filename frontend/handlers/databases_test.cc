@@ -447,6 +447,30 @@ TEST_F(DatabaseApiTest, GetDatabase) {
   database_api::Database database;
   ZETASQL_EXPECT_OK(GetDatabase(test_database_uri_, &database));
   EXPECT_EQ(database.name(), test_database_uri_);
+  EXPECT_EQ(database.database_dialect(),
+            database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+}
+
+TEST_F(DatabaseApiTest, GetDatabaseWithGSQLDialect) {
+  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_, {},
+                           database_api::DatabaseDialect::GOOGLE_STANDARD_SQL));
+
+  database_api::Database database;
+  ZETASQL_EXPECT_OK(GetDatabase(test_database_uri_, &database));
+  EXPECT_EQ(database.name(), test_database_uri_);
+  EXPECT_EQ(database.database_dialect(),
+            database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+}
+
+TEST_F(DatabaseApiTest, GetDatabaseWithPostgresDialect) {
+  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_, {},
+                           database_api::DatabaseDialect::POSTGRESQL));
+
+  database_api::Database database;
+  ZETASQL_EXPECT_OK(GetDatabase(test_database_uri_, &database));
+  EXPECT_EQ(database.name(), test_database_uri_);
+  EXPECT_EQ(database.database_dialect(),
+            database_api::DatabaseDialect::POSTGRESQL);
 }
 
 TEST_F(DatabaseApiTest, DropDatabaseInvalidInstance) {

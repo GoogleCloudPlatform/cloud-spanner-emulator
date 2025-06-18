@@ -462,6 +462,9 @@ void StripPgQueryDifferences(Query* pg_query) {
          StructList<InferenceElem*>(pg_query->onConflict->arbiterElems)) {
       StripPgExpr(PostgresCastToExpr(elem->expr));
     }
+    if (pg_query->onConflict->onConflictWhere != nullptr) {
+      StripPgExpr(PostgresCastToExpr(pg_query->onConflict->onConflictWhere));
+    }
     for (TargetEntry* entry :
          StructList<TargetEntry*>(pg_query->onConflict->onConflictSet)) {
       StripTargetEntry(entry);
@@ -496,6 +499,10 @@ class TransformTestCase {
     parameter_types_ = parameter_types;
     return *this;
   }
+  TransformTestCase& SetFlagOverride(absl::Flag<bool>* flag, bool value) {
+    flag_overrides_.push_back(std::make_pair(flag, value));
+    return *this;
+  }
   const std::string& name() const { return name_; }
   int planning_phases() const { return planning_phases_; }
   const std::string& pg_query() const { return pg_query_; }
@@ -503,6 +510,10 @@ class TransformTestCase {
   const absl::flat_hash_map<std::string, const zetasql::Type*>&
   parameter_types() const {
     return parameter_types_;
+  }
+  const std::vector<std::pair<absl::Flag<bool>*, bool>>& flag_overrides()
+      const {
+    return flag_overrides_;
   }
 
   friend std::ostream& operator<<(std::ostream& os,
@@ -523,6 +534,7 @@ class TransformTestCase {
   std::string pg_query_;
   std::string gsql_query_;
   absl::flat_hash_map<std::string, const zetasql::Type*> parameter_types_;
+  std::vector<std::pair<absl::Flag<bool>*, bool>> flag_overrides_;
 };
 
 class QueryTransformationTest
@@ -537,6 +549,10 @@ TEST_P(QueryTransformationTest, TestTransform) {
   std::unique_ptr<CatalogAdapterHolder> adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options_);
   TransformTestCase test_case = GetParam();
+
+  for (const auto& [flag, value] : test_case.flag_overrides()) {
+    absl::SetFlag(flag, value);
+  }
 
   // Build the analyzer options.
   zetasql::AnalyzerOptions analyzer_options =

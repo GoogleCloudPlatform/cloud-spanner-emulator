@@ -1619,6 +1619,25 @@ TEST_P(QueryEngineTest, TestPropertyGraphBasicQuery) {
   EXPECT_EQ(ToString(result), R"(node_id(INT64) : 2,1,4,)");
 }
 
+TEST_P(QueryEngineTest, TestSQLPGQBasicQuery) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      "SELECT * "
+      "FROM "
+      "GRAPH_TABLE("
+      "  test_graph "
+      "  MATCH (a) "
+      "  RETURN a.id AS node_id)"};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), R"(node_id(INT64) : 2,1,4,)");
+}
+
 TEST_P(QueryEngineTest, TestPropertyGraphPathAggQuery) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();

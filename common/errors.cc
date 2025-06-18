@@ -4415,6 +4415,11 @@ absl::Status ReadLockModeInRepeatableReadMustBeUnspecified() {
       "REPEATABLE_READ isolation level.");
 }
 
+absl::Status RenameTableNotSupportedInPostgreSQL() {
+  return absl::Status(absl::StatusCode::kUnimplemented,
+                      "RENAME TABLE is not supported in PostgreSQL dialect.");
+}
+
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

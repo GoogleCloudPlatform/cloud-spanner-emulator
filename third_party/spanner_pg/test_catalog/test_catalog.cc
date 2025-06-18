@@ -32,10 +32,12 @@
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
 
 #include "backend/query/analyzer_options.h"
+#include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/simple_catalog.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
+#include "absl/log/check.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -87,6 +89,7 @@ void MutateLanguageOptionsForSpangres(zetasql::LanguageOptions* options) {
 }  // namespace
 
 zetasql::AnalyzerOptions GetSpangresTestAnalyzerOptions() {
+
   zetasql::AnalyzerOptions options =
       google::spanner::emulator::backend::MakeGoogleSqlAnalyzerOptions();
   // We set this option to true as some tests expect it. But the transformer can

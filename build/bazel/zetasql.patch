@@ -1,8 +1,12 @@
 diff --git a/zetasql/analyzer/BUILD b/zetasql/analyzer/BUILD
-index 590f1be1..3ca15df4 100644
+index 5c94e1ad..1d900817 100644
 --- a/zetasql/analyzer/BUILD
 +++ b/zetasql/analyzer/BUILD
-@@ -18,7 +18,7 @@ load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+@@ -15,11 +15,10 @@
+ #
+ 
+ load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+-load("@rules_cc//cc:cc_test.bzl", "cc_test")
  load(":builddefs.bzl", "gen_analyzer_test")
  
  package(
@@ -38,18 +42,6 @@ index b9a3176f..c1cf274a 100644
  
    auto wrapper_name_list = std::make_shared<NameList>();
    ZETASQL_RETURN_IF_ERROR(
-# diff --git a/bazel/zetasql_deps_step_2.bzl b/bazel/zetasql_deps_step_2.bzl
-# index 6873dbe9..872ffd5e 100644
-# --- a/bazel/zetasql_deps_step_2.bzl
-# +++ b/bazel/zetasql_deps_step_2.bzl
-# @@ -477,7 +477,6 @@ alias(
-#          flex_register_toolchains(version = "2.6.4")
-#          bison_register_toolchains(version = "3.3.2")
-#          go_rules_dependencies()
-# -        go_register_toolchains(version = "1.21.6")
-#          gazelle_dependencies()
-#          textmapper_dependencies()
- 
 diff --git a/zetasql/analyzer/resolver_expr.cc b/zetasql/analyzer/resolver_expr.cc
 index 6116b4f7..70e8c9fd 100644
 --- a/zetasql/analyzer/resolver_expr.cc
@@ -92,12 +84,15 @@ index 10596497..239c670f 100644
  # A drop in replacement for gtest_main that parsers absl flags
  cc_library(
 diff --git a/zetasql/common/BUILD b/zetasql/common/BUILD
-index cdafb15e..761e13cd 100644
+index 5c11e78f..ae05c0b7 100644
 --- a/zetasql/common/BUILD
 +++ b/zetasql/common/BUILD
-@@ -14,7 +14,7 @@
+@@ -13,10 +13,8 @@
+ # See the License for the specific language governing permissions and
  # limitations under the License.
- 
+
+-load("@rules_cc//cc:cc_test.bzl", "cc_test")
+-
  package(
 -    default_visibility = ["//zetasql/base:zetasql_implementation"],
 +    default_visibility = ["//visibility:public"],
@@ -131,7 +126,7 @@ index 433cf157..4fa4417c 100644
  
  genrule(
 diff --git a/zetasql/public/types/BUILD b/zetasql/public/types/BUILD
-index 2b42fdcb..19ff2a4e 100644
+index b93aacd0..0e096b22 100644
 --- a/zetasql/public/types/BUILD
 +++ b/zetasql/public/types/BUILD
 @@ -14,7 +14,7 @@
@@ -141,8 +136,8 @@ index 2b42fdcb..19ff2a4e 100644
 -package(default_visibility = ["//zetasql/base:zetasql_implementation"])
 +package(default_visibility = ["//visibility:public"])
  
- cc_library(
-     name = "types",
+ filegroup(
+     name = "type_headers",
  
 diff --git a/zetasql/public/value.cc b/zetasql/public/value.cc
 index 7aeffb01..c9f9f9dc 100644
@@ -188,35 +183,36 @@ index 7aeffb01..c9f9f9dc 100644
      // is replaced by "$" in the output from absl::Substitute.
      std::string templ =
 diff --git a/zetasql/reference_impl/algebrizer.cc b/zetasql/reference_impl/algebrizer.cc
-index 2e1258ab..48a3d7f4 100644
+index ebfa5f60..19371bcc 100644
 --- a/zetasql/reference_impl/algebrizer.cc
 +++ b/zetasql/reference_impl/algebrizer.cc
-@@ -6738,7 +6738,7 @@ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeTvfScan(
+@@ -7413,7 +7413,7 @@ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeTvfScan(
        ZETASQL_RET_CHECK(tvf_scan->signature()->argument(i).is_scalar());
        ZETASQL_ASSIGN_OR_RETURN(auto expr_argument,
                         AlgebrizeExpression(argument->expr()));
 -      arguments.push_back({.value = std::move(expr_argument)});
 +      arguments.push_back(TVFOp::TVFOpArgument{.value = std::move(expr_argument)});
+       arg_infos.push_back({.kind = TvfArgKind::kScalar});
        continue;
      }
- 
-@@ -6767,14 +6767,14 @@ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeTvfScan(
+@@ -7443,7 +7443,7 @@ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeTvfScan(
          columns.push_back({relation_signature_column.name,
                             argument_column.type(), input_variable});
        }
 -      arguments.push_back({.relation = TVFOp::TvfInputRelation{
 +      arguments.push_back(TVFOp::TVFOpArgument{.relation = TVFOp::TvfInputRelation{
                                 std::move(relation), std::move(columns)}});
+       arg_infos.push_back({.kind = TvfArgKind::kRelation});
        continue;
-     }
- 
+@@ -7451,7 +7451,7 @@ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeTvfScan(
+
      if (argument->model() != nullptr) {
        ZETASQL_RET_CHECK(tvf_scan->signature()->argument(i).is_model());
 -      arguments.push_back({.model = argument->model()->model()});
 +      arguments.push_back(TVFOp::TVFOpArgument{.model = argument->model()->model()});
+       arg_infos.push_back({.kind = TvfArgKind::kModel});
        continue;
      }
- 
 diff --git a/zetasql/reference_impl/relational_op.cc b/zetasql/reference_impl/relational_op.cc
 index 1619590a..a18a733f 100644
 --- a/zetasql/reference_impl/relational_op.cc
@@ -237,7 +233,7 @@ index 1619590a..a18a733f 100644
      }
  
 diff --git a/bazel/zetasql_deps_step_2.bzl b/bazel/zetasql_deps_step_2.bzl
-index 6873dbe9..223f8dbd 100644
+index dd39c53b..b0c18314 100644
 --- a/bazel/zetasql_deps_step_2.bzl
 +++ b/bazel/zetasql_deps_step_2.bzl
 @@ -19,7 +19,6 @@
@@ -256,41 +252,11 @@ index 6873dbe9..223f8dbd 100644
      rules_foreign_cc_dependencies()
  
  def textmapper_dependencies():
-@@ -49,21 +47,29 @@ def textmapper_dependencies():
-     go_repository(
-         name = "dev_lsp_go_jsonrpc2",
-         importpath = "go.lsp.dev/jsonrpc2",
-+        remote = "https://github.com/go-language-server/jsonrpc2",
-+        vcs = "git",
-         commit = "8c68d4fd37cd4bd06b62b3243f0d2292c681d164",
-     )
-     go_repository(
-         name = "dev_lsp_go_protocol",
-         importpath = "go.lsp.dev/protocol",
-+        remote = "https://github.com/go-language-server/protocol",
-+        vcs = "git",
-         commit = "da30f9ae0326cc45b76adc5cd8920ac1ffa14a15",
-     )
-     go_repository(
-         name = "dev_lsp_go_uri",
-         importpath = "go.lsp.dev/uri",
-+        remote = "https://github.com/go-language-server/uri",
-+        vcs = "git",
-         commit = "63eaac75cc850f596be19073ff6d4ec198603779",
-     )
-     go_repository(
-         name = "dev_lsp_go_pkg",
-         importpath = "go.lsp.dev/pkg",
-+        remote = "https://github.com/go-language-server/pkg",
-+        vcs = "git",
-         commit = "384b27a52fb2b5d74d78cfe89c7738e9a3e216a5",
-     )
-     go_repository(
 @@ -477,7 +483,6 @@ alias(
          flex_register_toolchains(version = "2.6.4")
          bison_register_toolchains(version = "3.3.2")
          go_rules_dependencies()
--        go_register_toolchains(version = "1.21.6")
+-        go_register_toolchains(version = "1.23.6")
          gazelle_dependencies()
          textmapper_dependencies()
  

@@ -70,7 +70,13 @@ CREATE TABLE named_schema.ns_table_2 (
   key1 INT64,
   key2 INT64
 ) PRIMARY KEY (key1);
-ALTER TABLE named_schema.ns_table_2 ADD CONSTRAINT fk_ns_table_2 FOREIGN KEY (key1) REFERENCES named_schema.ns_table_1(key1);
+CREATE SCHEMA named_schema2;
+CREATE TABLE named_schema2.ns_table_1 (
+  key1 INT64,
+  key2 STRING(256),
+  bool_value BOOL,
+) PRIMARY KEY (key1);
+ALTER TABLE named_schema.ns_table_2 ADD CONSTRAINT fk_ns_table_2 FOREIGN KEY (key1) REFERENCES named_schema2.ns_table_1(key1);
 CREATE UNIQUE INDEX named_schema.ns_index ON named_schema.ns_table_1 (key1 ASC);
 CREATE VIEW named_schema.ns_view SQL SECURITY INVOKER AS SELECT t.key1 FROM named_schema.ns_table_1 as t;
 CREATE SEQUENCE test_sequence OPTIONS (sequence_kind = 'bit_reversed_positive', start_with_counter = 1234);
@@ -202,7 +208,14 @@ CREATE TABLE named_schema.ns_table_2 (
   key2 bigint,
   PRIMARY KEY (key1)
 );
-ALTER TABLE named_schema.ns_table_2 ADD CONSTRAINT fk_ns_table_2 FOREIGN KEY (key1) REFERENCES named_schema.ns_table_1(key1);
+CREATE SCHEMA named_schema2;
+CREATE TABLE named_schema2.ns_table_1 (
+  key1 bigint,
+  key2 varchar(256),
+  bool_value bool,
+  PRIMARY KEY (key1)
+);
+ALTER TABLE named_schema.ns_table_2 ADD CONSTRAINT fk_ns_table_2 FOREIGN KEY (key1) REFERENCES named_schema2.ns_table_1(key1);
 CREATE UNIQUE INDEX ns_index ON named_schema.ns_table_1 (key1 ASC);
 CREATE VIEW named_schema.ns_view SQL SECURITY INVOKER AS SELECT t.key1 FROM named_schema.ns_table_1 as t;
 CREATE SEQUENCE test_sequence BIT_REVERSED_POSITIVE START COUNTER WITH 1234;

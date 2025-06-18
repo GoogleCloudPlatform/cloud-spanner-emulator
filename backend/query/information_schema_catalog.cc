@@ -54,7 +54,6 @@
 #include "backend/schema/parser/ddl_parser.h"
 #include "backend/schema/printer/print_ddl.h"
 #include "backend/schema/updater/ddl_type_conversion.h"
-#include "common/feature_flags.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 #include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
@@ -91,6 +90,7 @@ static constexpr char kOrdinalPosition[] = "ORDINAL_POSITION";
 static constexpr char kColumnDefault[] = "COLUMN_DEFAULT";
 static constexpr char kDataType[] = "DATA_TYPE";
 static constexpr char kIsNullable[] = "IS_NULLABLE";
+static constexpr char kIsHidden[] = "IS_HIDDEN";
 static constexpr char kSpannerType[] = "SPANNER_TYPE";
 static constexpr char kIsGenerated[] = "IS_GENERATED";
 static constexpr char kIsStored[] = "IS_STORED";
@@ -220,64 +220,40 @@ static int kBigintNumericPrecision = 64;
 static int kBinaryRepresentedNumericPrecisionRadix = 2;
 static int kDecimalRepresentedNumericPrecisionRadix = 10;
 
-// For now, this is a set of tables that are created from metadata. Once the
-// migration to auto-create tables is complete, it'll be the tables from
-// https://cloud.google.com/spanner/docs/information-schema.
-absl::flat_hash_set<std::string> GetSupportedGSQLTables() {
-  absl::flat_hash_set<std::string> supported_tables = {
-      kChangeStreams,
-      kChangeStreamColumns,
-      kChangeStreamOptions,
-      kChangeStreamTables,
-      kCheckConstraints,
-      kColumnColumnUsage,
-      kColumnOptions,
-      kColumns,
-      kConstraintColumnUsage,
-      kConstraintTableUsage,
-      kDatabaseOptions,
-      kIndexes,
-      kIndexColumns,
-      kKeyColumnUsage,
-      kLocalityGroupOptions,
-      kModels,
-      kModelOptions,
-      kModelColumns,
-      kModelColumnOptions,
-      kReferentialConstraints,
-      kSchemata,
-      kSequences,
-      kSequenceOptions,
-      kSpannerStatistics,
-      kTableConstraints,
-      kTables,
-      kViews,
-      kPropertyGraphs,
-  };
-  if (!EmulatorFeatureFlags::instance()
-           .flags()
-           .enable_property_graph_information_schema) {
-    supported_tables.erase(kPropertyGraphs);
-  }
-  return supported_tables;
-}
-
-// TODO: cleanup the feature flag and revert the functions back
-std::vector<ColumnsMetaEntry> GetColumnsMetadata() {
-  std::vector<ColumnsMetaEntry> metadata_entries = ColumnsMetadata();
-  if (!EmulatorFeatureFlags::instance()
-           .flags()
-           .enable_property_graph_information_schema) {
-    metadata_entries.erase(
-        std::remove_if(metadata_entries.begin(), metadata_entries.end(),
-                       [](const ColumnsMetaEntry& entry) {
-                         return std::string(entry.table_name) ==
-                                "PROPERTY_GRAPHS";
-                       }),
-        metadata_entries.end());
-  }
-  return metadata_entries;
-}
+static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+    // For now, this is a set of tables that are created from metadata. Once the
+    // migration to auto-create tables is complete, it'll be the tables from
+    // https://cloud.google.com/spanner/docs/information-schema.
+    kSupportedGSQLTables{{
+        kChangeStreams,
+        kChangeStreamColumns,
+        kChangeStreamOptions,
+        kChangeStreamTables,
+        kCheckConstraints,
+        kColumnColumnUsage,
+        kColumnOptions,
+        kColumns,
+        kConstraintColumnUsage,
+        kConstraintTableUsage,
+        kDatabaseOptions,
+        kIndexes,
+        kIndexColumns,
+        kKeyColumnUsage,
+        kLocalityGroupOptions,
+        kModels,
+        kModelOptions,
+        kModelColumns,
+        kModelColumnOptions,
+        kReferentialConstraints,
+        kSchemata,
+        kSequences,
+        kSequenceOptions,
+        kSpannerStatistics,
+        kTableConstraints,
+        kTables,
+        kViews,
+        kPropertyGraphs,
+    }};
 
 static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
     // For now, this is a set of tables that are created from metadata. Once the
@@ -336,11 +312,11 @@ typename std::vector<T>::const_iterator FindMetadata(
   return metadata_entries.cend();
 }
 
-// Returns a copy of an information schema column's metadata. The column's
+// Returns a reference to an information schema column's metadata. The column's
 // metadata must exist; otherwise, the process crashes with a fatal message.
-ColumnsMetaEntry GetColumnMetadata(const DatabaseDialect& dialect,
-                                   const zetasql::Table* table,
-                                   const zetasql::Column* column) {
+const ColumnsMetaEntry& GetColumnMetadata(const DatabaseDialect& dialect,
+                                          const zetasql::Table* table,
+                                          const zetasql::Column* column) {
   std::string error = "Missing metadata for column ";
   if (dialect == DatabaseDialect::POSTGRESQL) {
     std::string table_name = absl::AsciiStrToLower(table->Name());
@@ -352,9 +328,8 @@ ColumnsMetaEntry GetColumnMetadata(const DatabaseDialect& dialect,
     return *m;
   }
 
-  std::vector<ColumnsMetaEntry> columns_metadata = GetColumnsMetadata();
-  auto m = FindMetadata(columns_metadata, table->Name(), column->Name());
-  if (m == columns_metadata.end()) {
+  auto m = FindMetadata(ColumnsMetadata(), table->Name(), column->Name());
+  if (m == ColumnsMetadata().end()) {
     ABSL_LOG(FATAL) << error << table->Name() << "." << column->Name();
   }
   return *m;
@@ -541,11 +516,8 @@ InformationSchemaCatalog::InformationSchemaCatalog(
     tables_by_name_ = AddTablesFromMetadata(
         PGColumnsMetadata(), *kSpannerPGTypeToGSQLType, *kSupportedPGTables);
   } else {
-    auto metadata = GetColumnsMetadata();
-    auto tables = GetSupportedGSQLTables();
-    tables_by_name_ =
-        AddTablesFromMetadata(GetColumnsMetadata(), *kSpannerTypeToGSQLType,
-                              GetSupportedGSQLTables());
+    tables_by_name_ = AddTablesFromMetadata(
+        ColumnsMetadata(), *kSpannerTypeToGSQLType, *kSupportedGSQLTables);
   }
 
   for (auto& [name, table] : tables_by_name_) {
@@ -589,11 +561,7 @@ InformationSchemaCatalog::InformationSchemaCatalog(
   FillModelOptionsTable();
   FillModelColumnsTable();
   FillModelColumnOptionsTable();
-  if (EmulatorFeatureFlags::instance()
-          .flags()
-          .enable_property_graph_information_schema) {
-    FillPropertyGraphsTable();
-  }
+  FillPropertyGraphsTable();
 }
 
 inline std::string InformationSchemaCatalog::GetNameForDialect(
@@ -938,6 +906,7 @@ void InformationSchemaCatalog::FillColumnsTable() {
       specific_kvs[kColumnName] = String(column->Name());
       specific_kvs[kOrdinalPosition] = Int64(pos++);
       specific_kvs[kIsNullable] = String(column->is_nullable() ? kYes : kNo);
+      specific_kvs[kIsHidden] = DialectBoolValue(column->hidden());
       specific_kvs[kIsGenerated] =
           String(column->is_generated() ? kAlways : kNever);
       if (column->is_generated()) {
@@ -1018,6 +987,7 @@ void InformationSchemaCatalog::FillColumnsTable() {
       specific_kvs[kOrdinalPosition] = Int64(pos++);
       specific_kvs[kColumnDefault] = NullBytes();
       specific_kvs[kIsNullable] = String(kYes);
+      specific_kvs[kIsHidden] = DialectBoolValue(false);
       specific_kvs[kIsGenerated] = String(kNever);
       specific_kvs[kGenerationExpression] = NullString();
       specific_kvs[kIsStored] = NullString();
@@ -1067,6 +1037,7 @@ void InformationSchemaCatalog::FillColumnsTable() {
       specific_kvs[kColumnDefault] = NullBytes();
       specific_kvs[kIsNullable] = String(metadata.is_nullable);
       specific_kvs[kIsGenerated] = String(kNever);
+      specific_kvs[kIsHidden] = DialectBoolValue(false);
       specific_kvs[kGenerationExpression] = NullString();
       specific_kvs[kIsStored] = NullString();
       specific_kvs[kSpannerState] = NullString();
@@ -1971,6 +1942,9 @@ void InformationSchemaCatalog::FillReferentialConstraintsTable() {
     const auto& [table_schema_part, table_name_part] =
         GetSchemaAndNameForInformationSchema(table->Name());
     for (const auto* foreign_key : table->foreign_keys()) {
+      const auto& [referenced_table_schema_part, referenced_table_name_part] =
+          GetSchemaAndNameForInformationSchema(
+              foreign_key->referenced_table()->Name());
       rows.push_back({
           // constraint_catalog
           DialectTableCatalog(),
@@ -1981,7 +1955,7 @@ void InformationSchemaCatalog::FillReferentialConstraintsTable() {
           // unique_constraint_catalog
           DialectTableCatalog(),
           // unique_constraint_schema
-          String(table_schema_part),
+          String(referenced_table_schema_part),
           // unique_constraint_name
           String(ForeignKeyReferencedIndexName(foreign_key)),
           // match_option

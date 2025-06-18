@@ -33,11 +33,20 @@ class GCloudDatabaseAdminTest(emulator.TestCase):
                        '--instance=test-instance'), self.JoinLines(''))
     # Describe the database.
     self.assertEqual(
-        self.RunGCloud('spanner', 'databases', 'describe', 'test-database',
-                       '--instance=test-instance'),
+        self.RunGCloud(
+            'spanner',
+            'databases',
+            'describe',
+            'test-database',
+            '--instance=test-instance',
+        ),
         self.JoinLines(
+            'databaseDialect: GOOGLE_STANDARD_SQL',
             'name: projects/test-project/instances/test-instance/'
-            'databases/test-database', 'state: READY'))
+            'databases/test-database',
+            'state: READY',
+        ),
+    )
 
   def testCreateDatabaseWithProtoDescriptor(self):
     r = runfiles.Create()
@@ -54,11 +63,20 @@ class GCloudDatabaseAdminTest(emulator.TestCase):
         self.JoinLines(''))
     # Describe the database.
     self.assertEqual(
-        self.RunGCloud('spanner', 'databases', 'describe', 'test-database',
-                       '--instance=test-instance'),
+        self.RunGCloud(
+            'spanner',
+            'databases',
+            'describe',
+            'test-database',
+            '--instance=test-instance',
+        ),
         self.JoinLines(
+            'databaseDialect: GOOGLE_STANDARD_SQL',
             'name: projects/test-project/instances/test-instance/'
-            'databases/test-database', 'state: READY'))
+            'databases/test-database',
+            'state: READY',
+        ),
+    )
 
   def testListsEmptyDatabases(self):
     # Create an instance.
@@ -145,11 +163,20 @@ class GCloudDatabaseAdminTest(emulator.TestCase):
         self.JoinLines(''))
     # Describe the database.
     self.assertEqual(
-        self.RunGCloud('spanner', 'databases', 'describe', 'test-database',
-                       '--instance=test-instance'),
+        self.RunGCloud(
+            'spanner',
+            'databases',
+            'describe',
+            'test-database',
+            '--instance=test-instance',
+        ),
         self.JoinLines(
+            'databaseDialect: GOOGLE_STANDARD_SQL',
             'name: projects/test-project/instances/test-instance/'
-            'databases/test-database', 'state: READY'))
+            'databases/test-database',
+            'state: READY',
+        ),
+    )
 
     # TODO : Remove version check after GCloud version is updated.
     if self.GCloudVersion() <= 287:
@@ -192,11 +219,20 @@ class GCloudDatabaseAdminTest(emulator.TestCase):
         ), self.JoinLines(''))
     # Describe the database.
     self.assertEqual(
-        self.RunGCloud('spanner', 'databases', 'describe', 'test-database',
-                       '--instance=test-instance'),
+        self.RunGCloud(
+            'spanner',
+            'databases',
+            'describe',
+            'test-database',
+            '--instance=test-instance',
+        ),
         self.JoinLines(
+            'databaseDialect: GOOGLE_STANDARD_SQL',
             'name: projects/test-project/instances/test-instance/'
-            'databases/test-database', 'state: READY'))
+            'databases/test-database',
+            'state: READY',
+        ),
+    )
 
     # TODO : Remove version check after GCloud version is updated.
     if self.GCloudVersion() <= 287:

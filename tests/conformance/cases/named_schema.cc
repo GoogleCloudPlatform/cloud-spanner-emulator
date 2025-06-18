@@ -41,19 +41,30 @@ namespace {
 using ::absl::StatusCode;
 using ::zetasql_base::testing::StatusIs;
 
-class NamedSchemaTest : public DatabaseTest {
+class NamedSchemaTest
+    : public DatabaseTest,
+      public ::testing::WithParamInterface<database_api::DatabaseDialect> {
   absl::Status SetUpDatabase() override {
     feature_flags_setter_ = std::make_unique<ScopedEmulatorFeatureFlagsSetter>(
         EmulatorFeatureFlags::Flags{
             .enable_views = true,
         });
-    return absl::OkStatus();
+    return SetSchemaFromFile("named_schema.test");
+  }
+
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
   }
 
  protected:
   absl::StatusOr<int64_t> GetCurrentSequenceState(const std::string& name) {
     std::string query;
-    query = "SELECT GET_INTERNAL_SEQUENCE_STATE(SEQUENCE $0)";
+    if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+      query = "SELECT GET_INTERNAL_SEQUENCE_STATE(SEQUENCE $0)";
+    } else {
+      query = "SELECT spanner.get_internal_sequence_state('$0')";
+    }
     ZETASQL_ASSIGN_OR_RETURN(std::vector<ValueRow> query_result,
                      Query(absl::Substitute(query, name)));
     ZETASQL_RET_CHECK(query_result[0].values()[0].get<int64_t>().ok());
@@ -63,11 +74,15 @@ class NamedSchemaTest : public DatabaseTest {
   std::unique_ptr<ScopedEmulatorFeatureFlagsSetter> feature_flags_setter_;
 };
 
-TEST_F(NamedSchemaTest, BasicUsingDml) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(CREATE SCHEMA mynamedschema)"}));
-  ZETASQL_ASSERT_OK(UpdateSchema(
-      {R"(CREATE TABLE mynamedschema.t (col1 INT64, col2 INT64) PRIMARY KEY (col1))"}));
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectNamedSchemaTests, NamedSchemaTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<NamedSchemaTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
 
+TEST_P(NamedSchemaTest, BasicUsingDml) {
   ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {1, 2}));
   ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {3, 4}));
 
@@ -93,11 +108,7 @@ TEST_F(NamedSchemaTest, BasicUsingDml) {
               IsOkAndHoldsUnorderedRows({{3, 4}, {5, 10}}));
 }
 
-TEST_F(NamedSchemaTest, Basic) {
-  ZETASQL_ASSERT_OK(UpdateSchema(
-      {R"(CREATE SCHEMA mynamedschema)",
-       R"(CREATE TABLE mynamedschema.t (col1 INT64, col2 INT64) PRIMARY KEY (col1))"}));
-
+TEST_P(NamedSchemaTest, Basic) {
   ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {1, 2}));
   ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {3, 4}));
 
@@ -105,105 +116,70 @@ TEST_F(NamedSchemaTest, Basic) {
   EXPECT_THAT(Query("SELECT t.col1, t.col2 FROM mynamedschema.t as t"),
               IsOkAndHoldsUnorderedRows({{1, 2}, {3, 4}}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema(
-      {R"(CREATE VIEW mynamedschema.v SQL SECURITY INVOKER AS SELECT t.col1 FROM
-      mynamedschema.t)"}));
-
   EXPECT_THAT(Query("SELECT * FROM mynamedschema.v"),
               IsOkAndHoldsUnorderedRows({{1}, {3}}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema(
-      {R"(CREATE UNIQUE INDEX mynamedschema.idx ON mynamedschema.t (col2 DESC))"}));
   EXPECT_THAT(ReadAllWithIndex("mynamedschema.t", "mynamedschema.idx",
                                {"col1", "col2"}),
               IsOkAndHoldsRows({{3, 4}, {1, 2}}));
 }
 
-TEST_F(NamedSchemaTest, TableWithConstraint) {
-  ZETASQL_ASSERT_OK(UpdateSchema(
-      {R"(CREATE SCHEMA mynamedschema)",
-       R"(CREATE TABLE mynamedschema.t (col1 INT64, col2 INT64) PRIMARY KEY (col1))",
-       R"(ALTER TABLE mynamedschema.t ADD CONSTRAINT C CHECK (col1 < 10))"}));
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {1, 2}));
-  EXPECT_THAT(Insert("mynamedschema.t", {"col1", "col2"}, {11, 2}),
+TEST_P(NamedSchemaTest, TableWithConstraint) {
+  ZETASQL_ASSERT_OK(Insert("mynamedschema.con_t", {"col1", "col2"}, {1, 2}));
+  EXPECT_THAT(Insert("mynamedschema.con_t", {"col1", "col2"}, {11, 2}),
               StatusIs(StatusCode::kOutOfRange));
 }
 
-TEST_F(NamedSchemaTest, TableWithSynonym) {
-  ZETASQL_ASSERT_OK(UpdateSchema(
-      {R"(CREATE SCHEMA mynamedschema)",
-       R"(CREATE TABLE mynamedschema.t (col1 INT64, col2 INT64) PRIMARY KEY (col1))",
-       R"(ALTER TABLE mynamedschema.t ADD SYNONYM syn)"}));
+TEST_P(NamedSchemaTest, TableWithSynonym) {
+  std::string update_statement;
+  if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    update_statement =
+        R"(ALTER TABLE mynamedschema.t ADD SYNONYM mynamedschema.syn)";
+  } else {
+    update_statement =
+        R"(ALTER TABLE mynamedschema.t ADD SYNONYM "mynamedschema.syn")";
+  }
+  ZETASQL_ASSERT_OK(UpdateSchema({update_statement}));
   ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {1, 2}));
-  EXPECT_THAT(Query("SELECT * FROM syn"), IsOkAndHoldsUnorderedRows({{1, 2}}));
+  EXPECT_THAT(Query("SELECT * FROM mynamedschema.syn"),
+              IsOkAndHoldsUnorderedRows({{1, 2}}));
 }
 
-TEST_F(NamedSchemaTest, TableWithGeneratedAndDefaultColumn) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(CREATE SCHEMA mynamedschema)",
-                          R"(CREATE TABLE mynamedschema.t (
-       col1 INT64,
-       col2 INT64,
-       col3 INT64 AS (col1 + col2) STORED,
-       col4 INT64 DEFAULT (10)
-       ) PRIMARY KEY (col1))"}));
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {1, 2}));
-  EXPECT_THAT(Query("SELECT * FROM mynamedschema.t"),
+TEST_P(NamedSchemaTest, TableWithGeneratedAndDefaultColumn) {
+  ZETASQL_ASSERT_OK(Insert("mynamedschema.gen_t", {"col1", "col2"}, {1, 2}));
+  EXPECT_THAT(Query("SELECT * FROM mynamedschema.gen_t"),
               IsOkAndHoldsUnorderedRows({{1, 2, 3, 10}}));
 }
 
-TEST_F(NamedSchemaTest, TableWithSequence) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(CREATE SCHEMA mynamedschema)",
-                          R"(CREATE SEQUENCE mynamedschema.myseq OPTIONS (
-        sequence_kind = "bit_reversed_positive"))",
-                          R"(CREATE TABLE mynamedschema.t(
-                          int64_col INT64 NOT NULL DEFAULT
-                (GET_NEXT_SEQUENCE_VALUE (SEQUENCE mynamedschema.myseq)),
-                string_col string(max))
-                PRIMARY KEY (int64_col)
-      )"}));
-
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"string_col"}, {"one"}));
+TEST_P(NamedSchemaTest, TableWithSequence) {
+  ZETASQL_ASSERT_OK(Insert("mynamedschema.seq_t", {"string_col"}, {"one"}));
   ZETASQL_ASSERT_OK_AND_ASSIGN(int64_t count_1,
                        GetCurrentSequenceState("mynamedschema.myseq"));
 
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"string_col"}, {"two"}));
+  ZETASQL_ASSERT_OK(Insert("mynamedschema.seq_t", {"string_col"}, {"two"}));
   ZETASQL_ASSERT_OK_AND_ASSIGN(int64_t count_2,
                        GetCurrentSequenceState("mynamedschema.myseq"));
 
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"string_col"}, {"four"}));
+  ZETASQL_ASSERT_OK(Insert("mynamedschema.seq_t", {"string_col"}, {"four"}));
   ZETASQL_ASSERT_OK_AND_ASSIGN(int64_t count_3,
                        GetCurrentSequenceState("mynamedschema.myseq"));
 
   EXPECT_GE(count_3, count_2);
   EXPECT_GE(count_2, count_1);
 
-  EXPECT_THAT(Query("SELECT string_col FROM mynamedschema.t"),
+  EXPECT_THAT(Query("SELECT string_col FROM mynamedschema.seq_t"),
               IsOkAndHoldsUnorderedRows({{"one"}, {"two"}, {"four"}}));
 }
 
-TEST_F(NamedSchemaTest, TableWithForeignKey) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
-      R"(CREATE SCHEMA mynamedschema1)",
-      R"(CREATE TABLE mynamedschema1.t1 (col1 INT64, col2 INT64) PRIMARY KEY (col1))",
-      R"(CREATE TABLE t (col1 INT64, col2 INT64) PRIMARY KEY (col1))",
-      R"(ALTER TABLE t ADD CONSTRAINT C1 FOREIGN KEY (col2) REFERENCES
-      mynamedschema1.t1(col1))",
-  }));
-
-  ZETASQL_ASSERT_OK(Insert("mynamedschema1.t1", {"col1", "col2"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("t", {"col1", "col2"}, {5, 1}));
-  EXPECT_THAT(Insert("t", {"col1", "col2"}, {11, 5}),
+TEST_P(NamedSchemaTest, TableWithForeignKey) {
+  ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {1, 2}));
+  ZETASQL_ASSERT_OK(Insert("fk_t", {"col1", "col2"}, {5, 1}));
+  EXPECT_THAT(Insert("fk_t", {"col1", "col2"}, {11, 5}),
               StatusIs(StatusCode::kFailedPrecondition));
 
   // Verify cross schema foreign keys work.
-  ZETASQL_ASSERT_OK(UpdateSchema(
-      {R"(CREATE SCHEMA mynamedschema2)",
-       R"(CREATE TABLE mynamedschema2.t2 (col1 INT64, col2 INT64) PRIMARY KEY (col1))",
-       R"(ALTER TABLE mynamedschema2.t2 ADD CONSTRAINT C2 FOREIGN KEY (col2)
-      REFERENCES mynamedschema1.t1(col1))"}));
-
-  ZETASQL_ASSERT_OK(Insert("mynamedschema2.t2", {"col1", "col2"}, {5, 1}));
-  EXPECT_THAT(Insert("mynamedschema2.t2", {"col1", "col2"}, {11, 5}),
+  ZETASQL_ASSERT_OK(Insert("mynamedschema2.fk_t", {"col1", "col2"}, {5, 1}));
+  EXPECT_THAT(Insert("mynamedschema2.fk_t", {"col1", "col2"}, {11, 5}),
               StatusIs(StatusCode::kFailedPrecondition));
 }
 

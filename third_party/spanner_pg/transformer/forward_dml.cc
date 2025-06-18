@@ -274,13 +274,169 @@ absl::Status ForwardTransformer::CheckForUnsupportedOnConflictClause(
   return absl::OkStatus();
 }
 
+absl::Status ForwardTransformer::PopulateUpdateSetItemListFromUpdateSetClause(
+    const zetasql::Table& table, Index table_rtindex,
+    const List* update_set_clause, const VarIndexScope& update_column_scope,
+    const VarIndexScope& update_value_scope, const std::string& clause_name,
+    std::vector<std::unique_ptr<const zetasql::ResolvedUpdateItem>>&
+        update_item_list) {
+  absl::flat_hash_map<int, const zetasql::Column*> unwritable_table_columns =
+      GetUnwritableColumns(&table);
+  absl::flat_hash_set<int> updated_resnos;
+  for (TargetEntry* entry : StructList<TargetEntry*>(update_set_clause)) {
+    // Check for cases where the same column is set multiple times.
+    // Note that this (and vanilla PG) will return an error even if the set
+    // value is the same.
+    if (updated_resnos.contains(entry->resno)) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "multiple assignments to same column \"%s\"", entry->resname));
+    }
+    // Adjust from 1-based to 0-based indexing.
+    int column_index = entry->resno - 1;
+    auto it = unwritable_table_columns.find(column_index);
+    if (it != unwritable_table_columns.end()) {
+      return absl::InvalidArgumentError(
+          absl::StrFormat("Cannot UPDATE value on non-writable column \"%s\"",
+                          it->second->Name()));
+    }
+    updated_resnos.insert(entry->resno);
+
+    ZETASQL_ASSIGN_OR_RETURN(zetasql::ResolvedColumn update_column,
+                     GetResolvedColumn(update_column_scope, table_rtindex,
+                                       entry->resno, /*var_levels_up=*/0));
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<zetasql::ResolvedColumnRef> column_ref,
+        BuildGsqlResolvedColumnRef(update_column,
+                                   /*is_correlated=*/false,
+                                   zetasql::ResolvedStatement::WRITE));
+
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<const zetasql::ResolvedDMLValue> dml_value,
+        BuildGsqlResolvedDMLValue(*entry->expr, &update_value_scope,
+                                  clause_name.c_str()));
+
+    std::unique_ptr<zetasql::ResolvedUpdateItem> update_item =
+        zetasql::MakeResolvedUpdateItem();
+    update_item->set_target(std::move(column_ref));
+    update_item->set_set_value(std::move(dml_value));
+    update_item_list.push_back(std::move(update_item));
+  }
+  return absl::OkStatus();
+}
+
+absl::StatusOr<std::unique_ptr<const zetasql::ResolvedOnConflictClause>>
+ForwardTransformer::BuildGsqlOnConflictClauseForInsertDML(
+    const zetasql::Table& table, const OnConflictExpr* on_conflict,
+    RangeTblEntry* rte_for_excluded_alias, Index insert_table_rtindex,
+    Index excluded_alias_rtindex, const VarIndexScope* target_table_scope) {
+  ZETASQL_RET_CHECK_NE(on_conflict, nullptr);
+  ZETASQL_RET_CHECK_NE(rte_for_excluded_alias, nullptr);
+  ZETASQL_RET_CHECK_NE(target_table_scope, nullptr);
+  zetasql::ResolvedColumnList conflict_target_column_list;
+  // Columns from excluded RTE is added to the scope to resolve SET and WHERE
+  // expressions that can access columns like `excluded.<column_name>`
+  VarIndexScope on_conflict_scope = *target_table_scope;
+
+  // 1. Get conflict target columns. Duplicate columns should be ignored.
+  absl::flat_hash_set<std::string> visited_column_names;
+  for (InferenceElem* elem :
+       StructList<InferenceElem*>(on_conflict->arbiterElems)) {
+    ZETASQL_RET_CHECK_EQ(nodeTag(elem->expr), NodeTag::T_Var);
+    ZETASQL_ASSIGN_OR_RETURN(
+        zetasql::ResolvedColumn column,
+        GetResolvedColumn(
+            on_conflict_scope, /*varno=*/1,
+            ((const Var*)internal::PostgresCastToNode(elem->expr))->varattno,
+            /*var_levels_up=*/0));
+    // Column is already added to the list, ignore.
+    if (visited_column_names.find(column.name()) !=
+        visited_column_names.end()) {
+      continue;
+    }
+    conflict_target_column_list.push_back(column);
+    visited_column_names.insert(column.name());
+  }
+  // Conflict target columns must have READ access.
+  RecordColumnAccess(conflict_target_column_list,
+                     zetasql::ResolvedStatement::READ);
+
+  // 2. Alternative to conflict target columns, constraint name can be
+  // specified.
+  // TODO: Support ON CONFLICT ON CONSTRAINT.
+  std::string unique_constraint_name;
+  if (on_conflict->constraint != 0) {
+    ZETASQL_RET_CHECK_EQ(on_conflict->arbiterElems->length, 0);
+    return absl::UnimplementedError(
+        "ON CONFLICT ON CONSTRAINT is not supported");
+  }
+
+  std::vector<std::unique_ptr<const zetasql::ResolvedUpdateItem>>
+      update_item_list;
+  std::unique_ptr<const zetasql::ResolvedExpr> update_where_expr;
+  // 3. Nothing else is needed for ON CONFLICT DO NOTHING. Build and return the
+  // on zetasql::ResolvedOnConflictClause.
+  if (on_conflict->action == ONCONFLICT_NOTHING) {
+    return MakeResolvedOnConflictClause(
+        zetasql::ResolvedOnConflictClause::NOTHING,
+        std::move(conflict_target_column_list),
+        /*unique_constraint_name=*/"",
+        /*insert_row_scan=*/nullptr,
+        /*update_item_list=*/std::move(update_item_list),
+        /*update_where_expression=*/std::move(update_where_expr));
+  }
+
+  // 4. Build the scan for columns referenced with the excluded alias, if any.
+  // Additionally, add the columns to scope `on_conflict_scope` to resolve
+  // SET and WHERE expressions.
+  std::unique_ptr<zetasql::ResolvedTableScan> insert_row_scan = nullptr;
+  if (rte_for_excluded_alias->selectedCols != nullptr) {
+    auto transformer_info = std::make_unique<TransformerInfo>();
+    ZETASQL_ASSIGN_OR_RETURN(insert_row_scan,
+                     BuildGsqlResolvedTableScan(
+                         *rte_for_excluded_alias, transformer_info.get(),
+                         excluded_alias_rtindex, &on_conflict_scope));
+    ZETASQL_RET_CHECK(!insert_row_scan->alias().empty() &&
+              insert_row_scan->alias() == kExcludedAlias);
+  }
+
+  // 5. Build the update item list from the update set clause.
+  ZETASQL_RETURN_IF_ERROR(PopulateUpdateSetItemListFromUpdateSetClause(
+      table, insert_table_rtindex, on_conflict->onConflictSet,
+      *target_table_scope, on_conflict_scope,
+      "ON CONFLICT DO UPDATE SET clause", update_item_list));
+
+  // 6. Build a ResolvedExpr for the WHERE clause.
+  if (on_conflict->onConflictWhere != nullptr) {
+    if (internal::IsExpr(*on_conflict->onConflictWhere)) {
+      ZETASQL_ASSIGN_OR_RETURN(update_where_expr,
+                       BuildGsqlResolvedScalarExpr(
+                           *PostgresCastToExpr(on_conflict->onConflictWhere),
+                           &on_conflict_scope, "ON CONFLICT DO UPDATE WHERE"));
+    } else {
+      return absl::UnimplementedError(absl::StrCat(
+          "Node type ",
+          NodeTagToNodeString(nodeTag(&on_conflict->onConflictWhere)),
+          " is unsupported in ON CONFLICT clauses."));
+    }
+  }
+
+  // 7. Build and return the ResolvedOnConflictClause.
+  return MakeResolvedOnConflictClause(
+      zetasql::ResolvedOnConflictClause::UPDATE,
+      std::move(conflict_target_column_list),
+      /*unique_constraint_name=*/"",
+      (insert_row_scan != nullptr) ? std::move(insert_row_scan) : nullptr,
+      /*update_item_list=*/std::move(update_item_list),
+      /*update_where_expression=*/std::move(update_where_expr));
+}
+
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedInsertStmt>>
 ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
   zetasql::ResolvedInsertStmt::InsertMode insert_mode =
       zetasql::ResolvedInsertStmt::OR_ERROR;
-  if (query.onConflict != nullptr) {
-    switch (query.onConflict->action) {
-      case ONCONFLICT_NOTHING:
+    if (query.onConflict != nullptr) {
+      switch (query.onConflict->action) {
+        case ONCONFLICT_NOTHING:
         insert_mode = zetasql::ResolvedInsertStmt::OR_IGNORE;
         break;
       case ONCONFLICT_UPDATE:
@@ -290,8 +446,8 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
         return absl::UnimplementedError(
             "INSERT...ON CONFLICT statements are not supported.");
         break;
+      }
     }
-  }
 
   // The first RangeTblEntry is always the INSERT target table.
   // If there is exactly one RangeTblEntry, the statement is a simple
@@ -304,7 +460,11 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
   // RangeTblEntry for the `excluded` alias that allows access to rows
   // being inserted in the query.
   int rte_count = list_length(query.rtable);
-  if (insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE) {
+  bool is_insert_or_update =
+      insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE ||
+      (query.onConflict != nullptr &&
+       query.onConflict->action == ONCONFLICT_UPDATE);
+  if (is_insert_or_update) {
     ZETASQL_RET_CHECK(rte_count == 2 || rte_count == 3);
   } else {
     ZETASQL_RET_CHECK(rte_count == 1 || rte_count == 2);
@@ -418,9 +578,7 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
     std::unique_ptr<const zetasql::ResolvedInsertRow> insert_row =
         zetasql::MakeResolvedInsertRow(std::move(value_list));
     row_list.push_back(std::move(insert_row));
-  } else if (rte_count == 1 ||
-             (rte_count == 2 &&
-              insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE)) {
+  } else if (rte_count == 1 || (rte_count == 2 && is_insert_or_update)) {
     // A single row INSERT...VALUES statement.
     // Collect the list of Expr objects from the TargetEntry list.
     // Use the list of Expr objects to construct a row.
@@ -437,9 +595,7 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
         zetasql::MakeResolvedInsertRow(std::move(value_list));
     row_list.push_back(std::move(insert_row));
   } else {
-    ZETASQL_RET_CHECK(rte_count == 2 ||
-              (rte_count == 3 &&
-               insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE));
+    ZETASQL_RET_CHECK(rte_count == 2 || (rte_count == 3 && is_insert_or_update));
     RangeTblEntry* rte = rt_fetch(2, query.rtable);
     switch (rte->rtekind) {
       case RTE_VALUES: {
@@ -483,12 +639,24 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
     }
   }
 
+  std::unique_ptr<const zetasql::ResolvedOnConflictClause>
+      on_conflict_clause = nullptr;
   if (insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE ||
       insert_mode == zetasql::ResolvedInsertStmt::OR_IGNORE) {
     ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedOnConflictClause(
         query, rte_count, *table_scan->table(), insert_column_list,
         &target_table_scope,
         (insert_mode == zetasql::ResolvedInsertStmt::OR_IGNORE)));
+  } else if (query.onConflict != nullptr) {
+    // Get the RangeTblEntry node for the excluded alias, available in
+    // ON CONFLICT DO UPDATE DML only.
+    RangeTblEntry* rte_for_excluded_alias = rt_fetch(rte_count, query.rtable);
+    ZETASQL_ASSIGN_OR_RETURN(
+        on_conflict_clause,
+        BuildGsqlOnConflictClauseForInsertDML(
+            *table_scan->table(), query.onConflict, rte_for_excluded_alias,
+            /*insert_table_rtindex=*/rtindex,
+            /*excluded_alias_rtindex=*/rte_count, &target_table_scope));
   }
 
   ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<const zetasql::ResolvedReturningClause>
@@ -506,7 +674,7 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
       /*assert_rows_modified=*/nullptr, std::move(returning_clause),
       insert_column_list, std::move(query_parameter_list),
       std::move(insert_select_query), query_output_column_list,
-      std::move(row_list), /*on_conflict_clause=*/nullptr);
+      std::move(row_list), std::move(on_conflict_clause));
 }
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedUpdateStmt>>
@@ -542,51 +710,11 @@ ForwardTransformer::BuildPartialGsqlResolvedUpdateStmt(const Query& query) {
   absl::flat_hash_map<int, const zetasql::Column*> unwritable_table_columns =
       GetUnwritableColumns(table);
 
-  absl::flat_hash_set<int> updated_resnos;
   std::vector<std::unique_ptr<const zetasql::ResolvedUpdateItem>>
       update_item_list;
-  for (TargetEntry* entry : StructList<TargetEntry*>(query.targetList)) {
-    // Check for cases where the same column is set multiple times.
-    // Note that this (and vanilla PG) will return an error even if the set
-    // value is the same.
-    if (updated_resnos.contains(entry->resno)) {
-      return absl::InvalidArgumentError(
-          absl::StrFormat("multiple assignments to same column \"%s\"",
-                       entry->resname));
-    }
-    // Adjust from 1-based to 0-based indexing.
-    int column_index = entry->resno - 1;
-    auto it = unwritable_table_columns.find(column_index);
-    if (it != unwritable_table_columns.end()) {
-      return absl::InvalidArgumentError(
-          absl::StrFormat("Cannot UPDATE value on non-writable column \"%s\"",
-                          it->second->Name()));
-    }
-    updated_resnos.insert(entry->resno);
-
-    // Build a ResolvedUpdateItem for each TargetEntry and append it to
-    // update_item_list.
-    ZETASQL_ASSIGN_OR_RETURN(zetasql::ResolvedColumn column,
-                     GetResolvedColumn(target_table_scope, rtindex,
-                                       entry->resno, /*var_levels_up=*/0));
-
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::unique_ptr<const zetasql::ResolvedDMLValue> dml_value,
-        BuildGsqlResolvedDMLValue(*entry->expr, &target_table_scope,
-                                  "UPDATE clause"));
-
-    std::unique_ptr<zetasql::ResolvedUpdateItem> update_item =
-        zetasql::MakeResolvedUpdateItem();
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::unique_ptr<zetasql::ResolvedColumnRef> column_ref,
-        BuildGsqlResolvedColumnRef(column,
-                                   /*is_correlated=*/false,
-                                   zetasql::ResolvedStatement::WRITE));
-    update_item->set_target(std::move(column_ref));
-    update_item->set_set_value(std::move(dml_value));
-
-    update_item_list.push_back(std::move(update_item));
-  }
+  ZETASQL_RETURN_IF_ERROR(PopulateUpdateSetItemListFromUpdateSetClause(
+      *table, rtindex, query.targetList, target_table_scope, target_table_scope,
+      "UPDATE clause", update_item_list));
 
   // Build a ResolvedReturningClause.
   ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<const zetasql::ResolvedReturningClause>

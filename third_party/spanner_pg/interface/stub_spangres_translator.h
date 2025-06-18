@@ -66,6 +66,17 @@ class StubSpangresTranslator : public interfaces::SpangresTranslatorInterface {
   }
 
   absl::StatusOr<interfaces::ExpressionTranslateResult>
+  TranslateParsedExpression(
+      interfaces::TranslateParsedQueryParams params) override {
+    return absl::FailedPreconditionError("invoked stub SpangresTranslator");
+  }
+
+  absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateExpression(
+      interfaces::TranslateQueryParams params) override {
+    return absl::FailedPreconditionError("invoked stub SpangresTranslator");
+  }
+
+  absl::StatusOr<interfaces::ExpressionTranslateResult>
   TranslateParsedTableLevelExpression(
       interfaces::TranslateParsedQueryParams params,
       absl::string_view table_name) override {
@@ -79,6 +90,17 @@ class StubSpangresTranslator : public interfaces::SpangresTranslatorInterface {
 
   absl::StatusOr<interfaces::ExpressionTranslateResult>
   TranslateParsedQueryInView(
+      interfaces::TranslateParsedQueryParams params) override {
+    return absl::FailedPreconditionError("invoked stub SpangresTranslator");
+  }
+
+  absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateFunctionBody(
+      interfaces::TranslateQueryParams params) override {
+    return absl::FailedPreconditionError("invoked stub SpangresTranslator");
+  }
+
+  absl::StatusOr<interfaces::ExpressionTranslateResult>
+  TranslateParsedFunctionBody(
       interfaces::TranslateParsedQueryParams params) override {
     return absl::FailedPreconditionError("invoked stub SpangresTranslator");
   }
