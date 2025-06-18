@@ -55,6 +55,7 @@
 #include "utils/syscache.h"
 
 #include "third_party/spanner_pg/interface/catalog_wrappers.h"
+#include "third_party/spanner_pg/src/backend/catalog/pg_language_d.h"
 
 /* Hook for plugins to get control at end of parse analysis */
 post_parse_analyze_hook_type post_parse_analyze_hook = NULL;
@@ -413,6 +414,16 @@ transformStmt(ParseState *pstate, Node *parseTree)
 			result = transformCallStmt(pstate,
 									   (CallStmt *) parseTree);
 			break;
+
+	/* SPANGRES BEGIN */
+		// PostgreSQL typically defers validation of CREATE FUNCTION statements to
+		// the execution phase, but Spangres validates early inside the analyzer
+		case T_CreateFunctionStmt:
+			result = CreateFunctionQuery(pstate,
+																	 (CreateFunctionStmt *) parseTree,
+																	 SQLlanguageId);
+			break;
+	/* SPANGRES END */
 
 		default:
 

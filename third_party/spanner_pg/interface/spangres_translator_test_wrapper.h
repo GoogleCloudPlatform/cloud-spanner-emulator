@@ -148,6 +148,22 @@ class SpangresTranslatorTestWrapper {
   }
 
   absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateExpression(
+      absl::string_view string_expr,
+      const zetasql::AnalyzerOptions& options =
+          test::GetSpangresTestAnalyzerOptions(),
+      zetasql::EnumerableCatalog* engine_provided_catalog =
+          test::GetSpangresTestSpannerUserCatalog()) {
+    return translator_->TranslateExpression(
+        interfaces::TranslateQueryParamsBuilder(
+            string_expr, Parser(), engine_provided_catalog,
+            /*engine_builtin_function_catalog=*/
+            test::GetSpangresTestBuiltinFunctionCatalog(options.language()))
+            .SetAnalyzerOptions(options)
+            .Build());
+  }
+
+  absl::StatusOr<interfaces::ExpressionTranslateResult>
+  TranslateTableLevelExpression(
       const std::string& string_expr, absl::string_view sql,
       std::string table_name,
       const zetasql::AnalyzerOptions& options =
@@ -194,6 +210,46 @@ class SpangresTranslatorTestWrapper {
       zetasql::EnumerableCatalog* engine_provided_catalog =
           test::GetSpangresTestSpannerUserCatalog()) {
     return translator_->TranslateParsedQueryInView(
+        interfaces::TranslateParsedQueryParamsBuilder(
+            serialized_parse_tree, sql, engine_provided_catalog,
+            /*engine_builtin_function_catalog=*/
+            test::GetSpangresTestBuiltinFunctionCatalog(options.language()))
+            .SetAnalyzerOptions(options)
+            .SetMemoryReservationManager(
+                std::make_unique<StubMemoryReservationManager>())
+            .Build());
+  }
+
+  absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateFunctionBody(
+      absl::string_view sql,
+      const zetasql::AnalyzerOptions& options =
+          test::GetSpangresTestAnalyzerOptions(),
+      zetasql::EnumerableCatalog* engine_provided_catalog =
+          test::GetSpangresTestSpannerUserCatalog(),
+      std::function<void(const interfaces::ParserBatchOutput::Statistics&)>
+          parser_statistics_callback = std::function<
+              void(const interfaces::ParserBatchOutput::Statistics&)>()) {
+    std::unique_ptr<EngineBuiltinFunctionCatalog> function_catalog =
+        test::GetSpangresTestBuiltinFunctionCatalog(options.language());
+    ZETASQL_RET_CHECK_NE(Parser(), nullptr);
+    return translator_->TranslateFunctionBody(
+        interfaces::TranslateQueryParamsBuilder(
+            sql, Parser(), engine_provided_catalog, std::move(function_catalog))
+            .SetAnalyzerOptions(options)
+            .SetMemoryReservationManager(
+                std::make_unique<StubMemoryReservationManager>())
+            .SetParserStatisticsCallback(std::move(parser_statistics_callback))
+            .Build());
+  }
+
+  absl::StatusOr<interfaces::ExpressionTranslateResult>
+  TranslateParsedFunctionBody(
+      const std::string& serialized_parse_tree, absl::string_view sql,
+      const zetasql::AnalyzerOptions& options =
+          test::GetSpangresTestAnalyzerOptions(),
+      zetasql::EnumerableCatalog* engine_provided_catalog =
+          test::GetSpangresTestSpannerUserCatalog()) {
+    return translator_->TranslateParsedFunctionBody(
         interfaces::TranslateParsedQueryParamsBuilder(
             serialized_parse_tree, sql, engine_provided_catalog,
             /*engine_builtin_function_catalog=*/

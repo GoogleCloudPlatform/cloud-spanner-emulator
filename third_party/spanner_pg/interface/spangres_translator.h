@@ -32,6 +32,8 @@
 #ifndef INTERFACE_SPANGRES_TRANSLATOR_H_
 #define INTERFACE_SPANGRES_TRANSLATOR_H_
 
+#include <optional>
+
 #include "zetasql/public/analyzer.h"
 #include "zetasql/public/catalog.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
@@ -71,6 +73,29 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
   absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
   TranslateParsedQuery(interfaces::TranslateParsedQueryParams params) override;
 
+  // Translates SQL expressions by wrapping them in a SELECT statement. The main
+  // use case for this function is to be called during the DDL translation of
+  // function parameter default value expressions.
+  //
+  // This translation does not rewrite functions implemented with ZetaSQL's
+  // SQL-inlined framework. The reason is because the analyzer later runs a
+  // check on the translated AST to verify that column expressions
+  // (i.e., generated columns, default values, and check constraints) do not
+  // contain subqueries or scans. That test will fail if such functions are
+  // inlined earlier because they get inlined as subqueries. The analyzer
+  // does the inlining after completing its validation.
+  absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateExpression(
+      interfaces::TranslateQueryParams params) override {
+    return TranslateExpression(std::move(params), std::nullopt);
+  }
+
+  // Version of TranslateExpression for use by the emulator.
+  absl::StatusOr<interfaces::ExpressionTranslateResult>
+  TranslateParsedExpression(
+      interfaces::TranslateParsedQueryParams params) override {
+    return TranslateParsedExpression(std::move(params), std::nullopt);
+  }
+
   // Translates SQL expressions that operate within the scope of particular
   // table, which means expressions that can only reference columns of a
   // particular table. This table should exist in the catalog provided with
@@ -91,16 +116,21 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
   absl::StatusOr<interfaces::ExpressionTranslateResult>
   TranslateParsedTableLevelExpression(
       interfaces::TranslateParsedQueryParams params,
-      std::string_view table_name) override;
+      std::string_view table_name) override {
+    ZETASQL_RET_CHECK(!table_name.empty()) << "Table name cannot be null or empty";
+    return TranslateParsedExpression(std::move(params), table_name);
+  }
 
   // TranslateTableLevelExpression aims to replace old API:
   // TranslateParsedTableLevelExpression, this new API accepts
-  // TranslateQueryParams as parameter. It translates expression in text from
-  // PostgreSQL dialect to ZetaSQL dialect. It is also just used for DDL
-  // translation.
+  // TranslateQueryParams as parameter. It translates expression in text
+  // from PostgreSQL dialect to ZetaSQL dialect. It is also just used for
+  // DDL translation.
   absl::StatusOr<interfaces::ExpressionTranslateResult>
   TranslateTableLevelExpression(interfaces::TranslateQueryParams params,
-                                absl::string_view table_name) override;
+                                absl::string_view table_name) override {
+    return TranslateExpression(std::move(params), table_name);
+  }
 
   // Translates SQL body of the create view statement. It is used by DDL
   // which requires the result of both deparsed ZetaSQL and PostgreSQL.
@@ -116,17 +146,36 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
   TranslateParsedQueryInView(
       interfaces::TranslateParsedQueryParams params) override;
 
-  // Wraps node of expression in a SELECT $expression FROM $table_name
-  // statement.
-  static absl::StatusOr<List*> WrapExpressionInSelect(
-      Node* expression, absl::string_view table_name);
+  // Translates SQL body of the create function statement. It is used by DDL
+  // which requires the result of both deparsed ZetaSQL and PostgreSQL.
+  absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateFunctionBody(
+      interfaces::TranslateQueryParams params) override;
+
+  // Translates SQL body of the create function statement. It is used by DDL
+  // which requires the result of both deparsed ZetaSQL and PostgreSQL.
+  // This is used by the emulator.
+  absl::StatusOr<interfaces::ExpressionTranslateResult>
+  TranslateParsedFunctionBody(
+      interfaces::TranslateParsedQueryParams params) override;
 
   // Wraps string of expression in a SELECT $expression FROM $table_name
   // statement.
   static absl::StatusOr<std::string> WrapExpressionInSelect(
-      absl::string_view expression, absl::string_view table_name);
+      absl::string_view expression,
+      std::optional<absl::string_view> table_name);
 
  private:
+  // Wraps node of expression in a SELECT $expression (with a `FROM $table_name`
+  // clause if table_name is provided).
+  static absl::StatusOr<List*> WrapExpressionInSelect(
+      Node* expression, std::optional<absl::string_view> table_name);
+
+  absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateExpression(
+      interfaces::TranslateQueryParams params,
+      std::optional<absl::string_view> table_name);
+  absl::StatusOr<interfaces::ExpressionTranslateResult>
+  TranslateParsedExpression(interfaces::TranslateParsedQueryParams params,
+                            std::optional<absl::string_view> table_name);
   static interfaces::ParserSingleOutput ParseQuery(
       interfaces::ParserInterface* parser, absl::string_view sql,
       std::unique_ptr<interfaces::MemoryReservationManager> res_manager,
@@ -159,7 +208,7 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
   // MemoryContextPGArena will be created using the MemoryReservationManager
   // from params and assigned to arena.
   static absl::StatusOr<interfaces::ParserOutput> GetParserExpressionOutput(
-      absl::string_view table_name,
+      std::optional<absl::string_view> table_name,
       interfaces::TranslateParsedQueryParams& params,
       std::unique_ptr<interfaces::PGArena>& arena);
 

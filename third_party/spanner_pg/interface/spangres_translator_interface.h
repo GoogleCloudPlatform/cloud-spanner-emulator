@@ -587,6 +587,12 @@ class SpangresTranslatorInterface {
   virtual absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
   TranslateParsedQuery(TranslateParsedQueryParams params) = 0;
 
+  virtual absl::StatusOr<ExpressionTranslateResult> TranslateParsedExpression(
+      TranslateParsedQueryParams params) = 0;
+
+  virtual absl::StatusOr<ExpressionTranslateResult> TranslateExpression(
+      TranslateQueryParams params) = 0;
+
   virtual absl::StatusOr<ExpressionTranslateResult>
   TranslateParsedTableLevelExpression(TranslateParsedQueryParams params,
                                       absl::string_view table_name) = 0;
@@ -600,6 +606,12 @@ class SpangresTranslatorInterface {
 
   virtual absl::StatusOr<interfaces::ExpressionTranslateResult>
   TranslateParsedQueryInView(TranslateParsedQueryParams params) = 0;
+
+  virtual absl::StatusOr<interfaces::ExpressionTranslateResult>
+  TranslateFunctionBody(interfaces::TranslateQueryParams params) = 0;
+
+  virtual absl::StatusOr<interfaces::ExpressionTranslateResult>
+  TranslateParsedFunctionBody(TranslateParsedQueryParams params) = 0;
 
  protected:
   SpangresTranslatorInterface() = default;

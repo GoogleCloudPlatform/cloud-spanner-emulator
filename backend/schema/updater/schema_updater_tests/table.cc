@@ -623,6 +623,24 @@ TEST_P(SchemaUpdaterTest, AlterTable_Rename) {
   EXPECT_NE(s_new, nullptr);
 }
 
+TEST_P(SchemaUpdaterTest, RenameTable) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T (
+        k1 INT64,
+      ) PRIMARY KEY (k1)
+    )"}));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      RENAME TABLE T TO S
+    )"}));
+
+  const Table* t_new = new_schema->FindTable("T");
+  EXPECT_EQ(t_new, nullptr);
+
+  const Table* s_new = new_schema->FindTable("S");
+  EXPECT_NE(s_new, nullptr);
+}
+
 TEST_P(SchemaUpdaterTest, AlterTable_RenameWithSynonym) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (

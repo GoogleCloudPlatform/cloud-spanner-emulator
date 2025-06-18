@@ -650,7 +650,23 @@ ForwardTransformer::BuildGsqlResolvedExpr(
           *expr_transformer_info->var_index_scope);
     }
     case T_Param: {
-      return BuildGsqlResolvedParameter(*PostgresConstCastNode(Param, &expr));
+      Param param = *PostgresConstCastNode(Param, &expr);
+      // If there are no argument names, then the param is a query parameter.
+      if (create_func_arg_names_.empty()) {
+        return BuildGsqlResolvedParameter(param);
+      } else {
+        // DDL statements with input arguments have parameter names.
+        // NOTE: zetasql::Validator won't allow ArgumentRef nodes outside of
+        // UDF/TVF type stmts
+        std::string param_name = create_func_arg_names_[param.paramid - 1];
+        ZETASQL_ASSIGN_OR_RETURN(const zetasql::Type* type,
+                         BuildGsqlType(param.paramtype));
+        create_func_arg_types_[param_name] = type;
+        // NOTE: only scalar arguments are supported presently.
+        auto column_ref = zetasql::MakeResolvedArgumentRef(
+            type, param_name, zetasql::ResolvedArgumentDef::SCALAR);
+        return column_ref;
+      }
     }
     case T_OpExpr: {
       return BuildGsqlResolvedFunctionCall(

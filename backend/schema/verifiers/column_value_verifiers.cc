@@ -127,7 +127,7 @@ absl::Status VerifyInt64ColumnValue(absl::string_view table_name,
     // When converting int64_t column to enum column, int64_t should lie within the
     // enum range or the conversion should fail
     int32_t int_value = value.int64_value();
-    const std::string* name;
+    absl::string_view name;
     // enum name corresponding to the integer value is not found
     if (int_value != value.int64_value() ||
         (!new_column_type->AsEnum()->EnumAllowsUnnamedValues() &&

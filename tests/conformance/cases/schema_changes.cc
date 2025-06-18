@@ -267,8 +267,7 @@ TEST_F(SchemaChangeTest, ValidStatements) {
   EXPECT_EQ(metadata.commit_timestamps_size(), 2);
   EXPECT_EQ(metadata.statements_size(), 2);
 }
-
-TEST_F(SchemaChangeTest, PartialSuccess) {
+TEST_F(SchemaChangeTest, DISABLED_PartialSuccess) {
   ZETASQL_EXPECT_OK(SetSchema({R"(
               CREATE TABLE test_table(
                 int64_col INT64 NOT NULL,

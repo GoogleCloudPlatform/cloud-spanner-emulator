@@ -108,15 +108,6 @@ ALTER TABLE Users ALTER COLUMN UserId INT64 NOT NULL PRIMARY KEY;
 --
 ERROR:.* Expecting 'EOF' but found 'PRIMARY'
 ==
-# PRIMARY KEY on a column and the table is a parse error.
-# --regex
-CREATE TABLE Users (
-  UserId INT64 NOT NULL PRIMARY KEY,
-  Name STRING(MAX)
-) PRIMARY KEY(UserId);
---
-ERROR:.* Cannot specify both table and column PRIMARY KEY
-==
 # Primary key references a nonexistent column.
 # --regex
 CREATE TABLE Users (

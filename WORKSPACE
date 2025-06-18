@@ -51,6 +51,16 @@ rules_proto_toolchains()
 ################################################################################
 # Bazel utility rules                                                          #
 ################################################################################
+
+http_archive(
+    name = "rules_cc",
+    sha256 = "712d77868b3152dd618c4d64faaddefcc5965f90f5de6e6dd1d5ddcd0be82d42",
+    strip_prefix = "rules_cc-0.1.1",
+    urls = [
+        "https://github.com/bazelbuild/rules_cc/releases/download/0.1.1/rules_cc-0.1.1.tar.gz",
+    ],
+)
+
 _rules_pkg_version = "0.9.0"
 
 http_archive(
@@ -105,7 +115,7 @@ http_archive(
 
 load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 
-go_register_toolchains(version = "1.21.11")
+go_register_toolchains(version = "1.23.6")
 
 _bazel_gazelle_version = "0.36.0"
 
@@ -256,9 +266,9 @@ http_archive(
 
 http_archive(
     name = "com_google_protobuf",
-    sha256 = "8ff511a64fc46ee792d3fe49a5a1bcad6f7dc50dfbba5a28b0e5b979c17f9871",
-    strip_prefix = "protobuf-25.2",
-    urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v25.2/protobuf-25.2.tar.gz"],
+    sha256 = "79cc6d09d02706c5a73e900ea842b5b3dae160f371b6654774947fe781851423",
+    strip_prefix = "protobuf-27.5",
+    urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v27.5/protobuf-27.5.tar.gz"],
 )
 
 load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
@@ -327,9 +337,9 @@ http_archive(
     patches = ["//build/bazel:zetasql.patch"],
     # Patches applied:
     # - Give visibility to ZetaSQL's base library to reuse some utilities
-    sha256 = "1afc2210d4aad371eff0a6bfdd8417ba99e02183a35dff167af2fa6097643f26",
-    strip_prefix = "zetasql-a516c6b26d183efc4f56293256bba92e243b7a61",
-    url = "https://github.com/google/zetasql/archive/a516c6b26d183efc4f56293256bba92e243b7a61.tar.gz",
+    sha256 = "966514e838d9c4ac30198c00b480a846191974ecbab229282e396778bb071642",
+    strip_prefix = "zetasql-94ff7f5f95b42218193b61184b8797d6ae527004",
+    url = "https://github.com/google/zetasql/archive/94ff7f5f95b42218193b61184b8797d6ae527004.tar.gz",
 )
 
 http_archive(

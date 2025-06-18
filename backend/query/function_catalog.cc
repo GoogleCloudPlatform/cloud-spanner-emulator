@@ -294,9 +294,24 @@ void FunctionCatalog::AddSpannerPGFunctions() {
     // If function exists, add extra signatures instead of overwriting.
     // Needed for JSONB.
     if (auto f = functions_.find(function->Name()); f != functions_.end()) {
-      for (auto& sig : function->signatures()) {
-        f->second->AddSignature(sig);
+      // Copy the existing options and add any evaluators if they exist.
+      zetasql::FunctionOptions function_options =
+          f->second->function_options().Copy();
+      // Add function evaluators if they exist.
+      if (function->GetFunctionEvaluatorFactory() != nullptr) {
+        function_options.set_evaluator_factory(
+            function->GetFunctionEvaluatorFactory());
+      } else if (function->GetAggregateFunctionEvaluatorFactory() != nullptr) {
+        function_options.set_aggregate_function_evaluator_factory(
+            function->GetAggregateFunctionEvaluatorFactory());
       }
+      auto new_function = std::make_unique<zetasql::Function>(
+          f->second->Name(), f->second->GetGroup(), f->second->mode(),
+          function->signatures(), function_options);
+      for (auto& sig : f->second->signatures()) {
+        new_function->AddSignature(sig);
+      }
+      f->second = std::move(new_function);
     } else {
       functions_[function->Name()] = std::move(function);
     }

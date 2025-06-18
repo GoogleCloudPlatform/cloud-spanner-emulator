@@ -97,10 +97,10 @@ TEST(GlobalSchemaNames, GenerateForeignKeyName) {
   EXPECT_THAT(names.GenerateForeignKeyName("", "Songs"), Not(IsOk()));
   EXPECT_THAT(names.GenerateForeignKeyName("Albums", ""), Not(IsOk()));
 
-  // Replace '.' in objects with named schemas.
+  // Remove schemas for the base name. Append the schema for the full name.
   status = names.GenerateForeignKeyName("Schema1.Albums", "Schema2.Songs");
   ZETASQL_EXPECT_OK(status);
-  EXPECT_THAT(status.value(), Eq("FK_Albums_Songs_42ABDA0A1D54791A_2"));
+  EXPECT_THAT(status.value(), Eq("Schema1.FK_Albums_Songs_04F0A18F8F9162C0_1"));
 }
 
 TEST(GlobalSchemaNames, GenerateManagedIndexName) {
@@ -117,7 +117,8 @@ TEST(GlobalSchemaNames, GenerateManagedIndexName) {
       names.GenerateManagedIndexName("Schema1.Albums", {"Songs", "Artists"},
                                      /*null_filtered=*/false, /*unique=*/false);
   ZETASQL_EXPECT_OK(status);
-  EXPECT_THAT(status.value(), Eq("IDX_Albums_Songs_Artists_5B940F253605F140"));
+  EXPECT_THAT(status.value(),
+              Eq("Schema1.IDX_Albums_Songs_Artists_013336CDE9D3087F"));
 }
 
 TEST(GlobalSchemaNames, GenerateManagedNullFilteredIndexName) {

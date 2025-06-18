@@ -31,27 +31,40 @@
 
 #include "third_party/spanner_pg/catalog/spangres_system_catalog.h"
 
+#include <fstream>
+#include <sstream>
 #include <optional>
 #include <string>
+#include <vector>
 
+#include "google/protobuf/text_format.h"
+
+#include "absl/strings/str_format.h"
 #include "zetasql/public/builtin_function.h"
 #include "zetasql/public/builtin_function_options.h"
 #include "zetasql/analyzer/function_signature_matcher.h"
+#include "zetasql/public/function.h"
+#include "zetasql/public/function_signature.h"
 #include "zetasql/public/input_argument_type.h"
 #include "zetasql/public/language_options.h"
 #include "zetasql/public/type.pb.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/types/span.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/builtin_spanner_functions.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/catalog/function.h"
+#include "third_party/spanner_pg/catalog/proto/catalog.pb.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/datatypes/extended/conversion_finder.h"
@@ -64,6 +77,12 @@
 #include <set>
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
+
+ABSL_FLAG(
+    std::vector<std::string>, catalog_functions_allowlist,
+    std::vector<std::string>({}),
+    "List of functions to be registered from the protobuf catalog instead of "
+    "manually.");
 
 namespace postgres_translator {
 namespace spangres {
@@ -504,10 +523,92 @@ bool IsSpangresSqlRewriteFunction(const PostgresFunctionArguments& function) {
   return true;
 }
 
+absl::StatusOr<const CatalogProto> GetCatalogProto() {
+  CatalogProto result;
+
+  std::string path =
+    "third_party/spanner_pg/catalog/proto/functions.txtpb";
+  std::ifstream input_stream{path};
+  if (!input_stream.is_open()) {
+    return absl::NotFoundError(
+    absl::StrFormat( "Input file %s not opened successfully.", path));
+  }
+
+  std::stringstream content;
+  content << input_stream.rdbuf();
+  if (!google::protobuf::TextFormat::ParseFromString(content.str(), &result)) {
+    return absl::InternalError(absl::StrFormat(
+      "Could not parse catalog proto protobuf from %s", path));
+  }
+
+  return result;
+}
+
+absl::StatusOr<PostgresFunctionArguments>
+SpangresSystemCatalog::PostgresFunctionArgumentsFromProto(
+    const FunctionProto& function) {
+  if (function.name_path().size() > 2) {
+    return absl::InternalError(absl::StrFormat(
+        "Unsupported function name path with nested namespaces: %s",
+        absl::StrJoin(function.name_path(), ".")));
+  }
+
+  std::string postgres_function_name = *function.name_path().rbegin();
+  std::string mapped_function_name = absl::StrJoin(function.name_path(), ".");
+  std::string postgres_namespace = spangres::kDefaultFunctionNamespace;
+  if (function.name_path().size() > 1) {
+    std::string function_namespace = function.name_path()[0];
+    // pg namespace is mapped to the default namespace
+    if (function_namespace != "pg") {
+      postgres_namespace = function_namespace;
+    }
+  }
+
+  std::vector<PostgresFunctionSignatureArguments> signatures;
+  for (const auto& signature : function.signatures()) {
+    zetasql::FunctionArgumentType gsql_return_type(
+        GetType(signature.return_type().name()));
+
+    zetasql::FunctionArgumentTypeList gsql_arguments;
+    for (const auto& argument : signature.arguments()) {
+      gsql_arguments.push_back(GetType(argument.name()));
+    }
+
+    zetasql::FunctionSignature gsql_signature(gsql_return_type,
+                                                gsql_arguments,
+                                                /*context_ptr=*/nullptr);
+    Oid signature_oid =
+        signature.has_oid() ? signature.oid() : InvalidOid;  // NOLINT
+    PostgresFunctionSignatureArguments pg_signature(
+        gsql_signature,
+        /*has_mapped_function=*/true,
+        /*explicit_mapped_function_name=*/"", signature_oid);
+  }
+
+  return PostgresFunctionArguments(
+      postgres_function_name, mapped_function_name, signatures,
+      zetasql::Function::SCALAR,  // Only Scalar functions are supported
+      postgres_namespace);
+}
+
 absl::Status SpangresSystemCatalog::AddFunctions(
     const zetasql::LanguageOptions& language_options) {
   // Populate the set of ZetaSQL functions supported in Spangres.
   std::vector<PostgresFunctionArguments> functions;
+
+  absl::flat_hash_set<std::string> allowlist(
+      absl::GetFlag(FLAGS_catalog_functions_allowlist).begin(),
+      absl::GetFlag(FLAGS_catalog_functions_allowlist).end());
+  ZETASQL_ASSIGN_OR_RETURN(const CatalogProto catalog_proto, GetCatalogProto());
+  for (const auto& catalog_function : catalog_proto.functions()) {
+    std::string full_name = absl::StrJoin(catalog_function.name_path(), ".");
+    if (allowlist.contains(full_name)) {
+      ZETASQL_ASSIGN_OR_RETURN(PostgresFunctionArguments function,
+                       PostgresFunctionArgumentsFromProto(catalog_function));
+      functions.push_back(function);
+    }
+  }
+
   AddAggregateFunctions(functions);
   AddArithmeticFunctions(functions);
   AddBitwiseFunctions(functions);

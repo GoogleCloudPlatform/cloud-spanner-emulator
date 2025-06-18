@@ -598,6 +598,7 @@ class SchemaUpdaterImpl {
                               const Table* table);
   absl::Status RenameTo(const ddl::AlterTable::RenameTo& rename_to,
                         const Table* table);
+  absl::Status RenameTable(const ddl::RenameTable& rename_table);
   absl::Status AddSynonym(const std::string& synonym, const Table* table);
   absl::Status DropSynonym(const ddl::AlterTable::DropSynonym& drop_synonym,
                            const Table* table);
@@ -1070,6 +1071,13 @@ SchemaUpdaterImpl::ApplyDDLStatement(
             ddl_statement->drop_placement().placement_name());
       }
       ZETASQL_RETURN_IF_ERROR(DropNode(placement));
+      break;
+    }
+    case ddl::DDLStatement::kRenameTable: {
+      if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+        return error::RenameTableNotSupportedInPostgreSQL();
+      }
+      ZETASQL_RETURN_IF_ERROR(RenameTable(ddl_statement->rename_table()));
       break;
     }
     default:
@@ -4619,6 +4627,28 @@ absl::Status SchemaUpdaterImpl::RenameTo(
     ZETASQL_RETURN_IF_ERROR(AddSynonym(rename_to.synonym(), updated_table));
   }
 
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::RenameTable(
+    const ddl::RenameTable& rename_table) {
+  for (const ddl::RenameTable::RenameOp& op : rename_table.rename_op()) {
+    const std::string& from_name = op.from_name();
+    const Table* from_table = latest_schema_->FindTableCaseSensitive(from_name);
+    if (from_table == nullptr) {
+      return error::TableNotFound(from_name);
+    }
+    const std::string& to_name = op.to_name();
+    ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", to_name));
+    global_names_.RemoveName(from_name);
+
+    const Table* updated_table = nullptr;
+    ZETASQL_RETURN_IF_ERROR(AlterNode(from_table, [&](Table::Editor* editor) {
+      editor->set_name(to_name);
+      updated_table = editor->get();
+      return absl::OkStatus();
+    }));
+  }
   return absl::OkStatus();
 }
 

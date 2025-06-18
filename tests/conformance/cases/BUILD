@@ -60,7 +60,6 @@ cc_library(
         "pg_catalog_test.cc",
         "pg_change_streams_read_write.cc",
         "pg_functions_test.cc",
-        "pg_named_schema.cc",
         "pg_synonyms.cc",
         "pg_views_test.cc",
         "primary_keys.cc",

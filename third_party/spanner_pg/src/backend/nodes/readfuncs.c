@@ -3638,6 +3638,7 @@ _readIndexElem(void)
 
 	READ_STRING_FIELD(name);
 	READ_NODE_FIELD(expr);
+	READ_STRING_FIELD(expr_string);
 	READ_STRING_FIELD(indexcolname);
 	READ_NODE_FIELD(collation);
 	READ_NODE_FIELD(opclass);

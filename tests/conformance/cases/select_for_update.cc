@@ -110,8 +110,7 @@ TEST_P(SelectForUpdateTest, OtherLockModesUnsupported) {
   } else {
     EXPECT_THAT(Query("SELECT age FROM users WHERE user_id = 2 FOR SHARE"),
                 StatusIs(absl::StatusCode::kInvalidArgument,
-                         testing::HasSubstr(
-                             "Expected end of input but got keyword FOR")));
+                         testing::HasSubstr("Syntax error:")));
   }
 }
 

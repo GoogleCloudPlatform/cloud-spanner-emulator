@@ -146,7 +146,8 @@ TEST_P(SchemaUpdaterTest, FunctionAsDefault) {
   EXPECT_EQ(col->expression().value(), "CURRENT_TIMESTAMP()");
 }
 
-TEST_P(SchemaUpdaterTest, SQLInlinedFunctionAsDefault) {
+// TODO - Re-enable this test once the function has been renamed.
+TEST_P(SchemaUpdaterTest, DISABLED_SQLInlinedFunctionAsDefault) {
   // A SQL-inlined function is a function whose implementation is a SQL string
   // instead of an evaluator.
   std::unique_ptr<const Schema> schema;

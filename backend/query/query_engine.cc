@@ -167,6 +167,8 @@ absl::StatusOr<zetasql::AnalyzerOptions> MakeAnalyzerOptionsWithParameters(
       zetasql::FEATURE_V_1_4_SQL_GRAPH_PATH_TYPE);
   options.mutable_language()->EnableLanguageFeature(
       zetasql::FEATURE_V_1_4_SQL_GRAPH_PATH_MODE);
+  ZETASQL_RETURN_IF_ERROR(
+      options.mutable_language()->EnableReservableKeyword("GRAPH_TABLE"));
   return options;
 }
 

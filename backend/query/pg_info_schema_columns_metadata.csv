@@ -109,6 +109,7 @@ columns,is_updatable,YES,character varying
 columns,spanner_type,YES,character varying
 columns,is_stored,YES,character varying
 columns,spanner_state,YES,character varying
+columns,is_hidden,YES,character varying
 constraint_column_usage,table_catalog,YES,character varying
 constraint_column_usage,table_schema,YES,character varying
 constraint_column_usage,table_name,YES,character varying

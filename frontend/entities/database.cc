@@ -28,6 +28,7 @@ namespace frontend {
 absl::Status Database::ToProto(admin::database::v1::Database* database) {
   database->set_name(database_uri_);
   database->set_state(admin::database::v1::Database::READY);
+  database->set_database_dialect(backend()->dialect());
   return absl::OkStatus();
 }
 

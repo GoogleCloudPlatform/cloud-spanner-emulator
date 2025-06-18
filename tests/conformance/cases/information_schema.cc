@@ -90,10 +90,9 @@ class InformationSchemaTest
 
   // Information schema columns not yet supported.
   const std::pair<std::string, Value> kUnsupportedColumns{
-      "unsupported_columns",
-      std::vector<std::string>({
-          "IS_HIDDEN", "IS_STORED_VOLATILE",
-      })};
+      "unsupported_columns", std::vector<std::string>({
+                                 "IS_STORED_VOLATILE",
+                             })};
 
   // Information schema constraints not yet supported.
   const std::pair<std::string, Value> kUnsupportedConstraints{
@@ -265,12 +264,6 @@ class InformationSchemaTest
   cloud::spanner::Value Nb() { return Null<Bytes>(); }
   cloud::spanner::Value Ns() { return Null<std::string>(); }
   cloud::spanner::Value Ni() { return Null<std::int64_t>(); }
-
-  bool PropertyGraphInformationSchemaEnabled() {
-    return EmulatorFeatureFlags::instance()
-        .flags()
-        .enable_property_graph_information_schema;
-  }
 };
 
 INSTANTIATE_TEST_SUITE_P(
@@ -288,6 +281,7 @@ TEST_P(InformationSchemaTest, Schemata) {
         s.schema_name
       from
         information_schema.schemata AS s
+      where s.schema_name NOT LIKE 'named_schema%'
       order by
         s.catalog_name,
         s.schema_name
@@ -300,8 +294,8 @@ TEST_P(InformationSchemaTest, Schemata) {
     // currently set that to its correct value for PG.
     auto expected =
         std::vector<ValueRow>({{TableCatalogForDialect(), "information_schema"},
-                               {TableCatalogForDialect(), "named_schema"},
-                               {TableCatalogForDialect(), "pg_catalog"}});
+                               {TableCatalogForDialect(), "pg_catalog"},
+                               {TableCatalogForDialect(), "public"}});
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   } else {
     auto expected = std::vector<ValueRow>(
@@ -410,9 +404,7 @@ TEST_P(InformationSchemaTest, MetaTables) {
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODEL_COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODEL_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODELS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-    if (PropertyGraphInformationSchemaEnabled()) {
-      expected.push_back({"", table_schema, "VIEW", GetNameForDialect("PROPERTY_GRAPHS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
-    }
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("PROPERTY_GRAPHS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("REFERENTIAL_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SCHEMATA"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SEQUENCE_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
@@ -456,7 +448,8 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
         t.is_generated,
         t.generation_expression,
         t.is_stored,
-        t.spanner_state
+        t.spanner_state,
+        t.is_hidden
       from
         information_schema.columns as t
       where
@@ -464,6 +457,8 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
         and t.table_name not in unnest(@unsupported_tables)
         and not (t.table_name = 'COLUMNS' and t.column_name in unnest(@unsupported_columns))
         and not (t.table_name = 'INDEXES' and t.column_name in unnest(@unsupported_columns))
+        and not (t.table_name = 'COLUMN_OPTIONS' and t.column_name in unnest(@unsupported_columns))
+        and not (t.table_name = 'LOCALITY_GROUP_OPTIONS' and t.column_name in unnest(@unsupported_columns))
         and not (t.table_name = 'TABLES' and t.column_name = 'INTERLEAVE_TYPE')
         and not (t.table_name = 'TABLES' and t.column_name = 'ROW_DELETION_POLICY_EXPRESSION')
         and not (t.table_name = 'TABLES' and t.column_name = 'TABLE_TYPE')
@@ -479,191 +474,190 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
   // names.
   // clang-format off
   auto expected = std::vector<ValueRow>({
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAMS", "ALL", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAMS", "CHANGE_STREAM_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAMS", "CHANGE_STREAM_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAMS", "CHANGE_STREAM_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_COLUMNS", "CHANGE_STREAM_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_COLUMNS", "CHANGE_STREAM_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_COLUMNS", "CHANGE_STREAM_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_COLUMNS", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_COLUMNS", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_COLUMNS", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_COLUMNS", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_OPTIONS", "CHANGE_STREAM_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_OPTIONS", "CHANGE_STREAM_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_OPTIONS", "CHANGE_STREAM_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_TABLES", "ALL_COLUMNS", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_TABLES", "CHANGE_STREAM_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_TABLES", "CHANGE_STREAM_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_TABLES", "CHANGE_STREAM_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_TABLES", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_TABLES", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_TABLES", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHECK_CONSTRAINTS", "CHECK_CLAUSE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHECK_CONSTRAINTS", "CONSTRAINT_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHECK_CONSTRAINTS", "CONSTRAINT_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHECK_CONSTRAINTS", "CONSTRAINT_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CHECK_CONSTRAINTS", "SPANNER_STATE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "COLUMN_DEFAULT", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "DATA_TYPE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "GENERATION_EXPRESSION", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_GENERATION", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_KIND", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_SKIP_RANGE_MAX", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_SKIP_RANGE_MIN", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_START_WITH_COUNTER", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_GENERATED", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_IDENTITY", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_NULLABLE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_STORED", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "ORDINAL_POSITION", Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "SPANNER_STATE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "SPANNER_TYPE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMNS", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "DEPENDENT_COLUMN", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "CONSTRAINT_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "CONSTRAINT_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "CONSTRAINT_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", "CONSTRAINT_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", "CONSTRAINT_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", "CONSTRAINT_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "DATABASE_OPTIONS", "CATALOG_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "DATABASE_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "DATABASE_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "DATABASE_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "DATABASE_OPTIONS", "SCHEMA_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEXES", "INDEX_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEXES", "INDEX_STATE", Ns(), Ns(), "NO", "STRING(100)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEXES", "INDEX_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEXES", "IS_NULL_FILTERED", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEXES", "IS_UNIQUE", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEXES", "PARENT_TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEXES", "SPANNER_IS_MANAGED", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEXES", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEXES", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEXES", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "COLUMN_ORDERING", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "INDEX_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "INDEX_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "IS_NULLABLE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "ORDINAL_POSITION", Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "SPANNER_TYPE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "CONSTRAINT_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "CONSTRAINT_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "CONSTRAINT_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "ORDINAL_POSITION", Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "POSITION_IN_UNIQUE_CONSTRAINT", Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "LOCALITY_GROUP_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODELS", "IS_REMOTE", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODELS", "MODEL_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODELS", "MODEL_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODELS", "MODEL_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "COLUMN_KIND", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "DATA_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "IS_EXPLICIT", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "MODEL_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "MODEL_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "MODEL_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "ORDINAL_POSITION", Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "COLUMN_KIND", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "MODEL_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "MODEL_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "MODEL_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "MODEL_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "MODEL_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "MODEL_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CONSTRAINT_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CONSTRAINT_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CONSTRAINT_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "DELETE_RULE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "MATCH_OPTION", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "SPANNER_STATE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "UNIQUE_CONSTRAINT_CATALOG", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "UNIQUE_CONSTRAINT_NAME", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "UNIQUE_CONSTRAINT_SCHEMA", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "UPDATE_RULE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SCHEMATA", "CATALOG_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SCHEMATA", "SCHEMA_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SEQUENCES", "CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SEQUENCES", "DATA_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SEQUENCES", "NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SEQUENCES", "SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SEQUENCE_OPTIONS", "CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SEQUENCE_OPTIONS", "NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SEQUENCE_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SEQUENCE_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SEQUENCE_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SEQUENCE_OPTIONS", "SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SPANNER_STATISTICS", "ALLOW_GC", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SPANNER_STATISTICS", "CATALOG_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SPANNER_STATISTICS", "PACKAGE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "SPANNER_STATISTICS", "SCHEMA_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLES", "ON_DELETE_ACTION", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLES", "PARENT_TABLE_NAME", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLES", "SPANNER_STATE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLES", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLES", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLES", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CONSTRAINT_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CONSTRAINT_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CONSTRAINT_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CONSTRAINT_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "ENFORCED", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "INITIALLY_DEFERRED", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "IS_DEFERRABLE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
-    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAMS", "ALL", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAMS", "CHANGE_STREAM_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAMS", "CHANGE_STREAM_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAMS", "CHANGE_STREAM_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_COLUMNS", "CHANGE_STREAM_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_COLUMNS", "CHANGE_STREAM_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_COLUMNS", "CHANGE_STREAM_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_COLUMNS", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_COLUMNS", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_COLUMNS", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_COLUMNS", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_OPTIONS", "CHANGE_STREAM_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_OPTIONS", "CHANGE_STREAM_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_OPTIONS", "CHANGE_STREAM_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_TABLES", "ALL_COLUMNS", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_TABLES", "CHANGE_STREAM_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_TABLES", "CHANGE_STREAM_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_TABLES", "CHANGE_STREAM_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_TABLES", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_TABLES", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHANGE_STREAM_TABLES", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHECK_CONSTRAINTS", "CHECK_CLAUSE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHECK_CONSTRAINTS", "CONSTRAINT_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHECK_CONSTRAINTS", "CONSTRAINT_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHECK_CONSTRAINTS", "CONSTRAINT_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CHECK_CONSTRAINTS", "SPANNER_STATE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "COLUMN_DEFAULT", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "DATA_TYPE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "GENERATION_EXPRESSION", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_GENERATION", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_KIND", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_SKIP_RANGE_MAX", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_SKIP_RANGE_MIN", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IDENTITY_START_WITH_COUNTER", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_GENERATED", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_HIDDEN", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_IDENTITY", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_NULLABLE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_STORED", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "ORDINAL_POSITION", Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "SPANNER_STATE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "SPANNER_TYPE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "DEPENDENT_COLUMN", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_COLUMN_USAGE", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMN_OPTIONS", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "CONSTRAINT_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "CONSTRAINT_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "CONSTRAINT_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CONSTRAINT_COLUMN_USAGE", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", "CONSTRAINT_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", "CONSTRAINT_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", "CONSTRAINT_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "CONSTRAINT_TABLE_USAGE", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "DATABASE_OPTIONS", "CATALOG_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "DATABASE_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "DATABASE_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "DATABASE_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "DATABASE_OPTIONS", "SCHEMA_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEXES", "INDEX_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEXES", "INDEX_STATE", Ns(), Ns(), "NO", "STRING(100)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEXES", "INDEX_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEXES", "IS_NULL_FILTERED", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEXES", "IS_UNIQUE", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEXES", "PARENT_TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEXES", "SPANNER_IS_MANAGED", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEXES", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEXES", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEXES", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "COLUMN_ORDERING", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "INDEX_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "INDEX_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "IS_NULLABLE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "ORDINAL_POSITION", Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "SPANNER_TYPE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEX_COLUMNS", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "CONSTRAINT_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "CONSTRAINT_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "CONSTRAINT_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "ORDINAL_POSITION", Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "POSITION_IN_UNIQUE_CONSTRAINT", Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "KEY_COLUMN_USAGE", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "LOCALITY_GROUP_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "LOCALITY_GROUP_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODELS", "IS_REMOTE", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODELS", "MODEL_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODELS", "MODEL_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODELS", "MODEL_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "COLUMN_KIND", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "DATA_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "IS_EXPLICIT", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "MODEL_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "MODEL_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "MODEL_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "ORDINAL_POSITION", Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "COLUMN_KIND", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "COLUMN_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "MODEL_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "MODEL_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "MODEL_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "MODEL_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "MODEL_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "MODEL_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_METADATA_JSON", Ns(), Ns(), "YES", "JSON", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CONSTRAINT_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CONSTRAINT_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CONSTRAINT_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "DELETE_RULE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "MATCH_OPTION", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "SPANNER_STATE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "UNIQUE_CONSTRAINT_CATALOG", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "UNIQUE_CONSTRAINT_NAME", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "UNIQUE_CONSTRAINT_SCHEMA", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "UPDATE_RULE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SCHEMATA", "CATALOG_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SCHEMATA", "SCHEMA_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SEQUENCES", "CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SEQUENCES", "DATA_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SEQUENCES", "NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SEQUENCES", "SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SEQUENCE_OPTIONS", "CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SEQUENCE_OPTIONS", "NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SEQUENCE_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SEQUENCE_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SEQUENCE_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SEQUENCE_OPTIONS", "SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SPANNER_STATISTICS", "ALLOW_GC", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SPANNER_STATISTICS", "CATALOG_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SPANNER_STATISTICS", "PACKAGE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SPANNER_STATISTICS", "SCHEMA_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLES", "ON_DELETE_ACTION", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLES", "PARENT_TABLE_NAME", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLES", "SPANNER_STATE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLES", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLES", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLES", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CONSTRAINT_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CONSTRAINT_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CONSTRAINT_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CONSTRAINT_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "ENFORCED", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "INITIALLY_DEFERRED", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "IS_DEFERRABLE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
   });
-  if (PropertyGraphInformationSchemaEnabled()) {
-    expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns());  // NOLINT
-    expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_METADATA_JSON", Ns(), Ns(), "YES", "JSON", "NEVER", Ns(), Ns(), Ns());  // NOLINT
-    expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns());  // NOLINT
-    expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns());  // NOLINT
-  }
   // clang-format on
   CheckResultsAgainstExpected(results, expected);
 }
@@ -689,6 +683,7 @@ TEST_P(InformationSchemaTest, PGMetaColumns) {
         t.is_nullable,
         t.spanner_type,
         t.is_generated,
+        t.is_hidden,
         t.generation_expression,
         t.is_stored,
         t.spanner_state,
@@ -714,9 +709,9 @@ TEST_P(InformationSchemaTest, PGMetaColumns) {
   // the same for all columns.
   // clang-format off
   auto expected = std::vector<ValueRow>({
-    {"information_schema", "columns", "ordinal_position", Ns(), "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), Ns(), Ni(), 64, 2, 0},  // NOLINT
-    {"information_schema", "columns", "table_catalog", Ns(), "character varying", "YES", "character varying", "NEVER", Ns(), Ns(), Ns(), Ni(), Ni(), Ni(), Ni()},  // NOLINT
-    {"information_schema", "tables", "table_catalog", Ns(), "character varying", "YES", "character varying", "NEVER", Ns(), Ns(), Ns(), Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"information_schema", "columns", "ordinal_position", Ns(), "bigint", "YES", "bigint", "NEVER", "NO", Ns(),Ns(), Ns(), Ni(), 64, 2, 0},  // NOLINT
+    {"information_schema", "columns", "table_catalog", Ns(), "character varying", "YES", "character varying", "NEVER", "NO", Ns(), Ns(), Ns(), Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"information_schema", "tables", "table_catalog", Ns(), "character varying", "YES", "character varying", "NEVER", "NO", Ns(), Ns(), Ns(), Ni(), Ni(), Ni(), Ni()},  // NOLINT
   });
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -786,6 +781,7 @@ TEST_P(InformationSchemaTest, MetaIndexes) {
         {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
+        {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "SCHEMATA", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "SEQUENCES", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
@@ -794,9 +790,6 @@ TEST_P(InformationSchemaTest, MetaIndexes) {
         {"", "INFORMATION_SCHEMA", "TABLES", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
     });
-    if (PropertyGraphInformationSchemaEnabled()) {
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns());  // NOLINT
-    }
     // clang-format on
     results = QueryWithParams(query, {kUnsupportedTables});
     CheckResultsAgainstExpected(results, expected);
@@ -934,6 +927,9 @@ TEST_P(InformationSchemaTest, MetaIndexColumns) {
       {"INFORMATION_SCHEMA", "MODEL_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "MODEL_SCHEMA", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "MODEL_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "MODEL_NAME", 3, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "MODEL_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "OPTION_NAME", 4, "ASC", "NO", "STRING(MAX)"},  // NOLINT
+      {"INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "PROPERTY_GRAPH_CATALOG", 1, "ASC", "NO", "STRING(MAX)"},  // NOLINT
+      {"INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "PROPERTY_GRAPH_SCHEMA", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
+      {"INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "PROPERTY_GRAPH_NAME", 3, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "PRIMARY_KEY", "PRIMARY_KEY", "CONSTRAINT_CATALOG", 1, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "PRIMARY_KEY", "PRIMARY_KEY", "CONSTRAINT_SCHEMA", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "PRIMARY_KEY", "PRIMARY_KEY", "CONSTRAINT_NAME", 3, "ASC", "NO", "STRING(MAX)"},  // NOLINT
@@ -956,11 +952,6 @@ TEST_P(InformationSchemaTest, MetaIndexColumns) {
       {"INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "PRIMARY_KEY", "PRIMARY_KEY", "CONSTRAINT_SCHEMA", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "PRIMARY_KEY", "PRIMARY_KEY", "CONSTRAINT_NAME", 3, "ASC", "NO", "STRING(MAX)"},  // NOLINT
     });
-    if (PropertyGraphInformationSchemaEnabled()) {
-      expected.emplace_back("INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "PROPERTY_GRAPH_CATALOG", 1, "ASC", "NO", "STRING(MAX)");  // NOLINT
-      expected.emplace_back("INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "PROPERTY_GRAPH_SCHEMA", 2, "ASC", "NO", "STRING(MAX)");  // NOLINT
-      expected.emplace_back("INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "PROPERTY_GRAPH_NAME", 3, "ASC", "NO", "STRING(MAX)");  // NOLINT
-    }
     // clang-format on
     results = QueryWithParams(query, {kUnsupportedTables});
     LogResults(results);
@@ -1130,6 +1121,9 @@ TEST_P(InformationSchemaTest, MetaTableConstraints) {
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODEL_OPTIONS_OPTION_NAME", "", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODEL_OPTIONS_OPTION_TYPE", "", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODEL_OPTIONS_OPTION_VALUE", "", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_REFERENTIAL_CONSTRAINTS_CONSTRAINT_CATALOG", "", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_REFERENTIAL_CONSTRAINTS_CONSTRAINT_NAME", "", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_REFERENTIAL_CONSTRAINTS_CONSTRAINT_SCHEMA", "", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CHECK", "NO", "NO", "YES"},  // NOLINT
@@ -1185,6 +1179,7 @@ TEST_P(InformationSchemaTest, MetaTableConstraints) {
       {"", "INFORMATION_SCHEMA", "PK_MODEL_COLUMNS", "", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_MODEL_COLUMN_OPTIONS", "", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_MODEL_OPTIONS", "", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_REFERENTIAL_CONSTRAINTS", "", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_SCHEMATA", "", "INFORMATION_SCHEMA", "SCHEMATA", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_SEQUENCES", "", "INFORMATION_SCHEMA", "SEQUENCES", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
@@ -1193,12 +1188,6 @@ TEST_P(InformationSchemaTest, MetaTableConstraints) {
       {"", "INFORMATION_SCHEMA", "PK_TABLES", "", "INFORMATION_SCHEMA", "TABLES", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_TABLE_CONSTRAINTS", "", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
     });
-    if (PropertyGraphInformationSchemaEnabled()) {
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY KEY", "NO", "NO", "YES");  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "CHECK", "NO", "NO", "YES");  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "CHECK", "NO", "NO", "YES");  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "CHECK", "NO", "NO", "YES");  // NOLINT
-    }
 
     // clang-format on
     CheckResultsAgainstExpected(results, expected);
@@ -1334,6 +1323,9 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_KEY_COLUMN_USAGE_TABLE_SCHEMA", "TABLE_SCHEMA IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_LOCALITY_GROUP_OPTIONS_LOCALITY_GROUP_NAME", "LOCALITY_GROUP_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_LOCALITY_GROUP_OPTIONS_OPTION_NAME", "OPTION_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG", "PROPERTY_GRAPH_CATALOG IS NOT NULL", "COMMITTED"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME", "PROPERTY_GRAPH_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA", "PROPERTY_GRAPH_SCHEMA IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_REFERENTIAL_CONSTRAINTS_CONSTRAINT_CATALOG", "CONSTRAINT_CATALOG IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_REFERENTIAL_CONSTRAINTS_CONSTRAINT_NAME", "CONSTRAINT_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_REFERENTIAL_CONSTRAINTS_CONSTRAINT_SCHEMA", "CONSTRAINT_SCHEMA IS NOT NULL", "COMMITTED"},  // NOLINT
@@ -1371,11 +1363,6 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_TABLE_CONSTRAINTS_TABLE_NAME", "TABLE_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_TABLE_CONSTRAINTS_TABLE_SCHEMA", "TABLE_SCHEMA IS NOT NULL", "COMMITTED"},  // NOLINT
     });
-    if (PropertyGraphInformationSchemaEnabled()) {
-      expected.emplace_back("", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG", "PROPERTY_GRAPH_CATALOG IS NOT NULL", "COMMITTED");  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME", "PROPERTY_GRAPH_NAME IS NOT NULL", "COMMITTED");  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA", "PROPERTY_GRAPH_SCHEMA IS NOT NULL", "COMMITTED");  // NOLINT
-    }
     // clang-format on
     CheckResultsAgainstExpected(results, expected);
   }
@@ -1563,6 +1550,10 @@ TEST_P(InformationSchemaTest, MetaConstraintTableUsage) {
       {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODEL_OPTIONS_OPTION_TYPE"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODEL_OPTIONS_OPTION_VALUE"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "", "INFORMATION_SCHEMA", "PK_MODEL_OPTIONS"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_REFERENTIAL_CONSTRAINTS_CONSTRAINT_CATALOG"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_REFERENTIAL_CONSTRAINTS_CONSTRAINT_NAME"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_REFERENTIAL_CONSTRAINTS_CONSTRAINT_SCHEMA"},  // NOLINT
@@ -1607,12 +1598,6 @@ TEST_P(InformationSchemaTest, MetaConstraintTableUsage) {
       {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_TABLE_CONSTRAINTS_TABLE_SCHEMA"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "", "INFORMATION_SCHEMA", "PK_TABLE_CONSTRAINTS"},  // NOLINT
     });
-    if (PropertyGraphInformationSchemaEnabled()) {
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG");  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME");  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA");  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS");  // NOLINT
-    }
     // clang-format on
     CheckResultsAgainstExpected(results, expected);
   }
@@ -1774,6 +1759,9 @@ TEST_P(InformationSchemaTest, MetaKeyColumnUsage) {
       {"", "INFORMATION_SCHEMA", "PK_MODEL_OPTIONS", "", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "MODEL_SCHEMA", 2, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_MODEL_OPTIONS", "", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "MODEL_NAME", 3, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_MODEL_OPTIONS", "", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_NAME", 4, Ni()},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", 1, Ni()},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_SCHEMA", 2, Ni()},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", 3, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_REFERENTIAL_CONSTRAINTS", "", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CONSTRAINT_CATALOG", 1, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_REFERENTIAL_CONSTRAINTS", "", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CONSTRAINT_SCHEMA", 2, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_REFERENTIAL_CONSTRAINTS", "", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CONSTRAINT_NAME", 3, Ni()},  // NOLINT
@@ -1796,11 +1784,6 @@ TEST_P(InformationSchemaTest, MetaKeyColumnUsage) {
       {"", "INFORMATION_SCHEMA", "PK_TABLE_CONSTRAINTS", "", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CONSTRAINT_SCHEMA", 2, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_TABLE_CONSTRAINTS", "", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "CONSTRAINT_NAME", 3, Ni()},  // NOLINT
     });
-    if (PropertyGraphInformationSchemaEnabled()) {
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", 1, Ni());  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_SCHEMA", 2, Ni());  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", 3, Ni());  // NOLINT
-    }
     // clang-format on
     CheckResultsAgainstExpected(results, expected);
   }
@@ -2056,6 +2039,12 @@ TEST_P(InformationSchemaTest, MetaConstraintColumnUsage) {
       {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_NAME", "", "INFORMATION_SCHEMA", "PK_MODEL_OPTIONS"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_TYPE", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODEL_OPTIONS_OPTION_TYPE"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_VALUE", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODEL_OPTIONS_OPTION_VALUE"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", "", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", "", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_SCHEMA", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_SCHEMA", "", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CONSTRAINT_CATALOG", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_REFERENTIAL_CONSTRAINTS_CONSTRAINT_CATALOG"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CONSTRAINT_CATALOG", "", "INFORMATION_SCHEMA", "PK_REFERENTIAL_CONSTRAINTS"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "CONSTRAINT_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_REFERENTIAL_CONSTRAINTS_CONSTRAINT_NAME"},  // NOLINT
@@ -2114,14 +2103,6 @@ TEST_P(InformationSchemaTest, MetaConstraintColumnUsage) {
       {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_TABLE_CONSTRAINTS_TABLE_NAME"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_SCHEMA", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_TABLE_CONSTRAINTS_TABLE_SCHEMA"},  // NOLINT
     });
-    if (PropertyGraphInformationSchemaEnabled()) {
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG");  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", "", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS");  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME");  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", "", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS");  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_SCHEMA", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA");  // NOLINT
-      expected.emplace_back("", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_SCHEMA", "", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS");  // NOLINT
-    }
     CheckResultsAgainstExpected(results, expected);
   }
 }
@@ -2719,6 +2700,7 @@ TEST_P(InformationSchemaTest, DefaultColumnOptions) {
       where
         t.table_catalog = ''
         and t.table_schema = ''
+        and t.option_value != 'default'
       order by
         t.table_name,
         t.column_name,
@@ -2988,7 +2970,6 @@ TEST_P(InformationSchemaTest, NamedSchemaConstraintTableUsage) {
     // clang-format off
     auto expected = ExpectedRows(results, {
       {"named_schema", "ns_table_1", "named_schema", "PK_ns_table_1"},  // NOLINT
-      {"named_schema", "ns_table_1", "named_schema", "fk_ns_table_2"},  // NOLINT
       {"named_schema", "ns_table_2", "named_schema", "PK_ns_table_2"},  // NOLINT
     });
     // clang-format on
@@ -2997,7 +2978,6 @@ TEST_P(InformationSchemaTest, NamedSchemaConstraintTableUsage) {
     // clang-format off
     auto expected = ExpectedRows(results, {
       {"", "named_schema", "ns_table_1", "", "named_schema", "PK_ns_table_1"}, // NOLINT
-      {"", "named_schema", "ns_table_1", "", "named_schema", "fk_ns_table_2"}, // NOLINT
       {"", "named_schema", "ns_table_2", "", "named_schema", "PK_ns_table_2"} // NOLINT
     });
     // clang-format on
@@ -3093,14 +3073,14 @@ TEST_P(InformationSchemaTest, NamedSchemaReferentialConstraints) {
   if (GetParam() == POSTGRESQL) {
     // clang-format off
     auto expected = ExpectedRows(results, {
-      {"named_schema", "fk_ns_table_2", "named_schema", "PK_ns_table_1", "NONE", "NO ACTION", "NO ACTION", "COMMITTED"},  // NOLINT
+      {"named_schema", "fk_ns_table_2", "named_schema2", "PK_ns_table_1", "NONE", "NO ACTION", "NO ACTION", "COMMITTED"},  // NOLINT
     });
     // clang-format on
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   } else {
     // clang-format off
     auto expected = ExpectedRows(results, {
-      {"","named_schema", "fk_ns_table_2", "", "named_schema", "PK_ns_table_1", "SIMPLE", "NO ACTION", "NO ACTION", "COMMITTED"},  // NOLINT
+      {"","named_schema", "fk_ns_table_2", "", "named_schema2", "PK_ns_table_1", "SIMPLE", "NO ACTION", "NO ACTION", "COMMITTED"},  // NOLINT
     });
     // clang-format on
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -3377,7 +3357,6 @@ TEST_P(InformationSchemaTest, NamedSchemaConstraintColumnUsage) {
     auto expected = ExpectedRows(results, {
       {"named_schema", "ns_table_1", "key1", "named_schema", "CK_IS_NOT_NULL_ns_table_1_key1"}, // NOLINT
       {"named_schema", "ns_table_1", "key1", "named_schema", "PK_ns_table_1"},  // NOLINT
-      {"named_schema", "ns_table_1", "key1", "named_schema", "fk_ns_table_2"},  // NOLINT
       {"named_schema", "ns_table_2", "key1", "named_schema", "CK_IS_NOT_NULL_ns_table_2_key1"},  // NOLINT
       {"named_schema", "ns_table_2", "key1", "named_schema", "PK_ns_table_2"} // NOLINT
     });
@@ -3387,7 +3366,6 @@ TEST_P(InformationSchemaTest, NamedSchemaConstraintColumnUsage) {
     // clang-format off
     auto expected = ExpectedRows(results, {
       {"", "named_schema", "ns_table_1", "key1", "", "named_schema", "PK_ns_table_1"},  // NOLINT
-      {"", "named_schema", "ns_table_1", "key1","", "named_schema", "fk_ns_table_2"},  // NOLINT
       {"", "named_schema", "ns_table_2", "key1", "", "named_schema", "PK_ns_table_2"} // NOLINT
     });
     // clang-format on
@@ -4070,8 +4048,7 @@ TEST_P(InformationSchemaTest, DefaultModelColumnOptions) {
 }
 
 TEST_P(InformationSchemaTest, DefaultPropertyGraphs) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL ||
-      !PropertyGraphInformationSchemaEnabled()) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     return;
   }
 

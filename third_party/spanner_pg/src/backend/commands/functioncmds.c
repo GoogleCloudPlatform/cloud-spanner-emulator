@@ -96,7 +96,7 @@ compute_return_type(TypeName *returnType, Oid languageOid,
 {
 	Oid			rettype;
 	Type		typtup;
-	AclResult	aclresult;
+	// SPANGRES: ACL is not supported yet.
 
 	typtup = LookupTypeName(NULL, returnType, NULL, false);
 
@@ -162,9 +162,7 @@ compute_return_type(TypeName *returnType, Oid languageOid,
 		Assert(OidIsValid(rettype));
 	}
 
-	aclresult = pg_type_aclcheck(rettype, GetUserId(), ACL_USAGE);
-	if (aclresult != ACLCHECK_OK)
-		aclcheck_error_type(aclresult, rettype);
+	// SPANGRES: ACL is not supported yet.
 
 	*prorettype_p = rettype;
 	*returnsSet_p = returnType->setof;
@@ -233,7 +231,7 @@ interpret_function_parameter_list(ParseState *pstate,
 		bool		isinput = false;
 		Oid			toid;
 		Type		typtup;
-		AclResult	aclresult;
+		// SPANGRES: ACL is not supported yet.
 
 		/* For our purposes here, a defaulted mode spec is identical to IN */
 		if (fpmode == FUNC_PARAM_DEFAULT)
@@ -274,9 +272,7 @@ interpret_function_parameter_list(ParseState *pstate,
 			toid = InvalidOid;	/* keep compiler quiet */
 		}
 
-		aclresult = pg_type_aclcheck(toid, GetUserId(), ACL_USAGE);
-		if (aclresult != ACLCHECK_OK)
-			aclcheck_error_type(aclresult, toid);
+		// SPANGRES: ACL is not supported yet.
 
 		if (t->setof)
 		{
@@ -1020,18 +1016,26 @@ interpret_AS_clause(Oid languageOid, const char *languageName,
 ObjectAddress
 CreateFunction(ParseState *pstate, CreateFunctionStmt *stmt)
 {
+// SPANGRES BEGIN
+	ereport(ERROR,
+			(errcode(ERRCODE_INVALID_FUNCTION_DEFINITION),
+				errmsg("Unsupported function creation")));
+}
+
+Query *
+CreateFunctionQuery(ParseState *pstate, CreateFunctionStmt *stmt, Oid languageOid)
+{
+// SPANGRES END
 	char	   *probin_str;
 	char	   *prosrc_str;
 	Node	   *prosqlbody;
 	Oid			prorettype;
 	bool		returnsSet;
 	char	   *language;
-	Oid			languageOid;
-	Oid			languageValidator;
+	// SPANGRES: language passed as argument, and only SQL is supported.
 	Node	   *transformDefElem = NULL;
 	char	   *funcname;
-	Oid			namespaceId;
-	AclResult	aclresult;
+	// SPANGRES: ACL is not supported yet.
 	oidvector  *parameterTypes;
 	List	   *parameterTypes_list = NIL;
 	ArrayType  *allParameterTypes;
@@ -1052,20 +1056,15 @@ CreateFunction(ParseState *pstate, CreateFunctionStmt *stmt)
 	float4		procost;
 	float4		prorows;
 	Oid			prosupport;
-	HeapTuple	languageTuple;
-	Form_pg_language languageStruct;
+	// SPANGRES: Only SQL is supported.
 	List	   *as_clause;
 	char		parallel;
 
 	/* Convert list of names to a name and namespace */
-	namespaceId = QualifiedNameGetCreationNamespace(stmt->funcname,
-													&funcname);
-
-	/* Check we have creation rights in target namespace */
-	aclresult = pg_namespace_aclcheck(namespaceId, GetUserId(), ACL_CREATE);
-	if (aclresult != ACLCHECK_OK)
-		aclcheck_error(aclresult, OBJECT_SCHEMA,
-					   get_namespace_name(namespaceId));
+	// SPANGRES BEGIN
+	char	   *schemaname;
+	DeconstructQualifiedName(stmt->funcname, &schemaname, &funcname);
+	// SPANGRES END
 
 	/* Set default attributes */
 	as_clause = NIL;
@@ -1101,39 +1100,9 @@ CreateFunction(ParseState *pstate, CreateFunctionStmt *stmt)
 					 errmsg("no language specified")));
 	}
 
-	/* Look up the language and validate permissions */
-	languageTuple = SearchSysCache1(LANGNAME, PointerGetDatum(language));
-	if (!HeapTupleIsValid(languageTuple))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("language \"%s\" does not exist", language),
-				 (extension_file_exists(language) ?
-				  errhint("Use CREATE EXTENSION to load the language into the database.") : 0)));
+	// SPANGRES: Only SQL is supported.
 
-	languageStruct = (Form_pg_language) GETSTRUCT(languageTuple);
-	languageOid = languageStruct->oid;
-
-	if (languageStruct->lanpltrusted)
-	{
-		/* if trusted language, need USAGE privilege */
-		AclResult	aclresult;
-
-		aclresult = pg_language_aclcheck(languageOid, GetUserId(), ACL_USAGE);
-		if (aclresult != ACLCHECK_OK)
-			aclcheck_error(aclresult, OBJECT_LANGUAGE,
-						   NameStr(languageStruct->lanname));
-	}
-	else
-	{
-		/* if untrusted language, must be superuser */
-		if (!superuser())
-			aclcheck_error(ACLCHECK_NO_PRIV, OBJECT_LANGUAGE,
-						   NameStr(languageStruct->lanname));
-	}
-
-	languageValidator = languageStruct->lanvalidator;
-
-	ReleaseSysCache(languageTuple);
+	// SPANGRES: ACL is not supported yet.
 
 	/*
 	 * Only superuser is allowed to create leakproof functions because
@@ -1262,38 +1231,19 @@ CreateFunction(ParseState *pstate, CreateFunctionStmt *stmt)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("ROWS is not applicable when function does not return a set")));
-
-	/*
-	 * And now that we have all the parameters, and know we're permitted to do
-	 * so, go ahead and create the function.
-	 */
-	return ProcedureCreate(funcname,
-						   namespaceId,
-						   stmt->replace,
-						   returnsSet,
-						   prorettype,
-						   GetUserId(),
-						   languageOid,
-						   languageValidator,
-						   prosrc_str,	/* converted to text later */
-						   probin_str,	/* converted to text later */
-						   prosqlbody,
-						   stmt->is_procedure ? PROKIND_PROCEDURE : (isWindowFunc ? PROKIND_WINDOW : PROKIND_FUNCTION),
-						   security,
-						   isLeakProof,
-						   isStrict,
-						   volatility,
-						   parallel,
-						   parameterTypes,
-						   PointerGetDatum(allParameterTypes),
-						   PointerGetDatum(parameterModes),
-						   PointerGetDatum(parameterNames),
-						   parameterDefaults,
-						   PointerGetDatum(trftypes),
-						   PointerGetDatum(proconfig),
-						   prosupport,
-						   procost,
-						   prorows);
+	
+	// SPANGRES BEGIN
+	// TODO: disallow function names matching builtin names.
+	// TODO: default expressions cannot be removed or change type.
+	// `prosqlbody` is a list of nodes, but we only support a single statement.
+	if (IsA(prosqlbody, List))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_FUNCTION_DEFINITION),
+					errmsg("Only a single statement is supported in the function body")));
+	}
+	return (Query *) prosqlbody;
+	// SPANGRES END
 }
 
 /*

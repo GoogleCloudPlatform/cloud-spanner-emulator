@@ -1068,6 +1068,7 @@ absl::Status VectorIndexesUnusableForceIndexWrongColumn(
     absl::string_view index_string, absl::string_view ann_func_name,
     absl::string_view column_string);
 absl::Status NotVectorIndexes(absl::string_view index_string);
+absl::Status RenameTableNotSupportedInPostgreSQL();
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

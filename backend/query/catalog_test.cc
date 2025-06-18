@@ -228,6 +228,18 @@ TEST_F(CatalogTest, FindFunctionFindsSoundexFunction) {
   EXPECT_EQ(function->Name(), "soundex");
 }
 
+TEST_F(CatalogTest, FunctionOptionsAreUpdatedForPGFunctions) {
+  const zetasql::Function* function;
+
+  ZETASQL_ASSERT_OK(catalog().FindFunction({"pg.least"}, &function, {}));
+  EXPECT_NE(function->GetFunctionEvaluatorFactory(), nullptr);
+  EXPECT_EQ(function->GetAggregateFunctionEvaluatorFactory(), nullptr);
+
+  ZETASQL_ASSERT_OK(catalog().FindFunction({"pg.min"}, &function, {}));
+  EXPECT_EQ(function->GetFunctionEvaluatorFactory(), nullptr);
+  EXPECT_NE(function->GetAggregateFunctionEvaluatorFactory(), nullptr);
+}
+
 TEST_F(CatalogTest,
        FindFunctionDoesNotFindNonSoundexAdditionalStringFunctions) {
   const zetasql::Function* function;

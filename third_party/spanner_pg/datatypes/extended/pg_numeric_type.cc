@@ -65,6 +65,11 @@
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
+namespace {
+  constexpr absl::string_view kNestedMemoryReservationHoldersError =
+    "Nesting MemoryReservationHolders is not supported";
+}
+
 namespace postgres_translator::spangres::datatypes {
 
 using LanguageOptions = ::zetasql::LanguageOptions;
@@ -240,6 +245,17 @@ class PgNumericType : public SpannerExtendedType {
     std::string rhs_normalized_str;
     rhs_normalized_str.reserve(rhs_normalized.size());
     absl::CopyCordToString(rhs_normalized, &rhs_normalized_str);
+
+     // Setup the memory context arena which is required for PG function calls.
+    auto set_up_arena =
+         postgres_translator::interfaces::CreatePGArena(nullptr);
+    // If the arena setup fails and it isn't because the arena has already been
+    // setup, return the error.
+    if (!set_up_arena.ok() &&
+        set_up_arena.status().message() !=
+        kNestedMemoryReservationHoldersError) {
+      return set_up_arena.status();
+    }
 
     // Create numeric datums from `lhs_normalized_str` and `rhs_normalized_str`
     // by indirectly calling PG function `numeric_in`:

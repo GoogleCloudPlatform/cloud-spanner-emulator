@@ -1,0 +1,4230 @@
+#
+# proto-file: third_party/spanner_pg/catalog/proto/catalog.proto
+# proto-message: CatalogProto
+#
+# GENERATED FILE
+#
+# Do not edit directly.
+#
+
+functions {
+  name_path: "$add"
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "$divide"
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "$multiply"
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "$subscript"
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "$subtract"
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "$unary_minus"
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "abs"
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "ai"
+  name_path: "if"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "prompt"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "bool_array"
+  signatures {
+    return_type {
+      name: "_bool"
+      oid: 1000
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "ceil"
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "div"
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "floor"
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "get_internal_sequence_state"
+  signatures {
+    return_type {
+      name: "int8"
+      oid: 20
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "get_next_sequence_value"
+  signatures {
+    return_type {
+      name: "int8"
+      oid: 20
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "int64_array"
+  signatures {
+    return_type {
+      name: "_int8"
+      oid: 1016
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "json_query_array"
+  signatures {
+    return_type {
+      name: "_jsonb"
+      oid: 3807
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "json_type"
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "ml_predict_row"
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "model_endpoint"
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "args"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "model_endpoint"
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "args"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "mod"
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "approx_cosine_distance"
+  signatures {
+    return_type {
+      name: "float8"
+      oid: 701
+    }
+    arguments {
+      type {
+        name: "_float8"
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector1"
+    }
+    arguments {
+      type {
+        name: "_float8"
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector2"
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: NAMED_ONLY
+      name: "options"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "float8"
+      oid: 701
+    }
+    arguments {
+      type {
+        name: "_float4"
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector1"
+    }
+    arguments {
+      type {
+        name: "_float4"
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector2"
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: NAMED_ONLY
+      name: "options"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "approx_dot_product"
+  signatures {
+    return_type {
+      name: "float8"
+      oid: 701
+    }
+    arguments {
+      type {
+        name: "_float8"
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector1"
+    }
+    arguments {
+      type {
+        name: "_float8"
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector2"
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: NAMED_ONLY
+      name: "options"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "float8"
+      oid: 701
+    }
+    arguments {
+      type {
+        name: "_float4"
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector1"
+    }
+    arguments {
+      type {
+        name: "_float4"
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector2"
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: NAMED_ONLY
+      name: "options"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "approx_euclidean_distance"
+  signatures {
+    return_type {
+      name: "float8"
+      oid: 701
+    }
+    arguments {
+      type {
+        name: "_float8"
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector1"
+    }
+    arguments {
+      type {
+        name: "_float8"
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector2"
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: NAMED_ONLY
+      name: "options"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "float8"
+      oid: 701
+    }
+    arguments {
+      type {
+        name: "_float4"
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector1"
+    }
+    arguments {
+      type {
+        name: "_float4"
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector2"
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: NAMED_ONLY
+      name: "options"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "array_all_equal"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "anyelement"
+        oid: 2283
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_value"
+    }
+    arguments {
+      type {
+        name: "anyarray"
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "array_all_greater"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "anyelement"
+        oid: 2283
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_value"
+    }
+    arguments {
+      type {
+        name: "anyarray"
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "array_all_greater_equal"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "anyelement"
+        oid: 2283
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_value"
+    }
+    arguments {
+      type {
+        name: "anyarray"
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "array_all_less"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "anyelement"
+        oid: 2283
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_value"
+    }
+    arguments {
+      type {
+        name: "anyarray"
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "array_all_less_equal"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "anyelement"
+        oid: 2283
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_value"
+    }
+    arguments {
+      type {
+        name: "anyarray"
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "array_contained"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "anyarray"
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_values"
+    }
+    arguments {
+      type {
+        name: "anyarray"
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "array_contains"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "anyarray"
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    arguments {
+      type {
+        name: "anyarray"
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_values"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "array_length"
+  signatures {
+    return_type {
+      name: "int8"
+      oid: 20
+    }
+    arguments {
+      type {
+        name: "anyarray"
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "array_overlap"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "anyarray"
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    arguments {
+      type {
+        name: "anyarray"
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_values"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "array_slice"
+  signatures {
+    return_type {
+      name: "anyarray"
+      oid: 2277
+    }
+    arguments {
+      type {
+        name: "anyarray"
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_slice"
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "start_offset"
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "end_offset"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "array_upper"
+  signatures {
+    return_type {
+      name: "int8"
+      oid: 20
+    }
+    arguments {
+      type {
+        name: "anyarray"
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "cast_to_date"
+  signatures {
+    return_type {
+      name: "date"
+      oid: 1082
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "cast_to_double"
+  signatures {
+    return_type {
+      name: "float8"
+      oid: 701
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "cast_to_float"
+  signatures {
+    return_type {
+      name: "float4"
+      oid: 700
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "cast_to_int64"
+  signatures {
+    return_type {
+      name: "int8"
+      oid: 20
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "cast_to_interval"
+  signatures {
+    return_type {
+      name: "interval"
+      oid: 1186
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "cast_to_string"
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "cast_to_timestamp"
+  signatures {
+    return_type {
+      name: "timestamptz"
+      oid: 1184
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "date_bin"
+  signatures {
+    return_type {
+      name: "timestamptz"
+      oid: 1184
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "date_mi"
+  signatures {
+    return_type {
+      name: "int8"
+      oid: 20
+    }
+    arguments {
+      type {
+        name: "date"
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "date"
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "date_mii"
+  signatures {
+    return_type {
+      name: "date"
+      oid: 1082
+    }
+    arguments {
+      type {
+        name: "date"
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "date_part"
+  signatures {
+    return_type {
+      name: "float8"
+      oid: 701
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "date"
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "float8"
+      oid: 701
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "date_pli"
+  signatures {
+    return_type {
+      name: "date"
+      oid: 1082
+    }
+    arguments {
+      type {
+        name: "date"
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "date_trunc"
+  signatures {
+    return_type {
+      name: "timestamptz"
+      oid: 1184
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "timestamptz"
+      oid: 1184
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "extract"
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "date"
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "extract_interval"
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "float_add"
+  signatures {
+    return_type {
+      name: "float4"
+      oid: 700
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "float_divide"
+  signatures {
+    return_type {
+      name: "float4"
+      oid: 700
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "float_multiply"
+  signatures {
+    return_type {
+      name: "float4"
+      oid: 700
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "float_subtract"
+  signatures {
+    return_type {
+      name: "float4"
+      oid: 700
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "format_type"
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "oid"
+        oid: 26
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "generate_array"
+  signatures {
+    return_type {
+      name: "_numeric"
+      oid: 1231
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "greatest"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "bool"
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "bool"
+        oid: 16
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "bytea"
+      oid: 17
+    }
+    arguments {
+      type {
+        name: "bytea"
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "bytea"
+        oid: 17
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "date"
+      oid: 1082
+    }
+    arguments {
+      type {
+        name: "date"
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "date"
+        oid: 1082
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "float8"
+      oid: 701
+    }
+    arguments {
+      type {
+        name: "float8"
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "float8"
+        oid: 701
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "float4"
+      oid: 700
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "interval"
+      oid: 1186
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "int8"
+      oid: 20
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "timestamptz"
+      oid: 1184
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "uuid"
+      oid: 2950
+    }
+    arguments {
+      type {
+        name: "uuid"
+        oid: 2950
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "uuid"
+        oid: 2950
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "interval_add"
+  signatures {
+    return_type {
+      name: "interval"
+      oid: 1186
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "interval_divide"
+  signatures {
+    return_type {
+      name: "interval"
+      oid: 1186
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "float8"
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "interval_multiply"
+  signatures {
+    return_type {
+      name: "interval"
+      oid: 1186
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "float8"
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "interval_subtract"
+  signatures {
+    return_type {
+      name: "interval"
+      oid: 1186
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "interval_unary_minus"
+  signatures {
+    return_type {
+      name: "interval"
+      oid: 1186
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_build_array"
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "any"
+        oid: 2276
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_build_object"
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "any"
+        oid: 2276
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_concat"
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_contained"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_contains"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_delete"
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "_text"
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_delete_path"
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "_text"
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_exists"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_exists_all"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "_text"
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_exists_any"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "_text"
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_insert"
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+    }
+    arguments {
+      type {
+        name: "_text"
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+    }
+    arguments {
+      type {
+        name: "bool"
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_OR_NAMED
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_object_keys"
+  signatures {
+    return_type {
+      name: "_text"
+      oid: 1009
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_set"
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+    }
+    arguments {
+      type {
+        name: "_text"
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+    }
+    arguments {
+      type {
+        name: "bool"
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_OR_NAMED
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_set_lax"
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+    }
+    arguments {
+      type {
+        name: "_text"
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+    }
+    arguments {
+      type {
+        name: "bool"
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_OR_NAMED
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_OR_NAMED
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_strip_nulls"
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "jsonb_subscript_text"
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "justify_days"
+  signatures {
+    return_type {
+      name: "interval"
+      oid: 1186
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "justify_hours"
+  signatures {
+    return_type {
+      name: "interval"
+      oid: 1186
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "justify_interval"
+  signatures {
+    return_type {
+      name: "interval"
+      oid: 1186
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "least"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "bool"
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "bool"
+        oid: 16
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "bytea"
+      oid: 17
+    }
+    arguments {
+      type {
+        name: "bytea"
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "bytea"
+        oid: 17
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "date"
+      oid: 1082
+    }
+    arguments {
+      type {
+        name: "date"
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "date"
+        oid: 1082
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "float8"
+      oid: 701
+    }
+    arguments {
+      type {
+        name: "float8"
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "float8"
+        oid: 701
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "float4"
+      oid: 700
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "interval"
+      oid: 1186
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "int8"
+      oid: 20
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "timestamptz"
+      oid: 1184
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "uuid"
+      oid: 2950
+    }
+    arguments {
+      type {
+        name: "uuid"
+        oid: 2950
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "uuid"
+        oid: 2950
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "make_interval"
+  signatures {
+    return_type {
+      name: "interval"
+      oid: 1186
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "years"
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "months"
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "weeks"
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "days"
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "hours"
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "mins"
+    }
+    arguments {
+      type {
+        name: "float8"
+        oid: 701
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "secs"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "map_double_to_int"
+  signatures {
+    return_type {
+      name: "int8"
+      oid: 20
+    }
+    arguments {
+      type {
+        name: "float8"
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "map_float_to_int"
+  signatures {
+    return_type {
+      name: "int8"
+      oid: 20
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "quote_ident"
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "regexp_match"
+  signatures {
+    return_type {
+      name: "_text"
+      oid: 1009
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "_text"
+      oid: 1009
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "regexp_split_to_array"
+  signatures {
+    return_type {
+      name: "_text"
+      oid: 1009
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "_text"
+      oid: 1009
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "substring"
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "textregexne"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "timestamptz_add"
+  signatures {
+    return_type {
+      name: "timestamptz"
+      oid: 1184
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "timestamptz"
+      oid: 1184
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "timestamptz_subtract"
+  signatures {
+    return_type {
+      name: "timestamptz"
+      oid: 1184
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "timestamptz"
+      oid: 1184
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "interval"
+      oid: 1186
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "timestamptz_subtract_timestamptz"
+  signatures {
+    return_type {
+      name: "interval"
+      oid: 1186
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "to_char"
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "float8"
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "to_date"
+  signatures {
+    return_type {
+      name: "date"
+      oid: 1082
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "to_jsonb"
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "float8"
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "float4"
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "bool"
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "date"
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "timestamptz"
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "bytea"
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "interval"
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "uuid"
+        oid: 2950
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "_numeric"
+        oid: 1231
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "_int8"
+        oid: 1016
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "_float4"
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "_float8"
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "_text"
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "_bool"
+        oid: 1000
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "_jsonb"
+        oid: 3807
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "_date"
+        oid: 1182
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "_timestamptz"
+        oid: 1185
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "_bytea"
+        oid: 1001
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "_interval"
+        oid: 1187
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "_uuid"
+        oid: 2951
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "oid"
+        oid: 26
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "_oid"
+        oid: 1028
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "to_number"
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "pg"
+  name_path: "to_timestamp"
+  signatures {
+    return_type {
+      name: "timestamptz"
+      oid: 1184
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "score"
+  signatures {
+    return_type {
+      name: "float8"
+      oid: 701
+    }
+    arguments {
+      type {
+        name: "tokenlist"
+        oid: 50001
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "tokens"
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "query"
+    }
+    arguments {
+      type {
+        name: "bool"
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "enhance_query"
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "language_tag"
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "dialect"
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "enhance_query_options"
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "options"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "search"
+  signatures {
+    return_type {
+      name: "bool"
+      oid: 16
+    }
+    arguments {
+      type {
+        name: "tokenlist"
+        oid: 50001
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "tokens"
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "query"
+    }
+    arguments {
+      type {
+        name: "bool"
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "enhance_query"
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "language_tag"
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "dialect"
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "enhance_query_options"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "snippet"
+  signatures {
+    return_type {
+      name: "jsonb"
+      oid: 3802
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "query"
+    }
+    arguments {
+      type {
+        name: "bool"
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "enhance_query"
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "language_tag"
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "max_snippet_width"
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "max_snippets"
+    }
+    arguments {
+      type {
+        name: "text"
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "content_type"
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "enhance_query_options"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "string"
+  signatures {
+    return_type {
+      name: "text"
+      oid: 25
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "string_array"
+  signatures {
+    return_type {
+      name: "_text"
+      oid: 1009
+    }
+    arguments {
+      type {
+        name: "jsonb"
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  name_path: "trunc"
+  signatures {
+    return_type {
+      name: "numeric"
+      oid: 1700
+    }
+    arguments {
+      type {
+        name: "numeric"
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        name: "int8"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+

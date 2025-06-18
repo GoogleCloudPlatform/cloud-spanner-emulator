@@ -548,6 +548,21 @@ absl::Status EngineSystemCatalog::GetFunctions(
   return absl::OkStatus();
 }
 
+absl::StatusOr<std::vector<FunctionSigPair>>
+EngineSystemCatalog::GetFunctionSigPairs(
+    absl::string_view function_name) const {
+  const PostgresExtendedFunction* pg_function =
+      GetFunction(std::string(function_name));
+  ZETASQL_RET_CHECK_NE(pg_function, nullptr);
+  std::vector<FunctionSigPair> signatures;
+  for (const std::unique_ptr<PostgresExtendedFunctionSignature>& signature :
+       pg_function->GetPostgresSignatures()) {
+    ZETASQL_RET_CHECK_NE(signature->mapped_function(), nullptr);
+    signatures.push_back({signature->mapped_function(), signature.get()});
+  }
+  return signatures;
+}
+
 absl::Status EngineSystemCatalog::GetSetReturningFunctions(
     absl::flat_hash_set<const zetasql::Function*>* output) const {
   for (const auto& [function_name, function] : engine_functions_) {

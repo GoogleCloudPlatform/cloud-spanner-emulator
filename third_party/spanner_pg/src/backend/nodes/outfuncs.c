@@ -3050,6 +3050,7 @@ _outIndexElem(StringInfo str, const IndexElem *node)
 
 	WRITE_STRING_FIELD(name);
 	WRITE_NODE_FIELD(expr);
+	WRITE_STRING_FIELD(expr_string);
 	WRITE_STRING_FIELD(indexcolname);
 	WRITE_NODE_FIELD(collation);
 	WRITE_NODE_FIELD(opclass);

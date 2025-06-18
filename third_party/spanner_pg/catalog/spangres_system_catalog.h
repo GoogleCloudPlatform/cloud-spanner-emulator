@@ -34,19 +34,20 @@
 
 #include "zetasql/public/language_options.h"
 #include "zetasql/public/types/type.h"
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/catalog/function.h"
+#include "third_party/spanner_pg/catalog/proto/catalog.pb.h"
 #include "third_party/spanner_pg/interface/engine_builtin_function_catalog.h"
 
 namespace postgres_translator {
 namespace spangres {
 
 constexpr absl::string_view kSpangresSystemCatalogName = "pg";
+constexpr char kDefaultFunctionNamespace[] = "pg_catalog";
 
 // A derived class of EngineSystemCatalog which represents the PostgreSQL types
 // and functions supported in Spanner through the PostgreSQL dialect.
@@ -144,6 +145,12 @@ class SpangresSystemCatalog : public EngineSystemCatalog {
   absl::StatusOr<FunctionAndSignature> GetMapFloatingPointToIntFunction(
       const zetasql::Type* source_type,
       const zetasql::LanguageOptions& language_options);
+
+  // Transforms a function read from
+  // `third_party/spanner_pg/catalog/proto/catalog.proto` to the internal
+  // in memory representation for registration.
+  absl::StatusOr<PostgresFunctionArguments> PostgresFunctionArgumentsFromProto(
+      const FunctionProto& function);
 };
 
 }  // namespace spangres

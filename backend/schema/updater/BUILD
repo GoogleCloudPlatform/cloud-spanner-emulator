@@ -168,7 +168,6 @@ cc_library(
         "//common:errors",
         "//common:feature_flags",
         "//common:limits",
-        "//third_party/spanner_pg/catalog:spangres_system_catalog",
         "//third_party/spanner_pg/ddl:ddl_translator",
         "//third_party/spanner_pg/ddl:pg_to_spanner_ddl_translator",
         "//third_party/spanner_pg/interface:emulator_parser",

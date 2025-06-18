@@ -408,7 +408,6 @@ cc_library(
         "//backend/schema/parser:ddl_parser",
         "//backend/schema/printer:print_ddl",
         "//backend/schema/updater:ddl_type_conversion",
-        "//common:feature_flags",
         "//third_party/spanner_pg/catalog:spangres_type",
         "//third_party/spanner_pg/ddl:spangres_direct_schema_printer_impl",
         "//third_party/spanner_pg/ddl:spangres_schema_printer",

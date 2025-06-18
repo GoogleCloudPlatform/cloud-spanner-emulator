@@ -66,7 +66,14 @@ std::string MakeName(absl::string_view base, absl::string_view suffix) {
 
 std::string MakeBaseName(absl::string_view prefix,
                          std::vector<absl::string_view> object_names) {
-  std::vector<absl::string_view> to_join = {prefix};
+  std::string index_prefix;
+  if (SDLObjectName::IsFullyQualifiedName(object_names[0])) {
+    index_prefix = absl::StrCat(SDLObjectName::GetSchemaName(object_names[0]),
+                                ".", prefix);
+  } else {
+    index_prefix = prefix;
+  }
+  std::vector<absl::string_view> to_join = {index_prefix};
   for (const auto& object_name : object_names) {
     to_join.push_back(SDLObjectName::GetInSchemaName(object_name));
   }

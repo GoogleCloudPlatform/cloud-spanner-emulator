@@ -1794,9 +1794,12 @@ absl::Status ForwardTransformer::BuildGsqlSelectListResolvedExprsFirstPass(
 
     // Build an ExprTransformerInfo that allows aggregation and transform the
     // expr.
+    // NOTE: PostgreSQL does not assign column names for UDF return columns, but
+    // ZetaSQL ResolvedColumns require column names. Create a dummy output
+    // column name for the ZetaSQL ResolvedColumn.
     zetasql::IdString column_name =
         catalog_adapter_->analyzer_options().id_string_pool()->Make(
-            entry->resname);
+            is_create_function_stmt_ ? "_unused_name" : entry->resname);
     ExprTransformerInfo expr_transformer_info =
         ExprTransformerInfo::ForAggregation(from_scan_scope, transformer_info,
                                             entry->expr, column_name);
@@ -3391,7 +3394,7 @@ absl::Status ForwardTransformer::CheckForUnsupportedFeatures(
         "Statements with GROUP BY DISTINCT clauses are not supported");
   }
 
-  if (query.isReturn) {
+  if (query.isReturn && !is_create_function_stmt_) {
     return absl::UnimplementedError("RETURN statements are not supported");
   }
 
@@ -3467,6 +3470,7 @@ ForwardTransformer::BuildGsqlResolvedStatement(const Query& query) {
   // Query features that are partially supported are handled seperately.
   ZETASQL_RETURN_IF_ERROR(
       CheckForUnsupportedFeatures(query, /*is_top_level_query=*/true));
+  ZETASQL_RET_CHECK(query.isReturn == is_create_function_stmt_);
 
   std::unique_ptr<zetasql::ResolvedStatement> statement;
   switch (query.commandType) {

@@ -287,6 +287,7 @@ TEST_F(PGCatalogTest, PGAttribute) {
        std::string{'\0'}, false, false, false, std::string{'\0'},
        std::string{'\0'}, false, true, 0},
 
+      // named_schema.ns_table_1
       {"ns_table_1", "key1", "int8", 1, 0, -1, std::string{'\0'}, true, false,
        false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
       {"ns_table_1", "key2", "varchar", 2, 0, -1, std::string{'\0'}, false,
@@ -298,6 +299,14 @@ TEST_F(PGCatalogTest, PGAttribute) {
        false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
       {"ns_table_2", "key2", "int8", 2, 0, -1, std::string{'\0'}, false, false,
        false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+
+      // named_schema2.ns_table_1
+      {"ns_table_1", "key1", "int8", 1, 0, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"ns_table_1", "key2", "varchar", 2, 0, -1, std::string{'\0'}, false,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"ns_table_1", "bool_value", "bool", 3, 0, -1, std::string{'\0'}, false,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
   });
   EXPECT_THAT(Query(absl::StrFormat(query_template, "r")),
               IsOkAndHoldsRows(expected));
@@ -360,6 +369,7 @@ TEST_F(PGCatalogTest, PGAttribute) {
        std::string{'\0'}, false, false, false, std::string{'\0'},
        std::string{'\0'}, false, true, 0},
 
+      // named_schema.ns_table_1
       {"PK_ns_table_1", "key1", "int8", 1, 0, -1, std::string{'\0'}, true,
        false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
 
@@ -368,6 +378,10 @@ TEST_F(PGCatalogTest, PGAttribute) {
 
       {"ns_index", "key1", "int8", 1, 0, -1, std::string{'\0'}, true, false,
        false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+
+      // named_schema2.ns_table_1
+      {"PK_ns_table_1", "key1", "int8", 1, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
   });
   auto results = Query(absl::StrFormat(query_template, "i"));
   EXPECT_THAT(*results, ExpectedRows(*results, expected));
@@ -438,6 +452,9 @@ TEST_F(PGCatalogTest, PGClass) {
       {"PK_ns_table_2", "named_schema", PgOid(75002), false, "p", "i", 1, 0,
        true},
       {"ns_index", "named_schema", PgOid(75002), false, "p", "i", 1, 0, true},
+
+      {"PK_ns_table_1", "named_schema2", PgOid(75002), false, "p", "i", 1, 0,
+       true},
   });
   ZETASQL_EXPECT_OK(index_results);
   EXPECT_THAT(*index_results,
@@ -453,6 +470,9 @@ TEST_F(PGCatalogTest, PGClass) {
 
       {"ns_table_1", "named_schema", PgOid(75001), true, "p", "r", 3, 0, true},
       {"ns_table_2", "named_schema", PgOid(75001), false, "p", "r", 2, 0, true},
+
+      {"ns_table_1", "named_schema2", PgOid(75001), false, "p", "r", 3, 0,
+       true},  // NOLINT
   });
   ZETASQL_EXPECT_OK(table_results);
   EXPECT_THAT(*table_results,
@@ -600,6 +620,8 @@ TEST_F(PGCatalogTest, PGConstraint) {
                         "ns_table_1", " ", " ", std::vector<int>{1}},
                        {"PK_ns_table_2", "named_schema", "p", true,
                         "ns_table_2", " ", " ", std::vector<int>{1}},
+                       {"PK_ns_table_1", "named_schema2", "p", true,
+                        "ns_table_1", " ", " ", std::vector<int>{1}},
                    }));
 
   results = Query(R"sql(
@@ -669,6 +691,7 @@ TEST_F(PGCatalogTest, PGIndex) {
       {"no_action_child_by_value", "no_action_child", 1, 1, false, false,
        std::vector<int>{4}},
       {"PK_ns_table_1", "ns_table_1", 1, 1, true, true, std::vector<int>{1}},
+      {"PK_ns_table_1", "ns_table_1", 1, 1, true, true, std::vector<int>{1}},
       {"ns_index", "ns_table_1", 1, 1, true, false, std::vector<int>{1}},
       {"PK_ns_table_2", "ns_table_2", 1, 1, true, true, std::vector<int>{1}},
       {"PK_row_deletion_policy", "row_deletion_policy", 1, 1, true, true,
@@ -735,6 +758,8 @@ TEST_F(PGCatalogTest, PGIndexes) {
            {"named_schema", "ns_table_1", "ns_index", Ns(), Ns()},
            {"named_schema", "ns_table_2", "PK_ns_table_2", Ns(), Ns()},
 
+           {"named_schema2", "ns_table_1", "PK_ns_table_1", Ns(), Ns()},
+
            {"public", "base", "IDX_base_bool_value_key2_N_\\w{16}", Ns(), Ns()},
            {"public", "base", "PK_base", Ns(), Ns()},
            {"public", "cascade_child",
@@ -770,6 +795,7 @@ TEST_F(PGCatalogTest, PGNamespace) {
 
   expected = std::vector<ValueRow>({
       {"named_schema", NOid()},
+      {"named_schema2", NOid()},
   });
 
   // Check that user namespaces are surfaced.
@@ -794,9 +820,7 @@ TEST_F(PGCatalogTest, PGNamespace) {
       GROUP BY
         oid)sql"));
 
-  ASSERT_EQ(results.size(), 1);
-  ASSERT_EQ(results[0].values().size(), 1);
-  EXPECT_EQ(results[0].values()[0].get<int64_t>().value(), expected.size());
+  ASSERT_EQ(results.size(), expected.size());
 }
 
 TEST_F(PGCatalogTest, PGProc) {
@@ -919,6 +943,8 @@ TEST_F(PGCatalogTest, PGTables) {
   auto expected = std::vector<ValueRow>({
       {"named_schema", "ns_table_1", Ns(), Ns(), true, Nb(), Nb(), Nb()},
       {"named_schema", "ns_table_2", Ns(), Ns(), false, Nb(), Nb(), Nb()},
+
+      {"named_schema2", "ns_table_1", Ns(), Ns(), false, Nb(), Nb(), Nb()},
 
       {"public", "base", Ns(), Ns(), true, Nb(), Nb(), Nb()},
       {"public", "cascade_child", Ns(), Ns(), true, Nb(), Nb(), Nb()},

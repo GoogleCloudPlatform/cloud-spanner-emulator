@@ -32,11 +32,9 @@
 #ifndef TRANSFORMER_FORWARD_TRANSFORMER_H_
 #define TRANSFORMER_FORWARD_TRANSFORMER_H_
 
-#include <functional>
 #include <map>
 #include <memory>
 #include <string>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -56,14 +54,13 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
-#include "absl/types/optional.h"
-#include "absl/types/span.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
-#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/transformer/expr_transformer_helper.h"
 #include "third_party/spanner_pg/transformer/transformer_helper.h"
+#include "third_party/spanner_pg/util/pg_list_iterators.h"
 
 ABSL_DECLARE_FLAG(bool, spangres_include_invalid_statement_parse_locations);
 ABSL_DECLARE_FLAG(int64_t, spangres_expression_recursion_limit);
@@ -111,8 +108,14 @@ class ForwardTransformer {
     std::vector<std::string> output_column_names;
   };
 
-  ForwardTransformer(std::unique_ptr<CatalogAdapter> catalog_adapter)
-      : catalog_adapter_(std::move(catalog_adapter)) {
+  // NOTE: `create_func_arg_names` is only used for DDL statements to indicate
+  // that parameters are named.
+  ForwardTransformer(std::unique_ptr<CatalogAdapter> catalog_adapter,
+                     std::vector<std::string> create_func_arg_names = {},
+                     bool is_create_function_stmt = false)
+      : catalog_adapter_(std::move(catalog_adapter)),
+        is_create_function_stmt_(is_create_function_stmt),
+        create_func_arg_names_(create_func_arg_names) {
     ABSL_CHECK(catalog_adapter_ != nullptr);
     ABSL_CHECK(catalog_adapter_->analyzer_options().id_string_pool() != nullptr);
       ABSL_CHECK(catalog_adapter_->GetEngineSystemCatalog() != nullptr);
@@ -134,6 +137,10 @@ class ForwardTransformer {
 
   std::map<std::string, const zetasql::Type*>& query_parameter_types() {
     return query_parameter_types_;
+  }
+
+  std::map<std::string, const zetasql::Type*>& create_func_arg_types() {
+    return create_func_arg_types_;
   }
 
   // Query =====================================================================
@@ -654,6 +661,29 @@ class ForwardTransformer {
                                  absl::string_view table_alias,
                                  const VarIndexScope* target_table_scope);
 
+  // Builds a list of ZetaSQL ResolvedUpdateItem from a PostgreSQL list of
+  // TargetEntry objects for UPDATE SET clause in UPDATE DML or
+  // INSERT ON CONFLICT DO UPDATE DML.
+  absl::Status PopulateUpdateSetItemListFromUpdateSetClause(
+      const zetasql::Table& table, Index table_rtindex,
+      const List* update_set_clause, const VarIndexScope& update_column_scope,
+      const VarIndexScope& update_value_scope, const std::string& clause_name,
+      std::vector<std::unique_ptr<const zetasql::ResolvedUpdateItem>>&
+          update_item_list);
+
+  // Builds a ZetaSQL ResolvedOnConflictClause for the INSERT DML statements,
+  // using the input PostgreSQL `OnConflictExpr`. `pg_on_conflict` must be a
+  // non-null pointer.
+  // `rte_for_excluded_alias` is the RangeTblEntry node for the excluded alias
+  // in the ON CONFLICT DO UPDATE DML
+  // `target_table_scope` is the VarIndexScope for the target table used to
+  // resolve ON CONFLICT DO UPDATE SET and WHERE expressions.
+  absl::StatusOr<std::unique_ptr<const zetasql::ResolvedOnConflictClause>>
+  BuildGsqlOnConflictClauseForInsertDML(
+      const zetasql::Table& table, const OnConflictExpr* pg_on_conflict,
+      RangeTblEntry* rte_for_excluded_alias, Index insert_table_rtindex,
+      Index excluded_alias_rtindex, const VarIndexScope* target_table_scope);
+
   // Expression ================================================================
  public:
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedLiteral>>
@@ -1075,6 +1105,14 @@ class ForwardTransformer {
       CorrelatedColumnsSetList* correlated_columns_sets = nullptr);
 
   std::unique_ptr<CatalogAdapter> catalog_adapter_;
+  // True if the source DDL statement is a create function statement.
+  const bool is_create_function_stmt_;
+  // Names of input arguments in the order seen in the DDL statement. Passed in
+  // to the constructor.
+  const std::vector<std::string> create_func_arg_names_;
+  // Types of input arguments keyed by name. Set during the forward
+  // transformation.
+  std::map<std::string, const zetasql::Type*> create_func_arg_types_;
 
   const VarIndexScope empty_var_index_scope_;
 

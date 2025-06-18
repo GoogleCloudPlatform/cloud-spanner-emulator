@@ -154,26 +154,9 @@ inline constexpr char kPGCastNumericToFloatFunctionName[] = "pg.cast_to_float";
 inline constexpr char kPGCastToStringFunctionName[] = "pg.cast_to_string";
 inline constexpr char kPGCastNumericToInt64FunctionName[] = "pg.cast_to_int64";
 
-// PG NUMERIC operators.
-inline constexpr char kPGNumericEqualsFunctionName[] = "pg.numeric_eq";
-inline constexpr char kPGNumericNotEqualsFunctionName[] = "pg.numeric_ne";
-inline constexpr char kPGNumericLessThanFunctionName[] = "pg.numeric_lt";
-inline constexpr char kPGNumericLessThanEqualsFunctionName[] = "pg.numeric_le";
-inline constexpr char kPGNumericGreaterThanFunctionName[] = "pg.numeric_gt";
-inline constexpr char kPGNumericGreaterThanEqualsFunctionName[] =
-    "pg.numeric_ge";
-
 // PG OID functions.
 inline constexpr char kPGCastToOidFunctionName[] = "pg.cast_to_oid";
 inline constexpr char kPGCastFromOidFunctionName[] = "pg.cast_from_oid";
-
-// PG OID operators.
-inline constexpr char kPGOidEqualsFunctionName[] = "pg.oideq";
-inline constexpr char kPGOidNotEqualsFunctionName[] = "pg.oidne";
-inline constexpr char kPGOidLessThanFunctionName[] = "pg.oidlt";
-inline constexpr char kPGOidLessThanEqualsFunctionName[] = "pg.oidle";
-inline constexpr char kPGOidGreaterThanFunctionName[] = "pg.oidgt";
-inline constexpr char kPGOidGreaterThanEqualsFunctionName[] = "pg.oidge";
 
 // PG Interval functions.
 inline constexpr char kPGIntervalUnaryMinusFunctionName[] =

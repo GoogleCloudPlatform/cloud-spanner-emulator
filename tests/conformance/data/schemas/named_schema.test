@@ -1,0 +1,90 @@
+# Note that PG databases by default have lower case table and column names. To
+# use uppercase names, you have to quote them. But the GSQL and PG quoting
+# syntax is incompatible so we use lower-case names in both schemas to avoid
+# having to maintain two copies of each query.
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE SCHEMA mynamedschema;
+CREATE SEQUENCE mynamedschema.myseq OPTIONS (
+  sequence_kind = "bit_reversed_positive"
+);
+CREATE TABLE mynamedschema.t (
+  col1 INT64,
+  col2 INT64
+) PRIMARY KEY (col1);
+CREATE UNIQUE INDEX mynamedschema.idx ON mynamedschema.t (col2 DESC);
+CREATE VIEW mynamedschema.v SQL SECURITY INVOKER AS
+  SELECT t.col1 FROM mynamedschema.t;
+CREATE TABLE mynamedschema.gen_t (
+  col1 INT64,
+  col2 INT64,
+  col3 INT64 AS (col1 + col2) STORED,
+  col4 INT64 DEFAULT (10)
+) PRIMARY KEY (col1);
+CREATE TABLE mynamedschema.con_t (
+  col1 INT64,
+  col2 INT64,
+  CONSTRAINT C1 CHECK (col1 < 10)
+) PRIMARY KEY (col1);
+CREATE TABLE mynamedschema.seq_t (
+  int64_col INT64 NOT NULL DEFAULT (
+    GET_NEXT_SEQUENCE_VALUE (SEQUENCE mynamedschema.myseq)),
+  string_col string(max)
+) PRIMARY KEY (int64_col);
+CREATE SCHEMA mynamedschema2;
+CREATE TABLE mynamedschema2.fk_t (
+  col1 INT64,
+  col2 INT64,
+  CONSTRAINT C2 FOREIGN KEY (col2)
+      REFERENCES mynamedschema.t(col1)
+) PRIMARY KEY (col1);
+CREATE TABLE fk_t (
+  col1 INT64,
+  col2 INT64,
+  CONSTRAINT C3 FOREIGN KEY (col2)
+      REFERENCES mynamedschema.t(col1)
+) PRIMARY KEY (col1);
+===
+@Dialect=POSTGRESQL
+CREATE SCHEMA mynamedschema;
+CREATE SEQUENCE mynamedschema.myseq BIT_REVERSED_POSITIVE;
+CREATE TABLE mynamedschema.t (
+  col1 bigint,
+  col2 bigint,
+  PRIMARY KEY (col1)
+);
+CREATE UNIQUE INDEX idx ON mynamedschema.t (col2 DESC);
+CREATE VIEW mynamedschema.v SQL SECURITY INVOKER AS
+  SELECT t.col1 FROM mynamedschema.t;
+CREATE TABLE mynamedschema.gen_t (
+  col1 bigint,
+  col2 bigint,
+  col3 bigint GENERATED ALWAYS AS (col1 + col2) STORED,
+  col4 bigint DEFAULT (10),
+  PRIMARY KEY (col1)
+);
+CREATE TABLE mynamedschema.con_t (
+  col1 bigint,
+  col2 bigint,
+  CONSTRAINT C1 CHECK (col1 < 10),
+  PRIMARY KEY (col1)
+);
+CREATE TABLE mynamedschema.seq_t (
+  int64_col bigint NOT NULL DEFAULT (nextval('mynamedschema.myseq')),
+  string_col varchar,
+  PRIMARY KEY (int64_col)
+);
+CREATE SCHEMA mynamedschema2;
+CREATE TABLE mynamedschema2.fk_t (
+  col1 bigint,
+  col2 bigint,
+  CONSTRAINT C2 FOREIGN KEY (col2)
+      REFERENCES mynamedschema.t(col1),
+  PRIMARY KEY (col1)
+);
+CREATE TABLE fk_t (
+  col1 bigint,
+  col2 bigint,
+  CONSTRAINT C3 FOREIGN KEY (col2)
+      REFERENCES mynamedschema.t(col1),
+  PRIMARY KEY (col1)
+);
