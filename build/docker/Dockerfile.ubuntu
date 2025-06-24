@@ -49,7 +49,8 @@ RUN add-apt-repository ppa:ubuntu-toolchain-r/test                          && \
     apt-get -qq install -y ca-certificates libgnutls30                      && \
     update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-${GCC_VERSION} 90  \
                         --slave   /usr/bin/g++ g++ /usr/bin/g++-${GCC_VERSION} && \
-    update-alternatives --set gcc /usr/bin/gcc-${GCC_VERSION}
+    update-alternatives --set gcc /usr/bin/gcc-${GCC_VERSION}                && \
+    apt-get install --only-upgrade libstdc++6
 
 # Install the en* locales required for PG scalar functions.
 RUN apt-get -qq install language-pack-en
@@ -87,6 +88,9 @@ FROM gcr.io/distroless/cc-debian12
 # Copy binaries.
 COPY --from=build /src/bazel-bin/binaries/emulator_main .
 COPY --from=build /src/bazel-bin/binaries/gateway_main_/gateway_main .
+
+# Copy the libstdc++.so.6 shared library.
+COPY --from=build /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /usr/lib/x86_64-linux-gnu
 
 # Copy licenses
 COPY --from=build /licenses.txt.gz .

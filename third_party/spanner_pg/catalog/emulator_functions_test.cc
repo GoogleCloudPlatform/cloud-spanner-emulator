@@ -113,6 +113,13 @@ class EmulatorFunctionsTest : public ::testing::Test {
         GetSpannerPGFunctions("TestCatalog");
 
     for (auto& function : spanner_pg_functions) {
+      // Add entry for function alias.
+      if (!function->alias_name().empty()) {
+        auto alias_function = std::make_unique<zetasql::Function>(
+            function->Name(), function->GetGroup(), function->mode(),
+            function->signatures(), function->function_options());
+        functions_[function->alias_name()] = std::move(alias_function);
+      }
       functions_[function->Name()] = std::move(function);
     }
   }
@@ -163,10 +170,18 @@ TEST_P(PGScalarFunctionsTest, ExecutesFunctionsSuccessfully) {
       GetSpannerPGFunctions("TestCatalog");
 
   for (auto& function : spanner_pg_functions) {
+    // Add entry for function alias.
+    if (!function->alias_name().empty()) {
+      auto alias_function = std::make_unique<zetasql::Function>(
+          function->Name(), function->GetGroup(), function->mode(),
+          function->signatures(), function->function_options());
+      functions[function->alias_name()] = std::move(alias_function);
+    }
     functions[function->Name()] = std::move(function);
   }
 
   const zetasql::Function* function = functions[param.function_name].get();
+  ASSERT_NE(function, nullptr) << "Function not found: " << param.function_name;
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       zetasql::FunctionEvaluator evaluator,
       (function->GetFunctionEvaluatorFactory())(
@@ -351,124 +366,124 @@ INSTANTIATE_TEST_SUITE_P(
         },
         // pg.jsonb_array_element
         PGScalarFunctionTestCase{
-            kPGJsonbArrayElementFunctionName,
+            kZetaSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"),
              zetasql::Value::Int64(0)},
             *CreatePgJsonbValueWithMemoryContext("null")},
         PGScalarFunctionTestCase{
-            kPGJsonbArrayElementFunctionName,
+            kZetaSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([1.00, "string val"])"),
              zetasql::Value::Int64(1)},
             *CreatePgJsonbValueWithMemoryContext(R"("string val")")},
         PGScalarFunctionTestCase{
-            kPGJsonbArrayElementFunctionName,
+            kZetaSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"),
              zetasql::Value::Int64(2)},
             CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kPGJsonbArrayElementFunctionName,
+            kZetaSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"),
              zetasql::Value::Int64(-1)},
             *CreatePgJsonbValueWithMemoryContext(R"("string val")")},
         PGScalarFunctionTestCase{
-            kPGJsonbArrayElementFunctionName,
+            kZetaSQLSubscriptFunctionName,
             {CreatePgJsonbNullValue(), zetasql::Value::Int64(0)},
             CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kPGJsonbArrayElementFunctionName,
+            kZetaSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"),
              zetasql::Value::NullInt64()},
             CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kPGJsonbArrayElementFunctionName,
+            kZetaSQLSubscriptFunctionName,
             {CreatePgJsonbNullValue(), zetasql::Value::NullInt64()},
             CreatePgJsonbNullValue()},
 
         // pg.jsonb_object_field
         PGScalarFunctionTestCase{
-            kPGJsonbObjectFieldFunctionName,
+            kZetaSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"({"a": "string val"})"),
              zetasql::Value::String("a")},
             *CreatePgJsonbValueWithMemoryContext(R"("string val")")},
         PGScalarFunctionTestCase{
-            kPGJsonbObjectFieldFunctionName,
+            kZetaSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(
                  R"({"a": {"b": "string_val"}})"),
              zetasql::Value::String("a")},
             *CreatePgJsonbValueWithMemoryContext(R"({"b": "string_val"})")},
-        PGScalarFunctionTestCase{kPGJsonbObjectFieldFunctionName,
+        PGScalarFunctionTestCase{kZetaSQLSubscriptFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext(
                                       R"({"a": {"b": "string_val"}})"),
                                   zetasql::Value::String("c")},
                                  CreatePgJsonbNullValue()},
-        PGScalarFunctionTestCase{kPGJsonbObjectFieldFunctionName,
+        PGScalarFunctionTestCase{kZetaSQLSubscriptFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext(
                                       R"({"a": {"b": "string_val"}})"),
                                   zetasql::Value::String("no match")},
                                  CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kPGJsonbObjectFieldFunctionName,
+            kZetaSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"({"a": ""})"),
              zetasql::Value::String("a")},
             *CreatePgJsonbValueWithMemoryContext(R"("")")},
         PGScalarFunctionTestCase{
-            kPGJsonbObjectFieldFunctionName,
+            kZetaSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"({"a": ""})"),
              kNullStringValue},
             CreatePgJsonbNullValue()},
-        PGScalarFunctionTestCase{kPGJsonbObjectFieldFunctionName,
+        PGScalarFunctionTestCase{kZetaSQLSubscriptFunctionName,
                                  {CreatePgJsonbNullValue(), kNullStringValue},
                                  CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kPGJsonbObjectFieldFunctionName,
+            kZetaSQLSubscriptFunctionName,
             {CreatePgJsonbNullValue(), zetasql::Value::String("a")},
             CreatePgJsonbNullValue()},
 
         // pg.jsonb_typeof
-        PGScalarFunctionTestCase{kPGJsonbTypeofFunctionName,
+        PGScalarFunctionTestCase{kZetaSQLJsonTypeFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext("null")},
                                  zetasql::Value::String("null")},
         PGScalarFunctionTestCase{
-            kPGJsonbTypeofFunctionName,
+            kZetaSQLJsonTypeFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[1,2,3.56]")},
             zetasql::Value::String("array")},
         PGScalarFunctionTestCase{
-            kPGJsonbTypeofFunctionName,
+            kZetaSQLJsonTypeFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"("hello")")},
             zetasql::Value::String("string")},
         PGScalarFunctionTestCase{
-            kPGJsonbTypeofFunctionName,
+            kZetaSQLJsonTypeFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(
                 R"({ "a" : { "b" : [null, 3.5, -214215, true] } })")},
             zetasql::Value::String("object")},
-        PGScalarFunctionTestCase{kPGJsonbTypeofFunctionName,
+        PGScalarFunctionTestCase{kZetaSQLJsonTypeFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext(
                                      "-18446744073709551615124125")},
                                  zetasql::Value::String("number")},
-        PGScalarFunctionTestCase{kPGJsonbTypeofFunctionName,
+        PGScalarFunctionTestCase{kZetaSQLJsonTypeFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext(
                                      "18446744073709551615124125")},
                                  zetasql::Value::String("number")},
         PGScalarFunctionTestCase{
-            kPGJsonbTypeofFunctionName,
+            kZetaSQLJsonTypeFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(
                 spangres::datatypes::common::MaxJsonbNumericString())},
             zetasql::Value::String("number")},
         PGScalarFunctionTestCase{
-            kPGJsonbTypeofFunctionName,
+            kZetaSQLJsonTypeFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(
                 spangres::datatypes::common::MinJsonbNumericString())},
             zetasql::Value::String("number")},
-        PGScalarFunctionTestCase{kPGJsonbTypeofFunctionName,
+        PGScalarFunctionTestCase{kZetaSQLJsonTypeFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext("true")},
                                  zetasql::Value::String("boolean")},
         PGScalarFunctionTestCase{
-            kPGJsonbTypeofFunctionName,
+            kZetaSQLJsonTypeFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("false")},
             zetasql::Value::String("boolean")},
         // pg.jsonb_query_array
         PGScalarFunctionTestCase{
-            kPGJsonbQueryArrayFunctionName,
+            kZetaSQLJsonQueryArrayFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[1, 2, 3]")},
             *zetasql::Value::MakeArray(
                 spangres::datatypes::GetPgJsonbArrayType(),
@@ -476,13 +491,13 @@ INSTANTIATE_TEST_SUITE_P(
                  *CreatePgJsonbValueWithMemoryContext("2"),
                  *CreatePgJsonbValueWithMemoryContext("3")})},
         PGScalarFunctionTestCase{
-            kPGJsonbQueryArrayFunctionName,
+            kZetaSQLJsonQueryArrayFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[\"abc\", \"def\"]")},
             *zetasql::Value::MakeArray(
                 spangres::datatypes::GetPgJsonbArrayType(),
                 {*CreatePgJsonbValueWithMemoryContext("\"abc\""),
                  *CreatePgJsonbValueWithMemoryContext("\"def\"")})},
-        PGScalarFunctionTestCase{kPGJsonbQueryArrayFunctionName,
+        PGScalarFunctionTestCase{kZetaSQLJsonQueryArrayFunctionName,
                                  {CreatePgJsonbNullValue()},
                                  CreatePgJsonbNullValue()},
         // pg.jsonb_build_array
@@ -659,27 +674,27 @@ INSTANTIATE_TEST_SUITE_P(
             zetasql::Value::Bool(false)},
 
         PGScalarFunctionTestCase{
-            kPGNumericAddFunctionName,
+            kZetaSQLAddFunctionName,
             {CreatePgNumericNullValue(),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kPGNumericAddFunctionName,
+            kZetaSQLAddFunctionName,
             {*CreatePgNumericValueWithMemoryContext("3.45"),
              CreatePgNumericNullValue()},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kPGNumericAddFunctionName,
+            kZetaSQLAddFunctionName,
             {*CreatePgNumericValueWithMemoryContext("NaN"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("NaN")},
         PGScalarFunctionTestCase{
-            kPGNumericAddFunctionName,
+            kZetaSQLAddFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("126.90")},
         PGScalarFunctionTestCase{
-            kPGNumericAddFunctionName,
+            kZetaSQLAddFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("-120")},
@@ -746,206 +761,206 @@ INSTANTIATE_TEST_SUITE_P(
              zetasql::values::Int64(1)},
             zetasql::values::Int64(2)},
         PGScalarFunctionTestCase{
-            kPGNumericSubtractFunctionName,
+            kZetaSQLSubtractFunctionName,
             {CreatePgNumericNullValue(),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kPGNumericSubtractFunctionName,
+            kZetaSQLSubtractFunctionName,
             {*CreatePgNumericValueWithMemoryContext("3.45"),
              CreatePgNumericNullValue()},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kPGNumericSubtractFunctionName,
+            kZetaSQLSubtractFunctionName,
             {*CreatePgNumericValueWithMemoryContext("NaN"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("NaN")},
         PGScalarFunctionTestCase{
-            kPGNumericSubtractFunctionName,
+            kZetaSQLSubtractFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("120.00")},
         PGScalarFunctionTestCase{
-            kPGNumericSubtractFunctionName,
+            kZetaSQLSubtractFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("-126.90")},
 
         PGScalarFunctionTestCase{
-            kPGNumericMultiplyFunctionName,
+            kZetaSQLMultiplyFunctionName,
             {CreatePgNumericNullValue(),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kPGNumericMultiplyFunctionName,
+            kZetaSQLMultiplyFunctionName,
             {*CreatePgNumericValueWithMemoryContext("3.45"),
              CreatePgNumericNullValue()},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kPGNumericMultiplyFunctionName,
+            kZetaSQLMultiplyFunctionName,
             {*CreatePgNumericValueWithMemoryContext("NaN"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("NaN")},
         PGScalarFunctionTestCase{
-            kPGNumericMultiplyFunctionName,
+            kZetaSQLMultiplyFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              *CreatePgNumericValueWithMemoryContext("2.0")},
             *CreatePgNumericValueWithMemoryContext("246.90")},
         PGScalarFunctionTestCase{
-            kPGNumericMultiplyFunctionName,
+            kZetaSQLMultiplyFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45"),
              *CreatePgNumericValueWithMemoryContext("2.0")},
             *CreatePgNumericValueWithMemoryContext("-246.90")},
 
         PGScalarFunctionTestCase{
-            kPGNumericDivideFunctionName,
+            kZetaSQLDivideFunctionName,
             {CreatePgNumericNullValue(),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kPGNumericDivideFunctionName,
+            kZetaSQLDivideFunctionName,
             {*CreatePgNumericValueWithMemoryContext("3.45"),
              CreatePgNumericNullValue()},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kPGNumericDivideFunctionName,
+            kZetaSQLDivideFunctionName,
             {*CreatePgNumericValueWithMemoryContext("NaN"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("NaN")},
         PGScalarFunctionTestCase{
-            kPGNumericDivideFunctionName,
+            kZetaSQLDivideFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              *CreatePgNumericValueWithMemoryContext("2.0")},
             *CreatePgNumericValueWithMemoryContext("61.725")},
         PGScalarFunctionTestCase{
-            kPGNumericDivideFunctionName,
+            kZetaSQLDivideFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45"),
              *CreatePgNumericValueWithMemoryContext("2.0")},
             *CreatePgNumericValueWithMemoryContext("-61.725")},
 
         PGScalarFunctionTestCase{
-            kPGNumericDivTruncFunctionName,
+            kZetaSQLDivTruncFunctionName,
             {CreatePgNumericNullValue(),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kPGNumericDivTruncFunctionName,
+            kZetaSQLDivTruncFunctionName,
             {*CreatePgNumericValueWithMemoryContext("3.45"),
              CreatePgNumericNullValue()},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kPGNumericDivTruncFunctionName,
+            kZetaSQLDivTruncFunctionName,
             {*CreatePgNumericValueWithMemoryContext("NaN"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("NaN")},
         PGScalarFunctionTestCase{
-            kPGNumericDivTruncFunctionName,
+            kZetaSQLDivTruncFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              *CreatePgNumericValueWithMemoryContext("2.0")},
             *CreatePgNumericValueWithMemoryContext("61")},
         PGScalarFunctionTestCase{
-            kPGNumericDivTruncFunctionName,
+            kZetaSQLDivTruncFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45"),
              *CreatePgNumericValueWithMemoryContext("2.0")},
             *CreatePgNumericValueWithMemoryContext("-61")},
 
         PGScalarFunctionTestCase{
-            kPGNumericAbsFunctionName,
+            kZetaSQLAbsFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45")},
             *CreatePgNumericValueWithMemoryContext("123.45")},
         PGScalarFunctionTestCase{
-            kPGNumericAbsFunctionName,
+            kZetaSQLAbsFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45")},
             *CreatePgNumericValueWithMemoryContext("123.45")},
-        PGScalarFunctionTestCase{kPGNumericAbsFunctionName,
+        PGScalarFunctionTestCase{kZetaSQLAbsFunctionName,
                                  {CreatePgNumericNullValue()},
                                  CreatePgNumericNullValue()},
 
         PGScalarFunctionTestCase{
-            kPGNumericCeilFunctionName,
+            kZetaSQLCeilFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45")},
             *CreatePgNumericValueWithMemoryContext("124")},
         PGScalarFunctionTestCase{
-            kPGNumericCeilFunctionName,
+            kZetaSQLCeilFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45")},
             *CreatePgNumericValueWithMemoryContext("-123")},
-        PGScalarFunctionTestCase{kPGNumericCeilFunctionName,
+        PGScalarFunctionTestCase{kZetaSQLCeilFunctionName,
                                  {CreatePgNumericNullValue()},
                                  CreatePgNumericNullValue()},
 
         PGScalarFunctionTestCase{
-            kPGNumericCeilingFunctionName,
+            kZetaSQLCeilingFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45")},
             *CreatePgNumericValueWithMemoryContext("124")},
         PGScalarFunctionTestCase{
-            kPGNumericCeilingFunctionName,
+            kZetaSQLCeilingFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45")},
             *CreatePgNumericValueWithMemoryContext("-123")},
-        PGScalarFunctionTestCase{kPGNumericCeilingFunctionName,
+        PGScalarFunctionTestCase{kZetaSQLCeilingFunctionName,
                                  {CreatePgNumericNullValue()},
                                  CreatePgNumericNullValue()},
 
         PGScalarFunctionTestCase{
-            kPGNumericFloorFunctionName,
+            kZetaSQLFloorFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45")},
             *CreatePgNumericValueWithMemoryContext("123")},
         PGScalarFunctionTestCase{
-            kPGNumericFloorFunctionName,
+            kZetaSQLFloorFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45")},
             *CreatePgNumericValueWithMemoryContext("-124")},
-        PGScalarFunctionTestCase{kPGNumericFloorFunctionName,
+        PGScalarFunctionTestCase{kZetaSQLFloorFunctionName,
                                  {CreatePgNumericNullValue()},
                                  CreatePgNumericNullValue()},
 
         PGScalarFunctionTestCase{
-            kPGNumericModFunctionName,
+            kZetaSQLModFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              *CreatePgNumericValueWithMemoryContext("10")},
             *CreatePgNumericValueWithMemoryContext("3.45")},
         PGScalarFunctionTestCase{
-            kPGNumericModFunctionName,
+            kZetaSQLModFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45"),
              *CreatePgNumericValueWithMemoryContext("10")},
             *CreatePgNumericValueWithMemoryContext("-3.45")},
-        PGScalarFunctionTestCase{kPGNumericModFunctionName,
+        PGScalarFunctionTestCase{kZetaSQLModFunctionName,
                                  {CreatePgNumericNullValue(),
                                   *CreatePgNumericValueWithMemoryContext("10")},
                                  CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kPGNumericModFunctionName,
+            kZetaSQLModFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              CreatePgNumericNullValue()},
             CreatePgNumericNullValue()},
 
         PGScalarFunctionTestCase{
-            kPGNumericTruncFunctionName,
+            kZetaSQLTruncFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              zetasql::values::Int64(1)},
             *CreatePgNumericValueWithMemoryContext("123.4")},
         PGScalarFunctionTestCase{
-            kPGNumericTruncFunctionName,
+            kZetaSQLTruncFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              zetasql::values::Int64(-1)},
             *CreatePgNumericValueWithMemoryContext("120")},
         PGScalarFunctionTestCase{
-            kPGNumericTruncFunctionName,
+            kZetaSQLTruncFunctionName,
             {CreatePgNumericNullValue(), zetasql::values::Int64(-1)},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kPGNumericTruncFunctionName,
+            kZetaSQLTruncFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              zetasql::values::NullInt64()},
             CreatePgNumericNullValue()},
 
         PGScalarFunctionTestCase{
-            kPGNumericUminusFunctionName,
+            kZetaSQLUminusFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45")},
             *CreatePgNumericValueWithMemoryContext("-123.45")},
         PGScalarFunctionTestCase{
-            kPGNumericUminusFunctionName,
+            kZetaSQLUminusFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45")},
             *CreatePgNumericValueWithMemoryContext("123.45")},
-        PGScalarFunctionTestCase{kPGNumericUminusFunctionName,
+        PGScalarFunctionTestCase{kZetaSQLUminusFunctionName,
                                  {CreatePgNumericNullValue()},
                                  CreatePgNumericNullValue()},
 
@@ -2465,7 +2480,7 @@ TEST_F(EmulatorFunctionsTest, ToCharReturnsErrorWhenTypeUnsupported) {
 
 TEST_F(EmulatorFunctionsTest, AddReturnsErrorWhenArgumentsAreInvalid) {
   const zetasql::Function* function =
-      functions_[kPGNumericAddFunctionName].get();
+      functions_[kZetaSQLAddFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
@@ -2476,7 +2491,7 @@ TEST_F(EmulatorFunctionsTest, AddReturnsErrorWhenArgumentsAreInvalid) {
 
 TEST_F(EmulatorFunctionsTest, AddReturnsErrorWhenResultIsOverflow) {
   const zetasql::Function* function =
-      functions_[kPGNumericAddFunctionName].get();
+      functions_[kZetaSQLAddFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
@@ -2493,7 +2508,7 @@ TEST_F(EmulatorFunctionsTest, AddReturnsErrorWhenResultIsOverflow) {
 
 TEST_F(EmulatorFunctionsTest, SubtractReturnsErrorWhenArgumentsAreInvalid) {
   const zetasql::Function* function =
-      functions_[kPGNumericSubtractFunctionName].get();
+      functions_[kZetaSQLSubtractFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
@@ -2504,7 +2519,7 @@ TEST_F(EmulatorFunctionsTest, SubtractReturnsErrorWhenArgumentsAreInvalid) {
 
 TEST_F(EmulatorFunctionsTest, SubtractReturnsErrorWhenResultIsOverflow) {
   const zetasql::Function* function =
-      functions_[kPGNumericSubtractFunctionName].get();
+      functions_[kZetaSQLSubtractFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
@@ -2521,7 +2536,7 @@ TEST_F(EmulatorFunctionsTest, SubtractReturnsErrorWhenResultIsOverflow) {
 
 TEST_F(EmulatorFunctionsTest, MultiplyReturnsErrorWhenArgumentsAreInvalid) {
   const zetasql::Function* function =
-      functions_[kPGNumericMultiplyFunctionName].get();
+      functions_[kZetaSQLMultiplyFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
@@ -2532,7 +2547,7 @@ TEST_F(EmulatorFunctionsTest, MultiplyReturnsErrorWhenArgumentsAreInvalid) {
 
 TEST_F(EmulatorFunctionsTest, MultiplyReturnsErrorWhenResultIsOverflow) {
   const zetasql::Function* function =
-      functions_[kPGNumericMultiplyFunctionName].get();
+      functions_[kZetaSQLMultiplyFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
@@ -2549,7 +2564,7 @@ TEST_F(EmulatorFunctionsTest, MultiplyReturnsErrorWhenResultIsOverflow) {
 
 TEST_F(EmulatorFunctionsTest, DivideReturnsErrorWhenArgumentsAreInvalid) {
   const zetasql::Function* function =
-      functions_[kPGNumericDivideFunctionName].get();
+      functions_[kZetaSQLDivideFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
@@ -2560,7 +2575,7 @@ TEST_F(EmulatorFunctionsTest, DivideReturnsErrorWhenArgumentsAreInvalid) {
 
 TEST_F(EmulatorFunctionsTest, DivideReturnsErrorWhenDividingByZero) {
   const zetasql::Function* function =
-      functions_[kPGNumericDivideFunctionName].get();
+      functions_[kZetaSQLDivideFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
@@ -2577,7 +2592,7 @@ TEST_F(EmulatorFunctionsTest, DivideReturnsErrorWhenDividingByZero) {
 
 TEST_F(EmulatorFunctionsTest, DivideReturnsErrorWhenResultIsOverflow) {
   const zetasql::Function* function =
-      functions_[kPGNumericDivideFunctionName].get();
+      functions_[kZetaSQLDivideFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
@@ -2594,7 +2609,7 @@ TEST_F(EmulatorFunctionsTest, DivideReturnsErrorWhenResultIsOverflow) {
 
 TEST_F(EmulatorFunctionsTest, DivTruncReturnsErrorWhenArgumentsAreInvalid) {
   const zetasql::Function* function =
-      functions_[kPGNumericDivTruncFunctionName].get();
+      functions_[kZetaSQLDivTruncFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
@@ -2605,7 +2620,7 @@ TEST_F(EmulatorFunctionsTest, DivTruncReturnsErrorWhenArgumentsAreInvalid) {
 
 TEST_F(EmulatorFunctionsTest, DivTruncReturnsErrorWhenDividingByZero) {
   const zetasql::Function* function =
-      functions_[kPGNumericDivTruncFunctionName].get();
+      functions_[kZetaSQLDivTruncFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
@@ -2622,7 +2637,7 @@ TEST_F(EmulatorFunctionsTest, DivTruncReturnsErrorWhenDividingByZero) {
 
 TEST_F(EmulatorFunctionsTest, DivTruncReturnsErrorWhenResultIsOverflow) {
   const zetasql::Function* function =
-      functions_[kPGNumericDivTruncFunctionName].get();
+      functions_[kZetaSQLDivTruncFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
@@ -2639,7 +2654,7 @@ TEST_F(EmulatorFunctionsTest, DivTruncReturnsErrorWhenResultIsOverflow) {
 
 TEST_F(EmulatorFunctionsTest, UminusReturnsErrorWhenArgumentsAreInvalid) {
   const zetasql::Function* function =
-      functions_[kPGNumericUminusFunctionName].get();
+      functions_[kZetaSQLUminusFunctionName].get();
   ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
@@ -4097,7 +4112,7 @@ class EvalJsonbArrayElement : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
     const zetasql::Function* function =
-        functions_[kPGJsonbArrayElementFunctionName].get();
+        functions_[kZetaSQLSubscriptFunctionName].get();
     ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
@@ -4126,7 +4141,7 @@ class EvalJsonbObjectField : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
     const zetasql::Function* function =
-        functions_[kPGJsonbObjectFieldFunctionName].get();
+        functions_[kZetaSQLSubscriptFunctionName].get();
     ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
@@ -4156,7 +4171,7 @@ class EvalJsonbTypeof : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
     const zetasql::Function* function =
-        functions_[kPGJsonbTypeofFunctionName].get();
+        functions_[kZetaSQLJsonTypeFunctionName].get();
     ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
@@ -4196,6 +4211,18 @@ TEST_P(EvalCastFromJsonbTest, TestEvalCastFromJsonb) {
   std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
       functions;
   for (auto& function : spanner_pg_functions) {
+    // Add function alias if it exists.
+    if (!function->function_options().alias_name.empty()) {
+      zetasql::FunctionOptions function_options =
+          function->function_options();
+      std::string alias_name = function_options.alias_name;
+      function_options.set_alias_name("");
+      auto alias_function = std::make_unique<zetasql::Function>(
+        function->Name(), function->GetGroup(),
+        function->mode(), function->signatures(),
+          function_options);
+      functions[alias_name] = std::move(alias_function);
+    }
     functions[function->Name()] = std::move(function);
   }
 

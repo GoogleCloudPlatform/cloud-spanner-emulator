@@ -4128,6 +4128,7 @@ static void _outCreateChangeStreamStmt(StringInfo str,
   WRITE_NODE_FIELD(opt_options);
 	WRITE_NODE_FIELD(opt_for_tables);
 	WRITE_BOOL_FIELD(for_all);
+	WRITE_BOOL_FIELD(if_not_exists);
 }
 
 static void _outChangeStreamTrackedTable(

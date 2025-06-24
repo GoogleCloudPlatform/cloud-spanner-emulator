@@ -7195,6 +7195,14 @@ DropStmt:	DROP object_type_any_name IF_P EXISTS any_name_list opt_drop_behavior
 					n->objects = list_make1($4);
 					$$ = (Node *)n;
 				}
+			| DROP CHANGE STREAM IF_P EXISTS qualified_name
+				{
+					DropStmt *n = makeNode(DropStmt);
+					n->removeType = OBJECT_CHANGE_STREAM;
+					n->missing_ok = true;
+					n->objects = list_make1($6);
+					$$ = (Node *)n;
+				}
 			// SPANGRES BEGIN
 			| DROP SEARCH INDEX any_name_list
 				{
@@ -11277,7 +11285,7 @@ DropSubscriptionStmt: DROP SUBSCRIPTION name opt_drop_behavior
 
 /*****************************************************************************
  *
- * CREATE CHANGE STREAM name [ FOR ] [ WITH options ]
+ * CREATE CHANGE STREAM [ IF NOT EXISTS ] name [ FOR ] [ WITH options ]
  *
  *****************************************************************************/
 
@@ -11298,6 +11306,26 @@ CreateChangeStreamStmt:
           if ($6 != NULL)
           {
             n->opt_options = $6;
+          }
+					$$ = (Node *)n;
+				}
+			| CREATE CHANGE STREAM IF_P NOT EXISTS qualified_name opt_change_stream_for_tables opt_definition
+				{
+					CreateChangeStreamStmt *n = makeNode(CreateChangeStreamStmt);
+					n->change_stream_name = $7;
+					n->if_not_exists = true;
+					if ($8 != NULL)
+					{
+						/* FOR */
+						if (IsA($8, List))
+							n->opt_for_tables = (List *)$8;
+						/* FOR ALL */
+						else
+							n->for_all = true;
+					}
+          if ($9 != NULL)
+          {
+            n->opt_options = $9;
           }
 					$$ = (Node *)n;
 				}

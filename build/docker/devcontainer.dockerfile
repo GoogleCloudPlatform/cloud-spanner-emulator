@@ -33,7 +33,8 @@ RUN add-apt-repository ppa:ubuntu-toolchain-r/test                          && \
     apt-get -qq install -y ca-certificates libgnutls30                      && \
     update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-${GCC_VERSION} 90  \
                         --slave   /usr/bin/g++ g++ /usr/bin/g++-${GCC_VERSION} && \
-    update-alternatives --set gcc /usr/bin/gcc-${GCC_VERSION}
+    update-alternatives --set gcc /usr/bin/gcc-${GCC_VERSION}               && \
+    apt-get install --only-upgrade libstdc++6
 
 # Install the en* locales required for PG scalar functions.
 RUN apt-get -qq install language-pack-en

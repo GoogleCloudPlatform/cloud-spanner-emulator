@@ -148,6 +148,7 @@ cc_library(
         "//backend/common:ids",
         "//backend/common:utils",
         "//backend/database/pg_oid_assigner",
+        "//backend/datamodel:types",
         "//backend/query:analyzer_options",
         "//backend/query:catalog",
         "//backend/query:function_catalog",

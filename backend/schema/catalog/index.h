@@ -129,7 +129,7 @@ class Index : public SchemaNode {
   absl::Span<const Column* const> partition_by() const { return partition_by_; }
 
   // Returns the list of order by column defined in the search index.
-  absl::Span<const Column* const> order_by() const { return order_by_; }
+  absl::Span<const KeyColumn* const> order_by() const { return order_by_; }
 
   // Returns a detailed string which lists information about this index.
   std::string FullDebugString() const;
@@ -230,7 +230,7 @@ class Index : public SchemaNode {
 
   // Currently applies only to search index. A list of key parts that the index
   // is ordered by. If this is empty, then the index is unordered.
-  std::vector<const Column*> order_by_;
+  std::vector<const KeyColumn*> order_by_;
 
   // Applies only to vector index. The options for the vector index.
   ddl::VectorIndexOptionsProto vector_index_options_;

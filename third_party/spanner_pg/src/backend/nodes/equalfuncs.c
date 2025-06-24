@@ -2449,6 +2449,7 @@ _equalCreateChangeStreamStmt(const CreateChangeStreamStmt *a,
 	COMPARE_NODE_FIELD(opt_options);
 	COMPARE_NODE_FIELD(opt_for_tables);
 	COMPARE_SCALAR_FIELD(for_all);
+	COMPARE_SCALAR_FIELD(if_not_exists);
 
 	return true;
 }

@@ -32,6 +32,8 @@
 #ifndef CATALOG_SPANGRES_SYSTEM_CATALOG_H_
 #define CATALOG_SPANGRES_SYSTEM_CATALOG_H_
 
+#include <vector>
+
 #include "zetasql/public/language_options.h"
 #include "zetasql/public/types/type.h"
 #include "absl/status/status.h"
@@ -130,6 +132,9 @@ class SpangresSystemCatalog : public EngineSystemCatalog {
   absl::Status AddFunctions(
       const zetasql::LanguageOptions& language_options) override;
 
+  absl::Status AddFunctionRegistryFunctions(
+      std::vector<PostgresFunctionArguments>& functions);
+
   // If the input `gsql_expr` returns a double type, wraps it in a call to
   // PG.MapDoubleToInt or PG.MapFloatToInt in order to preserve float8/float4
   // ordering and equality semantics.
@@ -145,12 +150,6 @@ class SpangresSystemCatalog : public EngineSystemCatalog {
   absl::StatusOr<FunctionAndSignature> GetMapFloatingPointToIntFunction(
       const zetasql::Type* source_type,
       const zetasql::LanguageOptions& language_options);
-
-  // Transforms a function read from
-  // `third_party/spanner_pg/catalog/proto/catalog.proto` to the internal
-  // in memory representation for registration.
-  absl::StatusOr<PostgresFunctionArguments> PostgresFunctionArgumentsFromProto(
-      const FunctionProto& function);
 };
 
 }  // namespace spangres

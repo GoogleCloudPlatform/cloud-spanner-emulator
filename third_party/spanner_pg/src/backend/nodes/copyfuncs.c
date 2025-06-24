@@ -5064,6 +5064,7 @@ _copyCreateChangeStreamStmt(const CreateChangeStreamStmt *from)
 	COPY_NODE_FIELD(opt_options);
 	COPY_NODE_FIELD(opt_for_tables);
 	COPY_SCALAR_FIELD(for_all);
+	COPY_SCALAR_FIELD(if_not_exists);
 
 	return newnode;
 }

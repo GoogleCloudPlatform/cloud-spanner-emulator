@@ -4012,6 +4012,7 @@ typedef struct CreateChangeStreamStmt {
   List *opt_options;            /* Optional list of DefElem nodes */
   List *opt_for_tables;         /* Optional list of ChangeStreamTrackedTable */
   bool for_all; /* Whether change stream tracks all tables in database */
+  bool if_not_exists; /* do nothing if change stream already exists */
 } CreateChangeStreamStmt;
 
 typedef struct AlterChangeStreamStmt {

@@ -2165,6 +2165,7 @@ _readCreateChangeStreamStmt(void)
   READ_NODE_FIELD(opt_options);
 	READ_NODE_FIELD(opt_for_tables);
 	READ_BOOL_FIELD(for_all);
+	READ_BOOL_FIELD(if_not_exists);
 
 	READ_DONE();
 }

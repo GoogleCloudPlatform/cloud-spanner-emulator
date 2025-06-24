@@ -148,6 +148,22 @@ static void AddPgNumericSignaturesForExistingFunctions(
       {"array_cat",
        {{{gsql_pg_numeric_array,
           {gsql_pg_numeric_array, gsql_pg_numeric_array},
+          /*context_ptr=*/nullptr}}}},
+      {"abs",
+       {{{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}}}},
+      {"ceil",
+       {{{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}}}},
+      {"ceiling",
+       {{{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}}}},
+      {"floor",
+       {{{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}}}},
+      {"mod",
+       {{{gsql_pg_numeric,
+          {gsql_pg_numeric, gsql_pg_numeric},
+          /*context_ptr=*/nullptr}}}},
+      {"trunc",
+       {{{gsql_pg_numeric,
+          {gsql_pg_numeric, gsql_int64},
           /*context_ptr=*/nullptr}}}}};
 
     functions_with_new_signatures.push_back(
@@ -163,50 +179,6 @@ static void AddPgNumericSignaturesForExistingFunctions(
              {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
              /*has_mapped_function=*/true,
              /*explicit_mapped_function_name=*/"pg.numeric_max",
-         }}});
-    functions_with_new_signatures.push_back(
-        {"abs",
-         {{
-             {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
-             /*has_mapped_function=*/true,
-             /*explicit_mapped_function_name=*/"pg.numeric_abs",
-         }}});
-    functions_with_new_signatures.push_back(
-        {"ceil",
-         {{
-             {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
-             /*has_mapped_function=*/true,
-             /*explicit_mapped_function_name=*/"pg.numeric_ceil",
-         }}});
-    functions_with_new_signatures.push_back(
-        {"ceiling",
-         {{
-             {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
-             /*has_mapped_function=*/true,
-             /*explicit_mapped_function_name=*/"pg.numeric_ceiling",
-         }}});
-    functions_with_new_signatures.push_back(
-        {"floor",
-         {{
-             {gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
-             /*has_mapped_function=*/true,
-             /*explicit_mapped_function_name=*/"pg.numeric_floor",
-         }}});
-    functions_with_new_signatures.push_back(
-        {"mod",
-         {{
-             {gsql_pg_numeric, {gsql_pg_numeric, gsql_pg_numeric},
-             /*context_ptr=*/nullptr},
-             /*has_mapped_function=*/true,
-             /*explicit_mapped_function_name=*/"pg.numeric_mod",
-         }}});
-    functions_with_new_signatures.push_back(
-        {"trunc",
-         {{
-             {gsql_pg_numeric, {gsql_pg_numeric, gsql_int64},
-             /*context_ptr=*/nullptr},
-             /*has_mapped_function=*/true,
-             /*explicit_mapped_function_name=*/"pg.numeric_trunc",
          }}});
 
     functions_with_new_signatures.push_back({"count",
@@ -227,87 +199,60 @@ static void AddPgNumericNewFunctions(
     std::vector<PostgresFunctionArguments>& functions) {
   const zetasql::Type* gsql_pg_numeric =
       types::PgNumericMapping()->mapped_type();
-  // Basic arithmetic functions
-  std::string emulator_add_fn_name = "pg.numeric_add";
-  std::string emulator_subtract_fn_name = "pg.numeric_subtract";
-  std::string emulator_divide_fn_name = "pg.numeric_divide";
-  std::string emulator_multiply_fn_name = "pg.numeric_multiply";
-  std::string emulator_abs_fn_name = "pg.numeric_abs";
-  std::string emulator_mod_fn_name = "pg.numeric_mod";
-  std::string emulator_div_trunc_fn_name = "pg.numeric_div_trunc";
-  std::string emulator_uminus_fn_name = "pg.numeric_uminus";
   functions.push_back(
       {"numeric_add",
        "$add",
        {{{gsql_pg_numeric,
           {gsql_pg_numeric, gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_add_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
   functions.push_back(
       {"numeric_sub",
        "$subtract",
        {{{gsql_pg_numeric,
           {gsql_pg_numeric, gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_subtract_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
   functions.push_back(
       {"numeric_div",
        "$divide",
        {{{gsql_pg_numeric,
           {gsql_pg_numeric, gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_divide_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
   functions.push_back(
       {"numeric_mul",
        "$multiply",
        {{{gsql_pg_numeric,
           {gsql_pg_numeric, gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_multiply_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
   functions.push_back(
       {"numeric_abs",
        "abs",
        {{{gsql_pg_numeric,
           {gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_abs_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
   functions.push_back(
       {"numeric_mod",
        "mod",
        {{{gsql_pg_numeric,
           {gsql_pg_numeric, gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_mod_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
   functions.push_back(
       {"numeric_div_trunc",
        "div",
        {{{gsql_pg_numeric,
           {gsql_pg_numeric, gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_div_trunc_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
   functions.push_back(
       {"div",
        "div",
        {{{gsql_pg_numeric,
           {gsql_pg_numeric, gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_div_trunc_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
   functions.push_back(
       {"numeric_uminus",
        "$unary_minus",
        {{{gsql_pg_numeric,
           {gsql_pg_numeric},
-          /*context_ptr=*/nullptr},
-         /*has_mapped_function=*/true,
-         /*explicit_mapped_function_name=*/emulator_uminus_fn_name}}});
+          /*context_ptr=*/nullptr}}}});
 
   // Basic comparison functions
   functions.push_back(
@@ -465,39 +410,25 @@ static void AddPgJsonbNewFunctions(
         {{gsql_pg_jsonb, {gsql_pg_jsonb_arr}, /*context_ptr=*/nullptr}},
         {{gsql_pg_jsonb, {gsql_pg_oid_arr}, /*context_ptr=*/nullptr}}}});
 
-  std::string emulator_jsonb_typeof_fn_name = "pg.jsonb_typeof";
-  std::string emulator_jsonb_array_element_fn_name = "pg.jsonb_array_element";
-  std::string emulator_jsonb_object_field_fn_name = "pg.jsonb_object_field";
-  std::string emulator_jsonb_query_array_fn_name = "pg.jsonb_query_array";
-
   functions.push_back({"jsonb_typeof",
                        "json_type",
                        {{{gsql_string,
                           {gsql_pg_jsonb},
-                          /*context_ptr=*/nullptr},
-                         /*has_mapped_function=*/true,
-                         /*explicit_mapped_function_name=*/
-                         emulator_jsonb_typeof_fn_name}}});
+                          /*context_ptr=*/nullptr}}}});
 
   // Register new function mapping for '->' operator on JSONB arrays.
   functions.push_back({"jsonb_array_element",
                        "$subscript",
                        {{{gsql_pg_jsonb,
                           {gsql_pg_jsonb, gsql_int64},
-                          /*context_ptr=*/nullptr},
-                         /*has_mapped_function=*/true,
-                         /*explicit_mapped_function_name=*/
-                         emulator_jsonb_array_element_fn_name}}});
+                          /*context_ptr=*/nullptr}}}});
 
   // Register new function mapping for '->' operator on JSONB objects.
   functions.push_back({"jsonb_object_field",
                        "$subscript",
                        {{{gsql_pg_jsonb,
                           {gsql_pg_jsonb, gsql_string},
-                          /*context_ptr=*/nullptr},
-                         /*has_mapped_function=*/true,
-                         /*explicit_mapped_function_name=*/
-                         emulator_jsonb_object_field_fn_name}}});
+                          /*context_ptr=*/nullptr}}}});
 
   // Register new function mapping for '->>' operator on JSONB arrays.
   functions.push_back({"jsonb_array_element_text",
@@ -543,55 +474,55 @@ static void AddPgJsonbNewFunctions(
                        {{{gsql_bool,
                           {gsql_pg_jsonb, gsql_string_arr},
                           /*context_ptr=*/nullptr}}}});
-    // Register new function mapping for `-` operator on JSONB.
-    functions.push_back({"jsonb_delete",
-                         "pg.jsonb_delete",
-                         {{{gsql_pg_jsonb,
-                            {gsql_pg_jsonb, gsql_string},
-                            /*context_ptr=*/nullptr}},
-                          {{gsql_pg_jsonb,
-                            {gsql_pg_jsonb, gsql_int64},
-                            /*context_ptr=*/nullptr}}}});
+  // Register new function mapping for `-` operator on JSONB.
+  functions.push_back({"jsonb_delete",
+                        "pg.jsonb_delete",
+                        {{{gsql_pg_jsonb,
+                          {gsql_pg_jsonb, gsql_string},
+                          /*context_ptr=*/nullptr}},
+                        {{gsql_pg_jsonb,
+                          {gsql_pg_jsonb, gsql_int64},
+                          /*context_ptr=*/nullptr}}}});
 
-    // Register new function mapping for `#-` operator on JSONB.
-    functions.push_back({"jsonb_delete_path",
-                         "pg.jsonb_delete_path",
-                         {{{gsql_pg_jsonb,
-                            {gsql_pg_jsonb, gsql_string_arr},
-                            /*context_ptr=*/nullptr}}}});
+  // Register new function mapping for `#-` operator on JSONB.
+  functions.push_back({"jsonb_delete_path",
+                        "pg.jsonb_delete_path",
+                        {{{gsql_pg_jsonb,
+                          {gsql_pg_jsonb, gsql_string_arr},
+                          /*context_ptr=*/nullptr}}}});
 
-    functions.push_back(
-        {"jsonb_set",
-         "pg.jsonb_set",
-         {{{gsql_pg_jsonb,
-            {gsql_pg_jsonb, gsql_string_arr, gsql_pg_jsonb, gsql_bool},
-            /*context_ptr=*/nullptr}}}});
+  functions.push_back(
+      {"jsonb_set",
+        "pg.jsonb_set",
+        {{{gsql_pg_jsonb,
+          {gsql_pg_jsonb, gsql_string_arr, gsql_pg_jsonb, gsql_bool},
+          /*context_ptr=*/nullptr}}}});
 
-    functions.push_back({"jsonb_set_lax",
-                         "pg.jsonb_set_lax",
-                         {{{gsql_pg_jsonb,
-                            {gsql_pg_jsonb, gsql_string_arr, gsql_pg_jsonb,
-                             gsql_bool, gsql_string},
-                            /*context_ptr=*/nullptr}}}});
+  functions.push_back({"jsonb_set_lax",
+                        "pg.jsonb_set_lax",
+                        {{{gsql_pg_jsonb,
+                          {gsql_pg_jsonb, gsql_string_arr, gsql_pg_jsonb,
+                            gsql_bool, gsql_string},
+                          /*context_ptr=*/nullptr}}}});
 
-    functions.push_back({"jsonb_concat",
-                         "pg.jsonb_concat",
-                         {{{gsql_pg_jsonb,
-                            {gsql_pg_jsonb, gsql_pg_jsonb},
-                            /*context_ptr=*/nullptr}}}});
+  functions.push_back({"jsonb_concat",
+                        "pg.jsonb_concat",
+                        {{{gsql_pg_jsonb,
+                          {gsql_pg_jsonb, gsql_pg_jsonb},
+                          /*context_ptr=*/nullptr}}}});
 
-    functions.push_back(
-        {"jsonb_insert",
-         "pg.jsonb_insert",
-         {{{gsql_pg_jsonb,
-            {gsql_pg_jsonb, gsql_string_arr, gsql_pg_jsonb, gsql_bool},
-            /*context_ptr=*/nullptr}}}});
+  functions.push_back(
+      {"jsonb_insert",
+        "pg.jsonb_insert",
+        {{{gsql_pg_jsonb,
+          {gsql_pg_jsonb, gsql_string_arr, gsql_pg_jsonb, gsql_bool},
+          /*context_ptr=*/nullptr}}}});
 
-    functions.push_back({"jsonb_strip_nulls",
-                         "pg.jsonb_strip_nulls",
-                         {{{gsql_pg_jsonb,
-                            {gsql_pg_jsonb},
-                            /*context_ptr=*/nullptr}}}});
+  functions.push_back({"jsonb_strip_nulls",
+                        "pg.jsonb_strip_nulls",
+                        {{{gsql_pg_jsonb,
+                          {gsql_pg_jsonb},
+                          /*context_ptr=*/nullptr}}}});
 
   zetasql::FunctionArgumentTypeOptions repeated(
       zetasql::FunctionArgumentType::REPEATED);
@@ -628,13 +559,10 @@ static void AddPgJsonbNewFunctions(
 
   functions.push_back(
       {"jsonb_query_array",
-        "json_query_array",
-        {{{gsql_pg_jsonb_arr, {gsql_pg_jsonb}, /*context_ptr=*/nullptr},
-          /*has_mapped_function=*/true,
-          /*explicit_mapped_function_name=*/
-          emulator_jsonb_query_array_fn_name}},
-        /*mode=*/zetasql::Function::SCALAR,
-        /*postgres_namespace=*/"spanner"});
+       "json_query_array",
+       {{{gsql_pg_jsonb_arr, {gsql_pg_jsonb}, /*context_ptr=*/nullptr}}},
+       /*mode=*/zetasql::Function::SCALAR,
+       /*postgres_namespace=*/"spanner"});
 }
 
 void AddPgJsonbFunctions(std::vector<PostgresFunctionArguments>& functions) {
