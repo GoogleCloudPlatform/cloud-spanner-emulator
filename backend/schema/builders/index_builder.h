@@ -105,7 +105,7 @@ class Index::Builder {
     return *this;
   }
 
-  Builder& add_order_by_column(const Column* column) {
+  Builder& add_order_by_column(const KeyColumn* column) {
     instance_->order_by_.push_back(column);
     return *this;
   }

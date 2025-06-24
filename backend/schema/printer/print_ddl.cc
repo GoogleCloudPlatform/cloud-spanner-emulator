@@ -244,7 +244,13 @@ std::string PrintIndex(const Index* index) {
       std::vector<std::string> order_by_clause;
       order_by_clause.reserve(index->order_by().size());
       for (int i = 0; i < index->order_by().size(); ++i) {
-        order_by_clause.push_back(PrintName(index->order_by()[i]->Name()));
+        auto key_column = index->order_by()[i];
+        order_by_clause.push_back(
+            absl::StrCat(PrintName(key_column->column()->Name()),
+                         // TODO: Specifying NULLS FIRST/LAST is
+                         // unsupported in the emulator. Currently, users cannot
+                         // specify ASC_NULLS_LAST and DESC_NULLS_FIRST.
+                         key_column->is_descending() ? " DESC" : ""));
       }
       absl::StrAppend(&ddl_string, absl::StrJoin(order_by_clause, ", "));
     }

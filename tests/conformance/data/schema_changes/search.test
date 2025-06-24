@@ -182,7 +182,7 @@ ON Albums(Name_Tokens,
           Length_Tokens)
 STORING (Length)
 PARTITION BY UserId
-ORDER BY ReleaseTimestamp;
+ORDER BY ReleaseTimestamp DESC;
 --
 CREATE TABLE Albums (
   AlbumId INT64 NOT NULL,
@@ -203,4 +203,4 @@ ON Albums(Name_Tokens,
           Length_Tokens)
 STORING (Length)
 PARTITION BY UserId
-ORDER BY ReleaseTimestamp;
+ORDER BY ReleaseTimestamp DESC;

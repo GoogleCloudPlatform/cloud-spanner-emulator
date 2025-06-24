@@ -1149,7 +1149,7 @@ TEST_P(SchemaUpdaterTest, ComplexCreateSearchIndex) {
 
   EXPECT_EQ(idx->order_by().size(), 1);
   auto col7 = t->FindColumn("col7");
-  EXPECT_THAT(idx->order_by()[0], SourceColumnIs(col7));
+  EXPECT_THAT(idx->order_by()[0]->column(), SourceColumnIs(col7));
   EXPECT_NE(idx_data->FindColumn("col7"), nullptr);
 }
 

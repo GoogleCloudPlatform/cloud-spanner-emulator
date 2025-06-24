@@ -164,7 +164,8 @@ absl::Status IndexValidator::Validate(const Index* index,
     }
 
     // check order by restrictions
-    for (const auto* column : index->order_by_) {
+    for (const auto* key_column : index->order_by_) {
+      auto column = key_column->column();
       if (column->is_nullable() && !index->is_null_filtered_column(column)) {
         return error::SearchIndexSortMustBeNotNullError(column->Name(),
                                                         index->name_);

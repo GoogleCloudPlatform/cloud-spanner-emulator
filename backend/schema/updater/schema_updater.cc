@@ -66,6 +66,7 @@
 #include "backend/common/ids.h"
 #include "backend/common/utils.h"
 #include "backend/database/pg_oid_assigner/pg_oid_assigner.h"
+#include "backend/datamodel/types.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
@@ -156,7 +157,7 @@ struct ColumnsUsedByIndex {
   std::vector<const Column*> stored_columns;
   std::vector<const Column*> null_filtered_columns;
   std::vector<const Column*> partition_by_columns;
-  std::vector<const Column*> order_by_columns;
+  std::vector<const KeyColumn*> order_by_columns;
 };
 
 // Get all the names of objects in a vector of objects. Useful for creating
@@ -3399,10 +3400,28 @@ SchemaUpdaterImpl::CreateIndexDataTable(
   }
 
   if (order_by != nullptr) {
-    // Add order by columns to index data table.
-    ZETASQL_RETURN_IF_ERROR(AddSearchIndexColumns(
-        *order_by, indexed_table, index->is_null_filtered(),
-        columns_used_by_index->order_by_columns, builder));
+    for (const ddl::KeyPartClause& ddl_key_part : *order_by) {
+      const std::string& column_name = ddl_key_part.key_name();
+      std::vector<const Column*> columns;
+      // Add column to index data table.
+      ZETASQL_RETURN_IF_ERROR(AddIndexColumnsByName(column_name, indexed_table,
+                                            index->is_null_filtered(), columns,
+                                            builder));
+
+      // ORDER BY columns cannot be unsupported key column types.
+      if (!IsSupportedKeyColumnType(columns[0]->GetType(),
+                                    index->is_vector_index())) {
+        return error::SearchIndexOrderByMustBeIntegerType(
+            index->Name(), column_name, columns[0]->GetType()->DebugString());
+      }
+
+      // Create KeyColumn to preserve ordering metadata.
+      KeyColumn::Builder key_builder;
+      ZETASQL_ASSIGN_OR_RETURN(
+          const KeyColumn* order_by_column,
+          CreatePrimaryKeyColumn(ddl_key_part, builder.get(), &key_builder));
+      columns_used_by_index->order_by_columns.push_back(order_by_column);
+    }
   }
 
   return builder.build();
@@ -3874,7 +3893,7 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
       builder.add_partition_by_column(col);
     }
 
-    for (const Column* col : columns_used_by_index.order_by_columns) {
+    for (const KeyColumn* col : columns_used_by_index.order_by_columns) {
       builder.add_order_by_column(col);
     }
   }

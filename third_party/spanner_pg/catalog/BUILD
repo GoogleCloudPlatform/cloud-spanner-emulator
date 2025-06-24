@@ -78,6 +78,43 @@ cc_library(
 )
 
 cc_library(
+    name = "spangres_function_mapper",
+    srcs = ["spangres_function_mapper.cc"],
+    hdrs = ["spangres_function_mapper.h"],
+    deps = [
+        ":builtin_function",
+        ":engine_system_catalog",
+        "//third_party/spanner_pg/catalog/proto:catalog_cc_proto",
+        "//third_party/spanner_pg/src/include:client_include",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_zetasql//zetasql/public:function",
+    ],
+)
+
+cc_test(
+    name = "spangres_function_mapper_test",
+    srcs = ["spangres_function_mapper_test.cc"],
+    deps = [
+        ":builtin_function",
+        ":engine_system_catalog",
+        ":spangres_function_mapper",
+        "//third_party/spanner_pg/src/backend/catalog:generated_catalog_headers",
+        "//third_party/spanner_pg/src/include:client_include",
+        "//third_party/spanner_pg/test_catalog",
+        "@com_google_googletest//:gtest",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:function",
+        "@com_google_zetasql//zetasql/public:function_cc_proto",
+        "@com_google_zetasql//zetasql/public:options_cc_proto",
+        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_zetasql//zetasql/public/types:type",
+    ],
+)
+
+cc_library(
     name = "spangres_system_catalog",
     srcs = ["spangres_system_catalog.cc"],
     hdrs = ["spangres_system_catalog.h"],
@@ -90,6 +127,7 @@ cc_library(
         ":builtin_spanner_functions",
         ":engine_system_catalog",
         ":function",
+        ":spangres_function_mapper",
         ":spangres_type",
         ":type",
         "//third_party/spanner_pg/bootstrap_catalog",
@@ -105,6 +143,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:span",
         "@com_google_zetasql//zetasql/analyzer:function_signature_matcher",
@@ -632,6 +671,7 @@ cc_library(
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

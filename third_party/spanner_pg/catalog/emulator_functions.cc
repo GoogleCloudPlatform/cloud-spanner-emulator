@@ -514,7 +514,7 @@ std::unique_ptr<zetasql::Function> ToNumberFunction(
 
 // PG.NUMERIC Mathematical functions
 
-absl::StatusOr<zetasql::Value> EvalNumericAbs(
+absl::StatusOr<zetasql::Value> EvalZetaSQLAbs(
     absl::Span<const zetasql::Value> args) {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
@@ -537,15 +537,15 @@ std::unique_ptr<zetasql::Function> NumericAbsFunction(
       spangres::datatypes::GetPgNumericType();
 
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalNumericAbs));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalZetaSQLAbs));
   return std::make_unique<zetasql::Function>(
-      kPGNumericAbsFunctionName, catalog_name, zetasql::Function::SCALAR,
+    kZetaSQLAbsFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
           gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}},
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalNumericAdd(
+absl::StatusOr<zetasql::Value> EvalZetaSQLAdd(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
   if (args[0].is_null() || args[1].is_null()) {
@@ -565,10 +565,10 @@ std::unique_ptr<zetasql::Function> NumericAddFunction(
   const zetasql::Type* gsql_pg_numeric =
       postgres_translator::spangres::datatypes::GetPgNumericType();
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalNumericAdd));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalZetaSQLAdd));
 
   return std::make_unique<zetasql::Function>(
-      kPGNumericAddFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kZetaSQLAddFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           {gsql_pg_numeric,
            {gsql_pg_numeric, gsql_pg_numeric},
@@ -576,7 +576,7 @@ std::unique_ptr<zetasql::Function> NumericAddFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalNumericCeil(
+absl::StatusOr<zetasql::Value> EvalZetaSQLCeil(
     absl::Span<const zetasql::Value> args) {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
@@ -599,29 +599,16 @@ std::unique_ptr<zetasql::Function> NumericCeilFunction(
       spangres::datatypes::GetPgNumericType();
 
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalNumericCeil));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalZetaSQLCeil));
+  function_options.set_alias_name("ceiling");
   return std::make_unique<zetasql::Function>(
-      kPGNumericCeilFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kZetaSQLCeilFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
           gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}},
       function_options);
 }
 
-std::unique_ptr<zetasql::Function> NumericCeilingFunction(
-    absl::string_view catalog_name) {
-  static const zetasql::Type* gsql_pg_numeric =
-      spangres::datatypes::GetPgNumericType();
-
-  zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalNumericCeil));
-  return std::make_unique<zetasql::Function>(
-      kPGNumericCeilingFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
-          gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}},
-      function_options);
-}
-
-absl::StatusOr<zetasql::Value> EvalNumericDivide(
+absl::StatusOr<zetasql::Value> EvalZetaSQLDivide(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
   if (args[0].is_null() || args[1].is_null()) {
@@ -642,10 +629,10 @@ std::unique_ptr<zetasql::Function> NumericDivideFunction(
   const zetasql::Type* gsql_pg_numeric =
       postgres_translator::spangres::datatypes::GetPgNumericType();
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalNumericDivide));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalZetaSQLDivide));
 
   return std::make_unique<zetasql::Function>(
-      kPGNumericDivideFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kZetaSQLDivideFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           {gsql_pg_numeric,
            {gsql_pg_numeric, gsql_pg_numeric},
@@ -653,7 +640,7 @@ std::unique_ptr<zetasql::Function> NumericDivideFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalNumericDivTrunc(
+absl::StatusOr<zetasql::Value> EvalZetaSQLDivTrunc(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
   if (args[0].is_null() || args[1].is_null()) {
@@ -674,10 +661,10 @@ std::unique_ptr<zetasql::Function> NumericDivTruncFunction(
   const zetasql::Type* gsql_pg_numeric =
       postgres_translator::spangres::datatypes::GetPgNumericType();
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalNumericDivTrunc));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalZetaSQLDivTrunc));
 
   return std::make_unique<zetasql::Function>(
-      kPGNumericDivTruncFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kZetaSQLDivTruncFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           {gsql_pg_numeric,
            {gsql_pg_numeric, gsql_pg_numeric},
@@ -685,7 +672,7 @@ std::unique_ptr<zetasql::Function> NumericDivTruncFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalNumericFloor(
+absl::StatusOr<zetasql::Value> EvalZetaSQLFloor(
     absl::Span<const zetasql::Value> args) {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
@@ -708,15 +695,15 @@ std::unique_ptr<zetasql::Function> NumericFloorFunction(
       spangres::datatypes::GetPgNumericType();
 
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalNumericFloor));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalZetaSQLFloor));
   return std::make_unique<zetasql::Function>(
-      kPGNumericFloorFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kZetaSQLFloorFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
           gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}},
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalNumericMod(
+absl::StatusOr<zetasql::Value> EvalZetaSQLMod(
     absl::Span<const zetasql::Value> args) {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
@@ -742,9 +729,9 @@ std::unique_ptr<zetasql::Function> NumericModFunction(
       spangres::datatypes::GetPgNumericType();
 
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalNumericMod));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalZetaSQLMod));
   return std::make_unique<zetasql::Function>(
-      kPGNumericModFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kZetaSQLModFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{gsql_pg_numeric,
                                        {gsql_pg_numeric, gsql_pg_numeric},
@@ -752,7 +739,7 @@ std::unique_ptr<zetasql::Function> NumericModFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalNumericMultiply(
+absl::StatusOr<zetasql::Value> EvalZetaSQLMultiply(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
   if (args[0].is_null() || args[1].is_null()) {
@@ -773,10 +760,10 @@ std::unique_ptr<zetasql::Function> NumericMultiplyFunction(
   const zetasql::Type* gsql_pg_numeric =
       postgres_translator::spangres::datatypes::GetPgNumericType();
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalNumericMultiply));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalZetaSQLMultiply));
 
   return std::make_unique<zetasql::Function>(
-      kPGNumericMultiplyFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kZetaSQLMultiplyFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           {gsql_pg_numeric,
            {gsql_pg_numeric, gsql_pg_numeric},
@@ -784,7 +771,7 @@ std::unique_ptr<zetasql::Function> NumericMultiplyFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalNumericSubtract(
+absl::StatusOr<zetasql::Value> EvalZetaSQLSubtract(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
   if (args[0].is_null() || args[1].is_null()) {
@@ -805,10 +792,10 @@ std::unique_ptr<zetasql::Function> NumericSubtractFunction(
   const zetasql::Type* gsql_pg_numeric =
       postgres_translator::spangres::datatypes::GetPgNumericType();
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalNumericSubtract));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalZetaSQLSubtract));
 
   return std::make_unique<zetasql::Function>(
-      kPGNumericSubtractFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kZetaSQLSubtractFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           {gsql_pg_numeric,
            {gsql_pg_numeric, gsql_pg_numeric},
@@ -816,7 +803,7 @@ std::unique_ptr<zetasql::Function> NumericSubtractFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalNumericTrunc(
+absl::StatusOr<zetasql::Value> EvalZetaSQLTrunc(
     absl::Span<const zetasql::Value> args) {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
@@ -840,9 +827,9 @@ std::unique_ptr<zetasql::Function> NumericTruncFunction(
       spangres::datatypes::GetPgNumericType();
 
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalNumericTrunc));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalZetaSQLTrunc));
   return std::make_unique<zetasql::Function>(
-      kPGNumericTruncFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kZetaSQLTruncFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{gsql_pg_numeric,
                                        {gsql_pg_numeric, gsql_int64},
@@ -850,7 +837,7 @@ std::unique_ptr<zetasql::Function> NumericTruncFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalNumericUminus(
+absl::StatusOr<zetasql::Value> EvalZetaSQLUminus(
     absl::Span<const zetasql::Value> args) {
   static const zetasql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
@@ -874,9 +861,9 @@ std::unique_ptr<zetasql::Function> NumericUminusFunction(
       spangres::datatypes::GetPgNumericType();
 
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalNumericUminus));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalZetaSQLUminus));
   return std::make_unique<zetasql::Function>(
-      kPGNumericUminusFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kZetaSQLUminusFunctionName, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
           gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}},
       function_options);
@@ -2019,12 +2006,13 @@ std::unique_ptr<zetasql::Function> JsonbSubscriptTextFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalJsonbArrayElement(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<zetasql::Value> EvalSubscript(
+  absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
-  if (args[1].type_kind() != zetasql::TYPE_INT64) {
+  if ((args[1].type_kind() != zetasql::TYPE_INT64) &&
+      (args[1].type_kind() != zetasql::TYPE_STRING)) {
     return absl::UnimplementedError(absl::StrCat(
-        "jsonb_array_element(jsonb, ", args[1].type()->DebugString(), ")"));
+        "$subscript(PG.JSONB, ", args[1].type()->DebugString(), ")"));
   }
   if (args[0].is_null() || args[1].is_null()) {
     return zetasql::Value::Null(
@@ -2032,52 +2020,26 @@ absl::StatusOr<zetasql::Value> EvalJsonbArrayElement(
   }
 
   ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
-  return JsonbArrayElement(std::string(jsonb), args[1].int64_value());
+  if (args[1].type_kind() == zetasql::TYPE_INT64) {
+    return JsonbArrayElement(std::string(jsonb), args[1].int64_value());
+  } else {
+  return JsonbObjectField(std::string(jsonb), args[1].string_value());
+  }
 }
 
-std::unique_ptr<zetasql::Function> JsonbArrayElementFunction(
+std::unique_ptr<zetasql::Function> ZetaSQLSubscriptFunction(
     absl::string_view catalog_name) {
   const zetasql::Type* gsql_pg_jsonb =
       postgres_translator::spangres::datatypes::GetPgJsonbType();
   zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbArrayElement));
+  function_options.set_evaluator(PGFunctionEvaluator(EvalSubscript));
   return std::make_unique<zetasql::Function>(
-      kPGJsonbArrayElementFunctionName, catalog_name,
+      kZetaSQLSubscriptFunctionName, catalog_name,
       zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{gsql_pg_jsonb,
                                        {gsql_pg_jsonb, gsql_int64},
                                        /*context_ptr=*/nullptr},
-      },
-      function_options);
-}
-
-absl::StatusOr<zetasql::Value> EvalJsonbObjectField(
-    absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK(args.size() == 2);
-  if (args[1].type_kind() != zetasql::TYPE_STRING) {
-    return absl::UnimplementedError(absl::StrCat(
-        "jsonb_object_field(jsonb, ", args[1].type()->DebugString(), ")"));
-  }
-  if (args[0].is_null() || args[1].is_null()) {
-    return zetasql::Value::Null(
-        postgres_translator::spangres::datatypes::GetPgJsonbType());
-  }
-
-  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
-  return JsonbObjectField(std::string(jsonb), args[1].string_value());
-}
-
-std::unique_ptr<zetasql::Function> JsonbObjectFieldFunction(
-    absl::string_view catalog_name) {
-  const zetasql::Type* gsql_pg_jsonb =
-      postgres_translator::spangres::datatypes::GetPgJsonbType();
-  zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbObjectField));
-  return std::make_unique<zetasql::Function>(
-      kPGJsonbObjectFieldFunctionName, catalog_name,
-      zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{gsql_pg_jsonb,
                                        {gsql_pg_jsonb, gsql_string},
                                        /*context_ptr=*/nullptr},
@@ -2103,7 +2065,8 @@ std::unique_ptr<zetasql::Function> JsonbTypeofFunction(
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbTypeof));
   return std::make_unique<zetasql::Function>(
-      kPGJsonbTypeofFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kZetaSQLJsonTypeFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{gsql_string,
                                        {gsql_pg_jsonb},
@@ -2145,7 +2108,8 @@ std::unique_ptr<zetasql::Function> JsonbQueryArrayFunction(
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbQueryArray));
   return std::make_unique<zetasql::Function>(
-      kPGJsonbQueryArrayFunctionName, catalog_name, zetasql::Function::SCALAR,
+      kZetaSQLJsonQueryArrayFunctionName, catalog_name,
+      zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{gsql_pg_jsonb_array,
                                        {gsql_pg_jsonb},
@@ -3026,7 +2990,6 @@ LeastGreatestFunctions(const std::string& catalog_name) {
       });
   zetasql::FunctionOptions least_function_options;
   least_function_options.set_evaluator_factory(least_evaluator_factory);
-  least_function_options.set_arguments_are_coercible(false);
 
   zetasql::FunctionEvaluatorFactory greatest_evaluator_factory(
       [&](const zetasql::FunctionSignature& signature)
@@ -3046,7 +3009,6 @@ LeastGreatestFunctions(const std::string& catalog_name) {
       });
   zetasql::FunctionOptions greatest_function_options;
   greatest_function_options.set_evaluator_factory(greatest_evaluator_factory);
-  greatest_function_options.set_arguments_are_coercible(false);
 
   std::vector<const zetasql::Type*> supported_types{
       zetasql::types::DoubleType(),
@@ -3418,7 +3380,7 @@ class SumEvaluator : public zetasql::AggregateFunctionEvaluator {
     // Now do the addition.
     if (value.type_kind() == zetasql::TYPE_INT64) {
       // Setup the memory context arena which is required for
-      // CreatePgNumericValue() and EvalNumericAdd().
+      // CreatePgNumericValue() and EvalZetaSQLAdd().
       ZETASQL_ASSIGN_OR_RETURN(
           std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
           postgres_translator::interfaces::CreatePGArena(nullptr));
@@ -3426,7 +3388,7 @@ class SumEvaluator : public zetasql::AggregateFunctionEvaluator {
                        CreatePgNumericValue(absl::StrCat(value.int64_value())));
       ZETASQL_ASSIGN_OR_RETURN(
           result_,
-          EvalNumericAdd(absl::MakeConstSpan({result_, value_as_numeric})));
+          EvalZetaSQLAdd(absl::MakeConstSpan({result_, value_as_numeric})));
     } else if (value.type_kind() == zetasql::TYPE_DOUBLE) {
       double result;
       absl::Status status;
@@ -3455,12 +3417,13 @@ class SumEvaluator : public zetasql::AggregateFunctionEvaluator {
       }
       result_ = zetasql::values::Double(result);
     } else if (value.type_kind() == zetasql::TYPE_EXTENDED) {
-      // Setup the memory context arena which is required for EvalNumericAdd().
+      // Setup the memory context arena which is required for
+      // EvalZetaSQLAdd().
       ZETASQL_ASSIGN_OR_RETURN(
           std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
           postgres_translator::interfaces::CreatePGArena(nullptr));
       ZETASQL_ASSIGN_OR_RETURN(result_,
-                       EvalNumericAdd(absl::MakeConstSpan({result_, value})));
+                       EvalZetaSQLAdd(absl::MakeConstSpan({result_, value})));
     }  // No else because we've already validated the type above.
 
     count_++;
@@ -3545,13 +3508,14 @@ class AvgEvaluator : public SumEvaluator {
 
     // INT64 or PG.NUMERIC:
     // Setup the memory context arena which is required for
-    // CreatePgNumericValue() and EvalNumericDivide().
+    // CreatePgNumericValue() and EvalZetaSQLDivide().
     ZETASQL_ASSIGN_OR_RETURN(
         std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
         postgres_translator::interfaces::CreatePGArena(nullptr));
     ZETASQL_ASSIGN_OR_RETURN(auto count_as_numeric,
                      CreatePgNumericValue(absl::StrCat(count_)));
-    return EvalNumericDivide(absl::MakeConstSpan({result_, count_as_numeric}));
+    return EvalZetaSQLDivide(
+        absl::MakeConstSpan({result_, count_as_numeric}));
   }
 
  protected:
@@ -4551,10 +4515,8 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   functions.push_back(std::move(cast_from_jsonb_func));
   auto jsonb_subscript_text_func = JsonbSubscriptTextFunction(catalog_name);
   functions.push_back(std::move(jsonb_subscript_text_func));
-  auto jsonb_array_element_func = JsonbArrayElementFunction(catalog_name);
-  functions.push_back(std::move(jsonb_array_element_func));
-  auto jsonb_object_field_func = JsonbObjectFieldFunction(catalog_name);
-  functions.push_back(std::move(jsonb_object_field_func));
+  auto jsonb_subscript_func = ZetaSQLSubscriptFunction(catalog_name);
+  functions.push_back(std::move(jsonb_subscript_func));
   auto jsonb_typeof_func = JsonbTypeofFunction(catalog_name);
   functions.push_back(std::move(jsonb_typeof_func));
   auto jsonb_query_array_func = JsonbQueryArrayFunction(catalog_name);
@@ -4607,8 +4569,6 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   functions.push_back(std::move(numeric_add_func));
   auto numeric_ceil_func = NumericCeilFunction(catalog_name);
   functions.push_back(std::move(numeric_ceil_func));
-  auto numeric_ceiling_func = NumericCeilingFunction(catalog_name);
-  functions.push_back(std::move(numeric_ceiling_func));
   auto numeric_divide_func = NumericDivideFunction(catalog_name);
   functions.push_back(std::move(numeric_divide_func));
   auto numeric_div_trunc_func = NumericDivTruncFunction(catalog_name);

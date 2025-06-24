@@ -48,6 +48,26 @@
 
 namespace postgres_translator {
 
+// ZetaSQL builtin functions.
+  inline constexpr char kZetaSQLAbsFunctionName[] = "abs";
+  inline constexpr char kZetaSQLCeilFunctionName[] = "ceil";
+  inline constexpr char kZetaSQLCeilingFunctionName[] = "ceiling";
+  inline constexpr char kZetaSQLFloorFunctionName[] = "floor";
+  inline constexpr char kZetaSQLModFunctionName[] = "mod";
+  inline constexpr char kZetaSQLTruncFunctionName[] = "trunc";
+
+  inline constexpr char kZetaSQLSubscriptFunctionName[] = "$subscript";
+  inline constexpr char kZetaSQLJsonTypeFunctionName[] = "json_type";
+  inline constexpr char kZetaSQLJsonQueryArrayFunctionName[] =
+      "json_query_array";
+
+  inline constexpr char kZetaSQLAddFunctionName[] = "$add";
+  inline constexpr char kZetaSQLDivideFunctionName[] = "$divide";
+  inline constexpr char kZetaSQLDivTruncFunctionName[] = "div";
+  inline constexpr char kZetaSQLMultiplyFunctionName[] = "$multiply";
+  inline constexpr char kZetaSQLSubtractFunctionName[] = "$subtract";
+  inline constexpr char kZetaSQLUminusFunctionName[] = "$unary_minus";
+
 // PG casting functions that override the ZetaSQL/Spanner casting functions.
 inline constexpr char kPGCastToDateFunctionName[] = "pg.cast_to_date";
 inline constexpr char kPGCastToTimestampFunctionName[] = "pg.cast_to_timestamp";
@@ -90,14 +110,6 @@ inline constexpr char kPGToNumberFunctionName[] = "pg.to_number";
 inline constexpr char kPGToTimestampFunctionName[] = "pg.to_timestamp";
 inline constexpr char kPGToCharFunctionName[] = "pg.to_char";
 
-// PG mathematical functions.
-inline constexpr char kPGNumericAbsFunctionName[] = "pg.numeric_abs";
-inline constexpr char kPGNumericCeilFunctionName[] = "pg.numeric_ceil";
-inline constexpr char kPGNumericCeilingFunctionName[] = "pg.numeric_ceiling";
-inline constexpr char kPGNumericFloorFunctionName[] = "pg.numeric_floor";
-inline constexpr char kPGNumericModFunctionName[] = "pg.numeric_mod";
-inline constexpr char kPGNumericTruncFunctionName[] = "pg.numeric_trunc";
-
 // PG string functions.
 inline constexpr char kPGQuoteIdentFunctionName[] = "pg.quote_ident";
 inline constexpr char kPGSubstringFunctionName[] = "pg.substring";
@@ -110,14 +122,8 @@ inline constexpr char kPGToJsonbFunctionName[] = "pg.to_jsonb";
 inline constexpr char kPGCastFromJsonbFunctionName[] = "pg.cast_from_jsonb";
 inline constexpr char kPGJsonbSubscriptTextFunctionName[] =
     "pg.jsonb_subscript_text";
-inline constexpr char kPGJsonbArrayElementFunctionName[] =
-    "pg.jsonb_array_element";
-inline constexpr char kPGJsonbObjectFieldFunctionName[] =
-    "pg.jsonb_object_field";
-inline constexpr char kPGJsonbTypeofFunctionName[] = "pg.jsonb_typeof";
 inline constexpr char kPGJsonbArrayElementsFunctionName[] =
     "pg.jsonb_array_elements";
-inline constexpr char kPGJsonbQueryArrayFunctionName[] = "pg.jsonb_query_array";
 inline constexpr char kPGJsonbBuildArrayFunctionName[] = "pg.jsonb_build_array";
 inline constexpr char kPGJsonbBuildObjectFunctionName[] =
     "pg.jsonb_build_object";
@@ -141,12 +147,6 @@ inline constexpr char kPGFloatMultiplyFunctionName[] = "pg.float_multiply";
 inline constexpr char kPGFloatDivideFunctionName[] = "pg.float_divide";
 
 // PG NUMERIC functions.
-inline constexpr char kPGNumericAddFunctionName[] = "pg.numeric_add";
-inline constexpr char kPGNumericDivideFunctionName[] = "pg.numeric_divide";
-inline constexpr char kPGNumericDivTruncFunctionName[] = "pg.numeric_div_trunc";
-inline constexpr char kPGNumericMultiplyFunctionName[] = "pg.numeric_multiply";
-inline constexpr char kPGNumericSubtractFunctionName[] = "pg.numeric_subtract";
-inline constexpr char kPGNumericUminusFunctionName[] = "pg.numeric_uminus";
 inline constexpr char kPGCastToNumericFunctionName[] = "pg.cast_to_numeric";
 inline constexpr char kPGCastNumericToDoubleFunctionName[] =
     "pg.cast_to_double";
