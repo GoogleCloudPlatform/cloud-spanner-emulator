@@ -105,6 +105,10 @@ constexpr absl::string_view kHintTableScanGroupByScanOptimization =
 constexpr absl::string_view kUseAdditionalParallelism =
     "use_additional_parallelism";
 
+constexpr absl::string_view kScanMethod = "scan_method";
+constexpr absl::string_view kScanMethodBatch = "batch";
+constexpr absl::string_view kScanMethodRow = "row";
+
 // Lock scanned ranges
 constexpr absl::string_view kHintLockScannedRange = "lock_scanned_ranges";
 constexpr absl::string_view kHintLockScannedRangeShared = "shared";
