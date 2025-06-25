@@ -89,11 +89,16 @@ FROM gcr.io/distroless/cc-debian12
 COPY --from=build /src/bazel-bin/binaries/emulator_main .
 COPY --from=build /src/bazel-bin/binaries/gateway_main_/gateway_main .
 
-# Copy the libstdc++.so.6 shared library.
-COPY --from=build /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /usr/lib/x86_64-linux-gnu
+# Copy the libstdc++.so.6 shared library. We use wildcards to execute a conditional
+# copy depending on the target architecture.
+COPY --from=build /usr/lib/x86_64-linux-gnu*/libstdc++.so.6 /usr/lib/x86_64-linux-gnu
+COPY --from=build /usr/lib/aarch64-linux-gnu*/libstdc++.so.6 /usr/lib/aarch64-linux-gnu
 
 # Copy licenses
 COPY --from=build /licenses.txt.gz .
+
+# Copy Spangres functions catalog
+COPY --from=build /src/third_party/spanner_pg/catalog/proto/functions.txtpb ./third_party/spanner_pg/catalog/proto/functions.txtpb
 
 # Expose the default ports 9010 (gRPC) and 9020 (REST)
 EXPOSE 9010 9020
