@@ -178,14 +178,11 @@ TEST_F(BatchWriteApiTest, BatchWriteInsertOrUpdate) {
   grpc::ClientContext context;
   ZETASQL_EXPECT_OK(BatchWrite(request, &response));
 
-  EXPECT_THAT(response,
-              ElementsAre(AllOf(
-                  Partially(EqualsProto(R"pb(
-                    indexes: 0
-                    commit_timestamp {}
-                  )pb")),
-                  Property(&spanner_api::BatchWriteResponse::status,
-                           Property(&google::rpc::Status::code, Eq(0))))));
+  EXPECT_THAT(response, ElementsAre(Partially(EqualsProto(R"pb(
+                indexes: 0
+                status { code: 0 }
+                commit_timestamp {}
+              )pb"))));
 }
 
 TEST_F(BatchWriteApiTest, BatchWriteDelete) {
@@ -206,14 +203,11 @@ TEST_F(BatchWriteApiTest, BatchWriteDelete) {
   grpc::ClientContext context;
   ZETASQL_EXPECT_OK(BatchWrite(request, &response));
 
-  EXPECT_THAT(response,
-              ElementsAre(AllOf(
-                  Partially(EqualsProto(R"pb(
-                    indexes: 0
-                    commit_timestamp {}
-                  )pb")),
-                  Property(&spanner_api::BatchWriteResponse::status,
-                           Property(&google::rpc::Status::code, Eq(0))))));
+  EXPECT_THAT(response, ElementsAre(AllOf(Partially(EqualsProto(R"pb(
+                indexes: 0
+                status { code: 0 }
+                commit_timestamp {}
+              )pb")))));
   // Optionally, add a read operation to verify the deletion
   spanner_api::ReadRequest read_request;
   read_request.set_session(test_session_uri_);
@@ -271,27 +265,21 @@ TEST_F(BatchWriteApiTest, BatchWriteMultipleMutationGroups) {
   grpc::ClientContext context;
   ZETASQL_EXPECT_OK(BatchWrite(request, &response));
 
-  EXPECT_THAT(
-      response,
-      UnorderedElementsAre(
-          AllOf(Partially(EqualsProto(R"pb(
-                  indexes: 0
-                  commit_timestamp {}
-                )pb")),
-                Property(&spanner_api::BatchWriteResponse::status,
-                         Property(&google::rpc::Status::code, Eq(0)))),
-          AllOf(Partially(EqualsProto(R"pb(
-                  indexes: 1
-                  commit_timestamp {}
-                )pb")),
-                Property(&spanner_api::BatchWriteResponse::status,
-                         Property(&google::rpc::Status::code, Eq(0)))),
-          AllOf(Partially(EqualsProto(R"pb(
-                  indexes: 2
-                  commit_timestamp {}
-                )pb")),
-                Property(&spanner_api::BatchWriteResponse::status,
-                         Property(&google::rpc::Status::code, Eq(0))))));
+  EXPECT_THAT(response, UnorderedElementsAre(AllOf(Partially(EqualsProto(R"pb(
+                                               indexes: 0
+                                               status { code: 0 }
+                                               commit_timestamp {}
+                                             )pb"))),
+                                             AllOf(Partially(EqualsProto(R"pb(
+                                               indexes: 1
+                                               status { code: 0 }
+                                               commit_timestamp {}
+                                             )pb"))),
+                                             AllOf(Partially(EqualsProto(R"pb(
+                                               indexes: 2
+                                               status { code: 0 }
+                                               commit_timestamp {}
+                                             )pb")))));
 }
 
 TEST_F(BatchWriteApiTest, TestInsertMultipleMutationGroupsWithFailure) {
@@ -343,23 +331,22 @@ TEST_F(BatchWriteApiTest, TestInsertMultipleMutationGroupsWithFailure) {
       response,
       UnorderedElementsAre(
           AllOf(Partially(EqualsProto(R"pb(
-                  indexes: 0
-                  commit_timestamp {}
-                )pb")),
-                Property(&spanner_api::BatchWriteResponse::status,
-                         Property(&google::rpc::Status::code, Eq(0)))),
+            indexes: 0
+            status { code: 0 }
+            commit_timestamp {}
+          )pb"))),
           AllOf(Partially(EqualsProto(R"pb(
-                  indexes: 1
-                )pb")),
-                Property(
-                    &spanner_api::BatchWriteResponse::status,
-                    Property(&google::rpc::Status::code, testing::Not(Eq(0))))),
+            indexes: 1
+            status {
+              code: 6
+              message: "Table test_table: Row {Int64(1)} already exists."
+            }
+          )pb"))),
           AllOf(Partially(EqualsProto(R"pb(
-                  indexes: 2
-                  commit_timestamp {}
-                )pb")),
-                Property(&spanner_api::BatchWriteResponse::status,
-                         Property(&google::rpc::Status::code, Eq(0))))));
+            indexes: 2
+            status { code: 0 }
+            commit_timestamp {}
+          )pb")))));
 
   // First mutation group was committed successfully
   EXPECT_THAT(response[0].status().code(), Eq(0));
@@ -425,18 +412,17 @@ TEST_F(BatchWriteApiTest, TestInsertMutationGroupWithSuccessAndFailure) {
       response,
       UnorderedElementsAre(
           AllOf(Partially(EqualsProto(R"pb(
-                  indexes: 0
-                )pb")),
-                Property(
-                    &spanner_api::BatchWriteResponse::status,
-                    Property(&google::rpc::Status::code, testing::Not(Eq(0))))),
+            indexes: 0
+            status {
+              code: 6
+              message: "Table test_table: Row {Int64(1)} already exists."
+            }
+          )pb"))),
           AllOf(Partially(EqualsProto(R"pb(
-                  indexes: 1
-                  commit_timestamp {}
-                )pb")),
-                Property(&spanner_api::BatchWriteResponse::status,
-                         Property(&google::rpc::Status::code, Eq(0))))));
-
+            indexes: 1
+            status { code: 0 }
+            commit_timestamp {}
+          )pb")))));
   // Check the error message of the first mutation group
   EXPECT_THAT(
       response[0].status().message(),

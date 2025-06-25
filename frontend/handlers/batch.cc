@@ -94,6 +94,7 @@ absl::Status ProcessMutationGroup(
   }
 
   *response->mutable_commit_timestamp() = *commit_time_proto;
+  SetResponseStatus(response, absl::OkStatus());
   return absl::OkStatus();
 }
 }  // namespace
