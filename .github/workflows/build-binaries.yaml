@@ -1,0 +1,24 @@
+name: Build binaries
+
+on:
+  pull_request:
+    branches:
+      - master
+    types: [opened, synchronize, edited]
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+  release:
+    name: Build binaries
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bazel
+        uses: world-federation-of-advertisers/actions/setup-bazel@v2
+
+      - name: Build
+        run: bazel build -c opt //binaries/gateway_main
