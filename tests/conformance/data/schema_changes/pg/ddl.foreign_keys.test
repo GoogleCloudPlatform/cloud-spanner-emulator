@@ -215,7 +215,7 @@ CREATE TABLE users (
   FOREIGN KEY (id1) REFERENCES home(id1)
 )
 ==
-
+# --skip_prod_env
 CREATE TABLE home (
   id1 bigint NOT NULL,
   PRIMARY KEY(id1)

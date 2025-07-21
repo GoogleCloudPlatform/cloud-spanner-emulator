@@ -499,15 +499,22 @@ void VisitOnDeleteClause(const SimpleNode* node,
 
 void VisitInterleaveNode(const SimpleNode* node, InterleaveClause* interleave) {
   interleave->set_table_name(
-      GetQualifiedIdentifier(GetChildNode(node, 0, JJTINTERLEAVE_IN)));
+      GetQualifiedIdentifier(GetFirstChildNode(node, JJTINTERLEAVE_IN)));
+  SimpleNode* parent_node = GetFirstChildNode(node, JJTPARENT);
+  // No need to set interleave type to IN_PARENT for "INTERLEAVE IN PARENT",
+  // since it's the default.
+  if (parent_node == nullptr) {
+    interleave->set_type(InterleaveClause::IN);
+  }
 
-  // Default behavior is ON DELETE NO ACTION.
-  InterleaveClause::Action on_delete_action = InterleaveClause::NO_ACTION;
   SimpleNode* on_delete_node = GetFirstChildNode(node, JJTON_DELETE_CLAUSE);
   if (on_delete_node != nullptr) {
+    InterleaveClause::Action on_delete_action;
     VisitOnDeleteClause(on_delete_node, &on_delete_action);
+    interleave->set_on_delete(on_delete_action);
+  } else if (parent_node != nullptr) {
+    interleave->set_on_delete(InterleaveClause::NO_ACTION);
   }
-  interleave->set_on_delete(on_delete_action);
 }
 
 void VisitTableInterleaveNode(const SimpleNode* node,
@@ -573,6 +580,14 @@ void SetSortOrder(const SimpleNode* key_part_node, KeyPartClause* key_part,
       key_part->set_order(KeyPartClause::ASC);
     }
   }
+}
+
+void VisitSetInterleaveClause(
+    const SimpleNode* node,
+    AlterTable::SetInterleaveClause* set_interleave_clause) {
+  CheckNode(node, JJTSET_INTERLEAVE_CLAUSE);
+  VisitInterleaveNode(GetChildNode(node, 0, JJTTABLE_INTERLEAVE_CLAUSE),
+                      set_interleave_clause->mutable_interleave_clause());
 }
 
 // Visit a node that defines a key.
@@ -2509,6 +2524,12 @@ void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
         VisitTableOptionListNode(
             child, 0 /* option_list_offset */,
             alter_table->mutable_set_options()->mutable_options(), errors);
+        break;
+      }
+      case JJTSET_INTERLEAVE_CLAUSE: {
+        AlterTable::SetInterleaveClause* set_interleave_clause =
+            alter_table->mutable_set_interleave_clause();
+        VisitSetInterleaveClause(child, set_interleave_clause);
         break;
       }
       default:

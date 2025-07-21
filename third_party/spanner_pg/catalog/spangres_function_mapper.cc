@@ -52,17 +52,24 @@ constexpr char kDefaultFunctionNamespace[] = "pg_catalog";
 absl::StatusOr<PostgresFunctionArguments>
 SpangresFunctionMapper::ToPostgresFunctionArguments(
     const FunctionProto& function) const {
-  if (function.name_path().size() > 2) {
+  if (function.mapped_name_path().size() > 2) {
     return absl::InternalError(absl::StrFormat(
-        "Unsupported function name path with nested namespaces: %s",
-        absl::StrJoin(function.name_path(), ".")));
+        "Unsupported function mapped name path with nested namespaces: %s",
+        absl::StrJoin(function.mapped_name_path(), ".")));
+  }
+  if (function.postgresql_name_path().size() > 2) {
+    return absl::InternalError(absl::StrFormat(
+        "Unsupported function postgresql name path with nested namespaces: %s",
+        absl::StrJoin(function.postgresql_name_path(), ".")));
   }
 
-  std::string postgres_function_name = *function.name_path().rbegin();
-  std::string mapped_function_name = absl::StrJoin(function.name_path(), ".");
+  std::string postgres_function_name =
+      *function.postgresql_name_path().rbegin();
+  std::string mapped_function_name =
+      absl::StrJoin(function.mapped_name_path(), ".");
   std::string postgres_namespace = kDefaultFunctionNamespace;
-  if (function.name_path().size() > 1) {
-    std::string function_namespace = function.name_path()[0];
+  if (function.postgresql_name_path().size() > 1) {
+    std::string function_namespace = function.postgresql_name_path()[0];
     // pg namespace is mapped to the default namespace
     if (function_namespace != kPgNamespace) {
       postgres_namespace = function_namespace;

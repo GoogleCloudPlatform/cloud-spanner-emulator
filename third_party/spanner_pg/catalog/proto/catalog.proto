@@ -35,28 +35,29 @@ package postgres_translator;
 
 import "zetasql/public/function.proto";
 
-message FunctionTypeProto {
-  string name = 1;
-  uint32 oid = 2;
+message ArgumentTypeProto {
+  uint32 oid = 1;
 }
 
 message FunctionArgumentProto {
-  FunctionTypeProto type = 1;
+  ArgumentTypeProto type = 1;
   zetasql.FunctionEnums.ArgumentCardinality cardinality = 2;
   zetasql.FunctionEnums.NamedArgumentKind named_argument_kind = 3;
   string name = 4;
 }
 
 message FunctionSignatureProto {
-  FunctionTypeProto return_type = 1;
+  ArgumentTypeProto return_type = 1;
   repeated FunctionArgumentProto arguments = 2;
-  bool is_enabled_in_catalog = 3;
-  uint32 oid = 4;
+  uint32 oid = 3;
+  repeated string postgresql_name_path = 4;
+  bool is_enabled_in_catalog = 5;
 }
 
 message FunctionProto {
-  repeated string name_path = 1;
-  repeated FunctionSignatureProto signatures = 2;
+  repeated string mapped_name_path = 1;
+  repeated string postgresql_name_path = 2;
+  repeated FunctionSignatureProto signatures = 3;
 }
 
 message CatalogProto {

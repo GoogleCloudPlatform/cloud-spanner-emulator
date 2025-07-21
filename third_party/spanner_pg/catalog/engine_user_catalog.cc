@@ -33,15 +33,40 @@
 
 #include <algorithm>
 #include <cctype>
+#include <string>
+#include <vector>
 
 #include "zetasql/public/catalog.h"
+#include "absl/flags/flag.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
+#include "absl/types/span.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_builder.h"
+#include "zetasql/base/status_macros.h"
 
 namespace postgres_translator {
+absl::StatusOr<std::vector<std::string>> EngineUserCatalog::AdjustPath(
+    const absl::Span<const std::string> path) {
+  ZETASQL_RET_CHECK_LE(path.size(), 3);
+  if (path.size() == 2) {  // path = {schema_name, table_name}
+    ZETASQL_ASSIGN_OR_RETURN(const std::string& schema_name,
+                     MapSchemaName(path[0], path));
+    if (schema_name == kPublicSchema) {
+      return std::vector<std::string>{path[1]};
+    }
+    return std::vector<std::string>{schema_name, path[1]};
+  }
+  if (path.size() == 3) {  // path = {catalog_name, schema_name, table_name}
+    return absl::InvalidArgumentError(
+        absl::StrCat("cross-database references are not implemented: \"",
+                     path[0], ".", path[1], ".", path[2], "\""));
+  }
+  // path = {table_name}
+  return std::vector<std::string>{path.begin(), path.end()};
+}
 
 std::string EngineUserCatalog::FullName() const {
   return engine_provided_catalog_->FullName();
@@ -54,24 +79,19 @@ std::string EngineUserCatalog::FullName() const {
 absl::Status EngineUserCatalog::FindTable(
     const absl::Span<const std::string>& path, const zetasql::Table** table,
     const FindOptions& options) {
-  ZETASQL_RET_CHECK_LE(path.size(), 3);
+  ZETASQL_ASSIGN_OR_RETURN(const auto& adjusted_path, AdjustPath(path));
+  return engine_provided_catalog_->FindTable(adjusted_path, table, options);
+}
 
-  if (path.size() == 2) {  // path = {schema_name, table_name}
-    ZETASQL_ASSIGN_OR_RETURN(const std::string& schema_name,
-                     MapSchemaName(path[0], path));
-    if (schema_name == kPublicSchema) {
-      return engine_provided_catalog_->FindTable({path[1]}, table, options);
-    }
-    return engine_provided_catalog_->FindTable({schema_name, path[1]}, table,
-                                               options);
-  }
-  if (path.size() == 3) {  // path = {catalog_name, schema_name, table_name}
-    return absl::InvalidArgumentError(
-        absl::StrCat("cross-database references are not implemented: \"",
-                     path[0], ".", path[1], ".", path[2], "\""));
-  }
-  // path = {table_name}
-  return engine_provided_catalog_->FindTable(path, table, options);
+absl::Status EngineUserCatalog::FindFunction(
+    const absl::Span<const std::string>& path,
+    const zetasql::Function** function, const FindOptions& options) {
+  ZETASQL_ASSIGN_OR_RETURN(const auto& adjusted_path, AdjustPath(path));
+  const zetasql::Function* udf_candidate;
+  ZETASQL_RETURN_IF_ERROR(engine_provided_catalog_->FindFunction(
+      adjusted_path, &udf_candidate, options));
+  *function = udf_candidate;
+  return absl::OkStatus();
 }
 
 absl::Status EngineUserCatalog::FindTableValuedFunction(

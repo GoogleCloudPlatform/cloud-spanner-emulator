@@ -189,6 +189,8 @@ absl::StatusOr<const zetasql::Type*> ParseTypeName(const std::string& type) {
   } else if (type == "pg_numeric") {
     return postgres_translator::spangres::types::PgNumericMapping()
         ->mapped_type();
+  } else if (type == "pg_oid") {
+    return postgres_translator::spangres::types::PgOidMapping()->mapped_type();
   } else if (type == "int64_array") {
     return zetasql::types::Int64ArrayType();
   } else if (type == "double_array") {
@@ -210,6 +212,9 @@ absl::StatusOr<const zetasql::Type*> ParseTypeName(const std::string& type) {
         ->mapped_type();
   } else if (type == "pg_jsonb_array") {
     return postgres_translator::spangres::types::PgJsonbArrayMapping()
+        ->mapped_type();
+  } else if (type == "pg_oid_array") {
+    return postgres_translator::spangres::types::PgOidArrayMapping()
         ->mapped_type();
   } else {
     return absl::InvalidArgumentError(

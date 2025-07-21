@@ -17,10 +17,15 @@
 #ifndef STORAGE_CLOUD_SPANNER_EMULATOR_FRONTEND_SESSION_MANAGER_H_
 #define STORAGE_CLOUD_SPANNER_EMULATOR_FRONTEND_SESSION_MANAGER_H_
 
+#include <memory>
+
+#include "absl/base/thread_annotations.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "common/clock.h"
+#include "frontend/collections/multiplexed_session_transaction_manager.h"
+#include "frontend/common/labels.h"
 #include "frontend/entities/database.h"
 #include "frontend/entities/session.h"
 
@@ -36,8 +41,10 @@ class SessionManager {
 
   // Creates a session attached to the given database.
   absl::StatusOr<std::shared_ptr<Session>> CreateSession(
-      const Labels& labels, const bool multplexed,
-      std::shared_ptr<Database> database) ABSL_LOCKS_EXCLUDED(mu_);
+      const Labels& labels, bool multiplexed,
+      std::shared_ptr<Database> database,
+      MultiplexedSessionTransactionManager* mux_txn_manager)
+      ABSL_LOCKS_EXCLUDED(mu_);
 
   // Returns a session with the given URI.
   absl::StatusOr<std::shared_ptr<Session>> GetSession(
@@ -50,6 +57,9 @@ class SessionManager {
   // Lists sessions attached to the given database URI.
   absl::StatusOr<std::vector<std::shared_ptr<Session>>> ListSessions(
       const std::string& database_uri) const ABSL_LOCKS_EXCLUDED(mu_);
+
+  bool IsMultiplexedSession(const std::string& session_uri) const
+      ABSL_LOCKS_EXCLUDED(mu_);
 
  private:
   // System-wide clock.

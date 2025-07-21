@@ -930,6 +930,7 @@ TEST_F(SerializationDeserializationTest, CreateChangeStreamStmt) {
   create_change_stream_stmt->opt_for_tables = list_make1(PlaceHolderNode());
   create_change_stream_stmt->change_stream_name = range_var;
   create_change_stream_stmt->for_all = false;
+  create_change_stream_stmt->if_not_exists = false;
   EXPECT_THAT(create_change_stream_stmt, CanSerializeAndDeserialize());
 }
 

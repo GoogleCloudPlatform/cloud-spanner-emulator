@@ -27,6 +27,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "absl/types/variant.h"
 #include "backend/actions/manager.h"
@@ -57,7 +58,8 @@ namespace backend {
 
 // TransactionIDGenerator is initialized to 1 because 0 is used as a sentinel
 // value for an invalid transaction.
-Database::Database() : transaction_id_generator_(1) {}
+Database::Database()
+    : transaction_id_generator_(absl::ToUnixMicros(absl::Now())) {}
 
 absl::StatusOr<std::unique_ptr<Database>> Database::Create(
     Clock* clock, std::string_view database_id,

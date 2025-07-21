@@ -163,20 +163,18 @@ class TestSpangresFunctionMapper : public testing::Test {
 
 TEST_F(TestSpangresFunctionMapper, MapsToPostgresFunctionSuccessfully) {
   FunctionProto function;
-  function.add_name_path("pg");
-  function.add_name_path("textregexne");
+  function.add_mapped_name_path("regexp_contains");
+  function.add_postgresql_name_path("pg");
+  function.add_postgresql_name_path("textregexeq");
 
   FunctionSignatureProto* sig = function.add_signatures();
-  sig->mutable_return_type()->set_name("bool");
   sig->mutable_return_type()->set_oid(BOOLOID);
   sig->set_is_enabled_in_catalog(true);
   FunctionArgumentProto* arg1 = sig->add_arguments();
-  arg1->mutable_type()->set_name("text");
   arg1->mutable_type()->set_oid(TEXTOID);
   arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);
   arg1->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
   FunctionArgumentProto* arg2 = sig->add_arguments();
-  arg2->mutable_type()->set_name("text");
   arg2->mutable_type()->set_oid(TEXTOID);
   arg2->set_cardinality(zetasql::FunctionEnums::REQUIRED);
   arg2->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
@@ -186,7 +184,7 @@ TEST_F(TestSpangresFunctionMapper, MapsToPostgresFunctionSuccessfully) {
   EXPECT_THAT(
       mapper_->ToPostgresFunctionArguments(function),
       IsOkAndHolds(PostgresFunctionArgumentsEq(PostgresFunctionArguments(
-          "textregexne", "pg.textregexne",
+          "textregexeq", "regexp_contains",
           {PostgresFunctionSignatureArguments(
               zetasql::FunctionSignature(gsql_bool,
                                            {gsql_string, gsql_string},

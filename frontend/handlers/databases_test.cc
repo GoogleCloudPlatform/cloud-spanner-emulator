@@ -389,7 +389,8 @@ TEST_F(DatabaseApiTest, UpdateDatabaseDdlInvalidDatabaseUri) {
 
 TEST_F(DatabaseApiTest, UpdateDatabaseDdlPartialSuccess) {
   ZETASQL_EXPECT_OK(CreateTestDatabase());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const std::string session, CreateTestSession());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const std::string session,
+                       CreateTestSession(/*multiplexed=*/false));
 
   spanner_api::CommitRequest commit_request = PARSE_TEXT_PROTO(R"pb(
     single_use_transaction { read_write {} }
@@ -597,12 +598,14 @@ TEST_F(DatabaseApiTest, CreateSameNameSequencesInTwoDatabases) {
   }
 
   spanner_api::CommitResponse commit_response;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const std::string session_1,
-                       CreateTestSession(database_uri_1));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      const std::string session_1,
+      CreateTestSession(/*multiplexed=*/false, database_uri_1));
   ZETASQL_ASSERT_OK(Commit(GenerateSequenceTableInsert(session_1), &commit_response));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const std::string session_2,
-                       CreateTestSession(database_uri_2));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      const std::string session_2,
+      CreateTestSession(/*multiplexed=*/false, database_uri_2));
   ZETASQL_ASSERT_OK(Commit(GenerateSequenceTableInsert(session_2), &commit_response));
 
   {

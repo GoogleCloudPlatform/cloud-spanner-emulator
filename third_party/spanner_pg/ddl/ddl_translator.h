@@ -114,6 +114,9 @@ struct TranslationOptions {
   // enable_change_streams_allow_txn_exclusion_option allows
   // allow_txn_exclusion change stream option.
   bool enable_change_streams_allow_txn_exclusion_option = false;
+  // enable_change_streams_if_not_exists allows the IF NOT EXISTS clause for
+  // CREATE CHANGE STREAM, as well as IF EXISTS for DROP CHANGE STREAM.
+  bool enable_change_streams_if_not_exists = false;
   // This enables support for search index in Spangres.
   bool enable_search_index = true;
   // enable_locality_groups allows create/drop/alter locality groups.

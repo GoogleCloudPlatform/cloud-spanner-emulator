@@ -36,6 +36,7 @@ cc_library(
         "//backend/transaction:read_write_transaction",
         "//common:errors",
         "//common:limits",
+        "//frontend/collections:multiplexed_session_transaction_manager",
         "//frontend/common:labels",
         "//frontend/common:protos",
         "//frontend/converters:reads",

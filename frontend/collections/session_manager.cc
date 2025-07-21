@@ -27,6 +27,7 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "common/errors.h"
+#include "frontend/collections/multiplexed_session_transaction_manager.h"
 #include "frontend/common/labels.h"
 #include "frontend/common/uris.h"
 #include "frontend/entities/database.h"
@@ -39,16 +40,19 @@ namespace frontend {
 
 absl::StatusOr<std::shared_ptr<Session>> SessionManager::CreateSession(
     const Labels& labels, const bool multiplexed,
-    std::shared_ptr<Database> database) {
+    std::shared_ptr<Database> database,
+    MultiplexedSessionTransactionManager* mux_txn_manager) {
   absl::MutexLock lock(&mu_);
   const std::string session_id = absl::StrCat(next_session_id_++);
   std::string session_uri =
       MakeSessionUri(database->database_uri(), session_id);
-  std::shared_ptr<Session> session =
-      std::make_shared<Session>(session_uri, labels, multiplexed,
-                                /* create_time = */ clock_->Now(), database);
+  std::shared_ptr<Session> session = std::make_shared<Session>(
+      session_uri, labels, multiplexed,
+      /* create_time = */ clock_->Now(), database, mux_txn_manager);
   session->set_approximate_last_use_time(clock_->Now());
 
+  // Need to also cache mux session since the session IDs generated are not
+  // from Tokens but rather just an incrementing value.
   session_map_[session_uri] = session;
   return session;
 }
@@ -82,8 +86,11 @@ SessionManager::ListSessions(const std::string& database_uri) const {
        itr != session_map_.end(); ++itr) {
     if (absl::StartsWith(itr->first, session_uri_prefix)) {
       std::shared_ptr<Session> session = itr->second;
-      absl::Duration expiration_duration =
-          session->multiplexed() ? absl::Hours(28 * 24) : absl::Hours(1);
+      if (session->multiplexed()) {
+        // Multiplexed sessions are not sent in ListSessions response.
+        continue;
+      }
+      absl::Duration expiration_duration = absl::Hours(1);
       if (clock_->Now() - session->approximate_last_use_time() <=
           expiration_duration) {
         sessions.push_back(session);
@@ -97,6 +104,13 @@ SessionManager::ListSessions(const std::string& database_uri) const {
 
 absl::Status SessionManager::DeleteSession(const std::string& session_uri) {
   absl::MutexLock lock(&mu_);
+  auto itr = session_map_.find(session_uri);
+  if (itr != session_map_.end()) {
+    std::shared_ptr<Session> session = itr->second;
+    if (session->multiplexed()) {
+      return error::InvalidOperationSessionDelete();
+    }
+  }
   session_map_.erase(session_uri);
   return absl::OkStatus();
 }

@@ -974,6 +974,31 @@ TEST_P(SchemaUpdaterTest,
       ALTER TABLE Users DROP COLUMN Name)"}));
 }
 
+TEST_P(SchemaUpdaterTest, AlterChangeStreamSetForClauseAddsAllTrackedTables) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                       CreateSchema({R"(
+      CREATE TABLE a (id INT64 NOT NULL PRIMARY KEY)
+    )",
+                                     R"(
+      CREATE TABLE b (id INT64 NOT NULL PRIMARY KEY)
+    )",
+                                     R"(CREATE CHANGE STREAM s FOR a)"}));
+
+  // Alter the change stream to track both table a and b.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto updated_schema,
+      UpdateSchema(schema.get(), {R"(ALTER CHANGE STREAM s SET FOR a, b)"}));
+
+  // Verify that both 'a' and 'b' are being tracked.
+  const ChangeStream* change_stream = updated_schema->FindChangeStream("s");
+  ASSERT_NE(change_stream, nullptr);
+  const auto& tracked_tables = change_stream->tracked_tables_columns();
+
+  EXPECT_TRUE(tracked_tables.contains("a"));
+  EXPECT_TRUE(tracked_tables.contains("b"));
+  EXPECT_EQ(tracked_tables.size(), 2);
+}
+
 }  // namespace
 
 }  // namespace test

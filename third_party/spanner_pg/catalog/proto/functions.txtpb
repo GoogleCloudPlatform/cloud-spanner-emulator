@@ -8,15 +8,35 @@
 #
 
 functions {
-  name_path: "$add"
+  mapped_name_path: "$add"
   signatures {
     return_type {
-      name: "numeric"
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float8pl"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
       oid: 1700
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
@@ -24,85 +44,53 @@ functions {
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "numeric_add"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8pl"
     is_enabled_in_catalog: true
   }
 }
 functions {
-  name_path: "$divide"
+  mapped_name_path: "$bitwise_and"
   signatures {
     return_type {
-      name: "numeric"
-      oid: 1700
+      oid: 20
     }
     arguments {
       type {
-        name: "numeric"
-        oid: 1700
+        oid: 20
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
     arguments {
       type {
-        name: "numeric"
-        oid: 1700
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "$multiply"
-  signatures {
-    return_type {
-      name: "numeric"
-      oid: 1700
-    }
-    arguments {
-      type {
-        name: "numeric"
-        oid: 1700
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-    }
-    arguments {
-      type {
-        name: "numeric"
-        oid: 1700
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "$subscript"
-  signatures {
-    return_type {
-      name: "jsonb"
-      oid: 3802
-    }
-    arguments {
-      type {
-        name: "jsonb"
-        oid: 3802
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-    }
-    arguments {
-      type {
-        name: "int8"
         oid: 20
       }
       cardinality: REQUIRED
@@ -110,14 +98,1621 @@ functions {
     }
     is_enabled_in_catalog: true
   }
+}
+functions {
+  mapped_name_path: "$bitwise_left_shift"
   signatures {
     return_type {
-      name: "jsonb"
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "$bitwise_not"
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "$bitwise_or"
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "$bitwise_right_shift"
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "$bitwise_xor"
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "$divide"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float8div"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1700
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "numeric_div"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "$equal"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "booleq"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "byteaeq"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "date_eq"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float4eq"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float8eq"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "interval_eq"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8eq"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "numeric_eq"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 26
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 26
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "oideq"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "texteq"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "timestamptz_eq"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 2950
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 2950
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "uuid_eq"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "$greater"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "boolgt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "byteagt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "date_gt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float4gt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float8gt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "interval_gt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8gt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "numeric_gt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 26
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 26
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "oidgt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "textgt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "timestamptz_gt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 2950
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 2950
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "uuid_gt"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "$greater_or_equal"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "boolge"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "byteage"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "date_ge"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float4ge"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float8ge"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "interval_ge"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8ge"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "numeric_ge"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 26
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 26
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "oidge"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "textge"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "timestamptz_ge"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 2950
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 2950
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "uuid_ge"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "$less"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "boollt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "bytealt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "date_lt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float4lt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float8lt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "interval_lt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8lt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "numeric_lt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 26
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 26
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "oidlt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "textlt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "timestamptz_lt"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 2950
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 2950
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "uuid_lt"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "$less_or_equal"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "boolle"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "byteale"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1082
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "date_le"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float4le"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float8le"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1186
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "interval_le"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8le"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "numeric_le"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 26
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 26
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "oidle"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "textle"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "timestamptz_le"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 2950
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 2950
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "uuid_le"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "$like"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "bytealike"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "textlike"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "$multiply"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float8mul"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1700
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "numeric_mul"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8mul"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "$subscript"
+  signatures {
+    return_type {
       oid: 3802
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -125,25 +1720,68 @@ functions {
     }
     arguments {
       type {
-        name: "text"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_array_element"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 3802
+    }
+    arguments {
+      type {
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
         oid: 25
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_object_field"
     is_enabled_in_catalog: true
   }
 }
 functions {
-  name_path: "$subtract"
+  mapped_name_path: "$subtract"
   signatures {
     return_type {
-      name: "numeric"
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float8mi"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
       oid: 1700
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
@@ -151,44 +1789,173 @@ functions {
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "numeric_sub"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8mi"
     is_enabled_in_catalog: true
   }
 }
 functions {
-  name_path: "$unary_minus"
+  mapped_name_path: "$unary_minus"
   signatures {
     return_type {
-      name: "numeric"
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float8um"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 700
+    }
+    arguments {
+      type {
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float4um"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
       oid: 1700
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "numeric_uminus"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8um"
     is_enabled_in_catalog: true
   }
 }
 functions {
-  name_path: "abs"
+  mapped_name_path: "abs"
   signatures {
     return_type {
-      name: "numeric"
+      oid: 700
+    }
+    arguments {
+      type {
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "abs"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "abs"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
       oid: 1700
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "abs"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "abs"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "acos"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
@@ -197,16 +1964,14 @@ functions {
   }
 }
 functions {
-  name_path: "ai"
-  name_path: "if"
+  mapped_name_path: "ai"
+  mapped_name_path: "if"
   signatures {
     return_type {
-      name: "bool"
       oid: 16
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -217,149 +1982,294 @@ functions {
   }
 }
 functions {
-  name_path: "bool_array"
+  mapped_name_path: "array_concat"
   signatures {
     return_type {
-      name: "_bool"
       oid: 1000
     }
     arguments {
       type {
-        name: "jsonb"
-        oid: 3802
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "ceil"
-  signatures {
-    return_type {
-      name: "numeric"
-      oid: 1700
-    }
-    arguments {
-      type {
-        name: "numeric"
-        oid: 1700
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "div"
-  signatures {
-    return_type {
-      name: "numeric"
-      oid: 1700
-    }
-    arguments {
-      type {
-        name: "numeric"
-        oid: 1700
+        oid: 1000
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
     arguments {
       type {
-        name: "numeric"
-        oid: 1700
+        oid: 1000
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
     is_enabled_in_catalog: true
   }
-}
-functions {
-  name_path: "floor"
   signatures {
     return_type {
-      name: "numeric"
-      oid: 1700
+      oid: 1001
     }
     arguments {
       type {
-        name: "numeric"
-        oid: 1700
+        oid: 1001
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "get_internal_sequence_state"
-  signatures {
-    return_type {
-      name: "int8"
-      oid: 20
     }
     arguments {
       type {
-        name: "text"
-        oid: 25
+        oid: 1001
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
     is_enabled_in_catalog: true
   }
-}
-functions {
-  name_path: "get_next_sequence_value"
   signatures {
     return_type {
-      name: "int8"
-      oid: 20
+      oid: 1182
     }
     arguments {
       type {
-        name: "text"
-        oid: 25
+        oid: 1182
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1182
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
     is_enabled_in_catalog: true
   }
-}
-functions {
-  name_path: "int64_array"
   signatures {
     return_type {
-      name: "_int8"
+      oid: 1022
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1231
+    }
+    arguments {
+      type {
+        oid: 1231
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1231
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1028
+    }
+    arguments {
+      type {
+        oid: 1028
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1028
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
       oid: 1016
     }
     arguments {
       type {
-        name: "jsonb"
-        oid: 3802
+        oid: 1016
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "json_query_array"
-  signatures {
-    return_type {
-      name: "_jsonb"
-      oid: 3807
     }
     arguments {
       type {
-        name: "jsonb"
+        oid: 1016
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1009
+    }
+    arguments {
+      type {
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1185
+    }
+    arguments {
+      type {
+        oid: 1185
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1185
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 2951
+    }
+    arguments {
+      type {
+        oid: 2951
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 2951
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "asin"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "atan"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "atan2"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "bit_reverse"
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "bool_array"
+  signatures {
+    return_type {
+      oid: 1000
+    }
+    arguments {
+      type {
         oid: 3802
       }
       cardinality: REQUIRED
@@ -369,15 +2279,501 @@ functions {
   }
 }
 functions {
-  name_path: "json_type"
+  mapped_name_path: "ceil"
   signatures {
     return_type {
-      name: "text"
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "ceil"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1700
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "ceil"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "concat"
+  signatures {
+    return_type {
       oid: 25
     }
     arguments {
       type {
-        name: "jsonb"
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REPEATED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "concat"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "cos"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "cosine_distance"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "current_timestamp"
+  signatures {
+    return_type {
+      oid: 1184
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "date"
+  signatures {
+    return_type {
+      oid: 1082
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "make_date"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1082
+    }
+    arguments {
+      type {
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "date"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "debug_tokenlist"
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 50001
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "div"
+  signatures {
+    return_type {
+      oid: 1700
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "div"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8div"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "dot_product"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "input_array_1"
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "input_array_2"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "input_array_1"
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "input_array_2"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 1016
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "input_array_1"
+    }
+    arguments {
+      type {
+        oid: 1016
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "input_array_2"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "euclidean_distance"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "exp"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "exp"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "farm_fingerprint"
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "floor"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1700
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "generate_uuid"
+  signatures {
+    return_type {
+      oid: 2950
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "get_internal_sequence_state"
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "get_next_sequence_value"
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "get_table_column_identity_state"
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "int64_array"
+  signatures {
+    return_type {
+      oid: 1016
+    }
+    arguments {
+      type {
         oid: 3802
       }
       cardinality: REQUIRED
@@ -387,15 +2783,179 @@ functions {
   }
 }
 functions {
-  name_path: "ml_predict_row"
+  mapped_name_path: "json_query_array"
   signatures {
     return_type {
-      name: "jsonb"
+      oid: 3807
+    }
+    arguments {
+      type {
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "json_type"
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "length"
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "ln"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "ln"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "log10"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "log"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "lower"
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "lpad"
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "ltrim"
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "ml_predict_row"
+  signatures {
+    return_type {
       oid: 3802
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -404,7 +2964,6 @@ functions {
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -415,12 +2974,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -429,7 +2986,6 @@ functions {
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -440,15 +2996,13 @@ functions {
   }
 }
 functions {
-  name_path: "mod"
+  mapped_name_path: "mod"
   signatures {
     return_type {
-      name: "numeric"
       oid: 1700
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
@@ -456,445 +3010,452 @@ functions {
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "pg"
-  name_path: "approx_cosine_distance"
-  signatures {
-    return_type {
-      name: "float8"
-      oid: 701
-    }
-    arguments {
-      type {
-        name: "_float8"
-        oid: 1022
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "vector1"
-    }
-    arguments {
-      type {
-        name: "_float8"
-        oid: 1022
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "vector2"
-    }
-    arguments {
-      type {
-        name: "jsonb"
-        oid: 3802
-      }
-      cardinality: REQUIRED
-      named_argument_kind: NAMED_ONLY
-      name: "options"
-    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "mod"
     is_enabled_in_catalog: true
   }
   signatures {
     return_type {
-      name: "float8"
-      oid: 701
-    }
-    arguments {
-      type {
-        name: "_float4"
-        oid: 1021
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "vector1"
-    }
-    arguments {
-      type {
-        name: "_float4"
-        oid: 1021
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "vector2"
-    }
-    arguments {
-      type {
-        name: "jsonb"
-        oid: 3802
-      }
-      cardinality: REQUIRED
-      named_argument_kind: NAMED_ONLY
-      name: "options"
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "pg"
-  name_path: "approx_dot_product"
-  signatures {
-    return_type {
-      name: "float8"
-      oid: 701
-    }
-    arguments {
-      type {
-        name: "_float8"
-        oid: 1022
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "vector1"
-    }
-    arguments {
-      type {
-        name: "_float8"
-        oid: 1022
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "vector2"
-    }
-    arguments {
-      type {
-        name: "jsonb"
-        oid: 3802
-      }
-      cardinality: REQUIRED
-      named_argument_kind: NAMED_ONLY
-      name: "options"
-    }
-    is_enabled_in_catalog: true
-  }
-  signatures {
-    return_type {
-      name: "float8"
-      oid: 701
-    }
-    arguments {
-      type {
-        name: "_float4"
-        oid: 1021
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "vector1"
-    }
-    arguments {
-      type {
-        name: "_float4"
-        oid: 1021
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "vector2"
-    }
-    arguments {
-      type {
-        name: "jsonb"
-        oid: 3802
-      }
-      cardinality: REQUIRED
-      named_argument_kind: NAMED_ONLY
-      name: "options"
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "pg"
-  name_path: "approx_euclidean_distance"
-  signatures {
-    return_type {
-      name: "float8"
-      oid: 701
-    }
-    arguments {
-      type {
-        name: "_float8"
-        oid: 1022
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "vector1"
-    }
-    arguments {
-      type {
-        name: "_float8"
-        oid: 1022
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "vector2"
-    }
-    arguments {
-      type {
-        name: "jsonb"
-        oid: 3802
-      }
-      cardinality: REQUIRED
-      named_argument_kind: NAMED_ONLY
-      name: "options"
-    }
-    is_enabled_in_catalog: true
-  }
-  signatures {
-    return_type {
-      name: "float8"
-      oid: 701
-    }
-    arguments {
-      type {
-        name: "_float4"
-        oid: 1021
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "vector1"
-    }
-    arguments {
-      type {
-        name: "_float4"
-        oid: 1021
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "vector2"
-    }
-    arguments {
-      type {
-        name: "jsonb"
-        oid: 3802
-      }
-      cardinality: REQUIRED
-      named_argument_kind: NAMED_ONLY
-      name: "options"
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "pg"
-  name_path: "array_all_equal"
-  signatures {
-    return_type {
-      name: "bool"
-      oid: 16
-    }
-    arguments {
-      type {
-        name: "anyelement"
-        oid: 2283
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "search_value"
-    }
-    arguments {
-      type {
-        name: "anyarray"
-        oid: 2277
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "array_to_search"
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "pg"
-  name_path: "array_all_greater"
-  signatures {
-    return_type {
-      name: "bool"
-      oid: 16
-    }
-    arguments {
-      type {
-        name: "anyelement"
-        oid: 2283
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "search_value"
-    }
-    arguments {
-      type {
-        name: "anyarray"
-        oid: 2277
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "array_to_search"
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "pg"
-  name_path: "array_all_greater_equal"
-  signatures {
-    return_type {
-      name: "bool"
-      oid: 16
-    }
-    arguments {
-      type {
-        name: "anyelement"
-        oid: 2283
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "search_value"
-    }
-    arguments {
-      type {
-        name: "anyarray"
-        oid: 2277
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "array_to_search"
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "pg"
-  name_path: "array_all_less"
-  signatures {
-    return_type {
-      name: "bool"
-      oid: 16
-    }
-    arguments {
-      type {
-        name: "anyelement"
-        oid: 2283
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "search_value"
-    }
-    arguments {
-      type {
-        name: "anyarray"
-        oid: 2277
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "array_to_search"
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "pg"
-  name_path: "array_all_less_equal"
-  signatures {
-    return_type {
-      name: "bool"
-      oid: 16
-    }
-    arguments {
-      type {
-        name: "anyelement"
-        oid: 2283
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "search_value"
-    }
-    arguments {
-      type {
-        name: "anyarray"
-        oid: 2277
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "array_to_search"
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "pg"
-  name_path: "array_contained"
-  signatures {
-    return_type {
-      name: "bool"
-      oid: 16
-    }
-    arguments {
-      type {
-        name: "anyarray"
-        oid: 2277
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "search_values"
-    }
-    arguments {
-      type {
-        name: "anyarray"
-        oid: 2277
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "array_to_search"
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "pg"
-  name_path: "array_contains"
-  signatures {
-    return_type {
-      name: "bool"
-      oid: 16
-    }
-    arguments {
-      type {
-        name: "anyarray"
-        oid: 2277
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "array_to_search"
-    }
-    arguments {
-      type {
-        name: "anyarray"
-        oid: 2277
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-      name: "search_values"
-    }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  name_path: "pg"
-  name_path: "array_length"
-  signatures {
-    return_type {
-      name: "int8"
       oid: 20
     }
     arguments {
       type {
-        name: "anyarray"
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "mod"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "new_uuid"
+  signatures {
+    return_type {
+      oid: 2950
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "pg"
+  mapped_name_path: "approx_cosine_distance"
+  postgresql_name_path: "spanner"
+  postgresql_name_path: "approx_cosine_distance"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector1"
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector2"
+    }
+    arguments {
+      type {
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: NAMED_ONLY
+      name: "options"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector1"
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector2"
+    }
+    arguments {
+      type {
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: NAMED_ONLY
+      name: "options"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "pg"
+  mapped_name_path: "approx_dot_product"
+  postgresql_name_path: "spanner"
+  postgresql_name_path: "approx_dot_product"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector1"
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector2"
+    }
+    arguments {
+      type {
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: NAMED_ONLY
+      name: "options"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector1"
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector2"
+    }
+    arguments {
+      type {
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: NAMED_ONLY
+      name: "options"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "pg"
+  mapped_name_path: "approx_euclidean_distance"
+  postgresql_name_path: "spanner"
+  postgresql_name_path: "approx_euclidean_distance"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector1"
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector2"
+    }
+    arguments {
+      type {
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: NAMED_ONLY
+      name: "options"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector1"
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "vector2"
+    }
+    arguments {
+      type {
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: NAMED_ONLY
+      name: "options"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "pg"
+  mapped_name_path: "array_all_equal"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "array_all_equal"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 2283
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_value"
+    }
+    arguments {
+      type {
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "pg"
+  mapped_name_path: "array_all_greater"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "array_all_greater"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 2283
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_value"
+    }
+    arguments {
+      type {
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "pg"
+  mapped_name_path: "array_all_greater_equal"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "array_all_greater_equal"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 2283
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_value"
+    }
+    arguments {
+      type {
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "pg"
+  mapped_name_path: "array_all_less"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "array_all_less"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 2283
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_value"
+    }
+    arguments {
+      type {
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "pg"
+  mapped_name_path: "array_all_less_equal"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "array_all_less_equal"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 2283
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_value"
+    }
+    arguments {
+      type {
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "pg"
+  mapped_name_path: "array_contained"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "arraycontained"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_values"
+    }
+    arguments {
+      type {
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "pg"
+  mapped_name_path: "array_contains"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "arraycontains"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    arguments {
+      type {
+        oid: 2277
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_values"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "pg"
+  mapped_name_path: "array_length"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "array_length"
+  signatures {
+    return_type {
+      oid: 20
+    }
+    arguments {
+      type {
         oid: 2277
       }
       cardinality: REQUIRED
@@ -902,7 +3463,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REQUIRED
@@ -912,16 +3472,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "array_overlap"
+  mapped_name_path: "pg"
+  mapped_name_path: "array_overlap"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "arrayoverlap"
   signatures {
     return_type {
-      name: "bool"
       oid: 16
     }
     arguments {
       type {
-        name: "anyarray"
         oid: 2277
       }
       cardinality: REQUIRED
@@ -930,7 +3490,6 @@ functions {
     }
     arguments {
       type {
-        name: "anyarray"
         oid: 2277
       }
       cardinality: REQUIRED
@@ -941,16 +3500,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "array_slice"
+  mapped_name_path: "pg"
+  mapped_name_path: "array_slice"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "array_slice"
   signatures {
     return_type {
-      name: "anyarray"
       oid: 2277
     }
     arguments {
       type {
-        name: "anyarray"
         oid: 2277
       }
       cardinality: REQUIRED
@@ -959,7 +3518,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REQUIRED
@@ -968,7 +3526,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REQUIRED
@@ -979,16 +3536,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "array_upper"
+  mapped_name_path: "pg"
+  mapped_name_path: "array_upper"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "array_upper"
   signatures {
     return_type {
-      name: "int8"
       oid: 20
     }
     arguments {
       type {
-        name: "anyarray"
         oid: 2277
       }
       cardinality: REQUIRED
@@ -996,7 +3553,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REQUIRED
@@ -1006,16 +3562,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "cast_to_date"
+  mapped_name_path: "pg"
+  mapped_name_path: "cast_to_date"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "cast_to_date"
   signatures {
     return_type {
-      name: "date"
       oid: 1082
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -1025,16 +3581,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "cast_to_double"
+  mapped_name_path: "pg"
+  mapped_name_path: "cast_to_double"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "cast_to_double"
   signatures {
     return_type {
-      name: "float8"
       oid: 701
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
@@ -1044,16 +3600,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "cast_to_float"
+  mapped_name_path: "pg"
+  mapped_name_path: "cast_to_float"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "cast_to_float"
   signatures {
     return_type {
-      name: "float4"
       oid: 700
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
@@ -1063,16 +3619,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "cast_to_int64"
+  mapped_name_path: "pg"
+  mapped_name_path: "cast_to_int64"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "cast_to_int64"
   signatures {
     return_type {
-      name: "int8"
       oid: 20
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
@@ -1082,16 +3638,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "cast_to_interval"
+  mapped_name_path: "pg"
+  mapped_name_path: "cast_to_interval"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "cast_to_interval"
   signatures {
     return_type {
-      name: "interval"
       oid: 1186
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -1101,16 +3657,101 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "cast_to_string"
+  mapped_name_path: "pg"
+  mapped_name_path: "cast_to_numeric"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "cast_to_numeric"
   signatures {
     return_type {
-      name: "text"
+      oid: 1700
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1700
+    }
+    arguments {
+      type {
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1700
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1700
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1700
+    }
+    arguments {
+      type {
+        oid: 1700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "pg"
+  mapped_name_path: "cast_to_string"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "cast_to_string"
+  signatures {
+    return_type {
       oid: 25
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
@@ -1120,12 +3761,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "text"
       oid: 25
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -1135,16 +3774,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "cast_to_timestamp"
+  mapped_name_path: "pg"
+  mapped_name_path: "cast_to_timestamp"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "cast_to_timestamp"
   signatures {
     return_type {
-      name: "timestamptz"
       oid: 1184
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -1154,16 +3793,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "date_bin"
+  mapped_name_path: "pg"
+  mapped_name_path: "date_bin"
+  postgresql_name_path: "spanner"
+  postgresql_name_path: "date_bin"
   signatures {
     return_type {
-      name: "timestamptz"
       oid: 1184
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -1171,7 +3810,6 @@ functions {
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -1179,7 +3817,6 @@ functions {
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -1189,16 +3826,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "date_mi"
+  mapped_name_path: "pg"
+  mapped_name_path: "date_mi"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "date_mi"
   signatures {
     return_type {
-      name: "int8"
       oid: 20
     }
     arguments {
       type {
-        name: "date"
         oid: 1082
       }
       cardinality: REQUIRED
@@ -1206,7 +3843,6 @@ functions {
     }
     arguments {
       type {
-        name: "date"
         oid: 1082
       }
       cardinality: REQUIRED
@@ -1216,16 +3852,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "date_mii"
+  mapped_name_path: "pg"
+  mapped_name_path: "date_mii"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "date_mii"
   signatures {
     return_type {
-      name: "date"
       oid: 1082
     }
     arguments {
       type {
-        name: "date"
         oid: 1082
       }
       cardinality: REQUIRED
@@ -1233,7 +3869,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REQUIRED
@@ -1243,16 +3878,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "date_part"
+  mapped_name_path: "pg"
+  mapped_name_path: "date_part"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "date_part"
   signatures {
     return_type {
-      name: "float8"
       oid: 701
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -1260,7 +3895,6 @@ functions {
     }
     arguments {
       type {
-        name: "date"
         oid: 1082
       }
       cardinality: REQUIRED
@@ -1270,12 +3904,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "float8"
       oid: 701
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -1283,7 +3915,6 @@ functions {
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -1293,16 +3924,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "date_pli"
+  mapped_name_path: "pg"
+  mapped_name_path: "date_pli"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "date_pli"
   signatures {
     return_type {
-      name: "date"
       oid: 1082
     }
     arguments {
       type {
-        name: "date"
         oid: 1082
       }
       cardinality: REQUIRED
@@ -1310,7 +3941,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REQUIRED
@@ -1320,16 +3950,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "date_trunc"
+  mapped_name_path: "pg"
+  mapped_name_path: "date_trunc"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "date_trunc"
   signatures {
     return_type {
-      name: "timestamptz"
       oid: 1184
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -1337,7 +3967,6 @@ functions {
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -1347,12 +3976,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "timestamptz"
       oid: 1184
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -1360,7 +3987,6 @@ functions {
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -1368,7 +3994,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -1378,16 +4003,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "extract"
+  mapped_name_path: "pg"
+  mapped_name_path: "extract"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "extract"
   signatures {
     return_type {
-      name: "numeric"
       oid: 1700
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -1395,7 +4020,6 @@ functions {
     }
     arguments {
       type {
-        name: "date"
         oid: 1082
       }
       cardinality: REQUIRED
@@ -1405,12 +4029,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "numeric"
       oid: 1700
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -1418,7 +4040,6 @@ functions {
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -1428,12 +4049,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "numeric"
       oid: 1700
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -1441,7 +4060,6 @@ functions {
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -1451,16 +4069,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "extract_interval"
+  mapped_name_path: "pg"
+  mapped_name_path: "extract_interval"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "extract"
   signatures {
     return_type {
-      name: "numeric"
       oid: 1700
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -1468,7 +4086,6 @@ functions {
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -1478,16 +4095,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "float_add"
+  mapped_name_path: "pg"
+  mapped_name_path: "float_add"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "float4pl"
   signatures {
     return_type {
-      name: "float4"
       oid: 700
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REQUIRED
@@ -1495,7 +4112,6 @@ functions {
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REQUIRED
@@ -1505,16 +4121,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "float_divide"
+  mapped_name_path: "pg"
+  mapped_name_path: "float_divide"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "float4div"
   signatures {
     return_type {
-      name: "float4"
       oid: 700
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REQUIRED
@@ -1522,7 +4138,6 @@ functions {
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REQUIRED
@@ -1532,16 +4147,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "float_multiply"
+  mapped_name_path: "pg"
+  mapped_name_path: "float_multiply"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "float4mul"
   signatures {
     return_type {
-      name: "float4"
       oid: 700
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REQUIRED
@@ -1549,7 +4164,6 @@ functions {
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REQUIRED
@@ -1559,16 +4173,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "float_subtract"
+  mapped_name_path: "pg"
+  mapped_name_path: "float_subtract"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "float4mi"
   signatures {
     return_type {
-      name: "float4"
       oid: 700
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REQUIRED
@@ -1576,7 +4190,6 @@ functions {
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REQUIRED
@@ -1586,16 +4199,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "format_type"
+  mapped_name_path: "pg"
+  mapped_name_path: "format_type"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "format_type"
   signatures {
     return_type {
-      name: "text"
       oid: 25
     }
     arguments {
       type {
-        name: "oid"
         oid: 26
       }
       cardinality: REQUIRED
@@ -1603,7 +4216,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REQUIRED
@@ -1613,16 +4225,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "generate_array"
+  mapped_name_path: "pg"
+  mapped_name_path: "generate_array"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "generate_series"
   signatures {
     return_type {
-      name: "_numeric"
       oid: 1231
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
@@ -1630,7 +4242,6 @@ functions {
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
@@ -1638,7 +4249,6 @@ functions {
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: OPTIONAL
@@ -1648,16 +4258,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "greatest"
+  mapped_name_path: "pg"
+  mapped_name_path: "greatest"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "greatest"
   signatures {
     return_type {
-      name: "bool"
       oid: 16
     }
     arguments {
       type {
-        name: "bool"
         oid: 16
       }
       cardinality: REQUIRED
@@ -1665,7 +4275,6 @@ functions {
     }
     arguments {
       type {
-        name: "bool"
         oid: 16
       }
       cardinality: REPEATED
@@ -1675,12 +4284,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "bytea"
       oid: 17
     }
     arguments {
       type {
-        name: "bytea"
         oid: 17
       }
       cardinality: REQUIRED
@@ -1688,7 +4295,6 @@ functions {
     }
     arguments {
       type {
-        name: "bytea"
         oid: 17
       }
       cardinality: REPEATED
@@ -1698,12 +4304,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "date"
       oid: 1082
     }
     arguments {
       type {
-        name: "date"
         oid: 1082
       }
       cardinality: REQUIRED
@@ -1711,7 +4315,6 @@ functions {
     }
     arguments {
       type {
-        name: "date"
         oid: 1082
       }
       cardinality: REPEATED
@@ -1721,12 +4324,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "float8"
       oid: 701
     }
     arguments {
       type {
-        name: "float8"
         oid: 701
       }
       cardinality: REQUIRED
@@ -1734,7 +4335,6 @@ functions {
     }
     arguments {
       type {
-        name: "float8"
         oid: 701
       }
       cardinality: REPEATED
@@ -1744,12 +4344,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "float4"
       oid: 700
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REQUIRED
@@ -1757,7 +4355,6 @@ functions {
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REPEATED
@@ -1767,12 +4364,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "interval"
       oid: 1186
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -1780,7 +4375,6 @@ functions {
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REPEATED
@@ -1790,12 +4384,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "numeric"
       oid: 1700
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
@@ -1803,7 +4395,6 @@ functions {
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REPEATED
@@ -1813,12 +4404,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "int8"
       oid: 20
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REQUIRED
@@ -1826,7 +4415,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REPEATED
@@ -1836,12 +4424,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "text"
       oid: 25
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -1849,7 +4435,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REPEATED
@@ -1859,12 +4444,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "timestamptz"
       oid: 1184
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -1872,7 +4455,6 @@ functions {
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REPEATED
@@ -1882,12 +4464,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "uuid"
       oid: 2950
     }
     arguments {
       type {
-        name: "uuid"
         oid: 2950
       }
       cardinality: REQUIRED
@@ -1895,7 +4475,6 @@ functions {
     }
     arguments {
       type {
-        name: "uuid"
         oid: 2950
       }
       cardinality: REPEATED
@@ -1905,16 +4484,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "interval_add"
+  mapped_name_path: "pg"
+  mapped_name_path: "interval_add"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "interval_pl"
   signatures {
     return_type {
-      name: "interval"
       oid: 1186
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -1922,7 +4501,6 @@ functions {
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -1932,16 +4510,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "interval_divide"
+  mapped_name_path: "pg"
+  mapped_name_path: "interval_divide"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "interval_div"
   signatures {
     return_type {
-      name: "interval"
       oid: 1186
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -1949,7 +4527,6 @@ functions {
     }
     arguments {
       type {
-        name: "float8"
         oid: 701
       }
       cardinality: REQUIRED
@@ -1959,16 +4536,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "interval_multiply"
+  mapped_name_path: "pg"
+  mapped_name_path: "interval_multiply"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "interval_mul"
   signatures {
     return_type {
-      name: "interval"
       oid: 1186
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -1976,7 +4553,6 @@ functions {
     }
     arguments {
       type {
-        name: "float8"
         oid: 701
       }
       cardinality: REQUIRED
@@ -1986,16 +4562,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "interval_subtract"
+  mapped_name_path: "pg"
+  mapped_name_path: "interval_subtract"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "interval_mi"
   signatures {
     return_type {
-      name: "interval"
       oid: 1186
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -2003,7 +4579,6 @@ functions {
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -2013,16 +4588,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "interval_unary_minus"
+  mapped_name_path: "pg"
+  mapped_name_path: "interval_unary_minus"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "interval_um"
   signatures {
     return_type {
-      name: "interval"
       oid: 1186
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -2032,16 +4607,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_build_array"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_build_array"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_build_array"
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "any"
         oid: 2276
       }
       cardinality: REPEATED
@@ -2051,16 +4626,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_build_object"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_build_object"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_build_object"
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REPEATED
@@ -2068,7 +4643,6 @@ functions {
     }
     arguments {
       type {
-        name: "any"
         oid: 2276
       }
       cardinality: REPEATED
@@ -2078,16 +4652,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_concat"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_concat"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_concat"
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2095,7 +4669,6 @@ functions {
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2105,16 +4678,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_contained"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_contained"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_contained"
   signatures {
     return_type {
-      name: "bool"
       oid: 16
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2122,7 +4695,6 @@ functions {
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2132,16 +4704,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_contains"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_contains"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_contains"
   signatures {
     return_type {
-      name: "bool"
       oid: 16
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2149,7 +4721,6 @@ functions {
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2159,16 +4730,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_delete"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_delete"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_delete"
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2176,7 +4747,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REQUIRED
@@ -2186,12 +4756,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2199,7 +4767,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -2209,12 +4776,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2222,7 +4787,6 @@ functions {
     }
     arguments {
       type {
-        name: "_text"
         oid: 1009
       }
       cardinality: REQUIRED
@@ -2232,16 +4796,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_delete_path"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_delete_path"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_delete_path"
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2249,7 +4813,6 @@ functions {
     }
     arguments {
       type {
-        name: "_text"
         oid: 1009
       }
       cardinality: REQUIRED
@@ -2259,16 +4822,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_exists"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_exists"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_exists"
   signatures {
     return_type {
-      name: "bool"
       oid: 16
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2276,7 +4839,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -2286,16 +4848,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_exists_all"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_exists_all"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_exists_all"
   signatures {
     return_type {
-      name: "bool"
       oid: 16
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2303,7 +4865,6 @@ functions {
     }
     arguments {
       type {
-        name: "_text"
         oid: 1009
       }
       cardinality: REQUIRED
@@ -2313,16 +4874,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_exists_any"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_exists_any"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_exists_any"
   signatures {
     return_type {
-      name: "bool"
       oid: 16
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2330,7 +4891,6 @@ functions {
     }
     arguments {
       type {
-        name: "_text"
         oid: 1009
       }
       cardinality: REQUIRED
@@ -2340,16 +4900,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_insert"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_insert"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_insert"
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2357,7 +4917,6 @@ functions {
     }
     arguments {
       type {
-        name: "_text"
         oid: 1009
       }
       cardinality: REQUIRED
@@ -2365,7 +4924,6 @@ functions {
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2373,7 +4931,6 @@ functions {
     }
     arguments {
       type {
-        name: "bool"
         oid: 16
       }
       cardinality: OPTIONAL
@@ -2383,16 +4940,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_object_keys"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_object_keys"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_object_keys"
   signatures {
     return_type {
-      name: "_text"
       oid: 1009
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2402,16 +4959,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_set"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_set"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_set"
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2419,7 +4976,6 @@ functions {
     }
     arguments {
       type {
-        name: "_text"
         oid: 1009
       }
       cardinality: REQUIRED
@@ -2427,7 +4983,6 @@ functions {
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2435,7 +4990,6 @@ functions {
     }
     arguments {
       type {
-        name: "bool"
         oid: 16
       }
       cardinality: OPTIONAL
@@ -2445,16 +4999,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_set_lax"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_set_lax"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_set_lax"
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2462,7 +5016,6 @@ functions {
     }
     arguments {
       type {
-        name: "_text"
         oid: 1009
       }
       cardinality: REQUIRED
@@ -2470,7 +5023,6 @@ functions {
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2478,7 +5030,6 @@ functions {
     }
     arguments {
       type {
-        name: "bool"
         oid: 16
       }
       cardinality: OPTIONAL
@@ -2486,7 +5037,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: OPTIONAL
@@ -2496,16 +5046,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_strip_nulls"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_strip_nulls"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "jsonb_strip_nulls"
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2515,16 +5065,14 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "jsonb_subscript_text"
+  mapped_name_path: "pg"
+  mapped_name_path: "jsonb_subscript_text"
   signatures {
     return_type {
-      name: "text"
       oid: 25
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2532,22 +5080,21 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_array_element_text"
     is_enabled_in_catalog: true
   }
   signatures {
     return_type {
-      name: "text"
       oid: 25
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -2555,26 +5102,27 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_object_field_text"
     is_enabled_in_catalog: true
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "justify_days"
+  mapped_name_path: "pg"
+  mapped_name_path: "justify_days"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "justify_days"
   signatures {
     return_type {
-      name: "interval"
       oid: 1186
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -2584,16 +5132,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "justify_hours"
+  mapped_name_path: "pg"
+  mapped_name_path: "justify_hours"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "justify_hours"
   signatures {
     return_type {
-      name: "interval"
       oid: 1186
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -2603,16 +5151,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "justify_interval"
+  mapped_name_path: "pg"
+  mapped_name_path: "justify_interval"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "justify_interval"
   signatures {
     return_type {
-      name: "interval"
       oid: 1186
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -2622,16 +5170,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "least"
+  mapped_name_path: "pg"
+  mapped_name_path: "least"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "least"
   signatures {
     return_type {
-      name: "bool"
       oid: 16
     }
     arguments {
       type {
-        name: "bool"
         oid: 16
       }
       cardinality: REQUIRED
@@ -2639,7 +5187,6 @@ functions {
     }
     arguments {
       type {
-        name: "bool"
         oid: 16
       }
       cardinality: REPEATED
@@ -2649,12 +5196,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "bytea"
       oid: 17
     }
     arguments {
       type {
-        name: "bytea"
         oid: 17
       }
       cardinality: REQUIRED
@@ -2662,7 +5207,6 @@ functions {
     }
     arguments {
       type {
-        name: "bytea"
         oid: 17
       }
       cardinality: REPEATED
@@ -2672,12 +5216,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "date"
       oid: 1082
     }
     arguments {
       type {
-        name: "date"
         oid: 1082
       }
       cardinality: REQUIRED
@@ -2685,7 +5227,6 @@ functions {
     }
     arguments {
       type {
-        name: "date"
         oid: 1082
       }
       cardinality: REPEATED
@@ -2695,12 +5236,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "float8"
       oid: 701
     }
     arguments {
       type {
-        name: "float8"
         oid: 701
       }
       cardinality: REQUIRED
@@ -2708,7 +5247,6 @@ functions {
     }
     arguments {
       type {
-        name: "float8"
         oid: 701
       }
       cardinality: REPEATED
@@ -2718,12 +5256,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "float4"
       oid: 700
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REQUIRED
@@ -2731,7 +5267,6 @@ functions {
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REPEATED
@@ -2741,12 +5276,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "interval"
       oid: 1186
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -2754,7 +5287,6 @@ functions {
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REPEATED
@@ -2764,12 +5296,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "numeric"
       oid: 1700
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
@@ -2777,7 +5307,6 @@ functions {
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REPEATED
@@ -2787,12 +5316,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "int8"
       oid: 20
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REQUIRED
@@ -2800,7 +5327,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REPEATED
@@ -2810,12 +5336,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "text"
       oid: 25
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -2823,7 +5347,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REPEATED
@@ -2833,12 +5356,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "timestamptz"
       oid: 1184
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -2846,7 +5367,6 @@ functions {
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REPEATED
@@ -2856,12 +5376,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "uuid"
       oid: 2950
     }
     arguments {
       type {
-        name: "uuid"
         oid: 2950
       }
       cardinality: REQUIRED
@@ -2869,7 +5387,6 @@ functions {
     }
     arguments {
       type {
-        name: "uuid"
         oid: 2950
       }
       cardinality: REPEATED
@@ -2879,16 +5396,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "make_interval"
+  mapped_name_path: "pg"
+  mapped_name_path: "make_interval"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "make_interval"
   signatures {
     return_type {
-      name: "interval"
       oid: 1186
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: OPTIONAL
@@ -2897,7 +5414,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: OPTIONAL
@@ -2906,7 +5422,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: OPTIONAL
@@ -2915,7 +5430,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: OPTIONAL
@@ -2924,7 +5438,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: OPTIONAL
@@ -2933,7 +5446,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: OPTIONAL
@@ -2942,7 +5454,6 @@ functions {
     }
     arguments {
       type {
-        name: "float8"
         oid: 701
       }
       cardinality: OPTIONAL
@@ -2953,16 +5464,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "map_double_to_int"
+  mapped_name_path: "pg"
+  mapped_name_path: "map_double_to_int"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "map_double_to_int"
   signatures {
     return_type {
-      name: "int8"
       oid: 20
     }
     arguments {
       type {
-        name: "float8"
         oid: 701
       }
       cardinality: REQUIRED
@@ -2972,16 +5483,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "map_float_to_int"
+  mapped_name_path: "pg"
+  mapped_name_path: "map_float_to_int"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "map_float_to_int"
   signatures {
     return_type {
-      name: "int8"
       oid: 20
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REQUIRED
@@ -2991,16 +5502,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "quote_ident"
+  mapped_name_path: "pg"
+  mapped_name_path: "quote_ident"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "quote_ident"
   signatures {
     return_type {
-      name: "text"
       oid: 25
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3010,16 +5521,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "regexp_match"
+  mapped_name_path: "pg"
+  mapped_name_path: "regexp_match"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "regexp_match"
   signatures {
     return_type {
-      name: "_text"
       oid: 1009
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3027,7 +5538,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3037,12 +5547,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "_text"
       oid: 1009
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3050,7 +5558,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3058,7 +5565,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3068,16 +5574,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "regexp_split_to_array"
+  mapped_name_path: "pg"
+  mapped_name_path: "regexp_split_to_array"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "regexp_split_to_array"
   signatures {
     return_type {
-      name: "_text"
       oid: 1009
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3085,7 +5591,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3095,12 +5600,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "_text"
       oid: 1009
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3108,7 +5611,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3116,7 +5618,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3126,16 +5627,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "substring"
+  mapped_name_path: "pg"
+  mapped_name_path: "substring"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "substring"
   signatures {
     return_type {
-      name: "text"
       oid: 25
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3143,7 +5644,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3153,16 +5653,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "textregexne"
+  mapped_name_path: "pg"
+  mapped_name_path: "textregexne"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "textregexne"
   signatures {
     return_type {
-      name: "bool"
       oid: 16
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3170,7 +5670,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3180,16 +5679,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "timestamptz_add"
+  mapped_name_path: "pg"
+  mapped_name_path: "timestamptz_add"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "timestamptz_add"
   signatures {
     return_type {
-      name: "timestamptz"
       oid: 1184
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -3197,7 +5696,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3207,12 +5705,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "timestamptz"
       oid: 1184
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -3220,7 +5716,6 @@ functions {
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -3230,16 +5725,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "timestamptz_subtract"
+  mapped_name_path: "pg"
+  mapped_name_path: "timestamptz_subtract"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "timestamptz_subtract"
   signatures {
     return_type {
-      name: "timestamptz"
       oid: 1184
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -3247,7 +5742,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3257,12 +5751,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "timestamptz"
       oid: 1184
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -3270,7 +5762,6 @@ functions {
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -3280,12 +5771,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "interval"
       oid: 1186
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -3293,7 +5782,6 @@ functions {
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -3303,16 +5791,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "timestamptz_subtract_timestamptz"
+  mapped_name_path: "pg"
+  mapped_name_path: "timestamptz_subtract_timestamptz"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "timestamptz_mi"
   signatures {
     return_type {
-      name: "interval"
       oid: 1186
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -3320,7 +5808,6 @@ functions {
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -3330,16 +5817,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "to_char"
+  mapped_name_path: "pg"
+  mapped_name_path: "to_char"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "to_char"
   signatures {
     return_type {
-      name: "text"
       oid: 25
     }
     arguments {
       type {
-        name: "float8"
         oid: 701
       }
       cardinality: REQUIRED
@@ -3347,7 +5834,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3357,12 +5843,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "text"
       oid: 25
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REQUIRED
@@ -3370,7 +5854,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3380,12 +5863,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "text"
       oid: 25
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -3393,7 +5874,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3403,12 +5883,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "text"
       oid: 25
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
@@ -3416,7 +5894,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3426,12 +5903,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "text"
       oid: 25
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REQUIRED
@@ -3439,7 +5914,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3449,12 +5923,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "text"
       oid: 25
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -3462,7 +5934,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3472,16 +5943,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "to_date"
+  mapped_name_path: "pg"
+  mapped_name_path: "to_date"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "to_date"
   signatures {
     return_type {
-      name: "date"
       oid: 1082
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3489,7 +5960,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3499,16 +5969,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "to_jsonb"
+  mapped_name_path: "pg"
+  mapped_name_path: "to_jsonb"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "to_jsonb"
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
@@ -3518,12 +5988,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: REQUIRED
@@ -3533,12 +6001,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "float8"
         oid: 701
       }
       cardinality: REQUIRED
@@ -3548,12 +6014,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "float4"
         oid: 700
       }
       cardinality: REQUIRED
@@ -3563,12 +6027,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3578,12 +6040,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "bool"
         oid: 16
       }
       cardinality: REQUIRED
@@ -3593,12 +6053,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -3608,12 +6066,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "date"
         oid: 1082
       }
       cardinality: REQUIRED
@@ -3623,12 +6079,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "timestamptz"
         oid: 1184
       }
       cardinality: REQUIRED
@@ -3638,12 +6092,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "bytea"
         oid: 17
       }
       cardinality: REQUIRED
@@ -3653,12 +6105,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "interval"
         oid: 1186
       }
       cardinality: REQUIRED
@@ -3668,12 +6118,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "uuid"
         oid: 2950
       }
       cardinality: REQUIRED
@@ -3683,12 +6131,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "_numeric"
         oid: 1231
       }
       cardinality: REQUIRED
@@ -3698,12 +6144,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "_int8"
         oid: 1016
       }
       cardinality: REQUIRED
@@ -3713,12 +6157,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "_float4"
         oid: 1021
       }
       cardinality: REQUIRED
@@ -3728,12 +6170,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "_float8"
         oid: 1022
       }
       cardinality: REQUIRED
@@ -3743,12 +6183,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "_text"
         oid: 1009
       }
       cardinality: REQUIRED
@@ -3758,12 +6196,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "_bool"
         oid: 1000
       }
       cardinality: REQUIRED
@@ -3773,12 +6209,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "_jsonb"
         oid: 3807
       }
       cardinality: REQUIRED
@@ -3788,12 +6222,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "_date"
         oid: 1182
       }
       cardinality: REQUIRED
@@ -3803,12 +6235,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "_timestamptz"
         oid: 1185
       }
       cardinality: REQUIRED
@@ -3818,12 +6248,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "_bytea"
         oid: 1001
       }
       cardinality: REQUIRED
@@ -3833,12 +6261,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "_interval"
         oid: 1187
       }
       cardinality: REQUIRED
@@ -3848,12 +6274,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "_uuid"
         oid: 2951
       }
       cardinality: REQUIRED
@@ -3863,12 +6287,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "oid"
         oid: 26
       }
       cardinality: REQUIRED
@@ -3878,12 +6300,10 @@ functions {
   }
   signatures {
     return_type {
-      name: "jsonb"
       oid: 3802
     }
     arguments {
       type {
-        name: "_oid"
         oid: 1028
       }
       cardinality: REQUIRED
@@ -3893,16 +6313,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "to_number"
+  mapped_name_path: "pg"
+  mapped_name_path: "to_number"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "to_number"
   signatures {
     return_type {
-      name: "numeric"
       oid: 1700
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3910,7 +6330,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3920,16 +6339,16 @@ functions {
   }
 }
 functions {
-  name_path: "pg"
-  name_path: "to_timestamp"
+  mapped_name_path: "pg"
+  mapped_name_path: "to_timestamp"
+  postgresql_name_path: "pg"
+  postgresql_name_path: "to_timestamp"
   signatures {
     return_type {
-      name: "timestamptz"
       oid: 1184
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3937,7 +6356,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3947,15 +6365,229 @@ functions {
   }
 }
 functions {
-  name_path: "score"
+  mapped_name_path: "pow"
   signatures {
     return_type {
-      name: "float8"
       oid: 701
     }
     arguments {
       type {
-        name: "tokenlist"
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "pow"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "regexp_contains"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "regexp_replace"
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "repeat"
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "replace"
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "reverse"
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "round"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "rpad"
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "rtrim"
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "score"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
         oid: 50001
       }
       cardinality: REQUIRED
@@ -3964,7 +6596,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
@@ -3973,7 +6604,6 @@ functions {
     }
     arguments {
       type {
-        name: "bool"
         oid: 16
       }
       cardinality: OPTIONAL
@@ -3982,7 +6612,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: OPTIONAL
@@ -3991,7 +6620,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: OPTIONAL
@@ -4000,7 +6628,6 @@ functions {
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: OPTIONAL
@@ -4009,7 +6636,6 @@ functions {
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: OPTIONAL
@@ -4020,15 +6646,13 @@ functions {
   }
 }
 functions {
-  name_path: "search"
+  mapped_name_path: "score_ngrams"
   signatures {
     return_type {
-      name: "bool"
-      oid: 16
+      oid: 701
     }
     arguments {
       type {
-        name: "tokenlist"
         oid: 50001
       }
       cardinality: REQUIRED
@@ -4037,25 +6661,22 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_OR_NAMED
-      name: "query"
+      name: "ngrams_query"
     }
     arguments {
       type {
-        name: "bool"
-        oid: 16
+        oid: 25
       }
       cardinality: OPTIONAL
       named_argument_kind: NAMED_ONLY
-      name: "enhance_query"
+      name: "algorithm"
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: OPTIONAL
@@ -4064,7 +6685,55 @@ functions {
     }
     arguments {
       type {
-        name: "text"
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "array_aggregator"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "search"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 50001
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "tokens"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "query"
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "enhance_query"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "language_tag"
+    }
+    arguments {
+      type {
         oid: 25
       }
       cardinality: OPTIONAL
@@ -4073,7 +6742,6 @@ functions {
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: OPTIONAL
@@ -4084,24 +6752,70 @@ functions {
   }
 }
 functions {
-  name_path: "snippet"
+  mapped_name_path: "search_ngrams"
   signatures {
     return_type {
-      name: "jsonb"
-      oid: 3802
+      oid: 16
     }
     arguments {
       type {
-        name: "text"
+        oid: 50001
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "tokens"
+    }
+    arguments {
+      type {
         oid: 25
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_OR_NAMED
-      name: "value"
+      name: "ngrams_query"
     }
     arguments {
       type {
-        name: "text"
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "min_ngrams"
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "min_ngrams_percent"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "language_tag"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "search_substring"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 50001
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "tokens"
+    }
+    arguments {
+      type {
         oid: 25
       }
       cardinality: REQUIRED
@@ -4110,7 +6824,111 @@ functions {
     }
     arguments {
       type {
-        name: "bool"
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "relative_search_type"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "language_tag"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "sha256"
+  signatures {
+    return_type {
+      oid: 17
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "sha512"
+  signatures {
+    return_type {
+      oid: 17
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "sign"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "sin"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "snippet"
+  signatures {
+    return_type {
+      oid: 3802
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "query"
+    }
+    arguments {
+      type {
         oid: 16
       }
       cardinality: OPTIONAL
@@ -4119,7 +6937,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: OPTIONAL
@@ -4128,7 +6945,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: OPTIONAL
@@ -4137,7 +6953,6 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
       }
       cardinality: OPTIONAL
@@ -4146,7 +6961,6 @@ functions {
     }
     arguments {
       type {
-        name: "text"
         oid: 25
       }
       cardinality: OPTIONAL
@@ -4155,7 +6969,6 @@ functions {
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: OPTIONAL
@@ -4166,15 +6979,54 @@ functions {
   }
 }
 functions {
-  name_path: "string"
+  mapped_name_path: "sqrt"
   signatures {
     return_type {
-      name: "text"
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "sqrt"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "starts_with"
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "string"
+  signatures {
+    return_type {
       oid: 25
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -4184,15 +7036,13 @@ functions {
   }
 }
 functions {
-  name_path: "string_array"
+  mapped_name_path: "string_array"
   signatures {
     return_type {
-      name: "_text"
       oid: 1009
     }
     arguments {
       type {
-        name: "jsonb"
         oid: 3802
       }
       cardinality: REQUIRED
@@ -4202,15 +7052,1229 @@ functions {
   }
 }
 functions {
-  name_path: "trunc"
+  mapped_name_path: "strpos"
   signatures {
     return_type {
-      name: "numeric"
+      oid: 20
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "substr"
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "substr"
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "substr"
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "tan"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "timestamp_from_unix_micros"
+  signatures {
+    return_type {
+      oid: 1184
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1184
+    }
+    arguments {
+      type {
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "timestamp_from_unix_millis"
+  signatures {
+    return_type {
+      oid: 1184
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 1184
+    }
+    arguments {
+      type {
+        oid: 1184
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "timestamp_seconds"
+  signatures {
+    return_type {
+      oid: 1184
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "token"
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 1001
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "tokenize_bool"
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "tokenize_fulltext"
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "language_tag"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "content_type"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "token_category"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "language_tag"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "content_type"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "token_category"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "tokenize_jsonb"
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 3802
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "tokenize_ngrams"
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ngram_size_max"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ngram_size_min"
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "remove_diacritics"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ngram_size_max"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ngram_size_min"
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "remove_diacritics"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "tokenize_number"
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "comparison_type"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "algorithm"
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "min"
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "max"
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "granularity"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "tree_base"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ieee_precision"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 1022
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "comparison_type"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "algorithm"
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "min"
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "max"
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "granularity"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "tree_base"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ieee_precision"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 700
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "comparison_type"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "algorithm"
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "min"
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "max"
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "granularity"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "tree_base"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ieee_precision"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "comparison_type"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "algorithm"
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "min"
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "max"
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "granularity"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "tree_base"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ieee_precision"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "comparison_type"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "algorithm"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "min"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "max"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "granularity"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "tree_base"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ieee_precision"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 1016
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "comparison_type"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "algorithm"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "min"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "max"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "granularity"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "tree_base"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ieee_precision"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "tokenize_substring"
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ngram_size_max"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ngram_size_min"
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "support_relative_search"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "content_type"
+    }
+    arguments {
+      type {
+        oid: 1009
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "relative_search_types"
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "short_tokens_only_for_anchors"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "language_tag"
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "remove_diacritics"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ngram_size_max"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ngram_size_min"
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "support_relative_search"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "content_type"
+    }
+    arguments {
+      type {
+        oid: 1009
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "relative_search_types"
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "short_tokens_only_for_anchors"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "language_tag"
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "remove_diacritics"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ngram_size_max"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ngram_size_min"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "content_type"
+    }
+    arguments {
+      type {
+        oid: 1009
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "relative_search_types"
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "short_tokens_only_for_anchors"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "language_tag"
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "remove_diacritics"
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 1009
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ngram_size_max"
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "ngram_size_min"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "content_type"
+    }
+    arguments {
+      type {
+        oid: 1009
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "relative_search_types"
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "short_tokens_only_for_anchors"
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "language_tag"
+    }
+    arguments {
+      type {
+        oid: 16
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "remove_diacritics"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "tokenlist_concat"
+  signatures {
+    return_type {
+      oid: 50001
+    }
+    arguments {
+      type {
+        oid: 50002
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "tokens"
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "trim"
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 17
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "trunc"
+  signatures {
+    return_type {
+      oid: 701
+    }
+    arguments {
+      type {
+        oid: 701
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+  signatures {
+    return_type {
       oid: 1700
     }
     arguments {
       type {
-        name: "numeric"
         oid: 1700
       }
       cardinality: REQUIRED
@@ -4218,8 +8282,23 @@ functions {
     }
     arguments {
       type {
-        name: "int8"
         oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    is_enabled_in_catalog: true
+  }
+}
+functions {
+  mapped_name_path: "upper"
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 25
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY

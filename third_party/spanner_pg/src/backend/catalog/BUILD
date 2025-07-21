@@ -201,7 +201,7 @@ genrule(
     # included first.  Otherwise genbki.pl will not link
     # B back to A.
     cmd = """\
-        $(location genbki.pl) --output=/tmp --set-version=13 --include-path=third_party/spanner_pg/src/include \
+        $(location genbki.pl) --output=$(@D) --set-version=13 --include-path=third_party/spanner_pg/src/include \
             third_party/spanner_pg/src/include/catalog/pg_proc.h \
             third_party/spanner_pg/src/include/catalog/pg_type.h \
             third_party/spanner_pg/src/include/catalog/pg_attribute.h \
@@ -268,19 +268,6 @@ genrule(
             third_party/spanner_pg/src/include/catalog/pg_subscription_rel.h \
             third_party/spanner_pg/src/include/catalog/toasting.h \
             third_party/spanner_pg/src/include/catalog/indexing.h
-
-        OUTPUTDIR=$$(dirname $(location pg_enum_d.h))
-        for HEADERFILE in $(locations //third_party/spanner_pg/src/include:catalog_headers); do
-            OUTFILENAME="$$(basename $$HEADERFILE)"
-            OUTFILENAME="$${OUTFILENAME/.h/_d.h}"
-            if [[ -f "/tmp/$$OUTFILENAME" ]]; then
-                 mv -v "/tmp/$$OUTFILENAME" "$$OUTPUTDIR/$$OUTFILENAME"
-            else
-                echo "No output file for $$HEADERFILE"
-            fi
-        done
-        mv -v "/tmp/schemapg.h" "$(location schemapg.h)"
-        mv -v "/tmp/system_fk_info.h" "$(location system_fk_info.h)"
     """,
     tools = [
         "genbki.pl",

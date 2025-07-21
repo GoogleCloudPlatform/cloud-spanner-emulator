@@ -471,6 +471,7 @@ CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName, UserName);
 ERROR:.* Index UsersByName specifies key column UserName twice.
 ==
 # Index specifies keys that are not a prefix of the interleaved table.
+# --skip_prod_env
 # --regex
 CREATE TABLE Users (
   UserId INT64 NOT NULL,

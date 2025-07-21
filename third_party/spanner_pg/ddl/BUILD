@@ -178,8 +178,6 @@ cc_library(
         ":spangres_schema_printer",
         ":translation_utils",
         "//backend/schema/ddl:operations_cc_proto",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -188,6 +186,7 @@ cc_library(
         "@com_google_protobuf//:protobuf_lite",
         "@com_google_zetasql//zetasql/base",
         "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_googlesource_code_re2//:re2",
     ],
 )
 
@@ -208,6 +207,7 @@ cc_library(
         "//third_party/spanner_pg/shims:error_shim",
         "//third_party/spanner_pg/util:pg_list_iterators",
         "//third_party/spanner_pg/util:postgres",
+        "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",

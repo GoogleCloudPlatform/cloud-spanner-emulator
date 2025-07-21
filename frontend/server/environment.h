@@ -22,6 +22,7 @@
 #include "common/clock.h"
 #include "frontend/collections/database_manager.h"
 #include "frontend/collections/instance_manager.h"
+#include "frontend/collections/multiplexed_session_transaction_manager.h"
 #include "frontend/collections/operation_manager.h"
 #include "frontend/collections/session_manager.h"
 
@@ -38,13 +39,17 @@ class ServerEnv {
         database_manager_(new DatabaseManager(clock_.get())),
         instance_manager_(new InstanceManager()),
         operation_manager_(new OperationManager()),
-        session_manager_(new SessionManager(clock_.get())) {}
+        session_manager_(new SessionManager(clock_.get())),
+        mux_txn_manager_(new MultiplexedSessionTransactionManager()) {}
 
   Clock* clock() { return clock_.get(); }
   DatabaseManager* database_manager() { return database_manager_.get(); }
   InstanceManager* instance_manager() { return instance_manager_.get(); }
   OperationManager* operation_manager() { return operation_manager_.get(); }
   SessionManager* session_manager() { return session_manager_.get(); }
+  MultiplexedSessionTransactionManager* mux_txn_manager() {
+    return mux_txn_manager_.get();
+  }
 
  private:
   std::unique_ptr<Clock> clock_;
@@ -52,6 +57,7 @@ class ServerEnv {
   std::unique_ptr<InstanceManager> instance_manager_;
   std::unique_ptr<OperationManager> operation_manager_;
   std::unique_ptr<SessionManager> session_manager_;
+  std::unique_ptr<MultiplexedSessionTransactionManager> mux_txn_manager_;
 };
 
 }  // namespace frontend

@@ -158,6 +158,8 @@ constexpr char kNegInfString[] = "\"-Infinity\"";
 constexpr char kFalse[] = "false";
 constexpr char kTrue[] = "true";
 
+const char kSpannerFunctionGroup[] = "Spanner";
+
 using ::postgres_translator::EmulatorJsonbArrayElementText;
 using ::postgres_translator::EmulatorJsonbObjectFieldText;
 using ::postgres_translator::function_evaluators::Abs;
@@ -1243,7 +1245,8 @@ std::unique_ptr<zetasql::Function> ArrayContainsOrContainedFunction(
           FunctionSignatureRewriteOptions()
               .set_enabled(true)
               .set_rewriter(zetasql::REWRITE_BUILTIN_FUNCTION_INLINER)
-              .set_sql(kArrayContainsSql))};
+              .set_sql(kArrayContainsSql)
+              .set_allowed_function_groups({kSpannerFunctionGroup}))};
 
   return std::make_unique<zetasql::Function>(
       is_array_contains ? "pg.array_contains" : "pg.array_contained",
@@ -1284,7 +1287,8 @@ std::unique_ptr<zetasql::Function> ArrayAllFunction(
           FunctionSignatureRewriteOptions()
               .set_enabled(true)
               .set_rewriter(zetasql::REWRITE_BUILTIN_FUNCTION_INLINER)
-              .set_sql(absl::StrFormat(kArrayAllTemplateSql, operator_str)))};
+              .set_sql(absl::StrFormat(kArrayAllTemplateSql, operator_str))
+              .set_allowed_function_groups({kSpannerFunctionGroup}))};
 
   return std::make_unique<zetasql::Function>(
       function_name, catalog_name, zetasql::Function::SCALAR,
@@ -1335,7 +1339,8 @@ std::unique_ptr<zetasql::Function> ArraySliceFunction(
           FunctionSignatureRewriteOptions()
               .set_enabled(true)
               .set_rewriter(zetasql::REWRITE_BUILTIN_FUNCTION_INLINER)
-              .set_sql(kArraySliceSql))};
+              .set_sql(kArraySliceSql)
+              .set_allowed_function_groups({kSpannerFunctionGroup}))};
 
   return std::make_unique<zetasql::Function>(
       "pg.array_slice", catalog_name, zetasql::Function::SCALAR,

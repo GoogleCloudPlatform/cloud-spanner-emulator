@@ -63,7 +63,8 @@ absl::Status CreateSession(RequestContext* ctx,
                 request->session().labels().end());
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    ctx->env()->session_manager()->CreateSession(
-                       labels, request->session().multiplexed(), database));
+                       labels, request->session().multiplexed(), database,
+                       ctx->env()->mux_txn_manager()));
 
   // Return details about the newly created session.
   return session->ToProto(response, /*include_labels=*/true);
@@ -81,6 +82,10 @@ absl::Status BatchCreateSessions(
   ZETASQL_RETURN_IF_ERROR(ValidateLabels(request->session_template().labels()));
   if (request->session_count() < 0) {
     return error::TooFewSessions(request->session_count());
+  }
+
+  if (request->session_template().multiplexed()) {
+    return error::InvalidOperationBatchCreateSessions();
   }
 
   // Check that the instance is valid.
@@ -101,10 +106,13 @@ absl::Status BatchCreateSessions(
   Labels labels(request->session_template().labels().begin(),
                 request->session_template().labels().end());
   for (int i = 0; i < sessions.size(); ++i) {
+    // Mux does not support batch create sessions. So its ok to set the
+    // mux_txn_manager to null.
     ZETASQL_ASSIGN_OR_RETURN(
         sessions[i],
         ctx->env()->session_manager()->CreateSession(
-            labels, request->session_template().multiplexed(), database));
+            labels, request->session_template().multiplexed(), database,
+            /*mux_txn_manager=*/nullptr));
   }
 
   // Return details about the newly created session.

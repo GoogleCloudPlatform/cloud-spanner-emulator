@@ -36,20 +36,40 @@ namespace {
 
 using ::zetasql_base::testing::StatusIs;
 
+enum class SessionType {
+  kRegularSession,
+  kMultiplexedSession,
+};
+
 namespace spanner_api = ::google::spanner::v1;
 
-class PartitionApiTest : public test::ServerTest {
+class PartitionApiTest : public test::ServerTest,
+                         public testing::WithParamInterface<SessionType> {
  protected:
   void SetUp() override {
     ZETASQL_ASSERT_OK(CreateTestInstance());
     ZETASQL_ASSERT_OK(CreateTestDatabase());
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_, CreateTestSession());
+    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
+                         CreateTestSession(/*multiplexed=*/false));
+    ZETASQL_ASSERT_OK_AND_ASSIGN(test_multiplexed_session_uri_,
+                         CreateTestSession(/*multiplexed=*/true));
   }
 
+  std::string GetSessionUri(bool multiplexed) {
+    return multiplexed ? test_multiplexed_session_uri_ : test_session_uri_;
+  }
+
+  SessionType GetSessionType() { return GetParam(); }
+
   std::string test_session_uri_;
+  std::string test_multiplexed_session_uri_;
 };
 
-TEST_F(PartitionApiTest, RequiredSession) {
+INSTANTIATE_TEST_SUITE_P(SessionTypes, PartitionApiTest,
+                         testing::Values(SessionType::kRegularSession,
+                                         SessionType::kMultiplexedSession));
+
+TEST_P(PartitionApiTest, RequiredSession) {
   spanner_api::PartitionReadRequest partition_read_request;
 
   spanner_api::PartitionResponse partition_read_response;
@@ -57,45 +77,49 @@ TEST_F(PartitionApiTest, RequiredSession) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(PartitionApiTest, RequiredTransaction) {
+TEST_P(PartitionApiTest, RequiredTransaction) {
   spanner_api::PartitionReadRequest partition_read_request;
-  partition_read_request.set_session(test_session_uri_);
+  partition_read_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::PartitionResponse partition_read_response;
   EXPECT_THAT(PartitionRead(partition_read_request, &partition_read_response),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(PartitionApiTest, CannotReadUsingSingleUseTransaction) {
+TEST_P(PartitionApiTest, CannotReadUsingSingleUseTransaction) {
   spanner_api::PartitionReadRequest partition_read_request = PARSE_TEXT_PROTO(
       R"(
         transaction { single_use { read_only {} } }
       )");
-  partition_read_request.set_session(test_session_uri_);
+  partition_read_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::PartitionResponse partition_read_response;
   EXPECT_THAT(PartitionRead(partition_read_request, &partition_read_response),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(PartitionApiTest, CannotReadUsingBeginReadWriteTransaction) {
+TEST_P(PartitionApiTest, CannotReadUsingBeginReadWriteTransaction) {
   // Begin a new read only transaction.
   spanner_api::PartitionReadRequest partition_read_request = PARSE_TEXT_PROTO(
       R"(
         transaction { begin { read_write {} } }
       )");
-  partition_read_request.set_session(test_session_uri_);
+  partition_read_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::PartitionResponse partition_read_response;
   EXPECT_THAT(PartitionRead(partition_read_request, &partition_read_response),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(PartitionApiTest, CannotReadUsingExistingReadWriteTransaction) {
+TEST_P(PartitionApiTest, CannotReadUsingExistingReadWriteTransaction) {
   spanner_api::BeginTransactionRequest txn_request = PARSE_TEXT_PROTO(R"(
     options { read_write {} }
   )");
-  txn_request.set_session(test_session_uri_);
+  txn_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction txn_response;
   ZETASQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
@@ -108,7 +132,8 @@ TEST_F(PartitionApiTest, CannotReadUsingExistingReadWriteTransaction) {
       PARSE_TEXT_PROTO(R"(
         table: "test_table"
       )");
-  partition_read_request.set_session(test_session_uri_);
+  partition_read_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   *partition_read_request.mutable_transaction() = selector;
 
   spanner_api::PartitionResponse partition_read_response;
@@ -116,14 +141,15 @@ TEST_F(PartitionApiTest, CannotReadUsingExistingReadWriteTransaction) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(PartitionApiTest, CannotReadUsingInvalidPartitionOptions) {
+TEST_P(PartitionApiTest, CannotReadUsingInvalidPartitionOptions) {
   // Test that negative partition_size_bytes is not allowed.
   spanner_api::PartitionReadRequest partition_read_request = PARSE_TEXT_PROTO(
       R"(
         transaction { begin { read_only {} } }
         partition_options { partition_size_bytes: -1 max_partitions: 100 }
       )");
-  partition_read_request.set_session(test_session_uri_);
+  partition_read_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::PartitionResponse partition_read_response;
   EXPECT_THAT(PartitionRead(partition_read_request, &partition_read_response),
@@ -135,7 +161,8 @@ TEST_F(PartitionApiTest, CannotReadUsingInvalidPartitionOptions) {
         transaction { begin { read_only {} } }
         partition_options { partition_size_bytes: 10000 max_partitions: -1 }
       )");
-  partition_read_request.set_session(test_session_uri_);
+  partition_read_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   EXPECT_THAT(PartitionRead(partition_read_request, &partition_read_response),
               StatusIs(absl::StatusCode::kInvalidArgument));

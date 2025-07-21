@@ -1050,7 +1050,22 @@ TEST_P(SchemaUpdaterTest, CannotCreateIndexOnTokenListColumn) {
 TEST_P(SchemaUpdaterTest, BasicCreateDropSearchIndex) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"sql(
+        CREATE TABLE "T" (
+          col1 bigint NOT NULL,
+          col2 varchar,
+          col3 spanner.tokenlist GENERATED ALWAYS AS (
+            spanner.tokenize_fulltext(col2)) STORED HIDDEN,
+          PRIMARY KEY (col1)
+        )
+        )sql",
+                                       R"sql(
+          CREATE SEARCH INDEX "Idx" ON "T"(col3)
+        )sql"},
+                                      /*proto_descriptor_bytes=*/"",
+                                      /*dialect=*/POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
   } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"sql(
@@ -1095,7 +1110,31 @@ TEST_P(SchemaUpdaterTest, BasicCreateDropSearchIndex) {
 TEST_P(SchemaUpdaterTest, ComplexCreateSearchIndex) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"sql(
+        CREATE TABLE "T" (
+          col1 bigint NOT NULL,
+          col2 varchar,
+          col3 spanner.tokenlist GENERATED ALWAYS AS (
+            spanner.tokenize_fulltext(col2)) STORED HIDDEN,
+          col4 spanner.tokenlist GENERATED ALWAYS AS (
+            spanner.tokenize_substring(col2)) STORED HIDDEN,
+          col5 bigint,
+          col6 float8,
+          col7 bigint NOT NULL,
+          PRIMARY KEY (col1)
+        )
+        )sql",
+                                       R"sql(
+        CREATE SEARCH INDEX "Idx"
+        ON "T"(col3, col4)
+        INCLUDE (col2, col5)
+        PARTITION BY col1, col6
+        ORDER BY col7
+        )sql"},
+                                      /*proto_descriptor_bytes=*/"",
+                                      /*dialect=*/POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
   } else {
     ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"sql(
@@ -1174,7 +1213,21 @@ TEST_P(SchemaUpdaterTest, UnableToCreateSearchIndexOnJsonColumn) {
 TEST_P(SchemaUpdaterTest, CreateSearchIndexShouldNotStoreKeyColumn) {
   absl::StatusOr<std::unique_ptr<const Schema>> schema;
   if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
+    schema = CreateSchema({R"sql(
+        CREATE TABLE "T" (
+          col1 bigint NOT NULL,
+          col2 varchar,
+          col3 spanner.tokenlist GENERATED ALWAYS AS (
+            spanner.tokenize_fulltext(col2)) STORED HIDDEN,
+          PRIMARY KEY (col1)
+        )
+        )sql",
+                           R"sql(
+          CREATE SEARCH INDEX "SearchIndex" ON "T"(col3) INCLUDE(col3)
+        )sql"},
+                          /*proto_descriptor_bytes=*/"",
+                          /*dialect=*/POSTGRESQL,
+                          /*use_gsql_to_pg_translation=*/false);
   } else {
     schema = CreateSchema({
         R"sql(
@@ -1195,7 +1248,21 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexShouldNotStoreKeyColumn) {
 TEST_P(SchemaUpdaterTest, CreateSearchIndexPartitionByColumnMustExist) {
   absl::StatusOr<std::unique_ptr<const Schema>> schema;
   if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
+    schema = CreateSchema({R"sql(
+        CREATE TABLE "T" (
+          col1 bigint NOT NULL,
+          col2 varchar,
+          col3 spanner.tokenlist GENERATED ALWAYS AS (
+            spanner.tokenize_fulltext(col2)) STORED HIDDEN,
+          PRIMARY KEY (col1)
+        )
+        )sql",
+                           R"sql(
+          CREATE SEARCH INDEX "SearchIndex" ON "T"(col3) PARTITION BY col4
+        )sql"},
+                          /*proto_descriptor_bytes=*/"",
+                          /*dialect=*/POSTGRESQL,
+                          /*use_gsql_to_pg_translation=*/false);
   } else {
     schema = CreateSchema({
         R"sql(
@@ -1216,7 +1283,21 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexPartitionByColumnMustExist) {
 TEST_P(SchemaUpdaterTest, CreateSearchIndexOrderByColumnMustExist) {
   absl::StatusOr<std::unique_ptr<const Schema>> schema;
   if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
+    schema = CreateSchema({R"sql(
+        CREATE TABLE "T" (
+          col1 bigint NOT NULL,
+          col2 varchar,
+          col3 spanner.tokenlist GENERATED ALWAYS AS (
+            spanner.tokenize_fulltext(col2)) STORED HIDDEN,
+          PRIMARY KEY (col1)
+        )
+        )sql",
+                           R"sql(
+          CREATE SEARCH INDEX "SearchIndex" ON "T"(col3) ORDER BY col4
+        )sql"},
+                          /*proto_descriptor_bytes=*/"",
+                          /*dialect=*/POSTGRESQL,
+                          /*use_gsql_to_pg_translation=*/false);
   } else {
     schema = CreateSchema({
         R"sql(
@@ -1237,7 +1318,22 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexOrderByColumnMustExist) {
 TEST_P(SchemaUpdaterTest, CreateSearchIndexPartitionByNotTokenListType) {
   absl::StatusOr<std::unique_ptr<const Schema>> schema;
   if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
+    schema = CreateSchema({R"sql(
+        CREATE TABLE "T" (
+          col1 bigint NOT NULL,
+          col2 varchar,
+          col3 spanner.tokenlist GENERATED ALWAYS AS (
+            spanner.tokenize_fulltext(col2)) STORED HIDDEN,
+          col4 bigint,
+          PRIMARY KEY (col1)
+        )
+        )sql",
+                           R"sql(
+          CREATE SEARCH INDEX "SearchIndex" ON "T"(col3) PARTITION BY col3
+        )sql"},
+                          /*proto_descriptor_bytes=*/"",
+                          /*dialect=*/POSTGRESQL,
+                          /*use_gsql_to_pg_translation=*/false);
   } else {
     schema = CreateSchema({
         R"sql(
@@ -1259,7 +1355,22 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexPartitionByNotTokenListType) {
 TEST_P(SchemaUpdaterTest, CreateSearchIndexOrderByMustNotNull) {
   absl::StatusOr<std::unique_ptr<const Schema>> schema;
   if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
+    schema = CreateSchema({R"sql(
+        CREATE TABLE "T" (
+          col1 bigint NOT NULL,
+          col2 varchar,
+          col3 spanner.tokenlist GENERATED ALWAYS AS (
+            spanner.tokenize_fulltext(col2)) STORED HIDDEN,
+          col4 bigint,
+          PRIMARY KEY (col1)
+        )
+        )sql",
+                           R"sql(
+          CREATE SEARCH INDEX "SearchIndex" ON "T"(col3) ORDER BY col4
+        )sql"},
+                          /*proto_descriptor_bytes=*/"",
+                          /*dialect=*/POSTGRESQL,
+                          /*use_gsql_to_pg_translation=*/false);
   } else {
     schema = CreateSchema({
         R"sql(
@@ -1280,7 +1391,24 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexOrderByMustNotNull) {
 
 TEST_P(SchemaUpdaterTest, CreateSearchIndexNullFilteredOrderBy) {
   if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
+    ZETASQL_EXPECT_OK(CreateSchema({R"sql(
+        CREATE TABLE "T" (
+          col1 bigint NOT NULL,
+          col2 varchar,
+          col3 spanner.tokenlist GENERATED ALWAYS AS (
+            spanner.tokenize_fulltext(col2)) STORED HIDDEN,
+          col4 bigint,
+          PRIMARY KEY (col1)
+        )
+        )sql",
+                            R"sql(
+          CREATE SEARCH INDEX "SearchIndex" ON "T"(col3)
+          ORDER BY col4
+          WHERE col4 IS NOT NULL
+        )sql"},
+                           /*proto_descriptor_bytes=*/"",
+                           /*dialect=*/POSTGRESQL,
+                           /*use_gsql_to_pg_translation=*/false));
   } else {
     ZETASQL_EXPECT_OK(CreateSchema({
         R"sql(
@@ -1323,7 +1451,22 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexTokenColumnOrderNotAllowed) {
   std::string update_statement_template;
   absl::Status expected_error;
   if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
+    create_table_ddl = R"sql(
+      CREATE TABLE "T" (
+        col1 bigint NOT NULL,
+        col2 varchar,
+        col3 spanner.tokenlist GENERATED ALWAYS AS (
+        spanner.tokenize_fulltext(col2)) STORED HIDDEN,
+        col4 bigint NOT NULL,
+        PRIMARY KEY (col1)
+      )
+    )sql";
+    update_statement_template = R"sql(
+      CREATE SEARCH INDEX "SearchIndex" ON "T"(col3 $0) ORDER BY col4
+    )sql";
+    expected_error = absl::FailedPreconditionError(
+        "Ordering is not supported for tokenlist columns in "
+        "<CREATE SEARCH INDEX> statement.");
   } else {
     create_table_ddl = R"sql(
       CREATE TABLE T (

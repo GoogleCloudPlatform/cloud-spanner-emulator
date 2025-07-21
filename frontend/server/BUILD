@@ -118,6 +118,7 @@ cc_library(
         "//common:clock",
         "//frontend/collections:database_manager",
         "//frontend/collections:instance_manager",
+        "//frontend/collections:multiplexed_session_transaction_manager",
         "//frontend/collections:operation_manager",
         "//frontend/collections:session_manager",
         "@com_github_grpc_grpc//:grpc++",

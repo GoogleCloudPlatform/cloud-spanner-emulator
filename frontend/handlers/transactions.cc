@@ -57,6 +57,12 @@ absl::Status BeginTransaction(
   // Populate transaction proto in response.
   ZETASQL_ASSIGN_OR_RETURN(*response, txn->ToProto());
 
+  if (txn->IsReadWrite() && session->multiplexed() &&
+      request->has_mutation_key()) {
+    // Set a precommit token in the begin transaction response.
+    response->mutable_precommit_token();
+  }
+
   return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(Spanner, BeginTransaction);
@@ -71,10 +77,12 @@ absl::Status Commit(RequestContext* ctx,
 
   // Get transaction object to commit.
   absl::StatusOr<std::shared_ptr<Transaction>> maybe_txn;
+  bool is_single_use = false;
   switch (request->transaction_case()) {
     case spanner_api::CommitRequest::kSingleUseTransaction:
       maybe_txn = session->CreateSingleUseTransaction(
           request->single_use_transaction());
+      is_single_use = true;
       break;
     case spanner_api::CommitRequest::kTransactionId:
       maybe_txn = session->FindAndUseTransaction(request->transaction_id());
@@ -84,6 +92,13 @@ absl::Status Commit(RequestContext* ctx,
   }
 
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn, maybe_txn);
+
+  if (txn->IsReadWrite() && session->multiplexed() && !is_single_use &&
+      !request->has_precommit_token()) {
+    // A lightweight commit retry protocol.
+    response->mutable_precommit_token();
+    return absl::OkStatus();
+  }
 
   // Wrap all operations on this transaction so they are atomic .
   return txn->GuardedCall(Transaction::OpType::kCommit, [&]() -> absl::Status {

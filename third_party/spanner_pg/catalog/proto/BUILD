@@ -56,3 +56,16 @@ filegroup(
     name = "functions_txtpb",
     srcs = ["functions.txtpb"],
 )
+
+genrule(
+    name = "gen_functions_embed",
+    srcs = ["functions.txtpb"],
+    outs = ["functions_embed.h"],
+    cmd = "echo 'namespace postgres_translator { constexpr char kFunctionsEmbed[] = R\"(' > $@ && cat $(location functions.txtpb) >> $@ && echo ')\"; }' >> $@",
+)
+
+cc_library(
+    name = "functions_embed",
+    hdrs = ["functions_embed.h"],
+    deps = [":gen_functions_embed"],
+)

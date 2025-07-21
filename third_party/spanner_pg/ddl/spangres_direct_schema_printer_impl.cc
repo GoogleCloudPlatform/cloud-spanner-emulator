@@ -53,6 +53,7 @@
 #include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
 #include "third_party/spanner_pg/ddl/translation_utils.h"
 #include "google/protobuf/repeated_ptr_field.h"
+#include "re2/re2.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -773,8 +774,12 @@ std::string SpangresSchemaPrinterImpl::PrintChangeStreamForClause(
 std::string SpangresSchemaPrinterImpl::PrintCreateChangeStream(
     const google::spanner::emulator::backend::ddl::CreateChangeStream& statement) const {
   std::vector<std::string> output;
+  std::string if_not_exists = "";
+  if (statement.existence_modifier() == google::spanner::emulator::backend::ddl::IF_NOT_EXISTS) {
+    if_not_exists = "IF NOT EXISTS ";
+  }
   std::string base =
-      StrCat("CREATE CHANGE STREAM ",
+      StrCat("CREATE CHANGE STREAM ", if_not_exists,
              QuoteQualifiedIdentifier(statement.change_stream_name()));
 
   output.push_back(std::move(base));
@@ -827,7 +832,11 @@ std::string SpangresSchemaPrinterImpl::PrintAlterChangeStream(
 
 std::string SpangresSchemaPrinterImpl::PrintDropChangeStream(
     const google::spanner::emulator::backend::ddl::DropChangeStream& statement) const {
-  return Substitute("DROP CHANGE STREAM $0",
+  std::string if_exists = "";
+  if (statement.existence_modifier() == google::spanner::emulator::backend::ddl::IF_EXISTS) {
+    if_exists = "IF EXISTS ";
+  }
+  return Substitute("DROP CHANGE STREAM $0$1", if_exists,
                     QuoteQualifiedIdentifier(statement.change_stream_name()));
 }
 
@@ -1142,8 +1151,11 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropFunction(
     case google::spanner::emulator::backend::ddl::Function::VIEW:
       return Substitute("DROP VIEW $0$1", if_exists,
                         QuoteQualifiedIdentifier(statement.function_name()));
+    case google::spanner::emulator::backend::ddl::Function::FUNCTION:
+
     case google::spanner::emulator::backend::ddl::Function::INVALID_KIND:
-      ZETASQL_RET_CHECK_FAIL() << "Only VIEW is supported as a function kind";
+      ZETASQL_RET_CHECK_FAIL()
+      << "Only VIEW is supported as a function kind";
   }
   // Should never get here.
   ZETASQL_RET_CHECK_FAIL() << "Unknown Function type:"
@@ -1400,6 +1412,12 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintSQLSecurityType(
   }
   ZETASQL_RET_CHECK_FAIL() << "Unsupported sql security type: "
                    << static_cast<int64_t>(sql_security);
+}
+
+// Helper function to check if the parameter name is a UDF parameter name.
+inline bool IsUdfParameterNameReserved(absl::string_view name) {
+  static const LazyRE2 kUdfParameterRegex = {R"(\$\d+|`$\d+`)"};
+  return RE2::FullMatch(name, *kUdfParameterRegex);
 }
 
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateFunction(

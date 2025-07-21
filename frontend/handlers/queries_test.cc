@@ -54,13 +54,26 @@ using test::EqualsProto;
 using test::proto::Partially;
 using zetasql_base::testing::StatusIs;
 
-class QueryApiTest : public test::ServerTest {
+enum class SessionType {
+  kRegularSession,
+  kMultiplexedSession,
+};
+
+class QueryApiTest : public test::ServerTest,
+                     public testing::WithParamInterface<SessionType> {
  protected:
   void SetUp() override {
     ZETASQL_ASSERT_OK(CreateTestInstance());
     ZETASQL_ASSERT_OK(CreateTestDatabase());
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_, CreateTestSession());
+    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
+                         CreateTestSession(/*multiplexed=*/false));
+    ZETASQL_ASSERT_OK_AND_ASSIGN(test_multiplexed_session_uri_,
+                         CreateTestSession(/*multiplexed=*/true));
     ZETASQL_ASSERT_OK(PopulateTestTable());
+  }
+
+  std::string GetSessionUri(bool multiplexed) {
+    return multiplexed ? test_multiplexed_session_uri_ : test_session_uri_;
   }
 
   absl::Status PopulateTestTable() {
@@ -144,7 +157,10 @@ class QueryApiTest : public test::ServerTest {
     return Commit(commit_request, &commit_response);
   }
 
+  SessionType GetSessionType() { return GetParam(); }
+
   std::string test_session_uri_;
+  std::string test_multiplexed_session_uri_;
 
  private:
   std::string GenerateProtoDescriptorBytesAsString() {
@@ -172,11 +188,16 @@ class QueryApiTest : public test::ServerTest {
   }
 };
 
-TEST_F(QueryApiTest, ExecuteBatchDml) {
+INSTANTIATE_TEST_SUITE_P(SessionTypes, QueryApiTest,
+                         testing::Values(SessionType::kRegularSession,
+                                         SessionType::kMultiplexedSession));
+
+TEST_P(QueryApiTest, ExecuteBatchDml) {
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"(
     options { read_write {} }
   )");
-  begin_request.set_session(test_session_uri_);
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
@@ -192,31 +213,45 @@ TEST_F(QueryApiTest, ExecuteBatchDml) {
                "values (11, 'row_11')"
         }
       )""");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ExecuteBatchDmlResponse response;
   ZETASQL_ASSERT_OK(ExecuteBatchDml(request, &response));
-  EXPECT_THAT(response, EqualsProto(
-                            R"(
+  EXPECT_THAT(response, Partially(EqualsProto(
+                            R"pb(
                               result_sets {
                                 metadata { row_type {} }
                                 stats { row_count_exact: 1 }
                               }
-                              result_sets {
-                                stats { row_count_exact: 1 }
-                              }
+                              result_sets { stats { row_count_exact: 1 } }
                               status { code: 0 }
-                            )"));
+                            )pb")));
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_TRUE(response.has_precommit_token());
+  }
+
+  spanner_api::CommitRequest commit_request;
+  commit_request.set_transaction_id(transaction_response.id());
+  commit_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    *commit_request.mutable_precommit_token() = response.precommit_token();
+  }
+
+  spanner_api::CommitResponse commit_response1;
+  ZETASQL_EXPECT_OK(Commit(commit_request, &commit_response1));
 }
 
-TEST_F(QueryApiTest, ExecuteBatchDmlWithProtos) {
+TEST_P(QueryApiTest, ExecuteBatchDmlWithProtos) {
   ZETASQL_ASSERT_OK(AddProtoTables());
 
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }
   )pb");
-  begin_request.set_session(test_session_uri_);
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
@@ -232,12 +267,16 @@ TEST_F(QueryApiTest, ExecuteBatchDmlWithProtos) {
                "values (11, 'int_field: 271')"
         }
       )""");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ExecuteBatchDmlResponse response;
   ZETASQL_ASSERT_OK(ExecuteBatchDml(request, &response));
-  ASSERT_THAT(response, EqualsProto(
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_TRUE(response.has_precommit_token());
+  }
+  ASSERT_THAT(response, Partially(EqualsProto(
                             R"pb(
                               result_sets {
                                 metadata { row_type {} }
@@ -245,14 +284,15 @@ TEST_F(QueryApiTest, ExecuteBatchDmlWithProtos) {
                               }
                               result_sets { stats { row_count_exact: 1 } }
                               status { code: 0 }
-                            )pb"));
+                            )pb")));
 }
 
-TEST_F(QueryApiTest, ExecuteBatchDmlFailsOnInvalidDmlStatement) {
+TEST_P(QueryApiTest, ExecuteBatchDmlFailsOnInvalidDmlStatement) {
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"(
     options { read_write {} }
   )");
-  begin_request.set_session(test_session_uri_);
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
@@ -268,7 +308,8 @@ TEST_F(QueryApiTest, ExecuteBatchDmlFailsOnInvalidDmlStatement) {
                "values (11, 'row_11')"
         }
       )""");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ExecuteBatchDmlResponse response;
@@ -281,19 +322,24 @@ TEST_F(QueryApiTest, ExecuteBatchDmlFailsOnInvalidDmlStatement) {
                             )")));
 }
 
-TEST_F(QueryApiTest, ExecuteSql) {
+TEST_P(QueryApiTest, ExecuteSql) {
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"(
         transaction { single_use { read_only { strong: true } } }
         sql: "SELECT int64_col, string_col FROM test_table "
              "ORDER BY int64_col ASC, string_col DESC"
       )");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::ResultSet response;
   ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
-  EXPECT_THAT(response, EqualsProto(
-                            R"(
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    // No precommit token for single use transactions.
+    ASSERT_FALSE(response.has_precommit_token());
+  }
+  EXPECT_THAT(response, Partially(EqualsProto(
+                            R"pb(
                               metadata {
                                 row_type {
                                   fields {
@@ -318,10 +364,10 @@ TEST_F(QueryApiTest, ExecuteSql) {
                                 values { string_value: "3" }
                                 values { string_value: "row_3" }
                               }
-                            )"));
+                            )pb")));
 }
 
-TEST_F(QueryApiTest, ExecuteSqlWithParameters) {
+TEST_P(QueryApiTest, ExecuteSqlWithParameters) {
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"(
         transaction { single_use { read_only { strong: true } } }
@@ -337,11 +383,16 @@ TEST_F(QueryApiTest, ExecuteSqlWithParameters) {
           value { code: STRING }
         }
       )");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::ResultSet response;
   ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
-  EXPECT_THAT(response, EqualsProto(
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    // no precommit token for single use transactions.
+    ASSERT_FALSE(response.has_precommit_token());
+  }
+  EXPECT_THAT(response, Partially(EqualsProto(
                             R"pb(
                               metadata {
                                 row_type {
@@ -360,10 +411,10 @@ TEST_F(QueryApiTest, ExecuteSqlWithParameters) {
                               rows { values { string_value: "value" } }
                               rows { values { string_value: "value" } }
                               rows { values { string_value: "value" } }
-                            )pb"));
+                            )pb")));
 }
 
-TEST_F(QueryApiTest, ExecuteSqlWithProtoParameters) {
+TEST_P(QueryApiTest, ExecuteSqlWithProtoParameters) {
   ZETASQL_ASSERT_OK(AddProtoTables());
 
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
@@ -381,10 +432,15 @@ TEST_F(QueryApiTest, ExecuteSqlWithProtoParameters) {
           value { code: PROTO proto_type_fqn: "customer.app.User" }
         }
       )pb");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::ResultSet response;
   ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    // no precommit token for single use transactions.
+    ASSERT_FALSE(response.has_precommit_token());
+  }
   EXPECT_THAT(
       response,
       EqualsProto(
@@ -409,11 +465,12 @@ TEST_F(QueryApiTest, ExecuteSqlWithProtoParameters) {
           )pb"));
 }
 
-TEST_F(QueryApiTest, ExecuteSqlWithDmlAndParameters) {
+TEST_P(QueryApiTest, ExecuteSqlWithDmlAndParameters) {
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }
   )pb");
-  begin_request.set_session(test_session_uri_);
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
@@ -423,15 +480,19 @@ TEST_F(QueryApiTest, ExecuteSqlWithDmlAndParameters) {
         sql: "INSERT INTO test_table (int64_col, string_col) "
              "VALUES (@p1, @p2)"
       )""");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
   ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_TRUE(response.has_precommit_token());
+  }
   EXPECT_THAT(
       response,
-      EqualsProto(
+      Partially(EqualsProto(
           R"pb(
             metadata {
               row_type {}
@@ -450,14 +511,15 @@ TEST_F(QueryApiTest, ExecuteSqlWithDmlAndParameters) {
               query_plan { plan_nodes { display_name: "No query plan" } }
               row_count_exact: 0
             }
-          )pb"));
+          )pb")));
 }
 
-TEST_F(QueryApiTest, ExecuteSqlWithDmlReturningAndParameters) {
+TEST_P(QueryApiTest, ExecuteSqlWithDmlReturningAndParameters) {
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }
   )pb");
-  begin_request.set_session(test_session_uri_);
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
@@ -467,15 +529,19 @@ TEST_F(QueryApiTest, ExecuteSqlWithDmlReturningAndParameters) {
         sql: "INSERT INTO test_table (int64_col, string_col) "
              "VALUES (@p1, @p2) THEN RETURN int64_col, string_col"
       )""");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
   ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_TRUE(response.has_precommit_token());
+  }
   EXPECT_THAT(
       response,
-      EqualsProto(
+      Partially(EqualsProto(
           R"pb(
             metadata {
               row_type {
@@ -503,14 +569,15 @@ TEST_F(QueryApiTest, ExecuteSqlWithDmlReturningAndParameters) {
               query_plan { plan_nodes { display_name: "No query plan" } }
               row_count_exact: 0
             }
-          )pb"));
+          )pb")));
 }
 
-TEST_F(QueryApiTest, ExecuteSqlWithDmlReturningReturnsStats) {
+TEST_P(QueryApiTest, ExecuteSqlWithDmlReturningReturnsStats) {
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }
   )pb");
-  begin_request.set_session(test_session_uri_);
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
@@ -520,12 +587,16 @@ TEST_F(QueryApiTest, ExecuteSqlWithDmlReturningReturnsStats) {
         sql: "INSERT INTO test_table (int64_col, string_col) "
              "VALUES (10, 'row_10') THEN RETURN int64_col, string_col"
       )""");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
   ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
-  EXPECT_THAT(response, EqualsProto(
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_TRUE(response.has_precommit_token());
+  }
+  EXPECT_THAT(response, Partially(EqualsProto(
                             R"pb(
                               metadata {
                                 row_type {
@@ -544,14 +615,15 @@ TEST_F(QueryApiTest, ExecuteSqlWithDmlReturningReturnsStats) {
                                 values { string_value: "row_10" }
                               }
                               stats { row_count_exact: 1 }
-                            )pb"));
+                            )pb")));
 }
 
-TEST_F(QueryApiTest, ExecuteStreamingSqlWithDmlReturningReturnsStats) {
+TEST_P(QueryApiTest, ExecuteStreamingSqlWithDmlReturningReturnsStats) {
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }
   )pb");
-  begin_request.set_session(test_session_uri_);
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
@@ -561,12 +633,16 @@ TEST_F(QueryApiTest, ExecuteStreamingSqlWithDmlReturningReturnsStats) {
         sql: "INSERT INTO test_table (int64_col, string_col) "
              "VALUES (10, 'row_10') THEN RETURN int64_col, string_col"
       )""");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   request.mutable_transaction()->set_id(transaction_response.id());
 
   std::vector<spanner_api::PartialResultSet> response;
   ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
-  EXPECT_THAT(response, ElementsAre(EqualsProto(
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_TRUE(response[0].has_precommit_token());
+  }
+  EXPECT_THAT(response, ElementsAre(Partially(EqualsProto(
                             R"pb(metadata {
                                    row_type {
                                      fields {
@@ -583,15 +659,16 @@ TEST_F(QueryApiTest, ExecuteStreamingSqlWithDmlReturningReturnsStats) {
                                  values { string_value: "row_10" }
                                  chunked_value: false
                                  stats { row_count_exact: 1 }
-                            )pb")));
+                            )pb"))));
 }
 
-TEST_F(QueryApiTest,
+TEST_P(QueryApiTest,
        ExecuteStreamingSqlWithDmlReturningInPlanModeReturnsEmptyStats) {
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }
   )pb");
-  begin_request.set_session(test_session_uri_);
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
@@ -601,13 +678,17 @@ TEST_F(QueryApiTest,
         sql: "INSERT INTO test_table (int64_col, string_col) "
              "VALUES (10, 'row_10') THEN RETURN int64_col, string_col"
       )""");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
   request.mutable_transaction()->set_id(transaction_response.id());
 
   std::vector<spanner_api::PartialResultSet> response;
   ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
-  EXPECT_THAT(response, ElementsAre(EqualsProto(
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_TRUE(response[0].has_precommit_token());
+  }
+  EXPECT_THAT(response, ElementsAre(Partially(EqualsProto(
                             R"pb(metadata {
                                    row_type {
                                      fields {
@@ -622,14 +703,15 @@ TEST_F(QueryApiTest,
                                  }
                                  chunked_value: false
                                  stats { row_count_exact: 0 }
-                            )pb")));
+                            )pb"))));
 }
 
-TEST_F(QueryApiTest, ExecuteSqlWithDmlReturningStar) {
+TEST_P(QueryApiTest, ExecuteSqlWithDmlReturningStar) {
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }
   )pb");
-  begin_request.set_session(test_session_uri_);
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
@@ -638,15 +720,19 @@ TEST_F(QueryApiTest, ExecuteSqlWithDmlReturningStar) {
       R"""(
         sql: "DELETE test_table WHERE TRUE THEN RETURN *"
       )""");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
   ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_TRUE(response.has_precommit_token());
+  }
   EXPECT_THAT(
       response,
-      EqualsProto(
+      Partially(EqualsProto(
           R"pb(
             metadata {
               row_type {
@@ -664,14 +750,15 @@ TEST_F(QueryApiTest, ExecuteSqlWithDmlReturningStar) {
               query_plan { plan_nodes { display_name: "No query plan" } }
               row_count_exact: 0
             }
-          )pb"));
+          )pb")));
 }
 
-TEST_F(QueryApiTest, ExecuteSqlUpdateReturning) {
+TEST_P(QueryApiTest, ExecuteSqlUpdateReturning) {
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }
   )pb");
-  begin_request.set_session(test_session_uri_);
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
@@ -681,15 +768,19 @@ TEST_F(QueryApiTest, ExecuteSqlUpdateReturning) {
         sql: "UPDATE test_table SET string_col=@p1 "
              "WHERE int64_col=@p2 THEN RETURN string_col"
       )""");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
   ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_TRUE(response.has_precommit_token());
+  }
   EXPECT_THAT(
       response,
-      EqualsProto(
+      Partially(EqualsProto(
           R"pb(
             metadata {
               row_type {
@@ -713,14 +804,15 @@ TEST_F(QueryApiTest, ExecuteSqlUpdateReturning) {
               query_plan { plan_nodes { display_name: "No query plan" } }
               row_count_exact: 0
             }
-          )pb"));
+          )pb")));
 }
 
-TEST_F(QueryApiTest, ExecuteSqlDmlPlanWithoutReturning) {
+TEST_P(QueryApiTest, ExecuteSqlDmlPlanWithoutReturning) {
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }
   )pb");
-  begin_request.set_session(test_session_uri_);
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
@@ -730,15 +822,19 @@ TEST_F(QueryApiTest, ExecuteSqlDmlPlanWithoutReturning) {
         sql: "UPDATE test_table SET string_col=@p1 "
              "WHERE int64_col=@p2"
       )""");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
   ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_TRUE(response.has_precommit_token());
+  }
   EXPECT_THAT(
       response,
-      EqualsProto(
+      Partially(EqualsProto(
           R"pb(
             metadata {
               row_type {}
@@ -757,16 +853,17 @@ TEST_F(QueryApiTest, ExecuteSqlDmlPlanWithoutReturning) {
               query_plan { plan_nodes { display_name: "No query plan" } }
               row_count_exact: 0
             }
-          )pb"));
+          )pb")));
 }
 
-TEST_F(QueryApiTest, ExecuteSqlWithDmlAndProtoParameters) {
+TEST_P(QueryApiTest, ExecuteSqlWithDmlAndProtoParameters) {
   ZETASQL_ASSERT_OK(AddProtoTables());
 
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }
   )pb");
-  begin_request.set_session(test_session_uri_);
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
@@ -776,15 +873,19 @@ TEST_F(QueryApiTest, ExecuteSqlWithDmlAndProtoParameters) {
         sql: "INSERT INTO proto_table (int64_col, proto_col) "
              "VALUES (@p1, @p2)"
       )""");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
   ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_TRUE(response.has_precommit_token());
+  }
   EXPECT_THAT(
       response,
-      EqualsProto(
+      Partially(EqualsProto(
           R"pb(
             metadata {
               row_type {}
@@ -803,44 +904,48 @@ TEST_F(QueryApiTest, ExecuteSqlWithDmlAndProtoParameters) {
               query_plan { plan_nodes { display_name: "No query plan" } }
               row_count_exact: 0
             }
-          )pb"));
+          )pb")));
 }
 
-TEST_F(QueryApiTest, ExecuteStreamingSql) {
+TEST_P(QueryApiTest, ExecuteStreamingSql) {
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"(
         transaction { single_use { read_only { strong: true } } }
         sql: "SELECT int64_col, string_col FROM test_table "
              "ORDER BY int64_col ASC, string_col DESC"
       )");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   std::vector<spanner_api::PartialResultSet> response;
   ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
-  EXPECT_THAT(response, ElementsAre(EqualsProto(
-                            R"(metadata {
-                                 row_type {
-                                   fields {
-                                     name: "int64_col"
-                                     type { code: INT64 }
-                                   }
-                                   fields {
-                                     name: "string_col"
-                                     type { code: STRING }
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_FALSE(response.back().has_precommit_token());
+  }
+  EXPECT_THAT(response, ElementsAre(Partially(EqualsProto(
+                            R"pb(metadata {
+                                   row_type {
+                                     fields {
+                                       name: "int64_col"
+                                       type { code: INT64 }
+                                     }
+                                     fields {
+                                       name: "string_col"
+                                       type { code: STRING }
+                                     }
                                    }
                                  }
-                               }
-                               values { string_value: "1" }
-                               values { string_value: "row_1" }
-                               values { string_value: "2" }
-                               values { string_value: "row_2" }
-                               values { string_value: "3" }
-                               values { string_value: "row_3" }
-                               chunked_value: false
-                            )")));
+                                 values { string_value: "1" }
+                                 values { string_value: "row_1" }
+                                 values { string_value: "2" }
+                                 values { string_value: "row_2" }
+                                 values { string_value: "3" }
+                                 values { string_value: "row_3" }
+                                 chunked_value: false
+                            )pb"))));
 }
 
-TEST_F(QueryApiTest, ExecuteStreamingSqlWithParameters) {
+TEST_P(QueryApiTest, ExecuteStreamingSqlWithParameters) {
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"(
         transaction { single_use { read_only { strong: true } } }
@@ -856,11 +961,15 @@ TEST_F(QueryApiTest, ExecuteStreamingSqlWithParameters) {
           value { code: STRING }
         }
       )");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   std::vector<spanner_api::PartialResultSet> response;
   ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
-  EXPECT_THAT(response, ElementsAre(EqualsProto(
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_FALSE(response.back().has_precommit_token());
+  }
+  EXPECT_THAT(response, ElementsAre(Partially(EqualsProto(
                             R"pb(
                               metadata {
                                 row_type {
@@ -879,10 +988,10 @@ TEST_F(QueryApiTest, ExecuteStreamingSqlWithParameters) {
                               values { string_value: "value" }
                               values { string_value: "value" }
                               values { string_value: "value" }
-                            )pb")));
+                            )pb"))));
 }
 
-TEST_F(QueryApiTest, ExecuteStreamingSqlWithProtoParameters) {
+TEST_P(QueryApiTest, ExecuteStreamingSqlWithProtoParameters) {
   ZETASQL_ASSERT_OK(AddProtoTables());
   ZETASQL_ASSERT_OK(PopulateProtoTable());
 
@@ -901,10 +1010,14 @@ TEST_F(QueryApiTest, ExecuteStreamingSqlWithProtoParameters) {
           value { code: PROTO proto_type_fqn: "customer.app.User" }
         }
       )pb");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   std::vector<spanner_api::PartialResultSet> response;
   ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_FALSE(response.back().has_precommit_token());
+  }
   EXPECT_THAT(
       response,
       ElementsAre(EqualsProto(
@@ -929,11 +1042,12 @@ TEST_F(QueryApiTest, ExecuteStreamingSqlWithProtoParameters) {
           )pb")));
 }
 
-TEST_F(QueryApiTest, ExecuteStreamingSqlWithDmlAndParameters) {
+TEST_P(QueryApiTest, ExecuteStreamingSqlWithDmlAndParameters) {
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }
   )pb");
-  begin_request.set_session(test_session_uri_);
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
@@ -943,13 +1057,17 @@ TEST_F(QueryApiTest, ExecuteStreamingSqlWithDmlAndParameters) {
         sql: "INSERT INTO test_table (int64_col, string_col) "
              "VALUES (@p1, @p2)"
       )""");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   request.set_query_mode(spanner_api::ExecuteSqlRequest::PLAN);
   request.mutable_transaction()->set_id(transaction_response.id());
 
   std::vector<spanner_api::PartialResultSet> response;
   ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
-  EXPECT_THAT(response, ElementsAre(EqualsProto(
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    ASSERT_TRUE(response.back().has_precommit_token());
+  }
+  EXPECT_THAT(response, ElementsAre(Partially(EqualsProto(
                             R"pb(
                               metadata {
                                 row_type {}
@@ -965,23 +1083,27 @@ TEST_F(QueryApiTest, ExecuteStreamingSqlWithDmlAndParameters) {
                                 }
                               }
                               stats { row_count_exact: 0 }
-                            )pb")));
+                            )pb"))));
 }
 
-TEST_F(QueryApiTest, AcceptsPlanMode) {
+TEST_P(QueryApiTest, AcceptsPlanMode) {
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"pb(
         transaction { single_use { read_only { strong: true } } }
         query_mode: PLAN
         sql: "SELECT * FROM test_table"
       )pb");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   // PLAN mode accepted in non-streaming case.
   {
     spanner_api::ResultSet response;
     EXPECT_THAT(ExecuteSql(request, &response),
                 StatusIs(absl::StatusCode::kOk));
+    if (GetSessionType() == SessionType::kMultiplexedSession) {
+      ASSERT_FALSE(response.has_precommit_token());
+    }
   }
 
   // PLAN mode accepted in streaming case.
@@ -989,10 +1111,13 @@ TEST_F(QueryApiTest, AcceptsPlanMode) {
     std::vector<spanner_api::PartialResultSet> response;
     EXPECT_THAT(ExecuteStreamingSql(request, &response),
                 StatusIs(absl::StatusCode::kOk));
+    if (GetSessionType() == SessionType::kMultiplexedSession) {
+      ASSERT_FALSE(response.back().has_precommit_token());
+    }
   }
 }
 
-TEST_F(QueryApiTest, DirectedReadsWithROTxnSucceeds) {
+TEST_P(QueryApiTest, DirectedReadsWithROTxnSucceeds) {
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"pb(
         transaction { single_use { read_only { strong: true } } }
@@ -1002,13 +1127,17 @@ TEST_F(QueryApiTest, DirectedReadsWithROTxnSucceeds) {
           include_replicas { replica_selections { type: READ_ONLY } }
         }
       )pb");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   // Directed Reads accepted in non-streaming case.
   {
     spanner_api::ResultSet unused_response;
     EXPECT_THAT(ExecuteSql(request, &unused_response),
                 StatusIs(absl::StatusCode::kOk));
+    if (GetSessionType() == SessionType::kMultiplexedSession) {
+      ASSERT_FALSE(unused_response.has_precommit_token());
+    }
   }
 
   // Directed Reads accepted in streaming case.
@@ -1016,10 +1145,13 @@ TEST_F(QueryApiTest, DirectedReadsWithROTxnSucceeds) {
     std::vector<spanner_api::PartialResultSet> unused_response;
     EXPECT_THAT(ExecuteStreamingSql(request, &unused_response),
                 StatusIs(absl::StatusCode::kOk));
+    if (GetSessionType() == SessionType::kMultiplexedSession) {
+      ASSERT_FALSE(unused_response.back().has_precommit_token());
+    }
   }
 }
 
-TEST_F(QueryApiTest, DirectedReadsWithRWTxnFails) {
+TEST_P(QueryApiTest, DirectedReadsWithRWTxnFails) {
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"pb(
         transaction { begin { read_write {} } }
@@ -1029,7 +1161,8 @@ TEST_F(QueryApiTest, DirectedReadsWithRWTxnFails) {
           include_replicas { replica_selections { type: READ_ONLY } }
         }
       )pb");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   // Directed Reads rejected in non-streaming case.
   {

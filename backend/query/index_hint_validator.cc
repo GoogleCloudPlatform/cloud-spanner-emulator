@@ -191,8 +191,6 @@ absl::Status IndexHintValidator::VisitResolvedUpdateStmt(
     const zetasql::ResolvedUpdateStmt* stmt) {
   // Visit children first to collect all hints.
   ZETASQL_RETURN_IF_ERROR(zetasql::ResolvedASTVisitor::DefaultVisit(stmt));
-  // The target table should not have any hints (not allowed by ZetaSQL).
-  ZETASQL_RET_CHECK(!index_hints_map_.contains(stmt->table_scan()));
   return ValidateIndexesForTables();
 }
 
@@ -200,8 +198,6 @@ absl::Status IndexHintValidator::VisitResolvedDeleteStmt(
     const zetasql::ResolvedDeleteStmt* stmt) {
   // Visit children first to collect all hints.
   ZETASQL_RETURN_IF_ERROR(zetasql::ResolvedASTVisitor::DefaultVisit(stmt));
-  // The target table should not have any hints (not allowed by ZetaSQL).
-  ZETASQL_RET_CHECK(!index_hints_map_.contains(stmt->table_scan()));
   return ValidateIndexesForTables();
 }
 

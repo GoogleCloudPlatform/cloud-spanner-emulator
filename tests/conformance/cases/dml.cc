@@ -384,6 +384,124 @@ TEST_P(DmlTest, CanUseIndexHintInInsertStatement) {
               IsOkAndHoldsRow({1, "Peter"}));
 }
 
+TEST_P(DmlTest, CanUseIndexHintInDeleteStatement) {
+  // Spanner PG dialect doesn't support nullable indexes or this hint syntax.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  ZETASQL_EXPECT_OK(Insert("nullable", {"key", "value"}, {1, "Peter"}));
+
+  EXPECT_THAT(Query("SELECT key, value FROM nullable"),
+              IsOkAndHoldsRow({1, "Peter"}));
+
+  ZETASQL_EXPECT_OK(CommitDml(
+      {SqlStatement("DELETE FROM nullable@{force_index=nullableindex} "
+                    "WHERE value = 'Peter'")}));
+
+  EXPECT_THAT(Query("SELECT key, value FROM nullable"), IsOkAndHoldsRows({}));
+}
+
+TEST_P(DmlTest, CanUseForceIndexHintInUpdateStatement) {
+  // Spanner PG dialect doesn't support nullable indexes or this hint syntax.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  ZETASQL_EXPECT_OK(Insert("nullable", {"key", "value"}, {1, "Peter"}));
+  ZETASQL_EXPECT_OK(Insert("nullable", {"key", "value"}, {2, "James"}));
+
+  EXPECT_THAT(Query("SELECT key, value FROM nullable ORDER BY key"),
+              IsOkAndHoldsRows({{1, "Peter"}, {2, "James"}}));
+
+  // This UPDATE should use the index to find the row.
+  ZETASQL_EXPECT_OK(
+      CommitDml({SqlStatement("UPDATE nullable@{force_index=nullableindex} n "
+                              "SET n.value = 'Smith' "
+                              "WHERE n.value = 'Peter'")}));
+
+  EXPECT_THAT(Query("SELECT key, value FROM nullable ORDER BY key"),
+              IsOkAndHoldsRows({{1, "Smith"}, {2, "James"}}));
+}
+
+TEST_P(DmlTest, GroupByScanOptimizationHintSyntax) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
+
+  ZETASQL_EXPECT_OK(Insert("users", {"id", "name", "age"}, {1, "John", 30}));
+  ZETASQL_EXPECT_OK(Insert("users", {"id", "name", "age"}, {2, "Jane", 30}));
+
+  ZETASQL_EXPECT_OK(Query(
+      "SELECT age FROM users@{GROUPBY_SCAN_OPTIMIZATION=TRUE} GROUP BY age"));
+  ZETASQL_EXPECT_OK(Query(
+      "SELECT age FROM users@{GROUPBY_SCAN_OPTIMIZATION=FALSE} GROUP BY age"));
+}
+
+TEST_P(DmlTest, IndexStrategyForceIndexUnionHint) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
+
+  ZETASQL_ASSERT_OK(UpdateSchema(
+      {"CREATE TABLE TableWithMultiIndex (K INT64, ColA INT64, ColB INT64, Val "
+       "STRING(MAX)) PRIMARY KEY(K)",
+       "CREATE INDEX IndexColA ON TableWithMultiIndex(ColA)",
+       "CREATE INDEX IndexColB ON TableWithMultiIndex(ColB)"}));
+  ZETASQL_EXPECT_OK(Insert("TableWithMultiIndex", {"K", "ColA", "ColB", "Val"},
+                   {1, 10, 100, "A"}));
+  ZETASQL_EXPECT_OK(Insert("TableWithMultiIndex", {"K", "ColA", "ColB", "Val"},
+                   {2, 20, 200, "B"}));
+  ZETASQL_EXPECT_OK(Insert("TableWithMultiIndex", {"K", "ColA", "ColB", "Val"},
+                   {3, 10, 300, "C"}));
+
+  EXPECT_THAT(Query("SELECT K, Val FROM "
+                    "TableWithMultiIndex@{INDEX_STRATEGY=FORCE_INDEX_UNION} "
+                    "WHERE ColA = 10 OR ColB = 200 ORDER BY K"),
+              IsOkAndHoldsRows({{1, "A"}, {2, "B"}, {3, "C"}}));
+}
+
+TEST_P(DmlTest, HintsWithScanMethod) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  ZETASQL_EXPECT_OK(Insert("users", {"id", "name"}, {1, "John"}));
+  ZETASQL_EXPECT_OK(
+      Query("SELECT ID, Name FROM "
+            "users@{SCAN_METHOD=BATCH}"));
+}
+TEST_P(DmlTest, SeekableKeySizeHintTest) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK(
+      UpdateSchema({"CREATE TABLE SeekTable (K1 INT64, K2 INT64, V INT64) "
+                    "PRIMARY KEY(K1, K2)",
+                    "CREATE INDEX SeekIndex ON SeekTable(K1, K2)"}));
+  ZETASQL_EXPECT_OK(Insert("SeekTable", {"K1", "K2", "V"}, {1, 1, 100}));
+
+  if (in_prod_env()) {
+    ZETASQL_EXPECT_OK(
+        Query("SELECT V FROM SeekTable@{FORCE_INDEX=SeekIndex, "
+              "SEEKABLE_KEY_SIZE=1} WHERE K1 = 1 AND K2 = 1"));
+    ZETASQL_EXPECT_OK(
+        Query("SELECT V FROM SeekTable@{FORCE_INDEX=SeekIndex, "
+              "SEEKABLE_KEY_SIZE=0} WHERE K1 = 1 AND K2 = 1"));
+  } else {  // Emulator behavior
+    const std::string expected_error = "Unsupported hint: SEEKABLE_KEY_SIZE";
+    EXPECT_THAT(Query("SELECT V FROM SeekTable@{FORCE_INDEX=SeekIndex, "
+                      "SEEKABLE_KEY_SIZE=1} WHERE K1 = 1 AND K2 = 1"),
+                StatusIs(absl::StatusCode::kInvalidArgument,
+                         testing::HasSubstr(expected_error)));
+    EXPECT_THAT(Query("SELECT V FROM SeekTable@{FORCE_INDEX=SeekIndex, "
+                      "SEEKABLE_KEY_SIZE=0} WHERE K1 = 1 AND K2 = 1"),
+                StatusIs(absl::StatusCode::kInvalidArgument,
+                         testing::HasSubstr(expected_error)));
+    EXPECT_THAT(Query("SELECT V FROM SeekTable@{FORCE_INDEX=SeekIndex, "
+                      "SEEKABLE_KEY_SIZE=17} WHERE K1 = 1 AND K2 = 1"),
+                StatusIs(absl::StatusCode::kInvalidArgument,
+                         testing::HasSubstr(expected_error)));
+    EXPECT_THAT(Query("SELECT V FROM SeekTable@{SEEKABLE_KEY_SIZE=1} "
+                      "WHERE K1 = 1 AND K2 = 1"),
+                StatusIs(absl::StatusCode::kInvalidArgument,
+                         testing::HasSubstr(expected_error)));
+  }
+}
+
 TEST_P(DmlTest, CanUseIndexHintInUpdateStatement) {
   // Spanner PG dialect doesn't support nullable indexes.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {

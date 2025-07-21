@@ -69,7 +69,7 @@ absl::StatusOr<std::vector<std::string>> StringsFromTokenList(
 }
 
 zetasql::Value TokenListFromBytes(std::string& bytes) {
-  return zetasql::Value::TokenList(TokenList::FromBytes(bytes));
+  return zetasql::Value::TokenList(TokenList::FromBytesUnvalidated(bytes));
 }
 
 bool IsTokenizerSignature(absl::string_view token) {

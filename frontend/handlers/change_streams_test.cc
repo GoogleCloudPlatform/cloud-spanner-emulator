@@ -81,7 +81,8 @@ class ChangeStreamQueryAPITest
                   absl::Milliseconds(500));
     ZETASQL_ASSERT_OK(CreateTestInstance());
     ZETASQL_ASSERT_OK(CreateTestDatabaseWithChangeStream(GetParam()));
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_, CreateTestSession());
+    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
+                         CreateTestSession(/*multiplexed=*/false));
     now_ = Clock().Now();
     now_str_ = test::EncodeTimestampString(
         now_, GetParam() == database_api::DatabaseDialect::POSTGRESQL);

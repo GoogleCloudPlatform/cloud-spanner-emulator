@@ -3800,6 +3800,11 @@ absl::Status SchemaUpdaterImpl::EditChangeStreamTrackedObjects(
   if (!change_stream_for_clause.has_tracked_tables()) {
     return absl::OkStatus();
   }
+  ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+      change_stream, [](ChangeStream::Editor* editor) -> absl::Status {
+        editor->clear_tracked_tables_columns();
+        return absl::OkStatus();
+      }));
   for (const ddl::ChangeStreamForClause::TrackedTables::Entry& entry :
        change_stream_for_clause.tracked_tables().table_entry()) {
     std::vector<std::string> columns;
@@ -3822,7 +3827,6 @@ absl::Status SchemaUpdaterImpl::EditChangeStreamTrackedObjects(
     ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
         change_stream,
         [&, entry, columns](ChangeStream::Editor* editor) -> absl::Status {
-          editor->clear_tracked_tables_columns();
           editor->add_tracked_tables_columns(entry.table_name(), columns);
           return absl::OkStatus();
         }));

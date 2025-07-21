@@ -29,6 +29,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "absl/types/variant.h"
 #include "backend/access/read.h"
@@ -97,7 +98,8 @@ Transaction::Transaction(
       query_engine_(query_engine),
       usage_type_(usage),
       type_(TypeFromTransactionOptions(options)),
-      options_(options) {}
+      options_(options),
+      create_time_(absl::Now()) {}
 
 void Transaction::Close() {
   absl::MutexLock lock(&mu_);

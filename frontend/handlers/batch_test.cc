@@ -42,13 +42,27 @@ using test::EqualsProto;
 using testing::Property;
 using test::proto::Partially;
 
-class BatchWriteApiTest : public test::ServerTest {
+enum class SessionType {
+  kRegularSession,
+  kMultiplexedSession,
+};
+
+class BatchWriteApiTest : public test::ServerTest,
+                          public testing::WithParamInterface<SessionType> {
  protected:
   void SetUp() override {
     ZETASQL_ASSERT_OK(CreateTestInstance());
     ZETASQL_ASSERT_OK(CreateTestDatabase());
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_, CreateTestSession());
+    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_, CreateTestSession(
+                                                /*multiplexed=*/false));
+    ZETASQL_ASSERT_OK_AND_ASSIGN(test_multiplexed_session_uri_,
+                         CreateTestSession(
+                             /*multiplexed=*/true));
     ZETASQL_ASSERT_OK(PopulateTestTable());
+  }
+
+  std::string GetSessionUri(bool multiplexed) {
+    return multiplexed ? test_multiplexed_session_uri_ : test_session_uri_;
   }
 
   absl::Status ClearTestTable() {
@@ -98,12 +112,20 @@ class BatchWriteApiTest : public test::ServerTest {
     return Commit(commit_request, &commit_response);
   }
 
+  SessionType GetSessionType() { return GetParam(); }
+
   std::string test_session_uri_;
+  std::string test_multiplexed_session_uri_;
 };
 
-TEST_F(BatchWriteApiTest, BatchWriteInsert) {
+INSTANTIATE_TEST_SUITE_P(SessionTypes, BatchWriteApiTest,
+                         testing::Values(SessionType::kRegularSession,
+                                         SessionType::kMultiplexedSession));
+
+TEST_P(BatchWriteApiTest, BatchWriteInsert) {
   spanner_api::BatchWriteRequest request;
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   // Add mutation to insert a new row
   spanner_api::Mutation* mutation =
@@ -130,9 +152,10 @@ TEST_F(BatchWriteApiTest, BatchWriteInsert) {
                            Property(&google::rpc::Status::code, Eq(0))))));
 }
 
-TEST_F(BatchWriteApiTest, BatchWriteUpdate) {
+TEST_P(BatchWriteApiTest, BatchWriteUpdate) {
   spanner_api::BatchWriteRequest request;
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   // Add mutation to update an existing row
   spanner_api::Mutation* mutation =
@@ -159,9 +182,10 @@ TEST_F(BatchWriteApiTest, BatchWriteUpdate) {
                            Property(&google::rpc::Status::code, Eq(0))))));
 }
 
-TEST_F(BatchWriteApiTest, BatchWriteInsertOrUpdate) {
+TEST_P(BatchWriteApiTest, BatchWriteInsertOrUpdate) {
   spanner_api::BatchWriteRequest request;
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   // Add mutation to insert or update a row
   spanner_api::Mutation* mutation =
@@ -185,9 +209,10 @@ TEST_F(BatchWriteApiTest, BatchWriteInsertOrUpdate) {
               )pb"))));
 }
 
-TEST_F(BatchWriteApiTest, BatchWriteDelete) {
+TEST_P(BatchWriteApiTest, BatchWriteDelete) {
   spanner_api::BatchWriteRequest request;
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   // Add mutation to delete a row
   spanner_api::Mutation* mutation =
@@ -210,7 +235,8 @@ TEST_F(BatchWriteApiTest, BatchWriteDelete) {
               )pb")))));
   // Optionally, add a read operation to verify the deletion
   spanner_api::ReadRequest read_request;
-  read_request.set_session(test_session_uri_);
+  read_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   read_request.set_table("test_table");
   read_request.add_columns("int64_col");
   read_request.mutable_key_set()->add_keys()->add_values()->set_string_value(
@@ -223,9 +249,10 @@ TEST_F(BatchWriteApiTest, BatchWriteDelete) {
   EXPECT_EQ(read_response.rows_size(), 0);
 }
 
-TEST_F(BatchWriteApiTest, BatchWriteMultipleMutationGroups) {
+TEST_P(BatchWriteApiTest, BatchWriteMultipleMutationGroups) {
   spanner_api::BatchWriteRequest request;
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   // Add the first mutation group with an insert mutation
   spanner_api::Mutation* mutation1 =
@@ -282,9 +309,10 @@ TEST_F(BatchWriteApiTest, BatchWriteMultipleMutationGroups) {
                                              )pb")))));
 }
 
-TEST_F(BatchWriteApiTest, TestInsertMultipleMutationGroupsWithFailure) {
+TEST_P(BatchWriteApiTest, TestInsertMultipleMutationGroupsWithFailure) {
   spanner_api::BatchWriteRequest request;
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   // Add a mutation group with an insert mutation
   spanner_api::Mutation* mutation1 =
@@ -362,9 +390,10 @@ TEST_F(BatchWriteApiTest, TestInsertMultipleMutationGroupsWithFailure) {
   ZETASQL_EXPECT_OK(status);
 }
 
-TEST_F(BatchWriteApiTest, TestInsertMutationGroupWithSuccessAndFailure) {
+TEST_P(BatchWriteApiTest, TestInsertMutationGroupWithSuccessAndFailure) {
   spanner_api::BatchWriteRequest request;
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   // Add a mutation group with an insert mutation that will succeed
   spanner_api::BatchWriteRequest::MutationGroup* mutation_group1 =
@@ -435,11 +464,12 @@ TEST_F(BatchWriteApiTest, TestInsertMutationGroupWithSuccessAndFailure) {
   ZETASQL_EXPECT_OK(status);
 }
 
-TEST_F(BatchWriteApiTest, ConcurrentTransactions) {
+TEST_P(BatchWriteApiTest, ConcurrentTransactions) {
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }
   )pb");
-  begin_request.set_session(test_session_uri_);
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   // 1. Start a normal read/write transaction and execute a DML statement.
   spanner_api::Transaction transaction_response;
@@ -448,9 +478,10 @@ TEST_F(BatchWriteApiTest, ConcurrentTransactions) {
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"""(
         sql: "INSERT INTO test_table (int64_col, string_col) "
-             "VALUES (10, 'row_10') THEN RETURN int64_col, string_col"
+             "VALUES (6, 'row_6') THEN RETURN int64_col, string_col"
       )""");
-  request.set_session(test_session_uri_);
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
@@ -458,7 +489,8 @@ TEST_F(BatchWriteApiTest, ConcurrentTransactions) {
 
   // 2. Execute a BatchWrite with a couple of mutation groups.
   spanner_api::BatchWriteRequest batch_write_request;
-  batch_write_request.set_session(test_session_uri_);
+  batch_write_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   // Add a couple of mutation groups
   auto* mutation_group1 = batch_write_request.add_mutation_groups();
   spanner_api::Mutation* mutation1 = mutation_group1->add_mutations();
@@ -487,8 +519,12 @@ TEST_F(BatchWriteApiTest, ConcurrentTransactions) {
 
   // 3. Then try to commit the first transaction.
   spanner_api::CommitRequest commit_request;
-  commit_request.set_session(test_session_uri_);
+  commit_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   commit_request.mutable_transaction_id()->assign(transaction_response.id());
+  if (GetSessionType() == SessionType::kMultiplexedSession) {
+    commit_request.mutable_precommit_token();
+  }
   spanner_api::CommitResponse commit_response;
   absl::Status rw_commit_status = Commit(commit_request, &commit_response);
 
@@ -522,7 +558,8 @@ TEST_F(BatchWriteApiTest, ConcurrentTransactions) {
   }
   // Construct a new BatchWrite request with a single mutation group
   spanner_api::BatchWriteRequest new_batch_write_request;
-  new_batch_write_request.set_session(test_session_uri_);
+  new_batch_write_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
   auto* mutation_group = new_batch_write_request.add_mutation_groups();
   spanner_api::Mutation* mutation = mutation_group->add_mutations();
   spanner_api::Mutation::Write* insert = mutation->mutable_insert();

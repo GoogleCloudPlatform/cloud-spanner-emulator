@@ -27,6 +27,8 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
+#include "absl/strings/string_view.h"
+#include "absl/strings/substitute.h"
 #include "frontend/common/protos.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
@@ -49,7 +51,8 @@ class ReadApiTest : public test::ServerTest {
   void SetUp() override {
     ZETASQL_ASSERT_OK(CreateTestInstance());
     ZETASQL_ASSERT_OK(CreateTestDatabase());
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_, CreateTestSession());
+    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
+                         CreateTestSession(/*multiplexed=*/false));
     ZETASQL_ASSERT_OK(PopulateTestDatabase());
   }
 
@@ -350,24 +353,25 @@ TEST_F(ReadApiTest, CanBeginNewReadWriteTransactionAndPerformRead) {
 
   spanner_api::ResultSet read_response;
   ZETASQL_EXPECT_OK(Read(read_request, &read_response));
-  EXPECT_THAT(read_response, test::EqualsProto(
-                                 R"(metadata {
-                                      row_type {
-                                        fields {
-                                          name: "int64_col"
-                                          type { code: INT64 }
+  EXPECT_THAT(read_response, test::EqualsProto(absl::Substitute(
+                                 R"pb(metadata {
+                                        row_type {
+                                          fields {
+                                            name: "int64_col"
+                                            type { code: INT64 }
+                                          }
+                                          fields {
+                                            name: "string_col"
+                                            type { code: STRING }
+                                          }
                                         }
-                                        fields {
-                                          name: "string_col"
-                                          type { code: STRING }
-                                        }
+                                        transaction { id: "$0" }
                                       }
-                                      transaction { id: "2" }
-                                    }
-                                    rows {
-                                      values { string_value: "2" }
-                                      values { string_value: "row_2" }
-                                    })"));
+                                      rows {
+                                        values { string_value: "2" }
+                                        values { string_value: "row_2" }
+                                      })pb",
+                                 read_response.metadata().transaction().id())));
 }
 
 TEST_F(ReadApiTest, CannotReadUsingPartitionedDMLTransaction) {

@@ -455,7 +455,7 @@ void synonym_clause() :
 void table_interleave_clause() :
 {}
 {
-  <INTERLEAVE> <IN> <PARENT> qualified_identifier() #interleave_in
+  <INTERLEAVE> <IN> [ <PARENT> #parent ] qualified_identifier() #interleave_in
     [ on_delete_clause() ]
 }
 
@@ -920,6 +920,7 @@ void alter_table_statement() :
     | LOOKAHEAD(1) <ADD> #add_column [
         LOOKAHEAD(6) <COLUMN> [ if_not_exists() ]
       ] column_def()
+    | LOOKAHEAD(2) <SET> table_interleave_clause() #set_interleave_clause
     | <REPLACE> row_deletion_policy_clause() #replace_row_deletion_policy
   )
 }

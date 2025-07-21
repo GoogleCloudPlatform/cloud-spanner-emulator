@@ -269,6 +269,16 @@ absl::Status SessionNotFound(absl::string_view uri) {
   return error;
 }
 
+absl::Status InvalidOperationSessionDelete() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "Multiplexed sessions may not be deleted.");
+}
+
+absl::Status InvalidOperationBatchCreateSessions() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "Multiplexed sessions may not be created in batch.");
+}
+
 absl::Status TooFewSessions(int session_count) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,

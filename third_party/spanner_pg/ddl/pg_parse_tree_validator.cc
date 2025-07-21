@@ -37,6 +37,8 @@
 #include <cstdint>
 #include <string>
 
+#include "absl/flags/declare.h"
+#include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
@@ -49,6 +51,8 @@
 #include "third_party/spanner_pg/util/postgres.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
+
+ABSL_DECLARE_FLAG(bool, spangres_enable_udf_unnamed_parameters);
 
 namespace postgres_translator {
 namespace spangres {
@@ -927,9 +931,8 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
       node.removeType != OBJECT_SCHEMA && node.removeType != OBJECT_VIEW &&
       node.removeType != OBJECT_CHANGE_STREAM &&
       node.removeType != OBJECT_SEQUENCE
-      && node.removeType != OBJECT_SEARCH_INDEX
-      && node.removeType != OBJECT_LOCALITY_GROUP
-  ) {
+      && node.removeType != OBJECT_SEARCH_INDEX &&
+      node.removeType != OBJECT_LOCALITY_GROUP) {
     auto object_type = internal::ObjectTypeToString(node.removeType);
     const std::string error_message =
         "Only <DROP TABLE>, <DROP INDEX>, <DROP SCHEMA>, <DROP VIEW>, "
@@ -1031,16 +1034,24 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
 
   // `missing_ok` is set if IF EXISTS clause is present. Not supported.
   if (node.missing_ok) {
-    // if not enabled, or not a table or index, then an error.
+    // if not enabled, or not a table or index or sequence or view or schema or
+    // change stream then an error.
     if (!options.enable_if_not_exists ||
         !(node.removeType == OBJECT_TABLE || node.removeType == OBJECT_INDEX ||
           node.removeType == OBJECT_SEQUENCE ||
-          node.removeType == OBJECT_VIEW ||
-          node.removeType == OBJECT_SCHEMA
-          || node.removeType == OBJECT_LOCALITY_GROUP
-          )) {
+          node.removeType == OBJECT_VIEW || node.removeType == OBJECT_SCHEMA ||
+          node.removeType == OBJECT_CHANGE_STREAM
+          || node.removeType == OBJECT_SEARCH_INDEX ||
+          node.removeType == OBJECT_LOCALITY_GROUP)) {
       return UnsupportedTranslationError(
           "<IF EXISTS> is not supported by <DROP> statement.");
+    }
+
+    if (!options.enable_change_streams_if_not_exists &&
+        node.removeType == OBJECT_CHANGE_STREAM) {
+      return UnsupportedTranslationError(
+          "<IF EXISTS> clause is not supported by <DROP CHANGE STREAM> "
+          "statement.");
     }
   }
 
@@ -1637,7 +1648,8 @@ absl::Status ValidateParseTreeNode(const AlterChangeStreamStmt& node) {
   return absl::OkStatus();
 }
 
-absl::Status ValidateParseTreeNode(const CreateChangeStreamStmt& node) {
+absl::Status ValidateParseTreeNode(const CreateChangeStreamStmt& node,
+                                   const TranslationOptions& options) {
   ZETASQL_RET_CHECK_EQ(node.type, T_CreateChangeStreamStmt);
 
   // Make sure that if CreateChangeStreamStmt structure changes we update the
@@ -1666,6 +1678,13 @@ absl::Status ValidateParseTreeNode(const CreateChangeStreamStmt& node) {
     ZETASQL_RET_CHECK_EQ(for_all_int + opt_for_tables_int, 1)
         << "Invalid <FOR> clause for <CREATE CHANGE STREAM>";
   }
+
+  if (!options.enable_change_streams_if_not_exists && node.if_not_exists) {
+    return UnsupportedTranslationError(
+        "<IF NOT EXISTS> clause is not supported in <CREATE CHANGE STREAM> "
+        "statement.");
+  }
+
   return absl::OkStatus();
 }
 
