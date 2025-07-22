@@ -389,6 +389,25 @@ TEST_F(SpangresSystemCatalogTest, SpannerPendingCommitTimestampFunction) {
             "pending_commit_timestamp");
 }
 
+TEST_F(SpangresSystemCatalogTest, SpannerDateFunction) {
+  zetasql::LanguageOptions language_options = GetLanguageOptions();
+  EngineSystemCatalog* catalog = GetSpangresTestSystemCatalog();
+
+  std::vector<zetasql::InputArgumentType> input_types;
+  input_types.push_back(zetasql::InputArgumentType(gsql_timestamp));
+  input_types.push_back(zetasql::InputArgumentType(gsql_string));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid function_oid,
+                       catalog->GetPgProcOidFromReverseMapping(
+                           "date", input_types, language_options));
+  ASSERT_NE(function_oid, InvalidOid);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(FunctionAndSignature function_and_signature,
+                       catalog->GetFunctionAndSignature(
+                           function_oid, input_types, language_options));
+  ASSERT_NE(function_and_signature.function(), nullptr);
+  EXPECT_EQ(function_and_signature.function()->Name(), "date");
+}
+
 TEST_F(SpangresSystemCatalogTest, SpannerGenerateUuidFunction) {
   zetasql::LanguageOptions language_options = GetLanguageOptions();
   EngineSystemCatalog* catalog = GetSpangresTestSystemCatalog();
@@ -890,6 +909,10 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
   AssertPGFunctionIsRegistered("date_pli", "pg.date_pli", {DATEOID, INT8OID},
                                {zetasql::InputArgumentType(gsql_date),
                                 zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered("spanner", "date", "date",
+                               {TIMESTAMPTZOID, TEXTOID},
+                               {zetasql::InputArgumentType(gsql_timestamp),
+                                zetasql::InputArgumentType(gsql_string)});
   // Formatting functions
   AssertPGFunctionIsRegistered("to_date", "pg.to_date", {TEXTOID, TEXTOID},
                                {zetasql::InputArgumentType(gsql_string),

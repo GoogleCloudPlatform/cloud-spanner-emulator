@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/function.h"
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/id_string.h"
 #include "zetasql/public/input_argument_type.h"
@@ -266,7 +267,7 @@ MakeResolvedFunctionCall(
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
 ForwardTransformer::BuildGsqlResolvedFunctionCall(
     Oid funcid, List* args, ExprTransformerInfo* expr_transformer_info) {
-  // Sanity check: if this is a UDF/TVF, it's not supported in this context.
+  // Sanity check: if this is a TVF, it's not supported in this context.
   // Without this check, we will assume it's a builtin, fail to find it, and
   // return an internal error.
   auto tvf = catalog_adapter().GetTVFFromOid(funcid);
@@ -274,6 +275,21 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
     return absl::InvalidArgumentError(
         absl::StrCat("Function call ", tvf.value()->Name(),
                      " is unsupported in this context"));
+  }
+  auto udf_catalog_entry = catalog_adapter_->GetUDFFromOid(funcid);
+  if (udf_catalog_entry.ok()) {
+    const zetasql::Function* udf = udf_catalog_entry.value();
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list,
+        BuildGsqlFunctionArgumentList(args, expr_transformer_info));
+    std::vector<zetasql::InputArgumentType> input_argument_types =
+        GetInputArgumentTypes(argument_list);
+    ZETASQL_RET_CHECK_EQ(udf->NumSignatures(), 1);
+    const zetasql::FunctionSignature* signature = udf->GetSignature(0);
+    FunctionAndSignature function_and_signature =
+        FunctionAndSignature(udf, *signature);
+    return MakeResolvedFunctionCall(function_and_signature,
+                                    std::move(argument_list));
   }
 
   // Check if there is a custom error message for this function.

@@ -132,6 +132,7 @@ cc_library(
         ":type",
         "//third_party/spanner_pg/bootstrap_catalog",
         "//third_party/spanner_pg/catalog/proto:catalog_cc_proto",
+        "//third_party/spanner_pg/catalog/proto:functions_embed",
         "//third_party/spanner_pg/datatypes/extended:conversion_finder",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
@@ -198,8 +199,8 @@ cc_library(
         ":table_name",
         "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -210,7 +211,6 @@ cc_library(
         "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:function",
-        "@com_google_zetasql//zetasql/public:language_options",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )
@@ -407,6 +407,7 @@ cc_library(
         "@com_google_absl//absl/strings:str_format",
         "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/public:analyzer_options",
+        "@com_google_zetasql//zetasql/public:function",
     ],
 )
 
@@ -744,10 +745,10 @@ cc_library(
     ],
     features = ["-use_header_modules"],
     deps = [
+        ":catalog_adapter",
+        ":catalog_adapter_holder",
+        ":udf_support",
         "//third_party/spanner_pg/bootstrap_catalog",
-        "//third_party/spanner_pg/catalog:catalog_adapter",
-        "//third_party/spanner_pg/catalog:catalog_adapter_holder",
-        "//third_party/spanner_pg/catalog:udf_support",
         "//third_party/spanner_pg/errors:error_catalog",
         "//third_party/spanner_pg/interface:catalog_wrappers",
         "//third_party/spanner_pg/postgres_includes",

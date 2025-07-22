@@ -147,6 +147,14 @@ TEST_F(IndexHintValidatorTest, InvalidIndexHintInDeleteReturnsError) {
             error::QueryHintIndexNotFound("T1", "I2"));
 }
 
+TEST_F(IndexHintValidatorTest, ValidIndexHintOnDeleteTargetSucceeds) {
+  auto output =
+      AnalyzeQuery("DELETE FROM T1@{force_index=I1} WHERE col1 = 'value'");
+  auto stmt = output->resolved_statement();
+  IndexHintValidator validator{schema()};
+  ZETASQL_EXPECT_OK(stmt->Accept(&validator));
+}
+
 TEST_F(IndexHintValidatorTest,
        NullFilteredIndexCannotBeUsedForNullableColumns) {
   auto output = AnalyzeQuery("SELECT col1 FROM T1@{force_index=NF_I1}");

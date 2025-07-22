@@ -35,10 +35,10 @@
 #include <string>
 
 #include "zetasql/base/logging.h"
-#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "third_party/spanner_pg/postgres_includes/all.h"
+#include "third_party/spanner_pg/postgres_includes/all.h"  // IWYU pragma: keep for spangres_src includes
 
 // The function names in the file are intentionally designed to be
 // consistent with similar Postgres C function names. Some might violate
@@ -265,6 +265,16 @@ absl::StatusOr<Oid> GetArrayUnnestProcOid();
 // Helper function to check if the function call is a Vector Search ANN
 // function.
 absl::StatusOr<bool> IsAnnFunction(FuncExpr* func_expr);
+
+// For converting unnamed function parameters to named parameters.
+inline constexpr absl::string_view kUnnamedFunctionParameterPrefix = "$";
+
+// Helper function to create a UDF input parameter name from the given
+// parameter index.
+// Note: the index is 1-based, not 0-based.
+inline std::string GetUdfParameterName(int parameter_index) {
+  return absl::StrCat(kUnnamedFunctionParameterPrefix, parameter_index);
+}
 
 }  // namespace internal
 }  // namespace postgres_translator

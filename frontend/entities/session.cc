@@ -26,6 +26,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
 #include "backend/transaction/options.h"
@@ -141,6 +142,17 @@ absl::StatusOr<std::shared_ptr<Transaction>> Session::CreateMultiUseTransaction(
       CreateTransaction(options, Transaction::Usage::kMultiUse,
                         MakeRetryState(options, /*is_single_use_txn=*/false)));
 
+  if (multiplexed_) {
+    if (mux_txn_manager_ == nullptr) {
+      return error::Internal(
+          "Transaction manager is null on a multiplexed session");
+    }
+    ZETASQL_RETURN_IF_ERROR(mux_txn_manager_->AddToCurrentTransactions(txn, txn->id()));
+    // If the last clear time is older than staleness duration, clear the txn
+    // map.
+    mux_txn_manager_->MaybeClearOldTransactions();
+    return txn;
+  }
   // Insert shared transaction object into transaction map.
   transaction_map_.emplace(txn->id(), txn);
 
@@ -238,6 +250,9 @@ absl::StatusOr<std::shared_ptr<Transaction>> Session::FindAndUseTransaction(
     const std::string& bytes) {
   const backend::TransactionID& id = TransactionIDFromProto(bytes);
   absl::MutexLock lock(&mu_);
+  if (multiplexed_) {
+    return mux_txn_manager_->GetCurrentTransactionOnMultiplexedSession(id);
+  }
   if (id == backend::kInvalidTransactionID) {
     return error::InvalidTransactionID(backend::kInvalidTransactionID);
   }

@@ -602,6 +602,22 @@ TEST(ParseCreateTable, CanParseCreateInterleavedTableWithNoColumns) {
           )pb")));
 }
 
+TEST(ParseCreateTable, CanParseCreateNonParentInterleavedTableWithNoColumns) {
+  // Note that the on_delete action is not specified and not set either.
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE TABLE Albums (
+                    ) PRIMARY KEY (), INTERLEAVE IN Users
+                  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "Albums"
+                      interleave_clause { table_name: "Users" type: IN }
+                    }
+                  )pb")));
+}
+
 TEST(ParseCreateTable, CanParseCreateInterleavedTableWithKeyAndNonKeyColumns) {
   EXPECT_THAT(
       ParseDDLStatement(
@@ -630,6 +646,40 @@ TEST(ParseCreateTable, CanParseCreateInterleavedTableWithKeyAndNonKeyColumns) {
 }
 
 TEST(ParseCreateTable,
+     CanParseCreateNonParentInterleavedTableWithKeyAndNonKeyColumns) {
+  // The clause ON DELETE CASCADE is accepted at the parser level, but should be
+  // rejected at the schema validator level.
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
+                  CREATE TABLE Albums (
+                    UserId INT64 NOT NULL,
+                    AlbumId INT64 NOT NULL,
+                    Name STRING(1024),
+                    Description STRING(1024)
+                  ) PRIMARY KEY (UserId, AlbumId),
+                    INTERLEAVE IN Users ON DELETE CASCADE
+                )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Albums"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              column { column_name: "AlbumId" type: INT64 not_null: true }
+              column { column_name: "Name" type: STRING length: 1024 }
+              column { column_name: "Description" type: STRING length: 1024 }
+              primary_key { key_name: "UserId" }
+              primary_key { key_name: "AlbumId" }
+              interleave_clause {
+                table_name: "Users"
+                type: IN
+                on_delete: CASCADE
+              }
+            }
+          )pb")));
+}
+
+TEST(ParseCreateTable,
      CanParseCreateInterleavedTableWithExplicitOnDeleteNoAction) {
   EXPECT_THAT(
       ParseDDLStatement(
@@ -647,6 +697,28 @@ TEST(ParseCreateTable,
 }
 
 TEST(ParseCreateTable,
+     CanParseCreateNonParentInterleavedTableWithExplicitOnDeleteNoAction) {
+  // The clause ON DELETE NO ACTION is accepted at the parser level, but should
+  // be rejected at the schema validator level.
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                 CREATE TABLE Albums (
+                 ) PRIMARY KEY (), INTERLEAVE IN Users ON DELETE NO ACTION
+               )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "Albums"
+                      interleave_clause {
+                        table_name: "Users"
+                        type: IN
+                        on_delete: NO_ACTION
+                      }
+                    }
+                  )pb")));
+}
+
+TEST(ParseCreateTable,
      CanParseCreateInterleavedTableWithImplicitOnDeleteNoAction) {
   EXPECT_THAT(
       ParseDDLStatement(
@@ -661,6 +733,22 @@ TEST(ParseCreateTable,
               interleave_clause { table_name: "Users" on_delete: NO_ACTION }
             }
           )pb")));
+}
+
+TEST(ParseCreateTable,
+     CanParseCreateNonParentInterleavedTableWithImplicitOnDeleteNoAction) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+              CREATE TABLE Albums (
+              ) PRIMARY KEY (), INTERLEAVE IN Users
+            )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "Albums"
+                      interleave_clause { table_name: "Users" type: IN }
+                    }
+                  )pb")));
 }
 
 TEST(ParseCreateTable, CanParseCreateTableWithAnArrayField) {
@@ -1800,6 +1888,109 @@ TEST(ParseAlterTable, CannotParseAddColumnMissingTableName) {
   EXPECT_THAT(
       ParseDDLStatement("ALTER TABLE Users ADD `COLUMN` Notes STRING(MAX)"),
       StatusIs(StatusCode::kInvalidArgument));
+}
+
+TEST(ParseAlterTable, CanParseSetInterleaveInParentClauseImplicitNoAction) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER TABLE Albums SET INTERLEAVE IN PARENT Users )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            alter_table {
+              table_name: "Albums"
+              set_interleave_clause {
+                interleave_clause { table_name: "Users" on_delete: NO_ACTION }
+              }
+            }
+          )pb")));
+}
+
+TEST(ParseAlterTable, CanParseSetInterleaveInParentClauseExplicitNoAction) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER TABLE Albums SET INTERLEAVE IN PARENT Users
+                ON DELETE NO ACTION )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            alter_table {
+              table_name: "Albums"
+              set_interleave_clause {
+                interleave_clause { table_name: "Users" on_delete: NO_ACTION }
+              }
+            }
+          )pb")));
+}
+
+TEST(ParseAlterTable, CanParseSetInterleaveInParentClauseOnDeleteCascade) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(ALTER TABLE Albums SET INTERLEAVE IN PARENT Users
+                ON DELETE CASCADE )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            alter_table {
+              table_name: "Albums"
+              set_interleave_clause {
+                interleave_clause { table_name: "Users" on_delete: CASCADE }
+              }
+            }
+          )pb")));
+}
+
+TEST(ParseAlterTable, CanParseSetInterleaveInClause) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(ALTER TABLE Albums SET INTERLEAVE IN Users )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            alter_table {
+              table_name: "Albums"
+              set_interleave_clause {
+                interleave_clause { table_name: "Users" type: IN }
+              }
+            }
+          )pb")));
+}
+
+TEST(ParseAlterTable, CanParseSetInterleaveInClauseExplicitNoAction) {
+  // ON DELETE NO ACTION is accepted at parser level, but should be rejected at
+  // schema level.
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(ALTER TABLE Albums SET INTERLEAVE IN Users
+                ON DELETE NO ACTION )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "Albums"
+                      set_interleave_clause {
+                        interleave_clause {
+                          table_name: "Users"
+                          type: IN
+                          on_delete: NO_ACTION
+                        }
+                      }
+                    }
+                  )pb")));
+}
+
+TEST(ParseAlterTable, CanParseSetInterleaveInClauseOnDeleteCascade) {
+  // ON DELETE CASCADE is accepted at parser level, but should be rejected at
+  // schema level.
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(ALTER TABLE Albums SET INTERLEAVE IN Users
+                ON DELETE CASCADE )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "Albums"
+                      set_interleave_clause {
+                        interleave_clause {
+                          table_name: "Users"
+                          type: IN
+                          on_delete: CASCADE
+                        }
+                      }
+                    }
+                  )pb")));
 }
 
 TEST(ParseAlterTable, CanParseAddSynonym) {

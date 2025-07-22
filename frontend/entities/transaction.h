@@ -185,6 +185,12 @@ class Transaction {
   // Returns true if the current transaction is a PartitionedDmlTransaction.
   bool IsPartitionedDml() const { return type_ == kPartitionedDml; }
 
+  // Return the create timestamp of the transaction.
+  absl::Time GetCreateTime() const ABSL_LOCKS_EXCLUDED(mu_) {
+    absl::MutexLock lock(&mu_);
+    return create_time_;
+  }
+
   // All transaction methods should be called inside GuardedCall.
   absl::Status GuardedCall(OpType op, const std::function<absl::Status()>& fn)
       ABSL_LOCKS_EXCLUDED(mu_);
@@ -283,6 +289,9 @@ class Transaction {
 
   // DML sequence request map.
   std::map<int64_t, RequestReplayState> dml_requests_ ABSL_GUARDED_BY(mu_);
+
+  // create timestamp
+  absl::Time create_time_ ABSL_GUARDED_BY(mu_);
 };
 
 // Return true if the given transaction selector requires the transaction to be

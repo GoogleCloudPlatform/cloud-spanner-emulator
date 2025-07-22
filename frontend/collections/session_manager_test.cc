@@ -59,11 +59,13 @@ TEST_F(SessionManagerTest, CreateSession) {
   absl::Time start_time = absl::Now();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> actual,
-      session_manager_.CreateSession(test_labels_, multiplexed_, database_));
+      session_manager_.CreateSession(test_labels_, multiplexed_, database_,
+                                     /*mux_txn_manager=*/nullptr));
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> actual_multiplexed,
-      session_manager_.CreateSession(test_labels_, true, database_));
+      session_manager_.CreateSession(test_labels_, true, database_,
+                                     /*mux_txn_manager=*/nullptr));
   EXPECT_TRUE(
       absl::StartsWith(actual->session_uri(), database_->database_uri()));
   EXPECT_GT(actual->create_time(), start_time);
@@ -79,7 +81,8 @@ TEST_F(SessionManagerTest, CreateSession) {
 TEST_F(SessionManagerTest, GetSession) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> expected,
-      session_manager_.CreateSession(test_labels_, multiplexed_, database_));
+      session_manager_.CreateSession(test_labels_, multiplexed_, database_,
+                                     /*mux_txn_manager=*/nullptr));
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> actual,
                        session_manager_.GetSession(expected->session_uri()));
   EXPECT_EQ(actual->session_uri(), expected->session_uri());
@@ -91,7 +94,8 @@ TEST_F(SessionManagerTest, GetSession) {
 TEST_F(SessionManagerTest, GetSessionIncludesMultiplexedFlag) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> expected,
-      session_manager_.CreateSession(test_labels_, true, database_));
+      session_manager_.CreateSession(test_labels_, true, database_,
+                                     /*mux_txn_manager=*/nullptr));
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> actual,
                        session_manager_.GetSession(expected->session_uri()));
   EXPECT_TRUE(actual->multiplexed());
@@ -104,7 +108,8 @@ TEST_F(SessionManagerTest, GetSessionIncludesMultiplexedFlag) {
 TEST_F(SessionManagerTest, GetSessionFailsAfterVersionGcDuration) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> expected,
-      session_manager_.CreateSession(test_labels_, multiplexed_, database_));
+      session_manager_.CreateSession(test_labels_, multiplexed_, database_,
+                                     /*mux_txn_manager=*/nullptr));
   // Set the approximate_last_use_time to earlier than gc duration.
   expected->set_approximate_last_use_time(absl::Now() - absl::Hours(1.5));
   EXPECT_THAT(session_manager_.GetSession(expected->session_uri()),
@@ -114,7 +119,8 @@ TEST_F(SessionManagerTest, GetSessionFailsAfterVersionGcDuration) {
 TEST_F(SessionManagerTest, GetMultiplexedSessionFailsAfterVersionGcDuration) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> expected,
-      session_manager_.CreateSession(test_labels_, true, database_));
+      session_manager_.CreateSession(test_labels_, true, database_,
+                                     /*mux_txn_manager=*/nullptr));
   // Set the approximate_last_use_time to earlier than regular session gc
   // duration.
   expected->set_approximate_last_use_time(absl::Now() - absl::Hours(1.5));
@@ -131,7 +137,8 @@ TEST_F(SessionManagerTest, GetMultiplexedSessionFailsAfterVersionGcDuration) {
 TEST_F(SessionManagerTest, DeleteSession) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> actual,
-      session_manager_.CreateSession(test_labels_, multiplexed_, database_));
+      session_manager_.CreateSession(test_labels_, multiplexed_, database_,
+                                     /*mux_txn_manager=*/nullptr));
   ZETASQL_EXPECT_OK(session_manager_.DeleteSession(actual->session_uri()));
   EXPECT_THAT(session_manager_.GetSession(actual->session_uri()),
               zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
@@ -142,7 +149,8 @@ TEST_F(SessionManagerTest, ListSessions) {
   std::shared_ptr<Session> expected;
   for (int i = 0; i < num; i++) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
-                                       test_labels_, multiplexed_, database_));
+                                       test_labels_, multiplexed_, database_,
+                                       /*mux_txn_manager=*/nullptr));
   }
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::vector<std::shared_ptr<Session>> actual,
@@ -159,17 +167,15 @@ TEST_F(SessionManagerTest, ListSessionsIncludesMultiplexedFlag) {
   std::shared_ptr<Session> expected;
   for (int i = 0; i < num; i++) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
-                                       test_labels_, true, database_));
+                                       test_labels_,
+                                       /*multiplexed=*/true, database_,
+                                       /*mux_txn_manager=*/nullptr));
   }
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::vector<std::shared_ptr<Session>> actual,
       session_manager_.ListSessions(database_->database_uri()));
-  EXPECT_EQ(actual.size(), num);
-  for (int i = 0; i < num; i++) {
-    EXPECT_TRUE(
-        absl::StartsWith(actual[i]->session_uri(), database_->database_uri()));
-    EXPECT_TRUE(actual[i]->multiplexed());
-  }
+  // ListSessions API does not return any multiplexed sessions.
+  EXPECT_EQ(actual.size(), 0);
 }
 
 TEST_F(SessionManagerTest, ListSessionsWithSimilarPrefix) {
@@ -186,10 +192,12 @@ TEST_F(SessionManagerTest, ListSessionsWithSimilarPrefix) {
   std::shared_ptr<Session> expected;
   for (int i = 0; i < num; i++) {
     ZETASQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
-                                       test_labels_, multiplexed_, database1));
+                                       test_labels_, multiplexed_, database1,
+                                       /*mux_txn_manager=*/nullptr));
   }
   ZETASQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
-                                     test_labels_, multiplexed_, database2));
+                                     test_labels_, multiplexed_, database2,
+                                     /*mux_txn_manager=*/nullptr));
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::vector<std::shared_ptr<Session>> actual,
       session_manager_.ListSessions(database1->database_uri()));

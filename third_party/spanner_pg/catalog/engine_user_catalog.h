@@ -32,19 +32,22 @@
 #ifndef CATALOG_ENGINE_USER_CATALOG_H_
 #define CATALOG_ENGINE_USER_CATALOG_H_
 
+#include <string>
+#include <vector>
+
 #include "zetasql/base/logging.h"
 #include "zetasql/public/catalog.h"
-#include "zetasql/public/language_options.h"
 #include "zetasql/public/table_valued_function.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/base/case.h"
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "zetasql/base/die_if_null.h"
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "third_party/spanner_pg/catalog/table_name.h"
 
@@ -82,6 +85,13 @@ class EngineUserCatalog : public zetasql::EnumerableCatalog {
   absl::Status FindTable(const absl::Span<const std::string>& path,
                          const zetasql::Table** table,
                          const FindOptions& options = FindOptions()) override;
+
+  // FindFunction uses the engine-specific IsUserDefinedFunction to filter out
+  // non-UDFs from the result to prevent duplicates with the SystemCatalog.
+  absl::Status FindFunction(
+      const absl::Span<const std::string>& path,
+      const zetasql::Function** function,
+      const FindOptions& options = FindOptions()) override;
 
   // FindTableValuedFunction uses the engine-specific IsUserDefinedTVF to filter
   // out non-UDFs from the result to prevent duplicates with the SystemCatalog.
@@ -133,6 +143,8 @@ class EngineUserCatalog : public zetasql::EnumerableCatalog {
  private:
   friend class EngineUserCatalogTestPeer;
 
+  absl::StatusOr<std::vector<std::string>> AdjustPath(
+      absl::Span<const std::string> path);
   absl::StatusOr<std::string> MapSchemaName(
       std::string schema_name, const absl::Span<const std::string>& path) const;
   zetasql::EnumerableCatalog* engine_provided_catalog_;

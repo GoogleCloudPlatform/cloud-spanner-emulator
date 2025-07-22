@@ -67,7 +67,8 @@ class SessionExistenceTest : public testing::Test {
     // Create a session that belongs to the database created above.
     ZETASQL_ASSERT_OK_AND_ASSIGN(
         std::shared_ptr<Session> session,
-        env_->session_manager()->CreateSession({}, false, database));
+        env_->session_manager()->CreateSession({}, false, database,
+                                               /*mux_txn_manager=*/nullptr));
 
     absl::string_view project_id, instance_id, database_id;
     ZETASQL_EXPECT_OK(ParseSessionUri(session->session_uri(), &project_id, &instance_id,

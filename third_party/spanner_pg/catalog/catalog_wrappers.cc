@@ -40,6 +40,7 @@
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
@@ -455,6 +456,105 @@ static absl::StatusOr<List*> ExpandNSItemVarsForJoinCpp(
   return result;
 }
 
+// Given a UDF, build a FormData_pg_proc representing the same (transformed)
+// function for use by the PG Analyzer.
+//
+// For now, the following restrictions apply:
+// - Only a non-templated signature with a fixed return type is supported.
+// - Only concrete arguments are supported (no variadic, no templated)
+//
+// Memory is allocated from and owned by CurrentMemoryContext, but
+// CatalogAdapter will retain a pointer to it for later retrieval.
+static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromUDF(
+    const zetasql::Function* udf, CatalogAdapter* adapter) {
+  std::vector<const FormData_pg_proc*> result;
+
+  // Each signature will be created as a separate pg_proc.
+  // For now, we only need to support a single signature.
+  ZETASQL_RET_CHECK_EQ(udf->NumSignatures(), 1);
+  const zetasql::FunctionSignature* signature = udf->GetSignature(0);
+
+  // Build a corresponding FormData_pg_proc for this signature, including space
+  // for the variable-length args list. This lives in, is owned by, and has
+  // lifetime of CurrentMemoryContext, which is typically the length of this
+  // translation operation.
+  FormData_pg_proc* proc = reinterpret_cast<FormData_pg_proc*>(palloc0(
+      sizeof(FormData_pg_proc) + signature->arguments().size() * sizeof(Oid)));
+
+  // This oid will be assigned by CatalogAdapter later. It checks for InvalidOid
+  // as a sanity check that we aren't assigning a duplicate.
+  proc->oid = InvalidOid;
+  ZETASQL_ASSIGN_OR_RETURN(proc->oid, adapter->GenerateAndStoreUDFProcOid(proc, udf));
+  ZETASQL_RET_CHECK(udf->Name().size() < NAMEDATALEN);
+  memcpy(NameStr(proc->proname), udf->Name().c_str(), udf->Name().size() + 1);
+
+  // Treat UDFs at the root namespace as being in the pg_catalog namespace.
+  std::string udf_namespace;
+  ZETASQL_RET_CHECK(udf->FunctionNamePath().size() < 3);
+  if (udf->FunctionNamePath().size() == 1) {
+    udf_namespace = "pg_catalog";
+  } else if (udf->FunctionNamePath().size() == 2) {
+    udf_namespace = udf->FunctionNamePath()[0];
+  }
+  ZETASQL_ASSIGN_OR_RETURN(proc->pronamespace,
+                   adapter->GetOidFromNamespaceName(udf_namespace));
+
+  // These fields are currently unused by the caller, but we might as well fill
+  // them in with PG defaults. These defaults come from pg_proc.h.
+  proc->proowner = BOOTSTRAP_SUPERUSERID;
+  proc->prolang = INTERNALlanguageId;
+  proc->procost = 1;
+  proc->prorows = 0;
+  proc->provariadic = 0;
+  proc->prosupport = 0;
+  proc->prokind = PROKIND_FUNCTION;
+  proc->prosecdef =
+      udf->sql_security() ==
+      zetasql::ResolvedCreateStatementEnums::SQL_SECURITY_DEFINER;
+  proc->proretset = false;
+  switch (udf->function_options().volatility) {
+    case zetasql::FunctionEnums::VOLATILE:
+      proc->provolatile = PROVOLATILE_VOLATILE;
+      break;
+    case zetasql::FunctionEnums::IMMUTABLE:
+      proc->provolatile = PROVOLATILE_IMMUTABLE;
+      break;
+    case zetasql::FunctionEnums::STABLE:
+      proc->provolatile = PROVOLATILE_STABLE;
+      break;
+    default:
+      return absl::InternalError(absl::StrCat(
+          "Unsupported volatility: ", zetasql::FunctionEnums::Volatility_Name(
+                                          udf->function_options().volatility)));
+  }
+  proc->proparallel = PROPARALLEL_SAFE;
+  proc->pronargs = signature->arguments().size();
+
+  int pronargdefaults = 0;
+  for (const auto& arg : signature->arguments()) {
+    if (arg.HasDefault()) {
+      ++pronargdefaults;
+    }
+  }
+  proc->pronargdefaults = pronargdefaults;
+  proc->proargtypes.ndim = 1;
+  proc->proargtypes.dataoffset = 0;
+  proc->proargtypes.elemtype = OIDOID;
+  proc->proargtypes.dim1 = signature->arguments().size();
+  proc->proargtypes.lbound1 = 0;
+  for (int i = 0; i < signature->arguments().size(); ++i) {
+    ZETASQL_ASSIGN_OR_RETURN(Oid oid, Transformer::BuildPgTypeOid(
+                                  *adapter, signature->argument(i).type()));
+    proc->proargtypes.values[i] = oid;
+  }
+  ZETASQL_ASSIGN_OR_RETURN(
+      proc->prorettype,
+      Transformer::BuildPgTypeOid(*adapter, signature->result_type().type()));
+
+  result.push_back(proc);
+  return result;
+}
+
 // Given a TVF, build a FormData_pg_proc representing the same (transformed)
 // function for use by the PG Analyzer.
 //
@@ -483,7 +583,7 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromTVF(
   // This oid will be assigned by CatalogAdapter later. It checks for InvalidOid
   // as a sanity check that we aren't assigning a duplicate.
   proc->oid = InvalidOid;
-  ZETASQL_ASSIGN_OR_RETURN(proc->oid, adapter->GenerateAndStoreUDFProcOid(proc, tvf));
+  ZETASQL_ASSIGN_OR_RETURN(proc->oid, adapter->GenerateAndStoreTVFProcOid(proc, tvf));
   ZETASQL_RET_CHECK(tvf->Name().size() < NAMEDATALEN);
   memcpy(NameStr(proc->proname), tvf->Name().c_str(), tvf->Name().size() + 1);
 
@@ -509,7 +609,7 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromTVF(
   proc->provariadic = 0;
   proc->prosupport = 0;
   proc->prokind = PROKIND_FUNCTION;
-  proc->prosecdef = PROKIND_FUNCTION;
+  proc->prosecdef = false;
   // proretset is true for TVFs generally, though Spanner's TVFs return 1 row.
   proc->proretset = true;
   proc->provolatile = PROVOLATILE_VOLATILE;
@@ -560,8 +660,7 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromTVF(
 // that may appear in both catalogs. Builtin functions should be added to the
 // bootstrap_catalog and EngineSystemCatalog.
 //
-// For now, only TVFs are supported because the only supported UDF is the change
-// stream TVF.
+// Currently scalar UDFs and change stream TVFs are supported.
 //
 // Conforming to PG's behavior, googlesql functions with multiple signatures
 // are represented as multiple (overloaded) pg_procs.
@@ -583,21 +682,19 @@ static absl::Status GetProcsByNameFromUserCatalog(
   // TODO: Add support for nested catalogs.
   const zetasql::TableValuedFunction* tvf;
   absl::Status status = catalog->FindTableValuedFunction({name}, &tvf);
-  // NotFound is fine. Just swallow it and return an empty list. Any other error
-  // is unexpected.
-  if (absl::IsNotFound(status)) {
-    return absl::OkStatus();
-  } else if (!status.ok()) {
-    return status;
-  } else if (tvf->Name() != name) {
-    // Treat case mismatch as any other not found case (no error, 0 count).
+  // NotFound is fine, just swallow it. Any other error is unexpected.
+  if (!absl::IsNotFound(status)) {
+    if (!status.ok()) {
+      return status;
+    }
+    if (tvf->Name() == name) {
+      ZETASQL_ASSIGN_OR_RETURN(std::vector<const FormData_pg_proc*> new_procs,
+                       BuildPgProcsFromTVF(tvf, adapter));
+      found_procs.insert(found_procs.end(), new_procs.begin(), new_procs.end());
+    }
+  } else {
     return absl::OkStatus();
   }
-
-  ZETASQL_ASSIGN_OR_RETURN(std::vector<const FormData_pg_proc*> new_procs,
-                   BuildPgProcsFromTVF(tvf, adapter));
-  found_procs.insert(found_procs.end(), new_procs.begin(), new_procs.end());
-
   // Copy our results into the output.
   *outcount = found_procs.size();
   size_t outsize = sizeof(FormData_pg_proc*) * found_procs.size();

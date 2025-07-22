@@ -82,6 +82,8 @@ absl::Status BadLabelValue(absl::string_view key, absl::string_view value);
 absl::Status InvalidSessionURI(absl::string_view uri);
 absl::Status SessionNotFound(absl::string_view uri);
 absl::Status TooFewSessions(int session_count);
+absl::Status InvalidOperationSessionDelete();
+absl::Status InvalidOperationBatchCreateSessions();
 
 // Missing required field in proto error.
 absl::Status MissingRequiredFieldError(absl::string_view field);

@@ -118,6 +118,28 @@ absl::Status Index::DeepClone(SchemaGraphEditor* editor,
     }
   }
 
+  for (auto it = partition_by_.begin(); it != partition_by_.end();) {
+    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
+    // After CanonicalizeDeletion, the cloned node will be marked as deleted.
+    if (schema_node->is_deleted()) {
+      it = partition_by_.erase(it);
+    } else {
+      *it = schema_node->As<const Column>();
+      ++it;
+    }
+  }
+
+  for (auto it = order_by_.begin(); it != order_by_.end();) {
+    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
+    // After CanonicalizeDeletion, the cloned node will be marked as deleted.
+    if (schema_node->is_deleted()) {
+      it = order_by_.erase(it);
+    } else {
+      *it = schema_node->As<const KeyColumn>();
+      ++it;
+    }
+  }
+
   if (!managing_nodes_.empty()) {
     ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&managing_nodes_));
     if (managing_nodes_.empty()) {

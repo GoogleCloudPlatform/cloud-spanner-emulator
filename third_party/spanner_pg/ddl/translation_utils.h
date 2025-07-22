@@ -105,8 +105,7 @@ struct PostgreSQLConstants {
   static constexpr absl::string_view
       kSpangresDatabaseWitnessLocationOptionName = "spanner.witness_location";
   static constexpr absl::string_view
-      kSpangresDatabaseReadLeaseLabelsOptionName =
-          "spanner.cloud_read_lease_labels";
+      kSpangresDatabaseReadLeaseLabelsOptionName = "spanner.read_lease_regions";
   static constexpr absl::string_view kSearchIndexDisableUidOptionName =
       "disable_automatic_uid_column";
   static constexpr absl::string_view kSearchIndexSortOrderOptionName =

@@ -34,6 +34,7 @@
 #include <memory>
 
 #include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/function.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -185,6 +186,20 @@ absl::StatusOr<Oid> CatalogAdapter::GetOidFromNamespaceName(
 }
 
 absl::StatusOr<Oid> CatalogAdapter::GenerateAndStoreUDFProcOid(
+    FormData_pg_proc* pg_proc, const zetasql::Function* udf) {
+  ZETASQL_RET_CHECK_NE(pg_proc, nullptr);
+  ZETASQL_RET_CHECK_NE(udf, nullptr);
+  // We're about to generate a new oid. Make sure there isn't one already.
+  if (pg_proc->oid != InvalidOid) {
+    return absl::InternalError("pg_proc already has an oid assigned");
+  }
+  ZETASQL_ASSIGN_OR_RETURN(pg_proc->oid, GenerateOid());
+  oid_to_udf_proc_map_[pg_proc->oid] = pg_proc;
+  oid_to_udf_map_[pg_proc->oid] = udf;
+  return pg_proc->oid;
+}
+
+absl::StatusOr<Oid> CatalogAdapter::GenerateAndStoreTVFProcOid(
     FormData_pg_proc* pg_proc, const zetasql::TableValuedFunction* tvf) {
   ZETASQL_RET_CHECK_NE(pg_proc, nullptr);
   ZETASQL_RET_CHECK_NE(tvf, nullptr);
@@ -206,6 +221,17 @@ absl::StatusOr<const FormData_pg_proc*> CatalogAdapter::GetUDFProcFromOid(
         "No UDF proc with oid ", oid, " is tracked by the catalog adapter"));
   }
   return iter->second;
+}
+
+absl::StatusOr<const zetasql::Function*> CatalogAdapter::GetUDFFromOid(
+    Oid oid) const {
+  auto iter = oid_to_udf_map_.find(oid);
+  if (iter != oid_to_udf_map_.end()) {
+    return iter->second;
+  }
+
+  return absl::NotFoundError(
+      absl::StrCat("UDF with oid ", oid, " is not supported"));
 }
 
 absl::StatusOr<const zetasql::TableValuedFunction*>

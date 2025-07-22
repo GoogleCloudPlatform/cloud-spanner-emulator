@@ -105,6 +105,11 @@ absl::Status Read(RequestContext* ctx, const spanner_api::ReadRequest* request,
                        txn->ToProto());
     }
 
+    if (txn->IsReadWrite() && session->multiplexed()) {
+      // Set an empty precommit token.
+      response->mutable_precommit_token();
+    }
+
     // Convert read results to proto.
     return RowCursorToResultSetProto(cursor.get(), request->limit(), response);
   });

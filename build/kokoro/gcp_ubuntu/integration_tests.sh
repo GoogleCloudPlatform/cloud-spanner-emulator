@@ -61,6 +61,11 @@ function emulator::run_integration_tests() {
     go test -v -run '^TestIntegration_'
   elif [[ $client == "java" ]]; then
     cd "java/google-cloud-spanner"
+    # Enable the following environment variables to
+    # run the integration tests with multiplexed sessions.
+    #export GOOGLE_CLOUD_SPANNER_MULTIPLEXED_SESSIONS=TRUE
+    #export GOOGLE_CLOUD_SPANNER_MULTIPLEXED_SESSIONS_PARTITIONED_OPS=TRUE
+    #export GOOGLE_CLOUD_SPANNER_MULTIPLEXED_SESSIONS_FOR_RW=TRUE
     mvn clean test-compile failsafe:integration-test -DskipITs=false \
     -Dspanner.testenv.instance=""
   elif [[ $client == "cpp" ]]; then

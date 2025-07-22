@@ -218,7 +218,8 @@ class ServerTest : public testing::Test {
     return WaitForOperation(operation.name(), &operation);
   }
 
-  absl::StatusOr<std::string> CreateTestSession(std::string database_uri = "") {
+  absl::StatusOr<std::string> CreateTestSession(bool multiplexed,
+                                                std::string database_uri = "") {
     // Create a session that belongs to the database created above.
     grpc::ClientContext context;
     spanner_api::CreateSessionRequest request;
@@ -227,6 +228,10 @@ class ServerTest : public testing::Test {
       request.set_database(test_database_uri_);
     } else {
       request.set_database(database_uri);
+    }
+
+    if (multiplexed) {
+      request.mutable_session()->set_multiplexed(true);
     }
 
     ZETASQL_RETURN_IF_ERROR(test_env()->spanner_client()->CreateSession(

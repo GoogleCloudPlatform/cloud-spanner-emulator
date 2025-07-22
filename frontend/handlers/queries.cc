@@ -302,6 +302,12 @@ absl::Status ExecuteSql(RequestContext* ctx,
           ZETASQL_ASSIGN_OR_RETURN(*response->mutable_metadata()->mutable_transaction(),
                            txn->ToProto());
         }
+
+        if (txn->IsReadWrite() && session->multiplexed()) {
+          // Set an empty precommit token.
+          response->mutable_precommit_token();
+        }
+
         // Return query parameter types.
         ZETASQL_RETURN_IF_ERROR(AddUndeclaredParametersFromQueryResult(
             &result.parameter_types, response->mutable_metadata()));
@@ -408,6 +414,9 @@ absl::Status ExecuteStreamingSql(
                 std::get<spanner_api::ResultSet>(state->outcome);
             *response.mutable_stats() = replay_result.stats();
             *response.mutable_metadata() = replay_result.metadata();
+            if (session->multiplexed() && txn->IsReadWrite()) {
+              response.mutable_precommit_token();
+            }
             stream->Send(response);
             return state->status;
           }
@@ -484,6 +493,11 @@ absl::Status ExecuteStreamingSql(
         } else {
           ZETASQL_ASSIGN_OR_RETURN(responses, RowCursorToPartialResultSetProtos(
                                           result.rows.get(), /*limit=*/0));
+        }
+        if (session->multiplexed() && txn->IsReadWrite()) {
+          for (auto& response : responses) {
+            response.mutable_precommit_token();
+          }
         }
 
         if (!request->partition_token().empty()) {
@@ -639,6 +653,10 @@ absl::Status ExecuteBatchDml(RequestContext* ctx,
               txn->ToProto());
         }
       }
+    }
+
+    if (txn->IsReadWrite() && session->multiplexed()) {
+      response->mutable_precommit_token();
     }
 
     // Set the replay outcome.

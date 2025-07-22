@@ -1497,6 +1497,14 @@ void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
          {gsql_string, gsql_timestamp, gsql_string},
          /*context_ptr=*/nullptr}}}});
 
+    functions.push_back({"date",
+                         "date",
+                         {{{gsql_date,
+                            {gsql_timestamp, gsql_string},
+                            /*context_ptr=*/nullptr}}},
+                         /*mode=*/zetasql::Function::SCALAR,
+                         /*postgres_namespace=*/"spanner"});
+
     functions.push_back({"extract",
         "pg.extract",
         {{{gsql_pg_numeric,

@@ -143,6 +143,18 @@ ALTER CHANGE STREAM change_stream SET FOR Singers;
 --
 CREATE TABLE Singers ( SingerId STRING(20) NOT NULL, Name STRING(20), ) PRIMARY KEY(SingerId); CREATE CHANGE STREAM change_stream FOR Singers;
 ==
+# ALTER CHANGE STREAM to track multiple tables
+CREATE TABLE a (
+  id INT64 NOT NULL,
+) PRIMARY KEY(id);
+CREATE TABLE b (
+  id INT64 NOT NULL,
+) PRIMARY KEY(id);
+CREATE CHANGE STREAM s FOR a;
+ALTER CHANGE STREAM s SET FOR a, b;
+--
+CREATE TABLE a ( id INT64 NOT NULL, ) PRIMARY KEY(id); CREATE TABLE b ( id INT64 NOT NULL, ) PRIMARY KEY(id); CREATE CHANGE STREAM s FOR a, b;
+==
 # ALTER CHANGE STREAM SET OPTIONS;
 CREATE CHANGE STREAM change_stream;
 ALTER CHANGE STREAM change_stream SET OPTIONS (value_capture_type = 'OLD_AND_NEW_VALUES', retention_period = '2d', exclude_insert = true, exclude_update = false, exclude_delete = true, exclude_ttl_deletes = false);
@@ -557,7 +569,7 @@ CREATE CHANGE STREAM foo9 FOR Users3;
 CREATE CHANGE STREAM foo10 FOR Users4;
 CREATE CHANGE STREAM foo11 FOR Users4;
 --
-ERROR:.*  because the maximum number of Change Streams per Database .*
+ERROR:.* because the maximum number of Change Streams per Database .*
 ==
 # ALTER CHANGE STREAM with invalid retention.
 # --regex
@@ -568,7 +580,7 @@ CREATE TABLE Users (
 CREATE CHANGE STREAM foo FOR Users;
 ALTER CHANGE STREAM foo SET OPTIONS ( retention_period='50d' )
 --
-ERROR:.*  Change Streams retention period must be a value in the range .*
+ERROR:.* Change Streams retention period must be a value in the range .*
 ==
 # ALTER CHANGE STREAM with invalid value capture type.
 # --regex
@@ -579,7 +591,7 @@ CREATE TABLE Users (
 CREATE CHANGE STREAM foo FOR Users;
 ALTER CHANGE STREAM foo SET OPTIONS ( value_capture_type='FooBar' )
 --
-ERROR:.*  Invalid value_capture_type.*
+ERROR:.* Invalid value_capture_type.*
 ==
 # ALTER CHANGE STREAM with invalid set FOR CLAUSE for nonexistent table.
 # --regex
@@ -590,7 +602,7 @@ CREATE TABLE Users (
 CREATE CHANGE STREAM foo FOR Users;
 ALTER CHANGE STREAM foo SET FOR bar
 --
-ERROR:.*  this Table does not exist.*
+ERROR:.* this Table does not exist.*
 ==
 # ALTER CHANGE STREAM with invalid set FOR CLAUSE for nonexistent column.
 # --regex
@@ -601,7 +613,7 @@ CREATE TABLE Users (
 CREATE CHANGE STREAM foo FOR Users;
 ALTER CHANGE STREAM foo SET FOR Users(bar)
 --
-ERROR:.*  it does not exist in Table Users.*
+ERROR:.* it does not exist in Table Users.*
 ==
 # CREATE CHANGE STREAM with same name of existing change streams.
 # --regex
@@ -612,7 +624,7 @@ CREATE TABLE Users (
 CREATE CHANGE STREAM foo FOR Users;
 CREATE CHANGE STREAM foo FOR ALL;
 --
-ERROR:.*  Duplicate name in schema: foo.*
+ERROR:.* Duplicate name in schema: foo.*
 ==
 # CREATE CHANGE STREAM with same name of existing change streams tvf.
 # --regex
@@ -623,7 +635,7 @@ CREATE TABLE Users (
 CREATE CHANGE STREAM foo FOR Users;
 CREATE TABLE READ_foo()PRIMARY KEY();
 --
-ERROR:.*  Duplicate name in schema: READ_foo.*
+ERROR:.* Duplicate name in schema: READ_foo.*
 ==
 # DROP CHANGE STREAM nonexistent.
 # --regex
@@ -634,7 +646,7 @@ CREATE TABLE Users (
 CREATE CHANGE STREAM foo FOR Users;
 DROP CHANGE STREAM bar;
 --
-ERROR:.*  Change Stream not found: bar.*
+ERROR:.* Change Stream not found: bar.*
 ==
 # ALTER CHANGE STREAM SET NULL OPTIONS;
 CREATE TABLE Singers (
@@ -683,10 +695,3 @@ DROP CHANGE STREAM change_stream;
 --
 ERROR: Change Stream not found: change_stream
 ==
-
-
-
-
-
-
-

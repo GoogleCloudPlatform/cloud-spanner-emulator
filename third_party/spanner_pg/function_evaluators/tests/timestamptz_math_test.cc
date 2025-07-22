@@ -367,6 +367,7 @@ INSTANTIATE_TEST_SUITE_P(
         TimestamptzMathErrorTestCase({"0001-01-01 09:00:00+00", -10, "HOUR"}),
         TimestamptzMathErrorTestCase({"9999-12-28 00:00:00+00", 5, "DAY"}),
         TimestamptzMathErrorTestCase({"0001-01-01+00", -1, "DAY"})));
+
 }  // namespace
 }  // namespace postgres_translator::function_evaluators
 

@@ -33,6 +33,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -50,6 +51,7 @@
 #include "zetasql/public/types/type.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_ast_deep_copy_visitor.h"
+#include "zetasql/resolved_ast/resolved_node.h"
 #include "zetasql/resolved_ast/validator.h"
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
@@ -88,6 +90,8 @@ ABSL_FLAG(int64_t, spangres_stub_memory_reservation_size, 64'000'000,
 
 namespace postgres_translator {
 namespace spangres {
+using ::postgres_translator::internal::GetUdfParameterName;
+
 namespace {
 const char* FormatNode(const void* obj) {
   return pretty_format_node_dump(nodeToString(obj));
@@ -155,11 +159,9 @@ WrapInResolvedCreateFunctionStmt(
   std::vector<const zetasql::ResolvedNode*> child_nodes;
   stmt->GetChildNodes(&child_nodes);
   for (const zetasql::ResolvedNode* child_node : child_nodes) {
-    std::cerr << "child_node: " << child_node->node_kind_string() << "\n";
     // Get the ResolvedScan
     std::vector<const zetasql::ResolvedNode*> scan_child_nodes;
     if (child_node->IsScan()) {
-      std::cerr << "child_node is a scan\n";
       const zetasql::ResolvedScan* scan =
           child_node->GetAs<zetasql::ResolvedScan>();
       scan->GetChildNodes(&scan_child_nodes);
@@ -170,6 +172,7 @@ WrapInResolvedCreateFunctionStmt(
       }
     }
   }
+  ZETASQL_RET_CHECK_NE(expr, nullptr);
   // Create a deep copy visitor
   zetasql::ResolvedASTDeepCopyVisitor deep_copy_visitor;
   // Accept the visitor on the expression
@@ -292,9 +295,14 @@ SpangresTranslator::TranslateParsedTree(
         internal::PostgresCastNode(CreateFunctionStmt, raw_stmt->stmt);
     for (ListCell* lc = list_head(create_function_stmt->parameters);
          lc != nullptr; lc = lnext(create_function_stmt->parameters, lc)) {
+      int i = list_cell_number(create_function_stmt->parameters, lc) + 1;
       FunctionParameter* func_param =
           internal::PostgresCastNode(FunctionParameter, lfirst(lc));
-      input_arguments.push_back(std::string(func_param->name));
+      // Note that the parameter name is 1-based, not 0-based.
+      std::string default_param_name = GetUdfParameterName(i);
+      std::string param_name =
+          func_param->name != nullptr ? func_param->name : default_param_name;
+      input_arguments.push_back(param_name);
     }
   }
 
@@ -698,6 +706,8 @@ SpangresTranslator::TranslateParsedFunctionBody(
   static auto query_deparser = [](std::string* deparsed_query,
                                   Query* query) -> absl::Status {
     ZETASQL_RET_CHECK_NE(query, nullptr) << "Query should not be null";
+    ZETASQL_RET_CHECK_NE(list_head(query->targetList), nullptr)
+        << "Query target list should not be null";
 
     void* obj = list_head(query->targetList)->ptr_value;
     Expr* expr = internal::PostgresCastNode(TargetEntry, obj)->expr;

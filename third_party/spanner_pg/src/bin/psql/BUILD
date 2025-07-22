@@ -34,10 +34,7 @@ load("@com_google_zetasql//bazel:flex.bzl", "genlex")
 
 
 package(
-    default_visibility = [
-        "//:__subpackages__",
-        "//spanner/tests/spangres_end_to_end_test:__pkg__",
-    ],
+    default_visibility = ["//spanner/tests/spangres_end_to_end_test:__pkg__"],
     # Disable layering_check because the Postgres binary is one giant component.
     # Disable parse_headers because postgres implicitly includes postgres.h
     # before each header, so, the headers cannot be parsed independently.

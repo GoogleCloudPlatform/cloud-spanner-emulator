@@ -477,6 +477,46 @@ TEST_F(DdlTest, DisableChangeStreamAllowTxnExclusion) {
                   "Option allow_txn_exclusion is not supported yet."));
 }
 
+TEST_F(DdlTest, DisableChangeStreamIfNotExists) {
+  const std::string input =
+      "CREATE CHANGE STREAM IF NOT EXISTS change_stream FOR table1";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(
+          parsed_statements,
+          {.enable_change_streams = true,
+           .enable_change_streams_if_not_exists = false});
+  EXPECT_THAT(statements, StatusIs(absl::StatusCode::kFailedPrecondition,
+                                   "<IF NOT EXISTS> clause is not supported in "
+                                   "<CREATE CHANGE STREAM> statement."));
+}
+
+TEST_F(DdlTest, DisableDropChangeStreamIfExists) {
+  const std::string input =
+      "DROP CHANGE STREAM IF EXISTS change_stream";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(
+          parsed_statements, {.enable_if_not_exists = true,
+                              .enable_change_streams = true,
+                              .enable_change_streams_if_not_exists = false});
+  EXPECT_THAT(statements, StatusIs(absl::StatusCode::kFailedPrecondition,
+                                   "<IF EXISTS> clause is not supported by "
+                                   "<DROP CHANGE STREAM> statement."));
+}
+
 TEST_F(DdlTest, CreateDatabaseForEmulator) {
   const std::string input = "CREATE DATABASE test_db";
 

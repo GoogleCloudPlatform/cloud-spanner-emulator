@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 
+#include "google/protobuf/descriptor.pb.h"
 #include "google/protobuf/descriptor.h"
 #include "google/protobuf/descriptor_database.h"
 #include "absl/container/btree_set.h"
@@ -115,6 +116,23 @@ class ProtoBundle {
           builder->ParseProtoDescriptorBytes(proto_descriptor_bytes));
 
       if (prev_proto_bundle != nullptr) {
+        // Manually merge file descriptors from the previous bundle.
+        absl::flat_hash_set<std::string> seen_files;
+        for (const std::string& type_name : prev_proto_bundle->types()) {
+          const google::protobuf::FileDescriptor* file_desc =
+              prev_proto_bundle->descriptor_pool_->FindFileContainingSymbol(
+                  type_name);
+
+          if (file_desc && !seen_files.contains(file_desc->name())) {
+            google::protobuf::FileDescriptorProto file_proto;
+            file_desc->CopyTo(&file_proto);
+
+            // Add the reconstructed FileDescriptorProto to existing
+            // unfiltered_protodb_
+            builder->unfiltered_protodb_->Add(file_proto);
+            seen_files.insert(std::string(file_desc->name()));
+          }
+        }
         ZETASQL_RETURN_IF_ERROR(
             builder->LoadTypesFromPreviousProtoBundle(prev_proto_bundle));
       }

@@ -284,7 +284,7 @@ TEST_F(CatalogAdapterTest, GeneratesOidForUDFProc) {
       reinterpret_cast<const zetasql::TableValuedFunction*>(1);
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(Oid oid,
-                       catalog_adapter->GenerateAndStoreUDFProcOid(proc, tvf));
+                       catalog_adapter->GenerateAndStoreTVFProcOid(proc, tvf));
 
   EXPECT_EQ(oid, proc->oid);
   EXPECT_NE(oid, InvalidOid);
@@ -308,7 +308,7 @@ TEST_F(CatalogAdapterTest, RejectsInvalidUDFProc) {
   const zetasql::TableValuedFunction* tvf =
       reinterpret_cast<const zetasql::TableValuedFunction*>(1);
 
-  EXPECT_THAT(catalog_adapter->GenerateAndStoreUDFProcOid(proc, tvf),
+  EXPECT_THAT(catalog_adapter->GenerateAndStoreTVFProcOid(proc, tvf),
               StatusIs(absl::StatusCode::kInternal,
                        HasSubstr("pg_proc already has an oid assigned")));
 }
@@ -324,9 +324,9 @@ TEST_F(CatalogAdapterTest, RejectsNullArgs) {
       reinterpret_cast<const zetasql::TableValuedFunction*>(1);
   FormData_pg_proc* proc = reinterpret_cast<FormData_pg_proc*>(2);
 
-  EXPECT_THAT(catalog_adapter->GenerateAndStoreUDFProcOid(nullptr, tvf),
+  EXPECT_THAT(catalog_adapter->GenerateAndStoreTVFProcOid(nullptr, tvf),
               StatusIs(absl::StatusCode::kInternal));
-  EXPECT_THAT(catalog_adapter->GenerateAndStoreUDFProcOid(proc, nullptr),
+  EXPECT_THAT(catalog_adapter->GenerateAndStoreTVFProcOid(proc, nullptr),
               StatusIs(absl::StatusCode::kInternal));
 }
 

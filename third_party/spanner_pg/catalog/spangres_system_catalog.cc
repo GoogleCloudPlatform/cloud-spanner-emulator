@@ -65,6 +65,7 @@
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/catalog/function.h"
 #include "third_party/spanner_pg/catalog/proto/catalog.pb.h"
+#include "third_party/spanner_pg/catalog/proto/functions_embed.h"
 #include "third_party/spanner_pg/catalog/spangres_function_mapper.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/catalog/type.h"
@@ -527,19 +528,8 @@ bool IsSpangresSqlRewriteFunction(const PostgresFunctionArguments& function) {
 absl::StatusOr<const CatalogProto> GetCatalogProto() {
   CatalogProto result;
 
-  std::string path =
-    "third_party/spanner_pg/catalog/proto/functions.txtpb";
-  std::ifstream input_stream{path};
-  if (!input_stream.is_open()) {
-    return absl::NotFoundError(
-    absl::StrFormat( "Input file %s not opened successfully.", path));
-  }
-
-  std::stringstream content;
-  content << input_stream.rdbuf();
-  if (!google::protobuf::TextFormat::ParseFromString(content.str(), &result)) {
-    return absl::InternalError(absl::StrFormat(
-      "Could not parse catalog proto protobuf from %s", path));
+  if (!google::protobuf::TextFormat::ParseFromString(kFunctionsEmbed, &result)) {
+    return absl::InternalError("Could not parse embedded catalog proto data");
   }
 
   return result;
@@ -553,7 +543,8 @@ absl::Status SpangresSystemCatalog::AddFunctionRegistryFunctions(
       absl::GetFlag(FLAGS_catalog_functions_allowlist).end());
   ZETASQL_ASSIGN_OR_RETURN(const CatalogProto catalog_proto, GetCatalogProto());
   for (const auto& catalog_function : catalog_proto.functions()) {
-    std::string full_name = absl::StrJoin(catalog_function.name_path(), ".");
+    std::string full_name =
+        absl::StrJoin(catalog_function.mapped_name_path(), ".");
     if (allowlist.contains(full_name)) {
       ZETASQL_ASSIGN_OR_RETURN(PostgresFunctionArguments mapped_function,
                        mapper.ToPostgresFunctionArguments(catalog_function));

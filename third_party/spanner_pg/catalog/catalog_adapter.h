@@ -117,11 +117,16 @@ class CatalogAdapter {
   // IMPORTANT: CatalogAdapter does not take ownership of the pg_proc struct.
   // The struct should be unowned and backed by MemoryContext memory.
   absl::StatusOr<Oid> GenerateAndStoreUDFProcOid(
+      FormData_pg_proc* pg_proc, const zetasql::Function* udf);
+  absl::StatusOr<Oid> GenerateAndStoreTVFProcOid(
       FormData_pg_proc* pg_proc, const zetasql::TableValuedFunction* tvf);
   // Looks up the pg_proc struct from a function oid for functions that were
   // generated from the User Catalog (UDFs, not builtins). This complements
   // bootstrap_catalog lookup for builtin function procs.
   absl::StatusOr<const FormData_pg_proc*> GetUDFProcFromOid(Oid oid) const;
+  // Looks up the googlesql Function object that we previously generated an Oid
+  // for.
+  absl::StatusOr<const zetasql::Function*> GetUDFFromOid(Oid oid) const;
   // Looks up the googlesql TableValuedFunction object that we previously
   // generated an Oid for.
   absl::StatusOr<const zetasql::TableValuedFunction*> GetTVFFromOid(
@@ -189,11 +194,12 @@ class CatalogAdapter {
   absl::flat_hash_map<std::string, Oid> namespace_to_oid_map_;
   absl::flat_hash_map<Oid, std::string> oid_to_namespace_map_;
   // Like above but for FormData_pg_proc structs generated from user catalog
-  // functions (currently only Change Stream TVFs). The structs themselves
-  // are unowned and live in the MemoryContext created for this query.
+  // functions. The structs themselves are unowned and live in the MemoryContext
+  // created for this query.
   // Procs contain their oids, and name resolution is handled in the analyzer,
   // so a bidirectional map is not needed here.
   absl::flat_hash_map<Oid, const FormData_pg_proc*> oid_to_udf_proc_map_;
+  absl::flat_hash_map<Oid, const zetasql::Function*> oid_to_udf_map_;
   absl::flat_hash_map<Oid, const zetasql::TableValuedFunction*>
       oid_to_tvf_map_;
 

@@ -390,8 +390,7 @@ message InterleaveClause {
     IN_PARENT = 0;
 
     // Interleave this table in the parent table, without establishing any
-    // parent-child row existence relationship. Only used for supporting
-    // INTERLEAVE IN indexes for the PostgreSQL dialect.
+    // parent-child row existence relationship.
     IN = 1;
   }
   // Type of the relationship between the two tables involved.
@@ -534,6 +533,7 @@ message CreateChangeStream {
   optional string change_stream_name = 1;
   optional ChangeStreamForClause for_clause = 2;
   repeated SetOption set_options = 3;
+  optional ExistenceModifier existence_modifier = 5;
 }
 
 message CreateSequence {
@@ -585,6 +585,7 @@ message DropTable {
 
 message DropChangeStream {
   optional string change_stream_name = 1;
+  optional ExistenceModifier existence_modifier = 2;
 }
 
 message AlterTable {

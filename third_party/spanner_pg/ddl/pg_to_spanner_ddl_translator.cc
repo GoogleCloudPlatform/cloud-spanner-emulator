@@ -76,6 +76,7 @@ typedef google::protobuf::RepeatedPtrField<google::spanner::emulator::backend::d
 namespace {
 using PGConstants = internal::PostgreSQLConstants;
 using internal::FieldTypeChecker;
+using ::postgres_translator::internal::GetUdfParameterName;
 using ::postgres_translator::internal::PostgresCastToNode;
 using ::google::spanner::emulator::backend::ddl::Function;
 
@@ -2444,6 +2445,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropStatement(
           << "removeType should have been validated in ValidateTreeNode.";
   }
 }
+
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropChangeStream(
     const DropStmt& drop_change_stream_statement,
     const TranslationOptions& options,
@@ -2454,6 +2456,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropChangeStream(
   }
 
   ZETASQL_RET_CHECK_EQ(drop_change_stream_statement.removeType, OBJECT_CHANGE_STREAM);
+  if (drop_change_stream_statement.missing_ok) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
+  }
   ZETASQL_ASSIGN_OR_RETURN(
       const RangeVar* changestream_to_drop_node,
       (SingleItemListAsNode<RangeVar, T_RangeVar>(
@@ -2536,6 +2541,41 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropLocalityGroup(
   return absl::OkStatus();
 }
 
+absl::Status TranslateDropFunctionOrView(const DropStmt& drop_statement,
+                                         const List* name_parts_node_list,
+                                         google::spanner::emulator::backend::ddl::DropFunction& out) {
+  if (name_parts_node_list->length == 2) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        const String* name_node,
+        (GetListItemAsNode<String, T_String>)(name_parts_node_list, 0));
+    ZETASQL_ASSIGN_OR_RETURN(
+        const String* function_to_drop_node,
+        (GetListItemAsNode<String, T_String>)(name_parts_node_list, 1));
+    if (strcmp(name_node->sval, "public") != 0) {
+      *out.mutable_function_name() = absl::Substitute(
+          "$0.$1", name_node->sval, function_to_drop_node->sval);
+    } else {
+      *out.mutable_function_name() = function_to_drop_node->sval;
+    }
+  } else if (name_parts_node_list->length == 1) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        const String* name_node,
+        (SingleItemListAsNode<String, T_String>)(name_parts_node_list));
+    *out.mutable_function_name() = name_node->sval;
+  } else {
+    // Caller should have called ValidateParseTreeNode, which ensures the size
+    // of name_parts_node_list is 1 or 2. So this should never be reached.
+    ZETASQL_RET_CHECK_FAIL() << "Incorrect number of name components in drop target: "
+                     << name_parts_node_list->length;
+  }
+
+  if (drop_statement.missing_ok) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
+  }
+
+  return absl::OkStatus();
+}
+
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropView(
     const DropStmt& drop_statement, google::spanner::emulator::backend::ddl::DropFunction& out) const {
   ZETASQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_VIEW);
@@ -2545,37 +2585,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropView(
       (SingleItemListAsNode<List, T_List>)(drop_statement.objects));
 
   out.set_function_kind(google::spanner::emulator::backend::ddl::Function::VIEW);
-
-  if (view_to_drop_list->length == 2) {
-    ZETASQL_ASSIGN_OR_RETURN(
-        const String* schema_to_drop_node,
-        (GetListItemAsNode<String, T_String>)(view_to_drop_list, 0));
-    ZETASQL_ASSIGN_OR_RETURN(
-        const String* view_to_drop_node,
-        (GetListItemAsNode<String, T_String>)(view_to_drop_list, 1));
-    if (strcmp(schema_to_drop_node->sval, "public") != 0) {
-      *out.mutable_function_name() = absl::Substitute(
-          "$0.$1", schema_to_drop_node->sval, view_to_drop_node->sval);
-    } else {
-      *out.mutable_function_name() = view_to_drop_node->sval;
-    }
-  } else if (view_to_drop_list->length == 1) {
-    ZETASQL_ASSIGN_OR_RETURN(
-        const String* view_to_drop_node,
-        (SingleItemListAsNode<String, T_String>)(view_to_drop_list));
-    *out.mutable_function_name() = view_to_drop_node->sval;
-  } else {
-    // Caller should have called ValidateParseTreeNode, which ensures the size
-    // of view_to_drop_list is 1 or 2. So this should never be reached.
-    ZETASQL_RET_CHECK_FAIL() << "Incorrect number of name components in drop target: "
-                     << view_to_drop_list->length;
-  }
-
-  if (drop_statement.missing_ok) {
-    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
-  }
-
-  return absl::OkStatus();
+  return ::postgres_translator::spangres::TranslateDropFunctionOrView(
+      drop_statement, view_to_drop_list, out);
 }
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropTable(
@@ -2927,7 +2938,10 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateChangeStream(
     return UnsupportedTranslationError(
         "<CREATE CHANGE STREAM> statement is not supported.");
   }
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_change_stream_stmt));
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_change_stream_stmt, options));
+  if (create_change_stream_stmt.if_not_exists) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_NOT_EXISTS);
+  }
 
   // Populate the change stream name.
   ZETASQL_ASSIGN_OR_RETURN(std::string change_stream_name,

@@ -29,6 +29,7 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
+#include "frontend/collections/multiplexed_session_transaction_manager.h"
 #include "frontend/common/labels.h"
 #include "frontend/entities/database.h"
 #include "frontend/entities/transaction.h"
@@ -68,12 +69,14 @@ class Session {
 
   Session(const std::string& session_uri, const Labels& labels,
           const bool multiplexed, const absl::Time create_time,
-          std::shared_ptr<Database> database)
+          std::shared_ptr<Database> database,
+          MultiplexedSessionTransactionManager* mux_txn_manager)
       : session_uri_(session_uri),
         labels_(labels),
         create_time_(create_time),
         multiplexed_(multiplexed),
-        database_(database) {}
+        database_(database),
+        mux_txn_manager_(mux_txn_manager) {}
 
   // Returns the URI for this session.
   const std::string& session_uri() const { return session_uri_; }
@@ -172,6 +175,13 @@ class Session {
 
   // The first transaction id which is valid for use within this session.
   backend::TransactionID min_valid_id_ = backend::kInvalidTransactionID + 1;
+
+  // References to the transaction manager for multiplexed sessions.
+  // This is not owned by the session object but rather owned by the
+  // server environment. Therefore it is expected that this pointer
+  // is valid for the lifetime of this session. The transaction
+  // manager is used to add and delete transactions.
+  MultiplexedSessionTransactionManager* mux_txn_manager_;
 };
 
 }  // namespace frontend
