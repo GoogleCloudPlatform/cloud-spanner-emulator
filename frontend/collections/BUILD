@@ -139,6 +139,7 @@ cc_test(
         ":database_manager",
         ":session_manager",
         "//common:clock",
+        "//common:errors",
         "//frontend/entities:database",
         "//frontend/entities:session",
         "//tests/common:proto_matchers",

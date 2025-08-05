@@ -29,6 +29,8 @@
 # MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #------------------------------------------------------------------------------
 
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
 # Description:
 # Libraries used for dealing with extended types that are spanner-specific and not part
 # of the GoogleSQL standard.

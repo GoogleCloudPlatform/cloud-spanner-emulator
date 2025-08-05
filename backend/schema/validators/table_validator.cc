@@ -39,6 +39,7 @@
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
+#include "common/feature_flags.h"
 #include "common/limits.h"
 #include "zetasql/base/ret_check.h"
 #include "absl/status/status.h"
@@ -74,8 +75,15 @@ absl::Status CheckKeyPartCompatibility(const Table* interleaved_table,
                                                  parent_key_col->Name(), i);
       }
     }
-    return error::MustReferenceParentKeyColumn(object_type, object_name,
-                                               parent_key_col->Name());
+    if (interleaved_table->owner_index() == nullptr ||
+        !EmulatorFeatureFlags::instance().flags().enable_interleave_in) {
+      // For tables, Spanner requires the child key column name to match the
+      // parent key column name.
+      // For indexes, names can be different, in which case the index is called
+      // a remote index.
+      return error::MustReferenceParentKeyColumn(object_type, object_name,
+                                                 parent_key_col->Name());
+    }
   }
 
   // Parent and child key sort orders should match.
@@ -114,6 +122,12 @@ absl::Status CheckKeyPartCompatibility(const Table* interleaved_table,
 
   // Parent and child key column nullability should match.
   if (child_key_col->is_nullable() != parent_key_col->is_nullable()) {
+    if (interleaved_table->owner_index() != nullptr &&
+        !child_key_col->is_nullable()) {
+      // In this case, the child key column is NOT NULL while the parent key
+      // column is nullable. Spanner allows this for interleaved indexes.
+      return absl::OkStatus();
+    }
     return error::IncorrectParentKeyNullability(
         object_type, object_name, parent_key_col->Name(),
         parent_key_col->is_nullable() ? "nullable" : "not null",
@@ -191,7 +205,8 @@ absl::Status ValidateRowDeletionPolicy(
   }
 
   ZETASQL_RETURN_IF_ERROR(ValidateDescendantTables(table, [&](const Table* children) {
-    if (children->on_delete_action() == Table::OnDeleteAction::kNoAction) {
+    if (children->has_on_delete_action() &&
+        children->on_delete_action() == Table::OnDeleteAction::kNoAction) {
       return error::RowDeletionPolicyHasChildWithOnDeleteNoAction(
           table_name, children->Name());
     } else {
@@ -223,7 +238,8 @@ absl::Status ValidateUpdateRowDeletionPolicy(const Table* table,
       ValidateRowDeletionPolicy(table->row_deletion_policy(), old_table));
 
   // This handles the case when an alter only affects the child tables.
-  if (table->on_delete_action() != Table::OnDeleteAction::kCascade &&
+  if (table->has_on_delete_action() &&
+      table->on_delete_action() != Table::OnDeleteAction::kCascade &&
       table->parent() != nullptr &&
       table->parent()->row_deletion_policy().has_value()) {
     return error::RowDeletionPolicyOnAncestors(table->Name(),
@@ -335,6 +351,12 @@ absl::Status TableValidator::Validate(const Table* table,
           table, parent_pk[i], table->primary_key_[i], ignore_nullability));
     }
     ZETASQL_RETURN_IF_ERROR(CheckInterleaveDepthLimit(table));
+
+    if (table->interleave_type_.has_value() &&
+        table->interleave_type_.value() == Table::InterleaveType::kIn &&
+        table->on_delete_action_.has_value()) {
+      return error::SetOnDeleteOnInterleaveInTables(table->Name());
+    }
 
     // Cannot add a table with no columns as a child.
     if (table->columns_.empty()) {

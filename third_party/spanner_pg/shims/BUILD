@@ -32,6 +32,8 @@
 # Shim libraries and other support packages for linking PostgreSQL parser and
 # analyzer code to Spanner code for Spangres.
 
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
 package(
     default_visibility = ["//:__subpackages__"],
     features = ["-use_header_modules"],  # Incompatible with -fexceptions.

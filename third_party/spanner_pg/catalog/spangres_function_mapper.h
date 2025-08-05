@@ -32,6 +32,11 @@
 #ifndef CATALOG_SPANGRES_FUNCTION_MAPPER_H_
 #define CATALOG_SPANGRES_FUNCTION_MAPPER_H_
 
+#include <cstdint>
+#include <vector>
+
+#include "zetasql/public/function_signature.h"
+#include "zetasql/public/types/type.h"
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
@@ -43,11 +48,19 @@ class SpangresFunctionMapper {
   SpangresFunctionMapper(const EngineSystemCatalog* catalog)
       : catalog_(catalog) {}
 
-  absl::StatusOr<PostgresFunctionArguments> ToPostgresFunctionArguments(
-      const FunctionProto& function) const;
+  absl::StatusOr<std::vector<PostgresFunctionArguments>>
+  ToPostgresFunctionArguments(const FunctionProto& function) const;
 
  private:
   const EngineSystemCatalog* catalog_;
+
+  const zetasql::Type* FindTypeByOid(uint32_t oid) const;
+
+  absl::StatusOr<zetasql::FunctionArgumentType> FunctionArgumentTypeFrom(
+      ArgumentTypeProto arg_type) const;
+
+  absl::StatusOr<zetasql::FunctionArgumentType> FunctionArgumentTypeFrom(
+      FunctionArgumentProto arg) const;
 };
 }  // namespace postgres_translator
 

@@ -230,7 +230,11 @@ CREATE TABLE Users (
   FOREIGN KEY(id1) REFERENCES home(id1)
 ) INTERLEAVE IN parent;
 --
-ERROR: <INTERLEAVE IN> clause is not supported. Consider using <INTERLEAVE IN PARENT>.
+CREATE TABLE users (
+  id1 bigint NOT NULL,
+  PRIMARY KEY(id1),
+  FOREIGN KEY (id1) REFERENCES home(id1)
+) INTERLEAVE IN parent;
 ==
 
 CREATE TABLE home (
@@ -322,7 +326,7 @@ CREATE TABLE users (
   FOREIGN KEY (id1) REFERENCES parent(id1)
 ) INTERLEAVE IN PARENT parent ON DELETE CASCADE
 ==
-
+# --skip_prod_env
 CREATE TABLE parent (
   pid bigint NOT NULL,
   PRIMARY KEY(pid)
@@ -336,7 +340,6 @@ CREATE TABLE Users (
 --
 ERROR: Table users does not reference parent key column pid.
 ==
-
 CREATE TABLE parent (
   pid bigint NOT NULL,
   PRIMARY KEY(pid)

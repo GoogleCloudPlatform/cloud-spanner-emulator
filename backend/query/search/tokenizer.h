@@ -39,6 +39,8 @@ static constexpr absl::string_view kSubstringTokenizer = "substring";
 static constexpr absl::string_view kNumericTokenizer = "numeric";
 static constexpr absl::string_view kBoolTokenizer = "bool";
 static constexpr absl::string_view kNgramsTokenizer = "ngrams";
+static constexpr absl::string_view kJsonTokenizer = "json";
+static constexpr absl::string_view kJsonbTokenizer = "jsonb";
 
 static constexpr int kSubstringTokenizerSignatureArgumentSize = 5;
 

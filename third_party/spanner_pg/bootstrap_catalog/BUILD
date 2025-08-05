@@ -35,6 +35,8 @@
 # shim packages because it needs to directly include PostgreSQL src files
 # instead of the standard postgres_includes package used elsewhere.
 
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
 package(
     default_visibility = ["//visibility:private"],
 )

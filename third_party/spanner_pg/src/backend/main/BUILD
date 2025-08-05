@@ -29,12 +29,11 @@
 # MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #------------------------------------------------------------------------------
 
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
 
 
 package(
-    default_visibility = [
-        "//:__subpackages__",
-    ],
     # Disable layering_check because the Postgres binary is one giant component.
     # Disable parse_headers because postgres implicitly includes postgres.h
     # before each header, so, the headers cannot be parsed independently.

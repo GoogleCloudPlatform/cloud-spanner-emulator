@@ -4160,6 +4160,7 @@ static void _outCreateSearchIndexStmt(StringInfo str, const CreateSearchIndexStm
 {
   WRITE_NODE_TYPE("CREATESEARCHINDEXSTMT");
 	WRITE_STRING_FIELD(search_index_name);
+	WRITE_NODE_FIELD(search_index_name_rangevar);
 	WRITE_NODE_FIELD(table_name);
 	WRITE_NODE_FIELD(token_columns);
 	WRITE_NODE_FIELD(storing);

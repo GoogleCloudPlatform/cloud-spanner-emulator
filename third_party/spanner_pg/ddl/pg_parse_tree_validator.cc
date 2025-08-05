@@ -1692,15 +1692,17 @@ absl::Status ValidateParseTreeNode(const CreateSearchIndexStmt& node) {
   ZETASQL_RET_CHECK_EQ(node.type, T_CreateSearchIndexStmt);
   // Make sure that if CreateSearchIndexStmt structure changes we update the
   // translator.
-  AssertPGNodeConsistsOf(node, FieldTypeChecker<char*>(node.search_index_name),
-                         FieldTypeChecker<RangeVar*>(node.table_name),
-                         FieldTypeChecker<List*>(node.token_columns),
-                         FieldTypeChecker<List*>(node.storing),
-                         FieldTypeChecker<List*>(node.partition),
-                         FieldTypeChecker<List*>(node.order),
-                         FieldTypeChecker<Node*>(node.null_filters),
-                         FieldTypeChecker<InterleaveSpec*>(node.interleave),
-                         FieldTypeChecker<List*>(node.options));
+  AssertPGNodeConsistsOf(
+      node, FieldTypeChecker<char*>(node.search_index_name),
+      FieldTypeChecker<RangeVar*>(node.search_index_name_rangevar),
+      FieldTypeChecker<RangeVar*>(node.table_name),
+      FieldTypeChecker<List*>(node.token_columns),
+      FieldTypeChecker<List*>(node.storing),
+      FieldTypeChecker<List*>(node.partition),
+      FieldTypeChecker<List*>(node.order),
+      FieldTypeChecker<Node*>(node.null_filters),
+      FieldTypeChecker<InterleaveSpec*>(node.interleave),
+      FieldTypeChecker<List*>(node.options));
 
   // `search_index_name` defines the name of the index.
   if (node.search_index_name == nullptr) {

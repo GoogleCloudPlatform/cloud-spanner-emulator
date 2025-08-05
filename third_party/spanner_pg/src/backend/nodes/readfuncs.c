@@ -2206,6 +2206,7 @@ _readCreateSearchIndexStmt(void)
 {
   READ_LOCALS(CreateSearchIndexStmt);
 	READ_STRING_FIELD(search_index_name);
+	READ_NODE_FIELD(search_index_name_rangevar);
 	READ_NODE_FIELD(table_name);
 	READ_NODE_FIELD(token_columns);
 	READ_NODE_FIELD(storing);

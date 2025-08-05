@@ -390,10 +390,8 @@ cc_library(
     name = "transactions",
     srcs = ["transactions.cc"],
     deps = [
-        "//backend/transaction:read_only_transaction",
-        "//backend/transaction:read_write_transaction",
+        "//backend/access:write",
         "//common:errors",
-        "//frontend/common:protos",
         "//frontend/converters:mutations",
         "//frontend/converters:time",
         "//frontend/entities:session",

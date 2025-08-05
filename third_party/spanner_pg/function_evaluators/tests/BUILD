@@ -31,6 +31,8 @@
 
 # This package contain tests for each of the functions in function_evaluators
 
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
 licenses(["notice"])
 
 cc_library(

@@ -30,6 +30,7 @@
 #------------------------------------------------------------------------------
 
 load("@com_google_zetasql//bazel:flex.bzl", "genlex")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
 
 
 

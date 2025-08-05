@@ -92,6 +92,8 @@ cc_library(
     deps = [
         ":bool_tokenizer",
         ":exact_match_tokenizer",
+        ":json_tokenizer",
+        ":jsonb_tokenizer",
         ":ngrams_tokenizer",
         ":numeric_tokenizer",
         ":plain_full_text_tokenizer",
@@ -575,6 +577,63 @@ cc_test(
         "//tests/common:proto_matchers",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_library(
+    name = "json_tokenizer",
+    srcs = ["json_tokenizer.cc"],
+    hdrs = ["json_tokenizer.h"],
+    deps = [
+        ":tokenizer",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_test(
+    name = "json_tokenizer_test",
+    srcs = ["json_tokenizer_test.cc"],
+    deps = [
+        ":json_tokenizer",
+        ":tokenizer",
+        "//tests/common:proto_matchers",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:json_value",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_library(
+    name = "jsonb_tokenizer",
+    srcs = ["jsonb_tokenizer.cc"],
+    hdrs = ["jsonb_tokenizer.h"],
+    deps = [
+        ":tokenizer",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_test(
+    name = "jsonb_tokenizer_test",
+    srcs = ["jsonb_tokenizer_test.cc"],
+    deps = [
+        ":jsonb_tokenizer",
+        ":tokenizer",
+        "//tests/common:proto_matchers",
+        "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
+        "//third_party/spanner_pg/test_catalog",
+        "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status:statusor",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",

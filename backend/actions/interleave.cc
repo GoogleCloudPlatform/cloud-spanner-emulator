@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "absl/status/status.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/storage/iterator.h"
 #include "common/errors.h"
@@ -32,10 +33,17 @@ InterleaveParentValidator::InterleaveParentValidator(const Table* parent,
                                                      const Table* child)
     : parent_(parent),
       child_(child),
-      on_delete_action_(child->on_delete_action()) {}
+      on_delete_action_(child->on_delete_action()),
+      interleave_type_(child->interleave_type().value()) {}
 
 absl::Status InterleaveParentValidator::Validate(const ActionContext* ctx,
                                                  const DeleteOp& op) const {
+  if (interleave_type_ == Table::InterleaveType::kIn) {
+    // INTERLEAVE IN parent table rows can be deleted without checking for
+    // child rows.
+    return absl::OkStatus();
+  }
+
   switch (on_delete_action_) {
     case Table::OnDeleteAction::kNoAction: {
       ZETASQL_ASSIGN_OR_RETURN(bool has_children,
@@ -80,12 +88,19 @@ InterleaveChildValidator::InterleaveChildValidator(const Table* parent,
                                                    const Table* child)
     : parent_(parent),
       child_(child),
-      on_delete_action_(child->on_delete_action()) {}
+      on_delete_action_(child->on_delete_action()),
+      interleave_type_(child->interleave_type().value()) {}
 
 absl::Status InterleaveChildValidator::Validate(const ActionContext* ctx,
                                                 const InsertOp& op) const {
   // Compute the parent key as prefix of the child key.
   Key parent_key = op.key.Prefix(parent_->primary_key().size());
+
+  if (interleave_type_ == Table::InterleaveType::kIn) {
+    // INTERLEAVE IN child table rows can be inserted without checking for
+    // parent rows.
+    return absl::OkStatus();
+  }
 
   ZETASQL_ASSIGN_OR_RETURN(bool has_parent, ctx->store()->Exists(parent_, parent_key));
   if (!has_parent) {

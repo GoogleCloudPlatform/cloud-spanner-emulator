@@ -276,6 +276,7 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
         absl::StrCat("Function call ", tvf.value()->Name(),
                      " is unsupported in this context"));
   }
+
   auto udf_catalog_entry = catalog_adapter_->GetUDFFromOid(funcid);
   if (udf_catalog_entry.ok()) {
     const zetasql::Function* udf = udf_catalog_entry.value();
@@ -284,10 +285,21 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
         BuildGsqlFunctionArgumentList(args, expr_transformer_info));
     std::vector<zetasql::InputArgumentType> input_argument_types =
         GetInputArgumentTypes(argument_list);
+    // Currently don't support overloading UDFs.
     ZETASQL_RET_CHECK_EQ(udf->NumSignatures(), 1);
     const zetasql::FunctionSignature* signature = udf->GetSignature(0);
+    // Get a concrete signature for the UDF.
+    std::unique_ptr<zetasql::FunctionSignature> result_signature;
+    if (!catalog_adapter_->GetEngineSystemCatalog()->SignatureMatches(
+            input_argument_types, *signature, &result_signature,
+            catalog_adapter_->analyzer_options().language())) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "Function call ", udf->Name(),
+          " has no signature matching the provided argument types"));
+    }
+    ZETASQL_RET_CHECK(result_signature->IsConcrete());
     FunctionAndSignature function_and_signature =
-        FunctionAndSignature(udf, *signature);
+        FunctionAndSignature(udf, *result_signature);
     return MakeResolvedFunctionCall(function_and_signature,
                                     std::move(argument_list));
   }

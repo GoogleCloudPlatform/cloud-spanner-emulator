@@ -36,6 +36,7 @@
 #include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "common/errors.h"
+#include "common/feature_flags.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -147,7 +148,8 @@ absl::Status IndexValidator::Validate(const Index* index,
     while (table != index->parent() && table->parent()) {
       table = table->parent();
     }
-    if (table != index->parent()) {
+    if (table != index->parent() &&
+        !EmulatorFeatureFlags::instance().flags().enable_interleave_in) {
       return error::IndexInterleaveTableUnacceptable(
           index->name_, index->indexed_table_->Name(), index->parent()->Name());
     }

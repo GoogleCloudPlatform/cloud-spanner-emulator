@@ -31,12 +31,18 @@
 
 #include "third_party/spanner_pg/interface/parser_without_serialization.h"
 
+#include <string>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "third_party/spanner_pg/interface/parser_output.h"
+#include "third_party/spanner_pg/shims/error_shim.h"
 
 namespace postgres_translator {
 namespace spangres {
 
-absl::StatusOr<interfaces::ParserOutput> ParserWithoutSerialization::Parse(
+absl::StatusOr<interfaces::ParserOutput> ParserWithoutSerialization::ParseImpl(
     const std::string& sql) {
   return CheckedPgRawParserFullOutput(sql.c_str());
 }
@@ -46,7 +52,7 @@ absl::Status ParserWithoutSerialization::ParseIntoBatch(
     interfaces::ParserBatchOutput* batch_output) {
   batch_output->mutable_output()->reserve(sql_expressions.size());
   for (const std::string& sql : sql_expressions) {
-    batch_output->mutable_output()->emplace_back(Parse(sql));
+    batch_output->mutable_output()->emplace_back(ParseImpl(sql));
   }
   return absl::OkStatus();
 }

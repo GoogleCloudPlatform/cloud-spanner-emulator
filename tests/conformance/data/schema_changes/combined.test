@@ -470,7 +470,7 @@ CREATE NULL_FILTERED INDEX UsersByName ON Users(UserName, UserName);
 --
 ERROR:.* Index UsersByName specifies key column UserName twice.
 ==
-# Index specifies keys that are not a prefix of the interleaved table.
+# Remote index: child key column does not match parent key column type.
 # --skip_prod_env
 # --regex
 CREATE TABLE Users (
@@ -482,9 +482,57 @@ CREATE TABLE Albums (
   AlbumName STRING(MAX),
 ) PRIMARY KEY(UserId, AlbumId),
   INTERLEAVE IN PARENT Users ON DELETE CASCADE;
-CREATE NULL_FILTERED INDEX AlbumsByName ON Albums(AlbumName), INTERLEAVE IN Users;
+CREATE INDEX AlbumsByName ON Albums(AlbumName), INTERLEAVE IN Users;
 --
-ERROR:.* Index AlbumsByName does not reference index parent key column UserId.
+ERROR:.* Index AlbumsByName references parent key column UserId with incorrect type STRING \(should be INT64\).
+==
+# Remote index: interleave in a non-ancestor table.
+# --skip_prod_env
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  AlbumName STRING(MAX),
+) PRIMARY KEY(AlbumId);
+CREATE TABLE Songs (
+  AlbumId INT64 NOT NULL,
+  SongId INT64 NOT NULL,
+  SongName STRING(MAX),
+) PRIMARY KEY(AlbumId, SongId);
+CREATE INDEX SongsBySongId ON Songs(SongId), INTERLEAVE IN Albums;
+--
+CREATE TABLE Albums (
+  AlbumId INT64 NOT NULL,
+  AlbumName STRING(MAX),
+) PRIMARY KEY(AlbumId);
+CREATE TABLE Songs (
+  AlbumId INT64 NOT NULL,
+  SongId INT64 NOT NULL,
+  SongName STRING(MAX),
+) PRIMARY KEY(AlbumId, SongId);
+CREATE INDEX SongsBySongId ON Songs(SongId), INTERLEAVE IN Albums;
+==
+# null-filtered remote index: interleave in a non-ancestor table.
+# --skip_prod_env
+CREATE TABLE Albums (
+  AlbumId INT64,
+  AlbumName STRING(MAX),
+) PRIMARY KEY(AlbumId);
+CREATE TABLE Songs (
+  AlbumId INT64,
+  SongId INT64 NOT NULL,
+  SongName STRING(MAX),
+) PRIMARY KEY(AlbumId, SongId);
+CREATE NULL_FILTERED INDEX SongsBySongId ON Songs(SongId), INTERLEAVE IN Albums;
+--
+CREATE TABLE Albums (
+  AlbumId INT64,
+  AlbumName STRING(MAX),
+) PRIMARY KEY(AlbumId);
+CREATE TABLE Songs (
+  AlbumId INT64,
+  SongId INT64 NOT NULL,
+  SongName STRING(MAX),
+) PRIMARY KEY(AlbumId, SongId);
+CREATE NULL_FILTERED INDEX SongsBySongId ON Songs(SongId), INTERLEAVE IN Albums;
 ==
 # An index on an ARRAY without "DISTINCT_ARRAY_ELEMENT" is an error.
 # --regex

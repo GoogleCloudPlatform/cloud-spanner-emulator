@@ -2095,7 +2095,8 @@ typedef enum AlterTableType
 															non-key column from the index*/
 	AT_SetLocalityGroup,				/* SET LOCALITY GROUP */
 	AT_AddSynonym,				/* add synonym */
-  AT_DropSynonym 				/* drop synonym */
+  AT_DropSynonym,				/* drop synonym */
+	AT_ColumnOnUpdate  /* ADD/DROP ON UPDATE behavior */
 } AlterTableType;
 
 typedef struct ReplicaIdentityStmt
@@ -2406,7 +2407,8 @@ typedef enum ConstrType			/* types of constraints */
 	CONSTR_ATTR_DEFERRABLE,		/* attributes for previous constraint node */
 	CONSTR_ATTR_NOT_DEFERRABLE,
 	CONSTR_ATTR_DEFERRED,
-	CONSTR_ATTR_IMMEDIATE
+	CONSTR_ATTR_IMMEDIATE,
+	CONSTR_ON_UPDATE  // SPANGRES: Add ON UPDATE.
 } ConstrType;
 
 /* Foreign key action codes */
@@ -4047,6 +4049,7 @@ typedef struct ChangeStreamTrackedTable {
 typedef struct CreateSearchIndexStmt {
   NodeTag type;
   char *search_index_name; /* Name of the search index */
+  RangeVar *search_index_name_rangevar; /* Name of the search index */
   RangeVar *table_name;    /* Name of the table to create search index */
   List *token_columns;     /* Columns to index: a list of IndexElem */
   List *storing; /* Optional additional columns to index: a list of IndexElem */

@@ -319,7 +319,13 @@ absl::Status DropTableWithDependentIndices(absl::string_view table_name,
                                            absl::string_view indexes);
 absl::Status DropTableWithDependentChangeStreams(
     absl::string_view table_name, absl::string_view change_streams);
+absl::Status InterleaveInNotSupported();
+absl::Status ChangeInterleavingNotAllowed(absl::string_view table_name);
+absl::Status ChangeInterleavingTableNotAllowed(absl::string_view table_name);
 absl::Status SetOnDeleteWithoutInterleaving(absl::string_view table_name);
+absl::Status SetOnDeleteOnInterleaveInTables(absl::string_view table_name);
+absl::Status InterleaveInToInParentOnDeleteCascadeUnsupported(
+    absl::string_view table_name);
 absl::Status NonExistentKeyColumn(absl::string_view object_type,
                                   absl::string_view object_name,
                                   absl::string_view key_column);
@@ -525,6 +531,9 @@ absl::Status RowNotFound(absl::string_view table_name, absl::string_view key);
 absl::Status ParentKeyNotFound(absl::string_view parent_table_name,
                                absl::string_view child_table_name,
                                absl::string_view key);
+absl::Status InterleavingParentChildRowExistenceConstraintValidation(
+    absl::string_view parent_table_name, absl::string_view child_table_name,
+    absl::string_view key);
 absl::Status ChildKeyExists(absl::string_view parent_table_name,
                             absl::string_view child_table_name,
                             absl::string_view key);

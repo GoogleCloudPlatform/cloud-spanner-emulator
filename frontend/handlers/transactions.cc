@@ -23,12 +23,14 @@
 #include "google/spanner/v1/transaction.pb.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "backend/access/write.h"
 #include "common/errors.h"
 #include "frontend/converters/mutations.h"
 #include "frontend/converters/time.h"
 #include "frontend/entities/session.h"
 #include "frontend/entities/transaction.h"
 #include "frontend/server/handler.h"
+#include "google/protobuf/repeated_ptr_field.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
@@ -59,6 +61,14 @@ absl::Status BeginTransaction(
 
   if (txn->IsReadWrite() && session->multiplexed() &&
       request->has_mutation_key()) {
+    backend::Mutation mutation;
+    google::protobuf::RepeatedPtrField<spanner_api::Mutation> mutations;
+    *mutations.Add() = request->mutation_key();
+    absl::Status status =
+        MutationFromProto(*txn->schema(), mutations, &mutation);
+    if (!status.ok()) {
+      return absl::InvalidArgumentError(status.message());
+    }
     // Set a precommit token in the begin transaction response.
     response->mutable_precommit_token();
   }

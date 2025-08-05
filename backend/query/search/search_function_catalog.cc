@@ -37,6 +37,8 @@
 #include "absl/types/span.h"
 #include "backend/query/search/bool_tokenizer.h"
 #include "backend/query/search/exact_match_tokenizer.h"
+#include "backend/query/search/json_tokenizer.h"
+#include "backend/query/search/jsonb_tokenizer.h"
 #include "backend/query/search/ngrams_tokenizer.h"
 #include "backend/query/search/numeric_tokenizer.h"
 #include "backend/query/search/plain_full_text_tokenizer.h"
@@ -107,6 +109,12 @@ constexpr char kSearchNgramsFunctionName[] = "search_ngrams";
 
 // Function name for doing score ngrams.
 constexpr char kScoreNgramsFunctionName[] = "score_ngrams";
+
+// Function name for tokenizing json.
+constexpr char kTokenizeJsonFunctionName[] = "tokenize_json";
+
+// Function name for tokenizing jsonb.
+constexpr char kTokenizeJsonbFunctionName[] = "tokenize_jsonb";
 
 zetasql::FunctionArgumentTypeOptions GetArgumentTypeOptions(
     absl::string_view arg_name,
@@ -748,6 +756,39 @@ std::unique_ptr<zetasql::Function> ScoreNgramsFunction(
       },
       function_options);
 }
+
+std::unique_ptr<zetasql::Function> TokenizeJsonFunction(
+    zetasql::TypeFactory* type_factory, const std::string& catalog_name,
+    database_api::DatabaseDialect dialect) {
+  zetasql::FunctionOptions function_options;
+
+  const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    // Signature: TOKENIZE_JSONB(jsonb value)
+    function_options.set_evaluator(
+        zetasql::FunctionEvaluator(JsonbTokenizer::Tokenize));
+    auto pg_jsonb = postgres_translator::spangres::datatypes::GetPgJsonbType();
+    return std::make_unique<zetasql::Function>(
+        kTokenizeJsonbFunctionName, catalog_name, zetasql::Function::SCALAR,
+        std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
+            tokenlist_type,
+            {{pg_jsonb, GetRequiredArgumentTypeOptions("value", false)}},
+            nullptr}},
+        function_options);
+  }
+
+  // ZetaSQL dialect signature: TOKENIZE_JSON(json value).
+  function_options.set_evaluator(
+      zetasql::FunctionEvaluator(JsonTokenizer::Tokenize));
+  const zetasql::Type* json_type = type_factory->get_json();
+  return std::make_unique<zetasql::Function>(
+      kTokenizeJsonFunctionName, catalog_name, zetasql::Function::SCALAR,
+      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
+          tokenlist_type,
+          {{json_type, GetRequiredArgumentTypeOptions("value", false)}},
+          nullptr}},
+      function_options);
+}
 }  // namespace
 
 absl::flat_hash_map<std::string, std::unique_ptr<zetasql::Function>>
@@ -799,6 +840,10 @@ GetSearchFunctions(zetasql::TypeFactory* type_factory,
 
   auto score_ngrams_func = ScoreNgramsFunction(type_factory, catalog_name);
   function_map[score_ngrams_func->Name()] = std::move(score_ngrams_func);
+
+  auto tokenize_json_func =
+      TokenizeJsonFunction(type_factory, catalog_name, dialect);
+  function_map[tokenize_json_func->Name()] = std::move(tokenize_json_func);
 
   return function_map;
 }

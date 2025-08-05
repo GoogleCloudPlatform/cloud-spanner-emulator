@@ -29,6 +29,8 @@
 # MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #------------------------------------------------------------------------------
 
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
 # Catalog libraries for mappings between Postgres and GoogleSQL.
 
 package(
@@ -84,13 +86,18 @@ cc_library(
     deps = [
         ":builtin_function",
         ":engine_system_catalog",
+        ":type",
         "//third_party/spanner_pg/catalog/proto:catalog_cc_proto",
+        "//third_party/spanner_pg/src/backend/catalog:generated_catalog_headers",
         "//third_party/spanner_pg/src/include:client_include",
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
+        "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/public:function",
+        "@com_google_zetasql//zetasql/public:function_cc_proto",
+        "@com_google_zetasql//zetasql/public/types:type",
     ],
 )
 
@@ -102,8 +109,8 @@ cc_test(
         ":engine_system_catalog",
         ":spangres_function_mapper",
         "//third_party/spanner_pg/src/backend/catalog:generated_catalog_headers",
-        "//third_party/spanner_pg/src/include:client_include",
         "//third_party/spanner_pg/test_catalog",
+        "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:function",

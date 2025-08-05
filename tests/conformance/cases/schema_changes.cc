@@ -115,6 +115,7 @@ class SchemaChangeTest
             .enable_postgresql_interface = true,
             .enable_fk_delete_cascade_action = true,
             .enable_fk_enforcement_option = true,
+            .enable_interleave_in = true,
         }) {}
   const ScopedEmulatorFeatureFlagsSetter flag_setter_;
   absl::Status SetUpDatabase() override { return absl::OkStatus(); }

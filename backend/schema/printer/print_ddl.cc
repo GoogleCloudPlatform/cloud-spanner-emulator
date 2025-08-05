@@ -533,9 +533,14 @@ std::string PrintTable(const Table* table) {
 
   if (table->parent() != nullptr) {
     absl::StrAppend(&table_string, "),\n");
-    absl::StrAppend(&table_string, "  INTERLEAVE IN PARENT ",
-                    PrintName(table->parent()->Name()), " ON DELETE ",
-                    OnDeleteActionToString(table->on_delete_action()));
+    if (table->interleave_type().value() == Table::InterleaveType::kInParent) {
+      absl::StrAppend(&table_string, "  INTERLEAVE IN PARENT ",
+                      PrintName(table->parent()->Name()), " ON DELETE ",
+                      OnDeleteActionToString(table->on_delete_action()));
+    } else {
+      absl::StrAppend(&table_string, "  INTERLEAVE IN ",
+                      PrintName(table->parent()->Name()));
+    }
   } else {
     absl::StrAppend(&table_string, ")");
   }

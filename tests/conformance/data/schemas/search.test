@@ -28,6 +28,8 @@ CREATE TABLE albums (
   summaries_substr_tokens TOKENLIST AS (TOKENLIST_CONCAT([Summary_SubStr_Tokens, Summary2_SubStr_Tokens])) HIDDEN,
   length INT64,
   length_tokens TOKENLIST AS (TOKENIZE_NUMBER(Length, min=>0, max=>0x40000000)) STORED HIDDEN,
+  json JSON,
+  json_tokens TOKENLIST AS (TOKENIZE_JSON(json)) HIDDEN,
 ) PRIMARY KEY(albumid);
 CREATE SEARCH INDEX albumindex
 ON albums(name_tokens,
@@ -42,7 +44,8 @@ ON albums(name_tokens,
           summary2_substr_tokens,
           summaries_tokens,
           summaries_substr_tokens,
-          length_tokens)
+          length_tokens,
+          json_tokens)
 STORING(length)
 PARTITION BY userid
 ORDER BY releasetimestamp
@@ -76,6 +79,7 @@ CREATE TABLE albums (
   summaries_substr_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenlist_concat(ARRAY[spanner.tokenize_substring(summary, ngram_size_max=>4::bigint, ngram_size_min=>3::bigint), spanner.tokenize_substring(summary2, ngram_size_min=>3::bigint, ngram_size_max=>4::bigint, language_tag=>'ar-ar'::text)])) STORED HIDDEN,
   length bigint,
   length_tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenize_number(length, min=>0::bigint, max=>40000000::bigint)) STORED HIDDEN,
+  jsonb jsonb,
   PRIMARY KEY(albumid)
 );
 CREATE SEARCH INDEX albumindex

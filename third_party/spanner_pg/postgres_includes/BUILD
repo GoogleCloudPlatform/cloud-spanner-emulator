@@ -33,6 +33,8 @@
 # without polluting the global macro namespace, and in
 # an #include-order-independent way
 
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
 licenses(["notice"])
 
 package(

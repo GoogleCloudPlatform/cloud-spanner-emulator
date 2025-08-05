@@ -555,6 +555,57 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
   return std::move(maybe_schema.value());
 }
 
+absl::StatusOr<std::unique_ptr<const backend::Schema>>
+CreateSchemaWithNonParentInterleaving(
+    zetasql::TypeFactory* const type_factory,
+    database_api::DatabaseDialect dialect) {
+  std::string parent_table =
+      R"(
+          CREATE TABLE NpiParent (
+            k1 INT64 NOT NULL,
+            c1 STRING(MAX)
+          ) PRIMARY KEY (k1)
+        )";
+  std::string npi_child_table =
+      R"(
+          CREATE TABLE NpiChild (
+            k1 INT64 NOT NULL,
+            k2 INT64 NOT NULL,
+            c1 STRING(MAX)
+          ) PRIMARY KEY (k1, k2), INTERLEAVE IN NpiParent
+        )";
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    parent_table =
+        R"(
+            CREATE TABLE npiparent (
+              k1 bigint NOT NULL PRIMARY KEY,
+              c1 varchar
+            )
+          )";
+    npi_child_table =
+        R"(
+            CREATE TABLE npichild (
+              k1 bigint NOT NULL,
+              k2 bigint NOT NULL,
+              c1 varchar,
+              PRIMARY KEY (k1, k2)
+            ) INTERLEAVE IN npiparent
+        )";
+  }
+  auto maybe_schema = CreateSchemaFromDDL(
+      {
+          parent_table,
+          npi_child_table,
+      },
+      type_factory, "" /*proto_descriptor_bytes*/
+      ,
+      dialect);
+  if (!maybe_schema.status().ok()) {
+    return maybe_schema.status();
+  }
+  return std::move(maybe_schema.value());
+}
+
 std::unique_ptr<const backend::Schema> CreateSchemaWithMultiTables(
     zetasql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect) {

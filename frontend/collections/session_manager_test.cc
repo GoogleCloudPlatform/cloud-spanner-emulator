@@ -25,6 +25,7 @@
 #include "absl/strings/match.h"
 #include "absl/time/time.h"
 #include "common/clock.h"
+#include "common/errors.h"
 #include "frontend/collections/database_manager.h"
 #include "frontend/entities/database.h"
 #include "frontend/entities/session.h"
@@ -176,6 +177,58 @@ TEST_F(SessionManagerTest, ListSessionsIncludesMultiplexedFlag) {
       session_manager_.ListSessions(database_->database_uri()));
   // ListSessions API does not return any multiplexed sessions.
   EXPECT_EQ(actual.size(), 0);
+}
+
+TEST_F(SessionManagerTest, ListSessionsReturnsMultiplexedSessions) {
+  int num = 5;
+  std::shared_ptr<Session> expected;
+  for (int i = 0; i < num; i++) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
+                                       test_labels_,
+                                       /*multiplexed=*/true, database_,
+                                       /*mux_txn_manager=*/nullptr));
+  }
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<std::shared_ptr<Session>> actual,
+      session_manager_.ListSessions(database_->database_uri(),
+                                    /*include_multiplex_sessions=*/true));
+  EXPECT_EQ(actual.size(), 5);
+}
+
+TEST_F(SessionManagerTest,
+       DeleteSessionIncludesMultiplexedFlagAndDropMultiplexSessionsIsTrue) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::shared_ptr<Session> expected,
+      session_manager_.CreateSession(test_labels_,
+                                     /*multiplexed=*/true, database_,
+                                     /*mux_txn_manager=*/nullptr));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> actual,
+                       session_manager_.GetSession(expected->session_uri()));
+  EXPECT_EQ(actual, expected);
+
+  // DeleteSession API with delete_multiplex_sessions = true deletes multiplexed
+  // sessions.
+  ZETASQL_EXPECT_OK(session_manager_.DeleteSession(expected->session_uri(),
+                                           /*delete_multiplex_sessions=*/true));
+  EXPECT_THAT(session_manager_.GetSession(expected->session_uri()),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST_F(SessionManagerTest,
+       DeleteSessionIncludesMultiplexedFlagAndDropMultiplexSessionsIsFalse) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::shared_ptr<Session> expected,
+      session_manager_.CreateSession(test_labels_,
+                                     /*multiplexed=*/true, database_,
+                                     /*mux_txn_manager=*/nullptr));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> actual,
+                       session_manager_.GetSession(expected->session_uri()));
+  EXPECT_EQ(actual, expected);
+
+  // DeleteSession API with delete_multiplex_sessions = false does not delete
+  // multiplexed sessions.
+  EXPECT_EQ(session_manager_.DeleteSession(expected->session_uri()),
+            error::InvalidOperationSessionDelete());
 }
 
 TEST_F(SessionManagerTest, ListSessionsWithSimilarPrefix) {

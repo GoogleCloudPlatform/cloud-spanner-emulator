@@ -32,6 +32,8 @@
 # The function_evaluators package enables running PostgreSQL functions during
 # Spanner execution
 
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
 licenses(["notice"])
 
 cc_library(

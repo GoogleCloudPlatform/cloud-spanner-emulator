@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "zetasql/public/function.pb.h"
+#include "zetasql/public/function_signature.h"
 #include "zetasql/public/language_options.h"
 #include "zetasql/public/options.pb.h"
 #include "absl/log/check.h"
@@ -91,7 +92,17 @@ spangres::SpangresFunctionProto SpangresSystemCatalogGolden::ToProto(
   spangres::SpangresFunctionProto result;
   result.set_postgres_function_name(function.postgres_function_name());
   result.set_mapped_function_name(function.mapped_function_name());
-  for (const auto& signature : function.signature_arguments()) {
+
+  std::vector<PostgresFunctionSignatureArguments> signatures =
+      function.signature_arguments();
+  std::sort(signatures.begin(), signatures.end(),
+            [](const PostgresFunctionSignatureArguments& s1,
+               const PostgresFunctionSignatureArguments& s2) {
+              return s1.signature().DebugString() <
+                     s2.signature().DebugString();
+            });
+
+  for (const auto& signature : signatures) {
     *result.add_signatures() = ToProto(signature);
   }
   result.set_mode(zetasql::FunctionEnums::Mode_Name(function.mode()));

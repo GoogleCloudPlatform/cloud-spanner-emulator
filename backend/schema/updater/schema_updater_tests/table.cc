@@ -29,6 +29,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
@@ -328,7 +329,30 @@ TEST_P(SchemaUpdaterTest, CreateTable_AlreadyExists) {
               StatusIs(error::SchemaObjectAlreadyExists("Table", "T")));
 }
 
-TEST_P(SchemaUpdaterTest, CreateTable_Interleave) {
+TEST_P(SchemaUpdaterTest, CreateTable_InterleaveInParentNoIdentifier) {
+  EXPECT_THAT(CreateSchema({
+                  R"(
+      CREATE TABLE home(
+        col1 INT64
+      ) PRIMARY KEY(col1)
+    )",
+                  R"(
+      CREATE TABLE parent(
+        col1 INT64
+      ) PRIMARY KEY(col1)
+    )",
+                  R"(
+      CREATE TABLE child(
+        col1 INT64,
+        col2 INT64,
+        FOREIGN KEY(id1) REFERENCES home(id1)
+      ) PRIMARY KEY(col1), INTERLEAVE IN parent
+    )"}),
+              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
+                                        testing::HasSubstr("Syntax error ")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateTable_InterleaveInParent) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE `Parent` (
         k1 INT64 NOT NULL,
@@ -349,6 +373,78 @@ TEST_P(SchemaUpdaterTest, CreateTable_Interleave) {
   const Table* c = schema->FindTable("Child");
   EXPECT_NE(c, nullptr);
   EXPECT_THAT(c, IsInterleavedIn(p, Table::OnDeleteAction::kCascade));
+  EXPECT_EQ(c->interleave_type().value(), Table::InterleaveType::kInParent);
+}
+
+TEST_P(SchemaUpdaterTest,
+       CreateTable_InterleaveInParentCascadeWithRowDeletionPolicy) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE `Parent` (
+        k1 INT64 NOT NULL,
+        c1 STRING(MAX),
+        ts TIMESTAMP,
+      ) PRIMARY KEY (k1),
+        ROW DELETION POLICY (OLDER_THAN(ts, INTERVAL 10 DAY))
+    )",
+                                                  R"(
+      CREATE TABLE Child (
+        k1 INT64 NOT NULL,
+        k2 INT64 NOT NULL,
+        c1 STRING(MAX)
+      ) PRIMARY KEY (k1, k2),
+        INTERLEAVE IN PARENT `Parent` ON DELETE CASCADE
+    )"}));
+}
+
+TEST_P(SchemaUpdaterTest,
+       CreateTable_InterleaveInParentNoActionWithRowDeletionPolicyNotAllowed) {
+  // Changing the ordering for key columns is unsupported in PG.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE `Parent` (
+        k1 INT64 NOT NULL,
+        c1 STRING(MAX),
+        ts TIMESTAMP,
+      ) PRIMARY KEY (k1),
+        ROW DELETION POLICY (OLDER_THAN(ts, INTERVAL 10 DAY))
+      )"}));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      CREATE TABLE Child (
+        k1 INT64 NOT NULL,
+        k2 INT64 NOT NULL,
+        c1 STRING(MAX)
+      ) PRIMARY KEY (k1 DESC, k2),
+        INTERLEAVE IN PARENT `Parent` ON DELETE NO ACTION
+    )"}),
+              StatusIs(error::RowDeletionPolicyOnAncestors("Child", "Parent")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateTable_NonParentInterleave) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE `Parent` (
+        k1 INT64 NOT NULL,
+        c1 STRING(MAX),
+        ts TIMESTAMP,
+      ) PRIMARY KEY (k1),
+        ROW DELETION POLICY (OLDER_THAN(ts, INTERVAL 10 DAY))
+    )",
+                                                  R"(
+      CREATE TABLE Child (
+        k1 INT64 NOT NULL,
+        k2 INT64 NOT NULL,
+        c1 STRING(MAX)
+      ) PRIMARY KEY (k1, k2),
+        INTERLEAVE IN `Parent`
+    )"}));
+
+  auto p = schema->FindTable("Parent");
+  EXPECT_NE(p, nullptr);
+  auto c = schema->FindTable("Child");
+  EXPECT_NE(c, nullptr);
+  EXPECT_THAT(c, IsInterleavedIn(p, Table::OnDeleteAction::kNoAction));
+  EXPECT_EQ(c->interleave_type().value(), Table::InterleaveType::kIn);
+  EXPECT_FALSE(c->has_on_delete_action());
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_InterleaveMismatch) {
@@ -1059,7 +1155,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_InvalidDropIndexedColumn) {
       StatusIs(error::InvalidDropColumnWithDependency("c2", "T", "Idx1")));
 }
 
-TEST_P(SchemaUpdaterTest, AlterTable_ChangeOnDelete) {
+TEST_P(SchemaUpdaterTest, AlterTable_InterleaveInParent_ChangeOnDelete) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T1 (
@@ -1096,6 +1192,289 @@ TEST_P(SchemaUpdaterTest, AlterTable_ChangeOnDelete) {
   t2 = new_schema->FindTable("T2");
   EXPECT_NE(t2, nullptr);
   EXPECT_EQ(t2->on_delete_action(), Table::OnDeleteAction::kNoAction);
+}
+
+TEST_P(SchemaUpdaterTest,
+       AlterTable_SetOnDeleteNoAction_ParentHasRowDeletionPolicy) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+    CREATE TABLE T1 (
+      k1 INT64 NOT NULL,
+      c1 STRING(MAX),
+      ts TIMESTAMP,
+    ) PRIMARY KEY (k1),
+      ROW DELETION POLICY (OLDER_THAN(ts, INTERVAL 10 DAY))
+    )",
+                                                  R"(
+    CREATE TABLE T2 (
+      k1 INT64 NOT NULL,
+      k2 INT64 NOT NULL,
+      c1 STRING(MAX)
+    ) PRIMARY KEY (k1, k2),
+      INTERLEAVE IN PARENT T1 ON DELETE CASCADE
+    )"}));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T2 SET ON DELETE NO ACTION
+    )"}),
+              StatusIs(error::RowDeletionPolicyOnAncestors("T2", "T1")));
+
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T2 SET INTERLEAVE IN PARENT T1 ON DELETE NO ACTION
+    )"}),
+              StatusIs(error::RowDeletionPolicyOnAncestors("T2", "T1")));
+
+  // It's ok to change to INTERLEAVE IN.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T2 SET INTERLEAVE IN T1
+    )"}));
+}
+
+TEST_P(SchemaUpdaterTest, AlterTable_ChangeInterleaveInParent_To_NonParent) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+      CREATE TABLE T1 (
+        k1 INT64,
+        c1 STRING(10),
+      ) PRIMARY KEY (k1)
+    )",
+                                        R"(
+      CREATE TABLE T2 (
+        k1 INT64,
+        c1 STRING(10),
+        c2 BOOL,
+      ) PRIMARY KEY (k1, c1), INTERLEAVE IN PARENT T1 ON DELETE CASCADE
+    )"}));
+
+  // Cannot change to IN with ON DELETE CASCADE.
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+    ALTER TABLE T2 SET INTERLEAVE IN T1 ON DELETE CASCADE
+  )"}),
+              StatusIs(error::SetOnDeleteOnInterleaveInTables("T2")));
+
+  // Cannot change to IN with ON DELETE NO ACTION.
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+    ALTER TABLE T2 SET INTERLEAVE IN T1 ON DELETE NO ACTION
+  )"}),
+              StatusIs(error::SetOnDeleteOnInterleaveInTables("T2")));
+
+  const Table* t2 = schema->FindTable("T2");
+  EXPECT_NE(t2, nullptr);
+  EXPECT_EQ(t2->on_delete_action(), Table::OnDeleteAction::kCascade);
+  EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kInParent);
+
+  // Now change to INTERLEAVE IN. The delete action is not set.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T2 SET INTERLEAVE IN T1
+    )"}));
+
+  t2 = new_schema->FindTable("T2");
+  EXPECT_NE(t2, nullptr);
+  EXPECT_FALSE(t2->has_on_delete_action());
+}
+
+TEST_P(SchemaUpdaterTest, AlterTable_ChangeInterleaveIn_To_Parent) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+      CREATE TABLE T1 (
+        k1 INT64,
+        c1 STRING(10),
+      ) PRIMARY KEY (k1)
+    )",
+                                        R"(
+      CREATE TABLE T2 (
+        k1 INT64,
+        c1 STRING(10),
+        c2 BOOL,
+      ) PRIMARY KEY (k1, c1), INTERLEAVE IN T1
+    )"}));
+
+  const Table* t2 = schema->FindTable("T2");
+  EXPECT_NE(t2, nullptr);
+  EXPECT_FALSE(t2->has_on_delete_action());
+  EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kIn);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T2 SET INTERLEAVE IN PARENT T1
+    )"}));
+
+  t2 = new_schema->FindTable("T2");
+  EXPECT_NE(t2, nullptr);
+  EXPECT_EQ(t2->on_delete_action(), Table::OnDeleteAction::kNoAction);
+  EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kInParent);
+}
+
+TEST_P(SchemaUpdaterTest,
+       AlterTable_ChangeInterleaveIn_To_ParentExplicitNoAction) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+      CREATE TABLE T1 (
+        k1 INT64,
+        c1 STRING(10),
+      ) PRIMARY KEY (k1)
+    )",
+                                        R"(
+      CREATE TABLE T2 (
+        k1 INT64,
+        c1 STRING(10),
+        c2 BOOL,
+      ) PRIMARY KEY (k1, c1), INTERLEAVE IN T1
+    )"}));
+
+  const Table* t2 = schema->FindTable("T2");
+  EXPECT_NE(t2, nullptr);
+  EXPECT_FALSE(t2->has_on_delete_action());
+  EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kIn);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T2 SET INTERLEAVE IN PARENT T1 ON DELETE NO ACTION
+    )"}));
+
+  t2 = new_schema->FindTable("T2");
+  EXPECT_NE(t2, nullptr);
+  EXPECT_EQ(t2->on_delete_action(), Table::OnDeleteAction::kNoAction);
+  EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kInParent);
+}
+
+TEST_P(SchemaUpdaterTest,
+       AlterTable_CannotSetOnDeleteClause_InterleaveInNonParent) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+  CREATE TABLE T1 (
+    k1 INT64,
+    c1 STRING(10),
+  ) PRIMARY KEY (k1)
+  )",
+                                        R"(
+  CREATE TABLE T2 (
+    k1 INT64,
+    c1 STRING(10),
+    c2 BOOL,
+  ) PRIMARY KEY (k1, c1), INTERLEAVE IN T1
+  )"}));
+
+  const Table* t2 = schema->FindTable("T2");
+  EXPECT_NE(t2, nullptr);
+  EXPECT_FALSE(t2->has_on_delete_action());
+  EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kIn);
+
+  // Cannot set ON DELETE CASCADE on a table with INTERLEAVE IN.
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+    ALTER TABLE T2 SET ON DELETE CASCADE
+  )"}),
+              StatusIs(error::SetOnDeleteOnInterleaveInTables("T2")));
+
+  // Cannot set ON DELETE NO ACTION on a table with INTERLEAVE IN.
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+    ALTER TABLE T2 SET ON DELETE NO ACTION
+  )"}),
+              StatusIs(error::SetOnDeleteOnInterleaveInTables("T2")));
+
+  // Cannot change the ON DELETE CASCADE clause.
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+    ALTER TABLE T2 SET INTERLEAVE IN T1 ON DELETE CASCADE
+  )"}),
+              StatusIs(error::SetOnDeleteOnInterleaveInTables("T2")));
+
+  // Cannot change the ON DELETE NO ACTION clause.
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+    ALTER TABLE T2 SET INTERLEAVE IN T1 ON DELETE NO ACTION
+  )"}),
+              StatusIs(error::SetOnDeleteOnInterleaveInTables("T2")));
+}
+
+TEST_P(SchemaUpdaterTest,
+       AlterTable_ChangeInterleaveIn_To_ParentExplicitNoAction_Then_Cascade) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+      CREATE TABLE T1 (
+        k1 INT64,
+        c1 STRING(10),
+      ) PRIMARY KEY (k1)
+    )",
+                                        R"(
+      CREATE TABLE T2 (
+        k1 INT64,
+        c1 STRING(10),
+        c2 BOOL,
+      ) PRIMARY KEY (k1, c1), INTERLEAVE IN T1
+    )"}));
+
+  const Table* t2 = schema->FindTable("T2");
+  EXPECT_NE(t2, nullptr);
+  EXPECT_FALSE(t2->has_on_delete_action());
+  EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kIn);
+
+  // Cannot change directly from IN to IN PARENT ON DELETE CASCADE.
+  EXPECT_THAT(
+      UpdateSchema(schema.get(), {R"(
+    ALTER TABLE T2 SET INTERLEAVE IN PARENT T1 ON DELETE CASCADE
+  )"}),
+      StatusIs(error::InterleaveInToInParentOnDeleteCascadeUnsupported("T2")));
+
+  // First, change to IN PARENT ON DELETE NO ACTION.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T2 SET INTERLEAVE IN PARENT T1 ON DELETE NO ACTION
+    )"}));
+
+  t2 = new_schema->FindTable("T2");
+  EXPECT_NE(t2, nullptr);
+  EXPECT_EQ(t2->on_delete_action(), Table::OnDeleteAction::kNoAction);
+  EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kInParent);
+
+  // Next, change to IN PARENT ON DELETE CASCADE.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema2, UpdateSchema(new_schema.get(), {R"(
+    ALTER TABLE T2 SET ON DELETE CASCADE
+  )"}));
+
+  t2 = new_schema2->FindTable("T2");
+  EXPECT_NE(t2, nullptr);
+  EXPECT_EQ(t2->on_delete_action(), Table::OnDeleteAction::kCascade);
+  EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kInParent);
+}
+
+TEST_P(SchemaUpdaterTest,
+       AlterTable_ChangeInterleaveIn_To_Parent_Then_ExplicitCascade) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+  CREATE TABLE T1 (
+    k1 INT64,
+    c1 STRING(10),
+  ) PRIMARY KEY (k1)
+  )",
+                                        R"(
+  CREATE TABLE T2 (
+    k1 INT64,
+    c1 STRING(10),
+    c2 BOOL,
+  ) PRIMARY KEY (k1, c1), INTERLEAVE IN T1
+  )"}));
+
+  const Table* t2 = schema->FindTable("T2");
+  EXPECT_NE(t2, nullptr);
+  EXPECT_FALSE(t2->has_on_delete_action());
+  EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kIn);
+
+  // First, change to IN PARENT
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  ALTER TABLE T2 SET INTERLEAVE IN PARENT T1
+  )"}));
+
+  t2 = new_schema->FindTable("T2");
+  EXPECT_NE(t2, nullptr);
+  EXPECT_TRUE(t2->has_on_delete_action());
+  EXPECT_EQ(t2->on_delete_action(), Table::OnDeleteAction::kNoAction);
+  EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kInParent);
+
+  // Next, SET ON DELETE CASCADE.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema2, UpdateSchema(new_schema.get(), {R"(
+  ALTER TABLE T2 SET ON DELETE CASCADE
+  )"}));
+
+  t2 = new_schema2->FindTable("T2");
+  EXPECT_NE(t2, nullptr);
+  EXPECT_TRUE(t2->has_on_delete_action());
+  EXPECT_EQ(t2->on_delete_action(), Table::OnDeleteAction::kCascade);
+  EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kInParent);
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_AddSynonym) {

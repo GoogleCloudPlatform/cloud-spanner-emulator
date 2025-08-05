@@ -78,7 +78,8 @@ bool IsTokenizerSignature(absl::string_view token) {
          absl::StartsWith(token, absl::StrCat(kSubstringTokenizer, "-")) ||
          absl::StartsWith(token, absl::StrCat(kNumericTokenizer, "-")) ||
          absl::StartsWith(token, absl::StrCat(kBoolTokenizer, "-")) ||
-         absl::StartsWith(token, absl::StrCat(kNgramsTokenizer, "-"));
+         absl::StartsWith(token, absl::StrCat(kNgramsTokenizer, "-")) ||
+         absl::StartsWith(token, absl::StrCat(kJsonTokenizer, "-"));
 }
 
 int64_t GetIntParameterValue(absl::Span<const zetasql::Value> args,
