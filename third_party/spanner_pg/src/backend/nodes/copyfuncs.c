@@ -5102,6 +5102,7 @@ _copyCreateSearchIndexStmt(const CreateSearchIndexStmt *from)
 	CreateSearchIndexStmt *newnode = makeNode(CreateSearchIndexStmt);
 
 	COPY_STRING_FIELD(search_index_name);
+	COPY_NODE_FIELD(search_index_name_rangevar);
 	COPY_NODE_FIELD(table_name);
 	COPY_NODE_FIELD(token_columns);
 	COPY_NODE_FIELD(storing);

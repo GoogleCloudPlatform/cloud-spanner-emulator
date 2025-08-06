@@ -3131,13 +3131,49 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
       ddl_search_translator_.GetTableName(*create_search_index_stmt.table_name,
                                           "CREATE SEARCH INDEX"));
   out.set_index_base_name(table_name);
-  if (create_search_index_stmt.table_name->schemaname != nullptr &&
-      strcmp(create_search_index_stmt.table_name->schemaname, "public") != 0) {
-    out.set_index_name(absl::Substitute(
-        "$0.$1", create_search_index_stmt.table_name->schemaname,
-        create_search_index_stmt.search_index_name));
+
+  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(
+      *create_search_index_stmt.search_index_name_rangevar,
+      "CREATE SEARCH INDEX"));
+  const char* search_index_schema_name =
+      create_search_index_stmt.search_index_name_rangevar->schemaname;
+  const char* search_index_name =
+      create_search_index_stmt.search_index_name_rangevar->relname;
+  const char* table_schema_name =
+      create_search_index_stmt.table_name->schemaname;
+
+  // "public" is simply the default schema name in Postgres.
+  if (table_schema_name != nullptr &&
+      strcmp(table_schema_name, "public") == 0) {
+    table_schema_name = nullptr;
+  }
+  if (search_index_schema_name != nullptr &&
+      strcmp(search_index_schema_name, "public") == 0) {
+    search_index_schema_name = nullptr;
+  }
+
+  if (search_index_schema_name == nullptr && table_schema_name == nullptr) {
+    // If schema names provided on the search index and the table are both
+    // unspecified, schema name on the search index is not set.
+    out.set_index_name(search_index_name);
+  } else if (search_index_schema_name == nullptr ||
+             table_schema_name == nullptr ||
+             strcmp(search_index_schema_name, table_schema_name) != 0) {
+    // If the schema names provided on the search index and the table upon which
+    // it is defined are not equivalent, or one is unspecified while the other
+    // is specified, this is invalid. Schema names must be the same.
+    const char* search_index_schema_name_str =
+        search_index_schema_name == nullptr ? "unspecified"
+                                            : search_index_schema_name;
+    const char* table_schema_name_str =
+        table_schema_name == nullptr ? "unspecified" : table_schema_name;
+    return absl::InvalidArgumentError(absl::Substitute(
+        "Search index schema name ($0) must be the same as the table schema "
+        "name ($1).",
+        search_index_schema_name_str, table_schema_name_str));
   } else {
-    out.set_index_name(create_search_index_stmt.search_index_name);
+    out.set_index_name(
+        absl::Substitute("$0.$1", search_index_schema_name, search_index_name));
   }
 
   // Process token columns.

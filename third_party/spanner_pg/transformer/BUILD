@@ -31,6 +31,8 @@
 
 # Libraries for transforming between a PostgreSQL Query* and a GoogleSQL resolved AST
 
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
 package(
     default_visibility = ["//:__subpackages__"],
 )

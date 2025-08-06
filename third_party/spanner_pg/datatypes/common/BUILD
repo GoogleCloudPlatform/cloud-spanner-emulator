@@ -29,6 +29,8 @@
 # MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #------------------------------------------------------------------------------
 
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
 # Description:
 # Common Libraries used for dealing with data types.
 package(

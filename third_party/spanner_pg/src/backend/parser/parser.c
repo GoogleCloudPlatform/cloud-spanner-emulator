@@ -59,8 +59,10 @@ raw_parser_spangres(const char *str, RawParseMode mode, struct SpangresTokenLoca
 							 &ScanKeywords, ScanKeywordTokens);
 
 	/* base_yylex() only needs us to initialize the lookahead token, if any */
-	if (mode == RAW_PARSE_DEFAULT)
+	if (mode == RAW_PARSE_DEFAULT) {
 		yyextra.have_lookahead = false;
+		yyextra.have_second_lookahead = false;  /* SPANGRES: add second lookahead */
+	}
 	else
 	{
 		/* this array is indexed by RawParseMode enum */
@@ -77,6 +79,7 @@ raw_parser_spangres(const char *str, RawParseMode mode, struct SpangresTokenLoca
 		yyextra.lookahead_token = mode_token[mode];
 		yyextra.lookahead_yylloc = 0;
 		yyextra.lookahead_end = NULL;
+		yyextra.have_second_lookahead = false;  /* SPANGRES: add second lookahead */
 	}
 
 	/* initialize the bison parser */
@@ -134,6 +137,22 @@ base_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, core_yyscan_t yyscanner)
 		if (yyextra->lookahead_end)
 			*(yyextra->lookahead_end) = yyextra->lookahead_hold_char;
 		yyextra->have_lookahead = false;
+
+		/* SPANGRES BEGIN */
+		// If we also have a second lookahead token, pop it into the first lookahead
+		// slot. We maintain the null-termination of the formerly second/now first
+		// lookahead token, because first lookahead tokens are also null-terminated.
+		if (yyextra->have_second_lookahead)
+		{
+			yyextra->lookahead_token = yyextra->second_lookahead_token;
+			yyextra->lookahead_yylval = yyextra->second_lookahead_yylval;
+			yyextra->lookahead_yylloc = yyextra->second_lookahead_yylloc;
+			yyextra->lookahead_end = yyextra->second_lookahead_end;
+			yyextra->lookahead_hold_char = yyextra->second_lookahead_hold_char;
+			yyextra->have_lookahead = true;
+			yyextra->have_second_lookahead = false;
+		}
+		/* SPANGRES END */
 	}
 	else
 		cur_token = core_yylex(&(lvalp->core_yystype), llocp, yyscanner);
@@ -164,6 +183,11 @@ base_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, core_yyscan_t yyscanner)
 		case USCONST:
 			cur_token_length = strlen(yyextra->core_yy_extra.scanbuf + *llocp);
 			break;
+		/* SPANGRES BEGIN */
+		case ON:
+			cur_token_length = 2;
+			break;
+		/* SPANGRES END */
 		default:
 			return cur_token;
 	}
@@ -306,8 +330,61 @@ base_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, core_yyscan_t yyscanner)
 				cur_token = SCONST;
 			}
 			break;
-	}
+		/* SPANGRES BEGIN */
+		// To support ON UPDATE as a column constraint (ColConstraintElem), we need
+		// to disambiguate the foreign key version, ON UPDATE { RESTRICT, CASCADE,
+		// etc.}. If this is "ON UPDATE" and not a recognizable foreign key action,
+		// replace the token with ON_LA for the ON UPDATE column expression grammar.
+		case ON:
+			if (next_token == UPDATE)
+			{
+				// ON UPDATE could be either foreign key or a column expression. Get the
+				// third token (second lookahead token) to determine which this is.
 
+				// As with the first lookahead token above, save the token position and
+				// end+1 character to restore afterwards in case of error reporting.
+				const int next_token_length = 6;  // "U-P-D-A-T-E"
+				yyextra->second_lookahead_end = yyextra->core_yy_extra.scanbuf
+						+ yyextra->lookahead_yylloc + next_token_length;
+				Assert(*(yyextra->second_lookahead_end) == '\0');
+				Assert(cur_yylloc == *llocp);  // Should have already saved this before.
+				*llocp = yyextra->lookahead_yylloc;
+
+				// We also un-truncate of the current token here. This shouldn't
+				// strictly be necessary since today nothing looks back there for error
+				// reporting, but it gives the scanner a clean buffer in case its
+				// behavior changes in the future. We'll also undo this after.
+				*(yyextra->lookahead_end) = yyextra->lookahead_hold_char;
+
+				// Get third token, saving outputs as in the first lookahead case.
+				// If there's a scanner error in here, it will point to the second
+				// lookahead token.
+				const int third_token = core_yylex(&(yyextra->second_lookahead_yylval),
+										llocp, yyscanner);
+				yyextra->second_lookahead_token = third_token;
+				yyextra->second_lookahead_yylloc = *llocp;
+				yyextra->have_second_lookahead = true;
+
+				// Revert the un-truncation of the current token and restore *llocp.
+				*llocp = cur_yylloc;
+				*(yyextra->lookahead_end) = '\0';
+				yyextra->second_lookahead_hold_char = *(yyextra->second_lookahead_end);
+				*(yyextra->second_lookahead_end) = '\0';
+				// Now a parse error will once again point to the original,
+				// pre-lookahead token, which is null-terminated.
+
+				// See if the third token is part of the key_action rule:
+				// { NO ACTION, RESTRICT, CASCADE, SET NULL, SET DEFAULT }
+				// and replace current with ON_LA if not.
+				if (third_token != NO && third_token != RESTRICT &&
+						third_token != CASCADE && third_token != SET)
+				{
+						cur_token = ON_LA;
+				}
+			}
+			break;
+		/* SPANGRES END */
+	}
 	return cur_token;
 }
 

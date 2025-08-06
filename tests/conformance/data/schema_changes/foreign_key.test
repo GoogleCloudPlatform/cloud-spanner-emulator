@@ -785,3 +785,18 @@ CREATE TABLE engagement (
 ) PRIMARY KEY(A, X),
   INTERLEAVE IN PARENT user ON DELETE CASCADE, ROW DELETION POLICY (OLDER_THAN(TS, INTERVAL 7 DAY));
 ==
+# Interleaving in parent with no identifier.
+# --regex
+CREATE TABLE home (
+  id1 INT64 NOT NULL,
+) PRIMARY KEY(id1);
+CREATE TABLE parent (
+  id1 INT64 NOT NULL,
+) PRIMARY KEY(id1);
+CREATE TABLE Users (
+  id1 INT64,
+  FOREIGN KEY(id1) REFERENCES home(id1)
+) PRIMARY KEY(id1), INTERLEAVE IN parent;
+--
+ERROR:.* Syntax error on line 5, column 40: Encountered \'EOF\' while parsing: identifier.*
+==

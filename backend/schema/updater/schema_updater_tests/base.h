@@ -168,6 +168,7 @@ class SchemaUpdaterTest
             .enable_user_defined_functions = true,
             .enable_search_index = true,
             .enable_default_time_zone = true,
+            .enable_interleave_in = true,
         }) {}
   absl::StatusOr<std::unique_ptr<const Schema>> CreateSchema(
       absl::Span<const std::string> statements,

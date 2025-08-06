@@ -1018,6 +1018,29 @@ TEST_P(SearchTest, SnippetContentTypeCaseInsensitive) {
   ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
+// JSON search does not use the underlined tokenlist, instead it relies on the
+// JSON_CONTAINS or JSONB_CONTAINS function to do the search.
+// The required tokenize_json or tokenize_jsonb function will be added in the
+// schema file to ensure JSON search schema can work.
+TEST_P(SearchTest, JsonSearch) {
+  if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    GTEST_SKIP() << "JSON_CONTAINS is not supported in the emulator.";
+  }
+  std::string query = dialect_ == database_api::DatabaseDialect::POSTGRESQL
+                          ?
+                          R"sql(
+      SELECT albumid
+      FROM albums
+      WHERE userid = 1 AND jsonb @> '1')sql"
+                          :
+                          R"sql(
+      SELECT albumid
+      FROM albums
+      WHERE userid = 1 AND JSON_CONTAINS(json, JSON '1'))sql";
+
+  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
+}
+
 TEST_P(SearchTest, SearchWithExistingSearchIndexHint) {
   ZETASQL_EXPECT_OK(UpdateSchema({
       R"sql(

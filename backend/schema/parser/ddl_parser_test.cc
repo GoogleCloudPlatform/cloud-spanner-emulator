@@ -751,6 +751,16 @@ TEST(ParseCreateTable,
                   )pb")));
 }
 
+TEST(ParseCreateTable, CannotParseCreateTableWithInterleaveInParentConfusion) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE TABLE Users (
+                      Name STRING(MAX),
+                    ) PRIMARY KEY (Name), INTERLEAVE IN parent
+                  )sql"),
+              StatusIs(StatusCode::kInvalidArgument));
+}
+
 TEST(ParseCreateTable, CanParseCreateTableWithAnArrayField) {
   EXPECT_THAT(
       ParseDDLStatement(

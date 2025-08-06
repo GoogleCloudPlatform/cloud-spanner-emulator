@@ -51,12 +51,14 @@ class SessionManager {
       const std::string& session_uri) ABSL_LOCKS_EXCLUDED(mu_);
 
   // Deletes a session with the given URI.
-  absl::Status DeleteSession(const std::string& session_uri)
+  absl::Status DeleteSession(const std::string& session_uri,
+                             bool delete_multiplex_sessions = false)
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Lists sessions attached to the given database URI.
   absl::StatusOr<std::vector<std::shared_ptr<Session>>> ListSessions(
-      const std::string& database_uri) const ABSL_LOCKS_EXCLUDED(mu_);
+      const std::string& database_uri,
+      bool include_multiplex_sessions = false) const ABSL_LOCKS_EXCLUDED(mu_);
 
   bool IsMultiplexedSession(const std::string& session_uri) const
       ABSL_LOCKS_EXCLUDED(mu_);

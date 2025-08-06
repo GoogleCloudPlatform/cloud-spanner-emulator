@@ -2486,6 +2486,35 @@ TEST_P(QueryEngineTest, JsonConverterFunctionsForGsql) {
   }
 }
 
+TEST_P(QueryEngineTest, JsonbFunctions) {
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
+    return;
+  }
+  struct JsonbFunctionTestCase {
+    std::string name;
+    std::string function_call;
+  };
+
+  std::vector<JsonbFunctionTestCase> test_cases = {
+      {"jsonb_contains",
+       R"(SELECT '{"a":1, "b":2}'::jsonb @> '{"b":2}'::jsonb)"},
+      {"jsonb_contained",
+       R"(SELECT '{"b":2}'::jsonb <@ '{"a":1, "b":2}'::jsonb)"},
+      {"jsonb_exists", R"(SELECT '{"a":1, "b":2}'::jsonb ? 'b')"},
+      {"jsonb_exists_any",
+       R"(SELECT '{"a":1, "b":2, "c":3}'::jsonb ?| array['b', 'd'])"},
+      {"jsonb_exists_all",
+       R"(SELECT '["a", "b", "c"]'::jsonb ?& array['a', 'b'])"},
+  };
+
+  for (const auto& test_case : test_cases) {
+    ZETASQL_ASSERT_OK(query_engine().ExecuteSql(Query{test_case.function_call},
+                                        QueryContext{schema(), reader()}))
+        << test_case.name
+        << " failed with function call: " << test_case.function_call;
+  }
+}
+
 TEST_P(QueryEngineTest, QueryingOnViews) {
   test::ScopedEmulatorFeatureFlagsSetter setter({.enable_views = true});
   ZETASQL_ASSERT_OK_AND_ASSIGN(

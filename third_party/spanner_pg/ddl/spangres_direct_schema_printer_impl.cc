@@ -954,10 +954,9 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSearchIndex(
   statements.emplace_back(PrintSearchIndexClause(options, "OPTIONS"));
 
   std::string output;
-  StrAppend(
-      &output, "CREATE SEARCH INDEX ",
-      QuoteQualifiedIdentifier(GetSchemaLocalName(statement.index_name())),
-      " ON ", QuoteQualifiedIdentifier(statement.index_base_name()));
+  StrAppend(&output, "CREATE SEARCH INDEX ",
+            QuoteQualifiedIdentifier(statement.index_name()), " ON ",
+            QuoteQualifiedIdentifier(statement.index_base_name()));
   for (std::string& statement : statements) {
     StrAppend(&output, statement);
   }

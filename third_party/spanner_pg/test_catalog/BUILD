@@ -31,6 +31,8 @@
 
 # Test catalog for Spanner PG dialect unit tests.
 
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
 package(
     default_visibility = ["//:__subpackages__"],
 )

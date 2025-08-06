@@ -174,12 +174,15 @@ CREATE TABLE Albums (
   Summary_Tokens TOKENLIST AS (TOKENIZE_FULLTEXT(Summary)) HIDDEN,
   Length INT64,
   Length_Tokens TOKENLIST AS (TOKENIZE_NUMBER(Length, min=>0, max=>0x40000000)) STORED HIDDEN,
+  JsonData JSON,
+  JsonData_Tokens TOKENLIST AS (TOKENIZE_JSON(JsonData)) HIDDEN,
 ) PRIMARY KEY(AlbumId);
 CREATE SEARCH INDEX AlbumIndexDefaultUniformSharding
 ON Albums(Name_Tokens,
           Tracks_Tokens,
           Summary_Tokens,
-          Length_Tokens)
+          Length_Tokens,
+          JsonData_Tokens)
 STORING (Length)
 PARTITION BY UserId
 ORDER BY ReleaseTimestamp DESC;
@@ -195,12 +198,15 @@ CREATE TABLE Albums (
   Summary STRING(MAX),
   Summary_Tokens TOKENLIST AS (TOKENIZE_FULLTEXT(Summary)) HIDDEN,
   Length INT64, Length_Tokens TOKENLIST AS (TOKENIZE_NUMBER(Length, min=>0, max=>0x40000000)) STORED HIDDEN,
+  JsonData JSON,
+  JsonData_Tokens TOKENLIST AS (TOKENIZE_JSON(JsonData)) HIDDEN,
 ) PRIMARY KEY(AlbumId);
 CREATE SEARCH INDEX AlbumIndexDefaultUniformSharding
 ON Albums(Name_Tokens,
           Tracks_Tokens,
           Summary_Tokens,
-          Length_Tokens)
+          Length_Tokens,
+          JsonData_Tokens)
 STORING (Length)
 PARTITION BY UserId
 ORDER BY ReleaseTimestamp DESC;

@@ -137,3 +137,48 @@ cc_test(
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
+
+cc_library(
+    name = "interleaving_verifiers",
+    srcs = ["interleaving_verifiers.cc"],
+    hdrs = ["interleaving_verifiers.h"],
+    deps = [
+        "//backend/common:ids",
+        "//backend/common:rows",
+        "//backend/datamodel:key",
+        "//backend/datamodel:key_range",
+        "//backend/query:analyzer_options",
+        "//backend/query:catalog",
+        "//backend/query:function_catalog",
+        "//backend/schema/catalog:schema",
+        "//backend/schema/updater:schema_validation_context",
+        "//backend/storage",
+        "//backend/storage:iterator",
+        "//common:errors",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/time",
+        "@com_google_zetasql//zetasql/public:analyzer_options",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)
+
+cc_test(
+    name = "interleaving_verifiers_test",
+    srcs = ["interleaving_verifiers_test.cc"],
+    deps = [
+        "//backend/access:write",
+        "//backend/database",
+        "//backend/schema/updater:schema_updater",
+        "//backend/transaction:read_write_transaction",
+        "//common:clock",
+        "//tests/common:proto_matchers",
+        "//tests/common:scoped_feature_flags_setter",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/time",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:value",
+    ],
+)

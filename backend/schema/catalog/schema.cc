@@ -380,10 +380,15 @@ void DumpInterleaveClause(const Table* table,
                           ddl::InterleaveClause& interleave_clause) {
   ABSL_CHECK_NE(table, nullptr);  // Crash OK
   interleave_clause.set_table_name(table->parent()->Name());
-  interleave_clause.set_on_delete(table->on_delete_action() ==
-                                          Table::OnDeleteAction::kCascade
-                                      ? ddl::InterleaveClause::CASCADE
-                                      : ddl::InterleaveClause::NO_ACTION);
+  if (table->interleave_type().value() == Table::InterleaveType::kInParent) {
+    interleave_clause.set_type(ddl::InterleaveClause::IN_PARENT);
+    interleave_clause.set_on_delete(table->on_delete_action() ==
+                                            Table::OnDeleteAction::kCascade
+                                        ? ddl::InterleaveClause::CASCADE
+                                        : ddl::InterleaveClause::NO_ACTION);
+  } else {
+    interleave_clause.set_type(ddl::InterleaveClause::IN);
+  }
 }
 
 void DumpCheckConstraint(const CheckConstraint* check_constraint,

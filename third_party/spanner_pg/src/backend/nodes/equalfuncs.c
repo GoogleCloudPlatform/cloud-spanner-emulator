@@ -2486,6 +2486,7 @@ _equalCreateSearchIndexStmt(const CreateSearchIndexStmt *a,
 							const CreateSearchIndexStmt *b)
 {
 	COMPARE_STRING_FIELD(search_index_name);
+	COMPARE_NODE_FIELD(search_index_name_rangevar);
 	COMPARE_NODE_FIELD(table_name);
 	COMPARE_NODE_FIELD(token_columns);
 	COMPARE_NODE_FIELD(storing);

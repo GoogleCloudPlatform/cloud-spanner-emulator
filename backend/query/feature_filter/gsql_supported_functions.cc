@@ -191,6 +191,7 @@ const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions() {
         "json_query",
         "json_remove",
         "json_set",
+        "json_contains",
         "json_array_insert",
         "json_strip_nulls",
         "json_array_append",

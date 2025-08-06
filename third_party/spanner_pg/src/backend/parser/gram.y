@@ -901,6 +901,10 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 
 %token		SPANGRES_HINT_START SPANGRES_HINT_END
 
+// ON_LA (ON Lookahead) exists to disambiguate ON UPDATE foreign key actions
+// from ON UPDATE column constraints (the latter being added for Spangres).
+%token		ON_LA
+
 %type <boolean> opt_is_definer_right
 /* END SPANGRES ADDED GRAMMAR TYPES */
 
@@ -2543,6 +2547,25 @@ alter_table_cmd:
 					n->def = NULL;
 					$$ = (Node *) n;
 				}
+			| ALTER opt_column ColId SET ON_LA UPDATE a_expr
+			  {
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+					n->subtype = AT_ColumnOnUpdate;
+					n->name = $3;
+					n->def = $7;
+					int expr_start = @7;
+					int expr_end  = pg_yyget_extra(yyscanner)->current_yylloc;
+					n->raw_expr_string = pnstrdup(pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf + expr_start, expr_end - expr_start);
+					$$ = (Node *)n;
+			  }
+			| ALTER opt_column ColId DROP ON_LA UPDATE
+			  {
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+					n->subtype = AT_ColumnOnUpdate;
+					n->name = $3;
+					n->def = NULL;
+					$$ = (Node *)n;
+			  }
 			/* END SPANGRES ADDED GRAMMAR RULES */
 			/* ALTER TABLE <name> ALTER [COLUMN] <colname> DROP NOT NULL */
 			| ALTER opt_column ColId DROP NOT NULL_P
@@ -4171,6 +4194,23 @@ ColConstraintElem:
 
 					$$ = (Node *) n;
 				}
+			/* BEGIN SPANGRES ADDED GRAMMAR RULE */
+			| ON_LA UPDATE b_expr
+			{
+				Constraint *n = makeNode(Constraint);
+				n->contype = CONSTR_ON_UPDATE;
+				n->location = @1;
+				n->raw_expr = $3;
+
+				int expr_start = @3;
+				int expr_end  = pg_yyget_extra(yyscanner)->current_yylloc;
+				n->constraint_expr_string =
+					pnstrdup(pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf +
+					expr_start, expr_end - expr_start);
+
+				$$ = (Node *)n;
+			}
+			/* END SPANGRES ADDED GRAMMAR RULE */
 			| GENERATED generated_when AS IDENTITY_P OptParenthesizedSeqOptList
 				{
 					Constraint *n = makeNode(Constraint);
@@ -11532,11 +11572,12 @@ AlterLocalityGroupStmt:
  *
  *****************************************************************************/
 CreateSearchIndexStmt:
-						CREATE SEARCH INDEX name ON qualified_name '(' index_params ')'
+						CREATE SEARCH INDEX qualified_name ON qualified_name '(' index_params ')'
 						opt_include opt_partition_by_clause opt_sort_clause OptInterleaveIndex where_clause opt_definition
 						{
 								CreateSearchIndexStmt *n = makeNode(CreateSearchIndexStmt);
-								n->search_index_name = $4;
+								n->search_index_name = $4->relname;
+								n->search_index_name_rangevar = $4;
 								n->table_name = $6;
 								n->token_columns = $8;
 								n->storing = $10;

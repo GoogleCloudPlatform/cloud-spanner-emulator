@@ -37,11 +37,9 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
-#include "third_party/spanner_pg/interface/parser_interface.h"
 #include "third_party/spanner_pg/interface/parser_output.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
-#include "third_party/spanner_pg/shims/memory_reservation_holder.h"
 #include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"
 
 namespace postgres_translator {
@@ -60,9 +58,7 @@ TEST_F(ParserWithoutSerializationTest, ExistingMemoryContext) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<interfaces::PGArena> extra_arena,
                        MemoryContextPGArena::Init(
                            std::make_unique<StubMemoryReservationManager>()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(interfaces::ParserInterface * parser,
-                       parser_.GetParser());
-  interfaces::ParserSingleOutput output(parser->Parse("select 1234567890123"));
+  interfaces::ParserSingleOutput output(parser_.Parse("select 1234567890123"));
   // We should get an internal error from attempting to overwrite an active
   // MemoryContext.
   EXPECT_THAT(output.output().status(),
@@ -71,9 +67,7 @@ TEST_F(ParserWithoutSerializationTest, ExistingMemoryContext) {
 
 TEST_F(ParserWithoutSerializationTest,
        ReturnsErrorOnInvalidUnicodeEscapeValue) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(interfaces::ParserInterface * parser,
-                       parser_.GetParser());
-  interfaces::ParserSingleOutput output(parser->Parse("u&\'\\+8FF2C7\'"));
+  interfaces::ParserSingleOutput output(parser_.Parse("u&\'\\+8FF2C7\'"));
   EXPECT_THAT(output.output().status(),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("invalid Unicode escape value")));

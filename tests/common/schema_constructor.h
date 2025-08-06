@@ -157,6 +157,14 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
+// Creates a schema with a child table interleaved in a parent table, with
+// the INTERLEAVE IN clause.
+absl::StatusOr<std::unique_ptr<const backend::Schema>>
+CreateSchemaWithNonParentInterleaving(
+    zetasql::TypeFactory* const type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+
 // Creates a schema with two top level tables and one child table.
 std::unique_ptr<const backend::Schema> CreateSchemaWithMultiTables(
     zetasql::TypeFactory* type_factory,

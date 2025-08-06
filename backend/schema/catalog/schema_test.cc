@@ -82,6 +82,7 @@ class SchemaTest : public testing::Test {
             .enable_identity_columns = true,
             .enable_user_defined_functions = true,
             .enable_fk_enforcement_option = true,
+            .enable_interleave_in = true,
         }) {}
 
   void SetUp() override {
@@ -298,11 +299,32 @@ TEST_F(SchemaTest, InterleaveTest) {
   ASSERT_NE(table, nullptr);
   EXPECT_EQ(table->on_delete_action(), Table::OnDeleteAction::kCascade);
   EXPECT_EQ(table->parent(), parent_table);
+  EXPECT_EQ(table->interleave_type().value(), Table::InterleaveType::kInParent);
 
   table = base_schema_->FindTable("NoActionDeleteChild");
   ASSERT_NE(table, nullptr);
   EXPECT_EQ(table->on_delete_action(), Table::OnDeleteAction::kNoAction);
   EXPECT_EQ(table->parent(), parent_table);
+  EXPECT_EQ(table->interleave_type().value(), Table::InterleaveType::kInParent);
+}
+
+TEST_F(SchemaTest, NonParentInterleaveTest) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      base_schema_,
+      test::CreateSchemaWithNonParentInterleaving(type_factory_.get()));
+  EXPECT_EQ(base_schema_->tables().size(), 2);
+
+  // Verify parent table.
+  const Table* parent_table = base_schema_->FindTable("NpiParent");
+  ASSERT_NE(parent_table, nullptr);
+  EXPECT_EQ(parent_table->children().size(), 1);
+
+  // Verify the interleaving table properties.
+  auto table = base_schema_->FindTable("NpiChild");
+  ASSERT_NE(table, nullptr);
+  EXPECT_FALSE(table->has_on_delete_action());
+  EXPECT_EQ(table->parent(), parent_table);
+  EXPECT_EQ(table->interleave_type().value(), Table::InterleaveType::kIn);
 }
 
 // Column tests.
@@ -975,6 +997,49 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestInterleaving) {
   c1 character varying,
   PRIMARY KEY(k1, k2)
 ) INTERLEAVE IN PARENT parent ON DELETE NO ACTION)")));
+}
+
+TEST_F(SchemaTest, PrintDDLStatementsTestNonParentInterleaving) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const Schema> schema,
+      test::CreateSchemaWithNonParentInterleaving(type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(
+                              R"(CREATE TABLE NpiParent (
+  k1 INT64 NOT NULL,
+  c1 STRING(MAX),
+) PRIMARY KEY(k1))",
+                              R"(CREATE TABLE NpiChild (
+  k1 INT64 NOT NULL,
+  k2 INT64 NOT NULL,
+  c1 STRING(MAX),
+) PRIMARY KEY(k1, k2),
+  INTERLEAVE IN NpiParent)")));
+}
+
+TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestNonParentInterleaving) {
+  SetPostgresqlDialect();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const Schema> schema,
+      test::CreateSchemaWithNonParentInterleaving(
+          type_factory_.get(), database_api::DatabaseDialect::POSTGRESQL));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(
+                              R"(CREATE TABLE npiparent (
+  k1 bigint NOT NULL,
+  c1 character varying,
+  PRIMARY KEY(k1)
+))",
+                              R"(CREATE TABLE npichild (
+  k1 bigint NOT NULL,
+  k2 bigint NOT NULL,
+  c1 character varying,
+  PRIMARY KEY(k1, k2)
+) INTERLEAVE IN npiparent)")));
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestForeignKey) {

@@ -48,6 +48,15 @@ typedef struct base_yy_extra_type
 	YYLTYPE		lookahead_yylloc;	/* yylloc for lookahead token */
 	char	   *lookahead_end;	/* end of current token */
 	char		lookahead_hold_char;	/* to be put back at *lookahead_end */
+	/* SPANGRES BEGIN */
+	// Spangres second lookahead token state.
+	bool		have_second_lookahead; /* is second lookahead info valid? */
+	int			second_lookahead_token;	/* two-token lookahead, the token itself */
+	core_YYSTYPE second_lookahead_yylval;	/* yylval for second lookahead token */
+	YYLTYPE		second_lookahead_yylloc;	/* yylloc for second lookahead token */
+	char	   *second_lookahead_end;	/* end of first lookahead token */
+	char		second_lookahead_hold_char;	/* to put back at *second_lookahead_end */
+	/* SPANGRES END */
 
 	/* SPANGRES BEGIN */
 	// spangres token location pairs

@@ -29,6 +29,8 @@
 # MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #------------------------------------------------------------------------------
 
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
 package(
     default_visibility = ["//:__subpackages__"],
     # Disable layering_check because the Postgres binary is one giant component.
@@ -60,7 +62,7 @@ cc_library(
     name = "backend_with_stub_shims",
     deps = [
         ":backend",
-        "//third_party/spanner_pg/interface:stub_catalog_wrappers",
+        "//third_party/spanner_pg/src/spangres:stub_catalog_wrappers",
         # `memory` is very widely used and very lightweight.
         # Don't stub it, just use it.
         "//third_party/spanner_pg/src/spangres:memory",

@@ -47,6 +47,7 @@ class InterleaveParentValidator : public Validator {
   const Table* parent_;
   const Table* child_;
   const Table::OnDeleteAction on_delete_action_;
+  const Table::InterleaveType interleave_type_;
 };
 
 // InterleaveParentEffector triggers on mutations to a parent table in an
@@ -86,6 +87,7 @@ class InterleaveChildValidator : public Validator {
   const Table* parent_;
   const Table* child_;
   const Table::OnDeleteAction on_delete_action_;
+  const Table::InterleaveType interleave_type_;
 };
 
 }  // namespace backend

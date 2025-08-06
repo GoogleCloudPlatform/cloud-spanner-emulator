@@ -96,6 +96,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8and"
     is_enabled_in_catalog: true
   }
 }
@@ -119,6 +121,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8shl"
     is_enabled_in_catalog: true
   }
 }
@@ -135,6 +139,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8not"
     is_enabled_in_catalog: true
   }
 }
@@ -158,6 +164,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8or"
     is_enabled_in_catalog: true
   }
 }
@@ -181,6 +189,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8shr"
     is_enabled_in_catalog: true
   }
 }
@@ -204,6 +214,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "int8xor"
     is_enabled_in_catalog: true
   }
 }
@@ -1960,6 +1972,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "acos"
     is_enabled_in_catalog: true
   }
 }
@@ -1978,6 +1992,8 @@ functions {
       named_argument_kind: POSITIONAL_OR_NAMED
       name: "prompt"
     }
+    postgresql_name_path: "ai"
+    postgresql_name_path: "if"
     is_enabled_in_catalog: true
   }
 }
@@ -2001,6 +2017,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_cat"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2021,6 +2039,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_cat"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2041,6 +2061,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_cat"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2061,6 +2083,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_cat"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2081,6 +2105,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_cat"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2101,6 +2127,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_cat"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2121,6 +2149,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_cat"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2141,6 +2171,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_cat"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2161,6 +2193,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_cat"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2181,6 +2215,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_cat"
     is_enabled_in_catalog: true
   }
 }
@@ -2197,6 +2233,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "asin"
     is_enabled_in_catalog: true
   }
 }
@@ -2213,6 +2251,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "atan"
     is_enabled_in_catalog: true
   }
 }
@@ -2236,6 +2276,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "atan2"
     is_enabled_in_catalog: true
   }
 }
@@ -2259,6 +2301,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50006
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "bit_reverse"
     is_enabled_in_catalog: true
   }
 }
@@ -2275,6 +2320,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50052
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "bool_array"
     is_enabled_in_catalog: true
   }
 }
@@ -2349,6 +2397,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cos"
     is_enabled_in_catalog: true
   }
 }
@@ -2372,6 +2422,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cosine_distance"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2392,6 +2444,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cosine_distance"
     is_enabled_in_catalog: true
   }
 }
@@ -2401,6 +2455,8 @@ functions {
     return_type {
       oid: 1184
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "now"
     is_enabled_in_catalog: true
   }
 }
@@ -2453,6 +2509,7 @@ functions {
       cardinality: OPTIONAL
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50067
     postgresql_name_path: "spanner"
     postgresql_name_path: "date"
     is_enabled_in_catalog: true
@@ -2471,6 +2528,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50003
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "debug_tokenlist"
     is_enabled_in_catalog: true
   }
 }
@@ -2543,6 +2603,9 @@ functions {
       named_argument_kind: POSITIONAL_ONLY
       name: "input_array_2"
     }
+    oid: 50046
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "dot_product"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2565,6 +2628,9 @@ functions {
       named_argument_kind: POSITIONAL_ONLY
       name: "input_array_2"
     }
+    oid: 50047
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "dot_product"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2587,6 +2653,9 @@ functions {
       named_argument_kind: POSITIONAL_ONLY
       name: "input_array_2"
     }
+    oid: 50045
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "dot_product"
     is_enabled_in_catalog: true
   }
 }
@@ -2610,6 +2679,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "euclidean_distance"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2630,6 +2701,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "euclidean_distance"
     is_enabled_in_catalog: true
   }
 }
@@ -2664,6 +2737,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50055
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "farm_fingerprint"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2677,6 +2753,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50054
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "farm_fingerprint"
     is_enabled_in_catalog: true
   }
 }
@@ -2693,6 +2772,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "floor"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2706,6 +2787,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "floor"
     is_enabled_in_catalog: true
   }
 }
@@ -2715,6 +2798,9 @@ functions {
     return_type {
       oid: 2950
     }
+    oid: 50008
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "generate_uuid"
     is_enabled_in_catalog: true
   }
 }
@@ -2731,6 +2817,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50007
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "get_internal_sequence_state"
     is_enabled_in_catalog: true
   }
 }
@@ -2747,6 +2836,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "nextval"
     is_enabled_in_catalog: true
   }
 }
@@ -2763,6 +2854,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50056
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "get_table_column_identity_state"
     is_enabled_in_catalog: true
   }
 }
@@ -2779,6 +2873,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50049
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "int64_array"
     is_enabled_in_catalog: true
   }
 }
@@ -2795,6 +2892,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50042
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "jsonb_query_array"
     is_enabled_in_catalog: true
   }
 }
@@ -2811,6 +2911,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_typeof"
     is_enabled_in_catalog: true
   }
 }
@@ -2827,6 +2929,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "length"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2840,6 +2944,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "length"
     is_enabled_in_catalog: true
   }
 }
@@ -2892,6 +2998,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "lower"
     is_enabled_in_catalog: true
   }
 }
@@ -2922,6 +3030,8 @@ functions {
       cardinality: OPTIONAL
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "lpad"
     is_enabled_in_catalog: true
   }
 }
@@ -2945,6 +3055,8 @@ functions {
       cardinality: OPTIONAL
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "ltrim"
     is_enabled_in_catalog: true
   }
 }
@@ -2970,6 +3082,9 @@ functions {
       named_argument_kind: POSITIONAL_OR_NAMED
       name: "args"
     }
+    oid: 50040
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "ml_predict_row"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -2992,6 +3107,9 @@ functions {
       named_argument_kind: POSITIONAL_OR_NAMED
       name: "args"
     }
+    oid: 50041
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "ml_predict_row"
     is_enabled_in_catalog: true
   }
 }
@@ -3048,6 +3166,8 @@ functions {
     return_type {
       oid: 2950
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "gen_random_uuid"
     is_enabled_in_catalog: true
   }
 }
@@ -3084,6 +3204,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "options"
     }
+    oid: 50061
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "approx_cosine_distance"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -3114,6 +3237,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "options"
     }
+    oid: 50062
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "approx_cosine_distance"
     is_enabled_in_catalog: true
   }
 }
@@ -3150,6 +3276,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "options"
     }
+    oid: 50065
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "approx_dot_product"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -3180,6 +3309,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "options"
     }
+    oid: 50066
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "approx_dot_product"
     is_enabled_in_catalog: true
   }
 }
@@ -3216,6 +3348,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "options"
     }
+    oid: 50063
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "approx_euclidean_distance"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -3246,6 +3381,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "options"
     }
+    oid: 50064
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "approx_euclidean_distance"
     is_enabled_in_catalog: true
   }
 }
@@ -3274,6 +3412,8 @@ functions {
       named_argument_kind: POSITIONAL_ONLY
       name: "array_to_search"
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_all_equal"
     is_enabled_in_catalog: true
   }
 }
@@ -3302,6 +3442,8 @@ functions {
       named_argument_kind: POSITIONAL_ONLY
       name: "array_to_search"
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_all_greater"
     is_enabled_in_catalog: true
   }
 }
@@ -3330,6 +3472,8 @@ functions {
       named_argument_kind: POSITIONAL_ONLY
       name: "array_to_search"
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_all_greater_equal"
     is_enabled_in_catalog: true
   }
 }
@@ -3358,6 +3502,8 @@ functions {
       named_argument_kind: POSITIONAL_ONLY
       name: "array_to_search"
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_all_less"
     is_enabled_in_catalog: true
   }
 }
@@ -3386,6 +3532,8 @@ functions {
       named_argument_kind: POSITIONAL_ONLY
       name: "array_to_search"
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_all_less_equal"
     is_enabled_in_catalog: true
   }
 }
@@ -3414,6 +3562,8 @@ functions {
       named_argument_kind: POSITIONAL_ONLY
       name: "array_to_search"
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "arraycontained"
     is_enabled_in_catalog: true
   }
 }
@@ -3442,6 +3592,8 @@ functions {
       named_argument_kind: POSITIONAL_ONLY
       name: "search_values"
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "arraycontains"
     is_enabled_in_catalog: true
   }
 }
@@ -3468,6 +3620,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_length"
     is_enabled_in_catalog: true
   }
 }
@@ -3496,6 +3650,8 @@ functions {
       named_argument_kind: POSITIONAL_ONLY
       name: "search_values"
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "arrayoverlap"
     is_enabled_in_catalog: true
   }
 }
@@ -3532,6 +3688,8 @@ functions {
       named_argument_kind: POSITIONAL_ONLY
       name: "end_offset"
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_slice"
     is_enabled_in_catalog: true
   }
 }
@@ -3558,6 +3716,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "array_upper"
     is_enabled_in_catalog: true
   }
 }
@@ -3577,6 +3737,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cast_to_date"
     is_enabled_in_catalog: true
   }
 }
@@ -3596,6 +3758,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cast_to_double"
     is_enabled_in_catalog: true
   }
 }
@@ -3615,6 +3779,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cast_to_float"
     is_enabled_in_catalog: true
   }
 }
@@ -3634,6 +3800,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cast_to_int64"
     is_enabled_in_catalog: true
   }
 }
@@ -3653,6 +3821,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cast_to_interval"
     is_enabled_in_catalog: true
   }
 }
@@ -3672,6 +3842,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cast_to_numeric"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -3685,6 +3857,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cast_to_numeric"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -3698,6 +3872,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cast_to_numeric"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -3711,6 +3887,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cast_to_numeric"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -3738,6 +3916,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cast_to_numeric"
     is_enabled_in_catalog: true
   }
 }
@@ -3757,6 +3937,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cast_to_string"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -3770,6 +3952,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cast_to_string"
     is_enabled_in_catalog: true
   }
 }
@@ -3789,6 +3973,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "cast_to_timestamp"
     is_enabled_in_catalog: true
   }
 }
@@ -3822,6 +4008,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50015
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "date_bin"
     is_enabled_in_catalog: true
   }
 }
@@ -3848,6 +4037,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "date_mi"
     is_enabled_in_catalog: true
   }
 }
@@ -3874,6 +4065,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "date_mii"
     is_enabled_in_catalog: true
   }
 }
@@ -3900,6 +4093,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "date_part"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -3920,6 +4115,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "date_part"
     is_enabled_in_catalog: true
   }
 }
@@ -3946,6 +4143,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "date_pli"
     is_enabled_in_catalog: true
   }
 }
@@ -3972,6 +4171,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "date_trunc"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -3999,6 +4200,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "date_trunc"
     is_enabled_in_catalog: true
   }
 }
@@ -4025,6 +4228,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "extract"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -4045,6 +4250,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "extract"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -4065,6 +4272,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "extract"
     is_enabled_in_catalog: true
   }
 }
@@ -4091,6 +4300,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "extract"
     is_enabled_in_catalog: true
   }
 }
@@ -4117,6 +4328,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float4pl"
     is_enabled_in_catalog: true
   }
 }
@@ -4143,6 +4356,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float4div"
     is_enabled_in_catalog: true
   }
 }
@@ -4169,6 +4384,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float4mul"
     is_enabled_in_catalog: true
   }
 }
@@ -4195,6 +4412,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "float4mi"
     is_enabled_in_catalog: true
   }
 }
@@ -4221,6 +4440,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "format_type"
     is_enabled_in_catalog: true
   }
 }
@@ -4254,6 +4475,8 @@ functions {
       cardinality: OPTIONAL
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "generate_series"
     is_enabled_in_catalog: true
   }
 }
@@ -4280,6 +4503,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "greatest"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -4300,6 +4525,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "greatest"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -4320,6 +4547,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "greatest"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -4340,6 +4569,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "greatest"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -4360,6 +4591,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "greatest"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -4380,6 +4613,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "greatest"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -4400,6 +4635,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "greatest"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -4420,6 +4657,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "greatest"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -4440,6 +4679,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "greatest"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -4460,6 +4701,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "greatest"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -4480,6 +4723,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "greatest"
     is_enabled_in_catalog: true
   }
 }
@@ -4506,6 +4751,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "interval_pl"
     is_enabled_in_catalog: true
   }
 }
@@ -4532,6 +4779,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "interval_div"
     is_enabled_in_catalog: true
   }
 }
@@ -4558,6 +4807,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "interval_mul"
     is_enabled_in_catalog: true
   }
 }
@@ -4584,6 +4835,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "interval_mi"
     is_enabled_in_catalog: true
   }
 }
@@ -4603,6 +4856,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "interval_um"
     is_enabled_in_catalog: true
   }
 }
@@ -4622,6 +4877,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_build_array"
     is_enabled_in_catalog: true
   }
 }
@@ -4648,6 +4905,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_build_object"
     is_enabled_in_catalog: true
   }
 }
@@ -4674,6 +4933,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_concat"
     is_enabled_in_catalog: true
   }
 }
@@ -4700,6 +4961,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_contained"
     is_enabled_in_catalog: true
   }
 }
@@ -4726,6 +4989,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_contains"
     is_enabled_in_catalog: true
   }
 }
@@ -4752,6 +5017,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_delete"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -4772,6 +5039,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_delete"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -4792,6 +5061,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_delete"
     is_enabled_in_catalog: true
   }
 }
@@ -4818,6 +5089,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_delete_path"
     is_enabled_in_catalog: true
   }
 }
@@ -4844,6 +5117,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_exists"
     is_enabled_in_catalog: true
   }
 }
@@ -4870,6 +5145,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_exists_all"
     is_enabled_in_catalog: true
   }
 }
@@ -4896,6 +5173,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_exists_any"
     is_enabled_in_catalog: true
   }
 }
@@ -4936,6 +5215,8 @@ functions {
       cardinality: OPTIONAL
       named_argument_kind: POSITIONAL_OR_NAMED
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_insert"
     is_enabled_in_catalog: true
   }
 }
@@ -4955,6 +5236,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_object_keys"
     is_enabled_in_catalog: true
   }
 }
@@ -4995,6 +5278,8 @@ functions {
       cardinality: OPTIONAL
       named_argument_kind: POSITIONAL_OR_NAMED
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_set"
     is_enabled_in_catalog: true
   }
 }
@@ -5042,6 +5327,8 @@ functions {
       cardinality: OPTIONAL
       named_argument_kind: POSITIONAL_OR_NAMED
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_set_lax"
     is_enabled_in_catalog: true
   }
 }
@@ -5061,6 +5348,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "jsonb_strip_nulls"
     is_enabled_in_catalog: true
   }
 }
@@ -5128,6 +5417,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "justify_days"
     is_enabled_in_catalog: true
   }
 }
@@ -5147,6 +5438,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "justify_hours"
     is_enabled_in_catalog: true
   }
 }
@@ -5166,6 +5459,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "justify_interval"
     is_enabled_in_catalog: true
   }
 }
@@ -5192,6 +5487,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "least"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5212,6 +5509,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "least"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5232,6 +5531,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "least"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5252,6 +5553,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "least"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5272,6 +5575,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "least"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5292,6 +5597,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "least"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5312,6 +5619,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "least"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5332,6 +5641,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "least"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5352,6 +5663,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "least"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5372,6 +5685,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "least"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5392,6 +5707,8 @@ functions {
       cardinality: REPEATED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "least"
     is_enabled_in_catalog: true
   }
 }
@@ -5460,6 +5777,8 @@ functions {
       named_argument_kind: POSITIONAL_OR_NAMED
       name: "secs"
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "make_interval"
     is_enabled_in_catalog: true
   }
 }
@@ -5479,6 +5798,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "map_double_to_int"
     is_enabled_in_catalog: true
   }
 }
@@ -5498,6 +5819,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "map_float_to_int"
     is_enabled_in_catalog: true
   }
 }
@@ -5517,6 +5840,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "quote_ident"
     is_enabled_in_catalog: true
   }
 }
@@ -5543,6 +5868,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "regexp_match"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5570,6 +5897,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "regexp_match"
     is_enabled_in_catalog: true
   }
 }
@@ -5596,6 +5925,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "regexp_split_to_array"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5623,6 +5954,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "regexp_split_to_array"
     is_enabled_in_catalog: true
   }
 }
@@ -5649,6 +5982,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "substring"
     is_enabled_in_catalog: true
   }
 }
@@ -5675,6 +6010,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "textregexne"
     is_enabled_in_catalog: true
   }
 }
@@ -5701,6 +6038,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "timestamptz_add"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5721,6 +6060,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "timestamptz_add"
     is_enabled_in_catalog: true
   }
 }
@@ -5747,6 +6088,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "timestamptz_subtract"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5767,6 +6110,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "timestamptz_subtract"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5787,6 +6132,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "timestamptz_subtract"
     is_enabled_in_catalog: true
   }
 }
@@ -5813,6 +6160,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "timestamptz_mi"
     is_enabled_in_catalog: true
   }
 }
@@ -5839,6 +6188,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_char"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5859,6 +6210,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_char"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5879,6 +6232,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_char"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5899,6 +6254,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_char"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5919,6 +6276,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_char"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5939,6 +6298,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_char"
     is_enabled_in_catalog: true
   }
 }
@@ -5965,6 +6326,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_date"
     is_enabled_in_catalog: true
   }
 }
@@ -5984,6 +6347,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -5997,6 +6362,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6010,6 +6377,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6023,6 +6392,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6036,6 +6407,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6049,6 +6422,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6062,6 +6437,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6075,6 +6452,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6088,6 +6467,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6101,6 +6482,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6114,6 +6497,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6127,6 +6512,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6140,6 +6527,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6153,6 +6542,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6166,6 +6557,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6179,6 +6572,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6192,6 +6587,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6205,6 +6602,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6218,6 +6617,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6231,6 +6632,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6244,6 +6647,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6257,6 +6662,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6270,6 +6677,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6283,6 +6692,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6296,6 +6707,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -6309,6 +6722,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_jsonb"
     is_enabled_in_catalog: true
   }
 }
@@ -6335,6 +6750,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_number"
     is_enabled_in_catalog: true
   }
 }
@@ -6361,6 +6778,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_timestamp"
     is_enabled_in_catalog: true
   }
 }
@@ -6409,6 +6828,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "textregexeq"
     is_enabled_in_catalog: true
   }
 }
@@ -6439,6 +6860,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "regexp_replace"
     is_enabled_in_catalog: true
   }
 }
@@ -6462,6 +6885,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "repeat"
     is_enabled_in_catalog: true
   }
 }
@@ -6492,6 +6917,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "replace"
     is_enabled_in_catalog: true
   }
 }
@@ -6508,6 +6935,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "reverse"
     is_enabled_in_catalog: true
   }
 }
@@ -6524,6 +6953,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "round"
     is_enabled_in_catalog: true
   }
 }
@@ -6554,6 +6985,8 @@ functions {
       cardinality: OPTIONAL
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "rpad"
     is_enabled_in_catalog: true
   }
 }
@@ -6577,6 +7010,8 @@ functions {
       cardinality: OPTIONAL
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "rtrim"
     is_enabled_in_catalog: true
   }
 }
@@ -6642,6 +7077,17 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "options"
     }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "dictionary"
+    }
+    oid: 50058
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "score"
     is_enabled_in_catalog: true
   }
 }
@@ -6691,6 +7137,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "array_aggregator"
     }
+    oid: 50036
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "score_ngrams"
     is_enabled_in_catalog: true
   }
 }
@@ -6748,6 +7197,17 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "enhance_query_options"
     }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "dictionary"
+    }
+    oid: 50033
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "search"
     is_enabled_in_catalog: true
   }
 }
@@ -6797,6 +7257,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "language_tag"
     }
+    oid: 50035
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "search_ngrams"
     is_enabled_in_catalog: true
   }
 }
@@ -6838,6 +7301,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "language_tag"
     }
+    oid: 50034
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "search_substring"
     is_enabled_in_catalog: true
   }
 }
@@ -6854,6 +7320,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "sha256"
     is_enabled_in_catalog: true
   }
 }
@@ -6870,6 +7338,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "sha512"
     is_enabled_in_catalog: true
   }
 }
@@ -6886,6 +7356,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "sign"
     is_enabled_in_catalog: true
   }
 }
@@ -6902,6 +7374,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "sin"
     is_enabled_in_catalog: true
   }
 }
@@ -6975,6 +7449,17 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "enhance_query_options"
     }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "dictionary"
+    }
+    oid: 50059
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "snippet"
     is_enabled_in_catalog: true
   }
 }
@@ -7016,22 +7501,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
-    is_enabled_in_catalog: true
-  }
-}
-functions {
-  mapped_name_path: "string"
-  signatures {
-    return_type {
-      oid: 25
-    }
-    arguments {
-      type {
-        oid: 3802
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-    }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "starts_with"
     is_enabled_in_catalog: true
   }
 }
@@ -7048,6 +7519,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50053
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "string_array"
     is_enabled_in_catalog: true
   }
 }
@@ -7071,6 +7545,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "strpos"
     is_enabled_in_catalog: true
   }
 }
@@ -7148,6 +7624,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "tan"
     is_enabled_in_catalog: true
   }
 }
@@ -7164,6 +7642,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50009
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "timestamp_from_unix_micros"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -7177,6 +7658,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50010
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "timestamp_from_unix_micros"
     is_enabled_in_catalog: true
   }
 }
@@ -7193,6 +7677,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50011
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "timestamp_from_unix_millis"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -7206,6 +7693,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50012
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "timestamp_from_unix_millis"
     is_enabled_in_catalog: true
   }
 }
@@ -7222,6 +7712,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "to_timestamp"
     is_enabled_in_catalog: true
   }
 }
@@ -7238,6 +7730,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50022
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "token"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -7251,6 +7746,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50023
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "token"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -7264,6 +7762,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50020
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "token"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -7277,6 +7778,9 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    oid: 50021
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "token"
     is_enabled_in_catalog: true
   }
 }
@@ -7294,6 +7798,9 @@ functions {
       named_argument_kind: POSITIONAL_OR_NAMED
       name: "value"
     }
+    oid: 50030
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenize_bool"
     is_enabled_in_catalog: true
   }
 }
@@ -7335,6 +7842,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "token_category"
     }
+    oid: 50016
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenize_fulltext"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -7373,6 +7883,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "token_category"
     }
+    oid: 50017
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenize_fulltext"
     is_enabled_in_catalog: true
   }
 }
@@ -7390,6 +7903,9 @@ functions {
       named_argument_kind: POSITIONAL_OR_NAMED
       name: "value"
     }
+    oid: 50060
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenize_jsonb"
     is_enabled_in_catalog: true
   }
 }
@@ -7431,6 +7947,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "remove_diacritics"
     }
+    oid: 50031
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenize_ngrams"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -7469,6 +7988,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "remove_diacritics"
     }
+    oid: 50057
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenize_ngrams"
     is_enabled_in_catalog: true
   }
 }
@@ -7542,6 +8064,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "ieee_precision"
     }
+    oid: 50024
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenize_number"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -7612,6 +8137,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "ieee_precision"
     }
+    oid: 50025
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenize_number"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -7682,6 +8210,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "ieee_precision"
     }
+    oid: 50028
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenize_number"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -7752,6 +8283,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "ieee_precision"
     }
+    oid: 50029
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenize_number"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -7822,6 +8356,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "ieee_precision"
     }
+    oid: 50026
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenize_number"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -7892,6 +8429,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "ieee_precision"
     }
+    oid: 50027
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenize_number"
     is_enabled_in_catalog: true
   }
 }
@@ -7927,14 +8467,6 @@ functions {
     }
     arguments {
       type {
-        oid: 16
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "support_relative_search"
-    }
-    arguments {
-      type {
         oid: 25
       }
       cardinality: OPTIONAL
@@ -7973,154 +8505,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "remove_diacritics"
     }
-    is_enabled_in_catalog: true
-  }
-  signatures {
-    return_type {
-      oid: 50001
-    }
-    arguments {
-      type {
-        oid: 1009
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_OR_NAMED
-      name: "value"
-    }
-    arguments {
-      type {
-        oid: 20
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "ngram_size_max"
-    }
-    arguments {
-      type {
-        oid: 20
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "ngram_size_min"
-    }
-    arguments {
-      type {
-        oid: 16
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "support_relative_search"
-    }
-    arguments {
-      type {
-        oid: 25
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "content_type"
-    }
-    arguments {
-      type {
-        oid: 1009
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "relative_search_types"
-    }
-    arguments {
-      type {
-        oid: 16
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "short_tokens_only_for_anchors"
-    }
-    arguments {
-      type {
-        oid: 25
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "language_tag"
-    }
-    arguments {
-      type {
-        oid: 16
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "remove_diacritics"
-    }
-    is_enabled_in_catalog: true
-  }
-  signatures {
-    return_type {
-      oid: 50001
-    }
-    arguments {
-      type {
-        oid: 25
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_OR_NAMED
-      name: "value"
-    }
-    arguments {
-      type {
-        oid: 20
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "ngram_size_max"
-    }
-    arguments {
-      type {
-        oid: 20
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "ngram_size_min"
-    }
-    arguments {
-      type {
-        oid: 25
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "content_type"
-    }
-    arguments {
-      type {
-        oid: 1009
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "relative_search_types"
-    }
-    arguments {
-      type {
-        oid: 16
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "short_tokens_only_for_anchors"
-    }
-    arguments {
-      type {
-        oid: 25
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "language_tag"
-    }
-    arguments {
-      type {
-        oid: 16
-      }
-      cardinality: OPTIONAL
-      named_argument_kind: NAMED_ONLY
-      name: "remove_diacritics"
-    }
+    oid: 50018
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenize_substring"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -8191,6 +8578,9 @@ functions {
       named_argument_kind: NAMED_ONLY
       name: "remove_diacritics"
     }
+    oid: 50019
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenize_substring"
     is_enabled_in_catalog: true
   }
 }
@@ -8208,6 +8598,9 @@ functions {
       named_argument_kind: POSITIONAL_OR_NAMED
       name: "tokens"
     }
+    oid: 50032
+    postgresql_name_path: "spanner"
+    postgresql_name_path: "tokenlist_concat"
     is_enabled_in_catalog: true
   }
 }
@@ -8231,6 +8624,8 @@ functions {
       cardinality: OPTIONAL
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "trim"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -8251,6 +8646,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "trim"
     is_enabled_in_catalog: true
   }
 }
@@ -8267,6 +8664,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "trunc"
     is_enabled_in_catalog: true
   }
   signatures {
@@ -8287,6 +8686,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "trunc"
     is_enabled_in_catalog: true
   }
 }
@@ -8303,6 +8704,8 @@ functions {
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
+    postgresql_name_path: "pg"
+    postgresql_name_path: "upper"
     is_enabled_in_catalog: true
   }
 }

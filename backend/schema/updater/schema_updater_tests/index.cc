@@ -449,6 +449,45 @@ TEST_P(SchemaUpdaterTest, CreateIndex_Interleave) {
   EXPECT_THAT(idx_data, IsInterleavedIn(t1, Table::OnDeleteAction::kCascade));
 }
 
+TEST_P(SchemaUpdaterTest, CreateIndex_InterleaveInRemoteParent) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE T1 (
+        k1 INT64,
+        k2 INT64
+      ) PRIMARY KEY (k1)
+    )sql",
+                                        R"sql(
+      CREATE TABLE T2 (
+        k1 INT64,
+        k2 INT64,
+        c1 BYTES(MAX)
+      ) PRIMARY KEY (k1,k2)
+    )sql",
+                                        R"sql(
+      CREATE INDEX RemoteIdx ON T2(k2,c1), INTERLEAVE IN T1
+    )sql"}));
+
+  auto t1 = schema->FindTable("T1");
+  EXPECT_NE(t1, nullptr);
+
+  auto idx = schema->FindIndex("RemoteIdx");
+  EXPECT_EQ(idx->parent(), t1);
+  EXPECT_NE(idx, nullptr);
+
+  auto idx_data = idx->index_data_table();
+  auto data_columns = idx_data->columns();
+  EXPECT_EQ(data_columns.size(), 3);
+  EXPECT_THAT(data_columns[0], ColumnIs("k2", types::Int64Type()));
+  EXPECT_THAT(data_columns[1], ColumnIs("c1", types::BytesType()));
+  // k1 is the remaining key column of T2.
+  EXPECT_THAT(data_columns[2], ColumnIs("k1", types::Int64Type()));
+
+  EXPECT_EQ(idx_data->parent(), t1);
+  EXPECT_EQ(idx_data->interleave_type(), Table::InterleaveType::kInParent);
+  EXPECT_EQ(idx_data->on_delete_action(), Table::OnDeleteAction::kCascade);
+}
+
 TEST_P(SchemaUpdaterTest, CreateIndex_NullFilteredInterleave) {
   // Null filtered indexes are not supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
@@ -484,25 +523,95 @@ TEST_P(SchemaUpdaterTest, CreateIndex_NullFilteredInterleave) {
   EXPECT_FALSE(idx_data->FindColumn("k1")->is_nullable());
 }
 
-TEST_P(SchemaUpdaterTest, CreateIndex_InvalidInterleaved) {
-  EXPECT_THAT(
-      CreateSchema({R"sql(
+TEST_P(SchemaUpdaterTest, CreateIndex_InvalidInterleaving_DifferentTypes) {
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
       CREATE TABLE T1 (
-        k1 INT64,
+        k1 FLOAT64,
         k2 INT64
       ) PRIMARY KEY (k1)
     )sql",
-                    R"sql(
+                  R"sql(
       CREATE TABLE T2 (
         k1 INT64,
         k2 INT64,
         c1 BYTES(MAX)
       ) PRIMARY KEY (k1,k2)
     )sql",
-                    R"sql(
-      CREATE INDEX Idx ON T2(k1,c1), INTERLEAVE IN T1
+                  R"sql(
+      CREATE INDEX Idx ON T2(k2, c1), INTERLEAVE IN T1
     )sql"}),
-      StatusIs(error::IndexInterleaveTableUnacceptable("Idx", "T2", "T1")));
+              StatusIs(error::IncorrectParentKeyType("Index", "Idx", "k1",
+                                                     "INT64", "FLOAT64")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateIndex_InvalidInterleaving_DifferentOrder) {
+  EXPECT_THAT(
+      CreateSchema({
+          R"sql(
+      CREATE TABLE T1 (
+        k1 INT64,
+        k2 INT64
+      ) PRIMARY KEY (k1)
+    )sql",
+          R"sql(
+      CREATE TABLE T2 (
+        k1 INT64,
+        k2 INT64,
+        c1 BYTES(MAX)
+      ) PRIMARY KEY (k1,k2)
+    )sql",
+          R"sql(
+      CREATE INDEX Idx ON T2(k2 DESC, c1), INTERLEAVE IN T1
+    )sql"}),
+      StatusIs(error::IncorrectParentKeyOrder("Index", "Idx", "k1", "ASC")));
+}
+
+TEST_P(SchemaUpdaterTest,
+       CreateIndex_InvalidInterleaving_NotNullParent_NullableChild) {
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE T1 (
+        k1 INT64 NOT NULL,
+        k2 INT64
+      ) PRIMARY KEY (k1)
+    )sql",
+                  R"sql(
+      CREATE TABLE T2 (
+        k1 INT64,
+        k2 INT64,
+        c1 INT64,
+      ) PRIMARY KEY (k1,k2)
+    )sql",
+                  R"sql(
+      CREATE INDEX Idx ON T2(c1, k2), INTERLEAVE IN T1
+    )sql"}),
+              StatusIs(error::IncorrectParentKeyNullability(
+                  "Index", "Idx", "k1", "not null", "nullable")));
+}
+
+TEST_P(SchemaUpdaterTest,
+       CreateIndex_ValidInterleaving_NullableParent_NotNullChild) {
+  // In PG, all key columns are NOT NULL by default.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE T1 (
+        k1 INT64,
+        k2 INT64
+      ) PRIMARY KEY (k1)
+    )sql",
+                                        R"sql(
+      CREATE TABLE T2 (
+        k1 INT64,
+        k2 INT64,
+        c1 INT64 NOT NULL,
+      ) PRIMARY KEY (k1,k2)
+    )sql",
+                                        R"sql(
+      CREATE INDEX Idx ON T2(c1, k2), INTERLEAVE IN T1
+    )sql"}));
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_TableNotFound) {

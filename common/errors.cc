@@ -1504,12 +1504,50 @@ absl::Status DropTableWithDependentChangeStreams(
                        table_name, change_streams));
 }
 
+absl::Status InterleaveInNotSupported() {
+  return absl::Status(absl::StatusCode::kUnimplemented,
+                      "INTERLEAVE IN is not supported.");
+}
+
+absl::Status ChangeInterleavingNotAllowed(absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Cannot change interleaving behavior of table $0.",
+                       table_name));
+}
+
+absl::Status ChangeInterleavingTableNotAllowed(absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Cannot change the interleaving table of table $0.",
+                       table_name));
+}
+
 absl::Status SetOnDeleteWithoutInterleaving(absl::string_view table_name) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
       absl::Substitute("Cannot SET ON DELETE on table $0 that does not have "
                        "an INTERLEAVE clause.",
                        table_name));
+}
+
+absl::Status SetOnDeleteOnInterleaveInTables(absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Cannot SET ON DELETE on an INTERLEAVE IN table $0.",
+                       table_name));
+}
+
+absl::Status InterleaveInToInParentOnDeleteCascadeUnsupported(
+    absl::string_view table_name) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute(
+          "Altering the table $0 from INTERLEAVE IN to INTERLEAVE "
+          "IN PARENT ON DELETE CASCADE is not supported. Please migrate the "
+          "table to INTERLEAVE IN PARENT ON DELETE NO ACTION first, then "
+          "migrate it to ON DELETE CASCADE.",
+          table_name));
 }
 
 absl::Status NonExistentKeyColumn(absl::string_view object_type,
@@ -2237,6 +2275,19 @@ absl::Status ParentKeyNotFound(absl::string_view parent_table_name,
                                    "parent table:  Parent Table: ",
                                    parent_table_name, "  Child Table: ",
                                    child_table_name, "  Key: ", key));
+}
+
+absl::Status InterleavingParentChildRowExistenceConstraintValidation(
+    absl::string_view parent_table_name, absl::string_view child_table_name,
+    absl::string_view key) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Parent-child row existence constraint validation failed for "
+          "table $0 at row key: $1. To migrate this table from INTERLEAVE IN "
+          "to INTERLEAVE IN PARENT, all its rows must have existing parent "
+          "rows in the $2 table.",
+          child_table_name, key, parent_table_name));
 }
 
 absl::Status ChildKeyExists(absl::string_view parent_table_name,

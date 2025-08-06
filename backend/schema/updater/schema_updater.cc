@@ -117,6 +117,7 @@
 #include "backend/schema/updater/sql_expression_validators.h"
 #include "backend/schema/verifiers/check_constraint_verifiers.h"
 #include "backend/schema/verifiers/foreign_key_verifiers.h"
+#include "backend/schema/verifiers/interleaving_verifiers.h"
 #include "backend/storage/storage.h"
 #include "common/constants.h"
 #include "common/errors.h"
@@ -347,11 +348,11 @@ class SchemaUpdaterImpl {
       const ddl::KeyPartClause& ddl_key_part, Table::Builder* builder,
       bool with_oid = true);
 
-  absl::Status CreateInterleaveConstraint(
+  absl::Status CreateInterleaveConstraintForTable(
       const ddl::InterleaveClause& interleave, Table::Builder* builder);
-  absl::Status CreateInterleaveConstraint(const Table* parent,
-                                          Table::OnDeleteAction on_delete,
-                                          Table::Builder* builder);
+  absl::Status CreateInterleaveConstraint(
+      const Table* parent, std::optional<Table::OnDeleteAction> on_delete,
+      Table::InterleaveType interleave_type, Table::Builder* builder);
   absl::Status ValidateChangeStreamForClause(
       const ddl::ChangeStreamForClause& change_stream_for_clause,
       absl::string_view change_stream_name);
@@ -403,9 +404,10 @@ class SchemaUpdaterImpl {
   absl::StatusOr<const Table*> GetInterleaveConstraintTable(
       const std::string& interleave_in_table_name,
       const Table::Builder& builder) const;
-  static Table::OnDeleteAction GetInterleaveConstraintOnDelete(
+  static std::optional<Table::OnDeleteAction> GetInterleaveConstraintOnDelete(
       const ddl::InterleaveClause& interleave);
-
+  static Table::InterleaveType GetInterleaveType(
+      const ddl::InterleaveClause& interleave);
   absl::Status CreateForeignKeyConstraint(
       const ddl::ForeignKey& ddl_foreign_key, const Table* referencing_table);
   absl::StatusOr<const ForeignKey*> BuildForeignKeyConstraint(
@@ -571,6 +573,9 @@ class SchemaUpdaterImpl {
       const ChangeStream* change_stream);
   absl::Status AlterIndex(const ddl::AlterIndex& alter_index);
   absl::Status AlterVectorIndex(const ddl::AlterVectorIndex& alter_index);
+  absl::Status AlterSetInterleave(
+      const ddl::AlterTable::SetInterleaveClause& set_interleave_clause,
+      const Table* table);
   absl::Status AlterInterleaveAction(
       const ddl::InterleaveClause::Action& ddl_interleave_action,
       const Table* table);
@@ -2229,21 +2234,30 @@ absl::Status SchemaUpdaterImpl::ValidateChangeStreamForClause(
   return absl::OkStatus();
 }
 
-absl::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
+absl::Status SchemaUpdaterImpl::CreateInterleaveConstraintForTable(
     const ddl::InterleaveClause& interleave, Table::Builder* builder) {
   ZETASQL_ASSIGN_OR_RETURN(const Table* parent, GetInterleaveConstraintTable(
                                             interleave.table_name(), *builder));
-  Table::OnDeleteAction on_delete = GetInterleaveConstraintOnDelete(interleave);
-  return CreateInterleaveConstraint(parent, on_delete, builder);
+  std::optional<Table::OnDeleteAction> on_delete =
+      GetInterleaveConstraintOnDelete(interleave);
+  Table::InterleaveType interleave_type = GetInterleaveType(interleave);
+  if (interleave_type == Table::InterleaveType::kIn &&
+      !EmulatorFeatureFlags::instance().flags().enable_interleave_in) {
+    return error::InterleaveInNotSupported();
+  }
+  return CreateInterleaveConstraint(parent, on_delete, interleave_type,
+                                    builder);
 }
 
 absl::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
-    const Table* parent, Table::OnDeleteAction on_delete,
-    Table::Builder* builder) {
+    const Table* parent, std::optional<Table::OnDeleteAction> on_delete,
+    Table::InterleaveType interleave_type, Table::Builder* builder) {
   ZETASQL_RET_CHECK_EQ(builder->get()->parent(), nullptr);
 
   if (parent->row_deletion_policy().has_value() &&
-      on_delete != Table::OnDeleteAction::kCascade) {
+      (interleave_type == Table::InterleaveType::kInParent &&
+       (!on_delete.has_value() ||
+        on_delete != Table::OnDeleteAction::kCascade))) {
     return error::RowDeletionPolicyOnAncestors(builder->get()->Name(),
                                                parent->Name());
   }
@@ -2255,7 +2269,10 @@ absl::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
         return absl::OkStatus();
       }));
 
-  builder->set_on_delete(on_delete);
+  if (on_delete.has_value()) {
+    builder->set_on_delete(on_delete.value());
+  }
+  builder->set_interleave_type(interleave_type);
   return absl::OkStatus();
 }
 
@@ -2276,11 +2293,22 @@ absl::StatusOr<const Table*> SchemaUpdaterImpl::GetInterleaveConstraintTable(
   return parent;
 }
 
-Table::OnDeleteAction SchemaUpdaterImpl::GetInterleaveConstraintOnDelete(
+std::optional<Table::OnDeleteAction>
+SchemaUpdaterImpl::GetInterleaveConstraintOnDelete(
     const ddl::InterleaveClause& interleave) {
+  if (!interleave.has_on_delete()) {
+    return std::nullopt;
+  }
   return interleave.on_delete() == ddl::InterleaveClause::CASCADE
              ? Table::OnDeleteAction::kCascade
              : Table::OnDeleteAction::kNoAction;
+}
+
+Table::InterleaveType SchemaUpdaterImpl::GetInterleaveType(
+    const ddl::InterleaveClause& interleave) {
+  return interleave.type() == ddl::InterleaveClause::IN_PARENT
+             ? Table::InterleaveType::kInParent
+             : Table::InterleaveType::kIn;
 }
 
 absl::Status SchemaUpdaterImpl::CreatePrimaryKeyConstraint(
@@ -2902,8 +2930,8 @@ absl::Status SchemaUpdaterImpl::CreateTable(
     ZETASQL_RETURN_IF_ERROR(CreateForeignKeyConstraint(ddl_foreign_key, builder.get()));
   }
   if (ddl_table.has_interleave_clause()) {
-    ZETASQL_RETURN_IF_ERROR(
-        CreateInterleaveConstraint(ddl_table.interleave_clause(), &builder));
+    ZETASQL_RETURN_IF_ERROR(CreateInterleaveConstraintForTable(
+        ddl_table.interleave_clause(), &builder));
     if (ddl_table.interleave_clause().type() ==
         ddl::InterleaveClause::IN_PARENT) {
       oid = pg_oid_assigner_->GetNextPostgresqlOid();
@@ -3222,9 +3250,10 @@ SchemaUpdaterImpl::CreateChangeStreamDataTable(
   ZETASQL_RETURN_IF_ERROR(
       CreateChangeStreamTablePKConstraint("record_sequence", &builder));
   // Set _ChangeStream_Partition_${ChangeStreamName} as interleaved parent table
-  Table::OnDeleteAction on_delete = Table::OnDeleteAction::kNoAction;
-  ZETASQL_RETURN_IF_ERROR(CreateInterleaveConstraint(change_stream_partition_table,
-                                             on_delete, &builder));
+  ZETASQL_RETURN_IF_ERROR(CreateInterleaveConstraint(
+      change_stream_partition_table,
+      /*on_delete=*/Table::OnDeleteAction::kNoAction,
+      /*interleave_type=*/Table::InterleaveType::kInParent, &builder));
   return builder.build();
 }
 
@@ -3367,7 +3396,9 @@ SchemaUpdaterImpl::CreateIndexDataTable(
                                          *interleave_in_table, builder));
     }
     ZETASQL_RETURN_IF_ERROR(CreateInterleaveConstraint(
-        parent_table, Table::OnDeleteAction::kCascade, &builder));
+        parent_table,
+        /*on_delete=*/Table::OnDeleteAction::kCascade,
+        /*interleave_type=*/Table::InterleaveType::kInParent, &builder));
   }
 
   // Add stored columns to index data table.
@@ -4906,9 +4937,7 @@ absl::Status SchemaUpdaterImpl::AlterTable(
 
   switch (alter_table.alter_type_case()) {
     case ddl::AlterTable::kSetInterleaveClause: {
-      return AlterInterleaveAction(
-          alter_table.set_interleave_clause().interleave_clause().on_delete(),
-          table);
+      return AlterSetInterleave(alter_table.set_interleave_clause(), table);
     }
     case ddl::AlterTable::kSetOnDelete: {
       return AlterInterleaveAction(alter_table.set_on_delete().action(), table);
@@ -5318,9 +5347,100 @@ absl::Status SchemaUpdaterImpl::AlterVectorIndex(
   return absl::OkStatus();
 }
 
+// Returns whether the given ON DELETE `action` would be valid for the given SDL
+// element interleaved in `parent`.
+static absl::Status IsOnDeleteValid(const std::string& name,
+                                    const Table* parent,
+                                    ddl::InterleaveClause interleave_clause) {
+  if (!interleave_clause.has_on_delete() ||
+      interleave_clause.on_delete() == ddl::InterleaveClause::NO_ACTION) {
+    for (const Table* ancestor = parent; ancestor != nullptr;
+         ancestor = ancestor->parent()) {
+      if (ancestor->row_deletion_policy().has_value()) {
+        return error::RowDeletionPolicyOnAncestors(name, ancestor->Name());
+      }
+      if (ancestor->interleave_type().has_value() &&
+          ancestor->interleave_type().value() == Table::InterleaveType::kIn) {
+        // If the ancestor is an INTERLEAVE IN table, we don't need to check
+        // its ancestors for Row Deletion Policies.
+        break;
+      }
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::AlterSetInterleave(
+    const ddl::AlterTable::SetInterleaveClause& set_interleave_clause,
+    const Table* table) {
+  if (table->parent() == nullptr ||
+      !set_interleave_clause.has_interleave_clause()) {
+    // Error if the table is not already interleaved, or the ALTER statement
+    // does not have an INTERLEAVE clause.
+    return error::ChangeInterleavingNotAllowed(table->Name());
+  }
+
+  const ddl::InterleaveClause& new_interleave_clause =
+      set_interleave_clause.interleave_clause();
+
+  if (new_interleave_clause.type() == ddl::InterleaveClause::IN &&
+      !EmulatorFeatureFlags::instance().flags().enable_interleave_in) {
+    return error::InterleaveInNotSupported();
+  }
+  if (!absl::EqualsIgnoreCase(table->parent()->Name(),
+                              new_interleave_clause.table_name())) {
+    // Cannot change the interleaving parent.
+    return error::ChangeInterleavingTableNotAllowed(table->Name());
+  }
+  const Table* parent = table->parent();
+  if (new_interleave_clause.type() == ddl::InterleaveClause::IN_PARENT) {
+    ZETASQL_RETURN_IF_ERROR(
+        IsOnDeleteValid(table->Name(), parent, new_interleave_clause));
+  }
+
+  if (table->interleave_type().value() == Table::InterleaveType::kIn &&
+      new_interleave_clause.type() == ddl::InterleaveClause::IN_PARENT) {
+    if (new_interleave_clause.on_delete() == ddl::InterleaveClause::CASCADE) {
+      // Direct migration from INTERLEAVE IN to INTERLEAVE IN PARENT ON DELETE
+      // CASCADE is not supported.
+      return error::InterleaveInToInParentOnDeleteCascadeUnsupported(
+          table->Name());
+    }
+    statement_context_->AddAction(
+        [parent, table](const SchemaValidationContext* context) {
+          return VerifyInterleaveInParentTableRowsExist(parent, table, context);
+        });
+  }
+
+  return AlterNode<Table>(table, [&](Table::Editor* editor) {
+    if (new_interleave_clause.type() == ddl::InterleaveClause::IN) {
+      editor->set_interleave_type(Table::InterleaveType::kIn);
+      editor->clear_on_delete();
+    } else {
+      editor->set_interleave_type(Table::InterleaveType::kInParent);
+    }
+
+    if (new_interleave_clause.has_on_delete()) {
+      if (new_interleave_clause.on_delete() == ddl::InterleaveClause::CASCADE) {
+        editor->set_on_delete(Table::OnDeleteAction::kCascade);
+      } else {
+        editor->set_on_delete(Table::OnDeleteAction::kNoAction);
+      }
+    } else {
+      editor->clear_on_delete();
+    }
+    return absl::OkStatus();
+  });
+}
+
 absl::Status SchemaUpdaterImpl::AlterInterleaveAction(
     const ddl::InterleaveClause::Action& ddl_interleave_action,
     const Table* table) {
+  /*if (table->interleave_type() == Table::InterleaveType::kIn) {
+    // ON DELETE actions cannot be set on INTERLEAVE IN tables.
+    return error::SetOnDeleteOnInterleaveInTables(table->Name());
+  }*/
+
   return AlterNode<Table>(table, [&](Table::Editor* editor) {
     if (ddl_interleave_action == ddl::InterleaveClause::CASCADE) {
       editor->set_on_delete(Table::OnDeleteAction::kCascade);
@@ -6253,6 +6373,7 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
             CreatePostgreSQLToSpannerDDLTranslator());
     const postgres_translator::spangres::TranslationOptions options{
         .enable_nulls_ordering = true,
+        .enable_interleave_in = true,
         .enable_generated_column = true,
         .enable_column_default = true,
         .enable_identity_column =

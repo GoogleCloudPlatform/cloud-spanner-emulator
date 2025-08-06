@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
@@ -78,7 +79,8 @@ absl::StatusOr<std::shared_ptr<Session>> SessionManager::GetSession(
 }
 
 absl::StatusOr<std::vector<std::shared_ptr<Session>>>
-SessionManager::ListSessions(const std::string& database_uri) const {
+SessionManager::ListSessions(const std::string& database_uri,
+                             bool include_multiplex_sessions) const {
   absl::MutexLock lock(&mu_);
   std::string session_uri_prefix = absl::StrCat(database_uri, "/");
   std::vector<std::shared_ptr<Session>> sessions;
@@ -86,8 +88,9 @@ SessionManager::ListSessions(const std::string& database_uri) const {
        itr != session_map_.end(); ++itr) {
     if (absl::StartsWith(itr->first, session_uri_prefix)) {
       std::shared_ptr<Session> session = itr->second;
-      if (session->multiplexed()) {
-        // Multiplexed sessions are not sent in ListSessions response.
+      if (session->multiplexed() && !include_multiplex_sessions) {
+        // Multiplexed sessions are not sent in ListSessions response by
+        // default.
         continue;
       }
       absl::Duration expiration_duration = absl::Hours(1);
@@ -102,12 +105,15 @@ SessionManager::ListSessions(const std::string& database_uri) const {
   return sessions;
 }
 
-absl::Status SessionManager::DeleteSession(const std::string& session_uri) {
+absl::Status SessionManager::DeleteSession(const std::string& session_uri,
+                                           bool delete_multiplex_sessions) {
   absl::MutexLock lock(&mu_);
   auto itr = session_map_.find(session_uri);
   if (itr != session_map_.end()) {
     std::shared_ptr<Session> session = itr->second;
-    if (session->multiplexed()) {
+    // Multiplexed sessions cannot be deleted using DeleteSession API, but they
+    // need to be deleted when the database is dropped.
+    if (session->multiplexed() && !delete_multiplex_sessions) {
       return error::InvalidOperationSessionDelete();
     }
   }

@@ -6328,6 +6328,9 @@ alter_table_type_to_string(AlterTableType cmdtype)
 			return "DROP SYNONYM";
 		case AT_SetLocalityGroup:
 			return "SET LOCALITY GROUP";
+		case AT_ColumnOnUpdate:
+			// NB: This node is also used for DROP ON UPDATE.
+			return "ALTER COLUMN ... SET ON UPDATE";
 		/* SPANGRES END */
 	}
 

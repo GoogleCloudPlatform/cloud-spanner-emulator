@@ -31,6 +31,8 @@
 
 # jsonb package contains all code files for parsing and binary format of PG.JSONB
 
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
 cc_library(
     name = "jsonb_value",
     srcs = [

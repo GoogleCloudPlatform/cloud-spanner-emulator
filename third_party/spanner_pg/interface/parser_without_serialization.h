@@ -32,9 +32,13 @@
 #ifndef INTERFACE_PARSER_WITHOUT_SERIALIZATION_H_
 #define INTERFACE_PARSER_WITHOUT_SERIALIZATION_H_
 
+#include <string>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "third_party/spanner_pg/interface/abstract_parser.h"
-#include "third_party/spanner_pg/interface/parser_interface.h"
-#include "third_party/spanner_pg/shims/error_shim.h"
+#include "third_party/spanner_pg/interface/parser_output.h"
 
 namespace postgres_translator {
 namespace spangres {
@@ -57,7 +61,7 @@ class ParserWithoutSerialization : public AbstractParser {
                               interfaces::ParserBatchOutput* output) override;
 
  private:
-  absl::StatusOr<interfaces::ParserOutput> Parse(const std::string& sql);
+  absl::StatusOr<interfaces::ParserOutput> ParseImpl(const std::string& sql);
 };
 
 }  // namespace spangres

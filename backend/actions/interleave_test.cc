@@ -18,17 +18,20 @@
 
 #include <memory>
 #include <queue>
+#include <utility>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/memory/memory.h"
+#include "absl/status/statusor.h"
 #include "absl/types/variant.h"
 #include "backend/actions/context.h"
 #include "backend/actions/ops.h"
 #include "tests/common/actions.h"
 #include "tests/common/schema_constructor.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
 namespace spanner {
@@ -36,6 +39,7 @@ namespace emulator {
 namespace backend {
 namespace {
 
+using ::google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
 using zetasql::values::Int64;
 using zetasql_base::testing::StatusIs;
 
@@ -170,6 +174,76 @@ TEST_F(InterleaveTest, ChildRowInsertSucceedsWithParentRow) {
   // Action succeeds with parent row.
   ZETASQL_EXPECT_OK(validator->Validate(
       ctx(), Insert(cascade_delete_child_, Key({Int64(1), Int64(1)}))));
+}
+
+// This unit test works with the following DDL statements:
+//
+// CREATE TABLE NpiParent (
+//   k1 INT64 NOT NULL,
+//   c1 STRING(MAX)
+// ) PRIMARY_KEY(k1);
+//
+// CREATE TABLE NpiChild (
+//   k1 INT64 NOT NULL,
+//   k2 INT64 NOT NULL,
+//   c1 STRING(MAX)
+// ) PRIMARY KEY (k1, k2)
+//   INTERLEAVE IN NpiParent;
+class NonParentInterleaveTest : public test::ActionsTest {
+ public:
+  NonParentInterleaveTest() : flag_setter_({.enable_interleave_in = true}) {}
+
+  void SetUp() override {
+    absl::StatusOr<std::unique_ptr<const Schema>> schema =
+        emulator::test::CreateSchemaWithNonParentInterleaving(&type_factory_);
+    ZETASQL_ASSERT_OK(schema);
+    schema_ = *std::move(schema);
+    npi_parent_ = schema_->FindTable("NpiParent");
+    npi_child_ = schema_->FindTable("NpiChild");
+    ASSERT_FALSE(npi_child_->has_on_delete_action());
+  }
+
+ protected:
+  // Test components.
+  zetasql::TypeFactory type_factory_;
+  std::unique_ptr<const Schema> schema_;
+
+  // Test variables.
+  const Table* npi_parent_;
+  const Table* npi_child_;
+  const ScopedEmulatorFeatureFlagsSetter flag_setter_;
+};
+
+TEST_F(NonParentInterleaveTest, ParentRowDeleteSucceedsWithNoChildRow) {
+  std::unique_ptr<Validator> validator =
+      std::make_unique<InterleaveParentValidator>(npi_parent_, npi_child_);
+  // Add parent row.
+  ZETASQL_EXPECT_OK(store()->Insert(npi_parent_, Key({Int64(1)}), {}, {}));
+
+  // Delete action should succeed with no child rows.
+  ZETASQL_EXPECT_OK(validator->Validate(ctx(), Delete(npi_parent_, Key({Int64(1)}))));
+}
+
+TEST_F(NonParentInterleaveTest, ParentRowDeleteSucceedsWithChildRow) {
+  std::unique_ptr<Validator> validator =
+      std::make_unique<InterleaveParentValidator>(npi_parent_, npi_child_);
+  // Add parent row.
+  ZETASQL_EXPECT_OK(store()->Insert(npi_parent_, Key({Int64(1)}), {}, {}));
+
+  // Add child row.
+  ZETASQL_EXPECT_OK(store()->Insert(npi_child_, Key({Int64(1), Int64(10)}), {}, {}));
+
+  // Delete action on parent row should succeed with child row exists.
+  ZETASQL_EXPECT_OK(validator->Validate(ctx(), Delete(npi_parent_, Key({Int64(1)}))));
+}
+
+TEST_F(NonParentInterleaveTest, ChildRowInsertSucceedsWithNoParentRow) {
+  std::unique_ptr<Validator> validator =
+      std::make_unique<InterleaveParentValidator>(npi_parent_, npi_child_);
+
+  // Insert action on child row should succeed with parent row exists.
+  ZETASQL_EXPECT_OK(validator->Validate(
+      ctx(), Insert(npi_child_, Key({Int64(1), Int64(10)}))));
 }
 
 }  // namespace

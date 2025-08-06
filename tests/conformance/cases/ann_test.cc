@@ -562,16 +562,18 @@ TEST_F(ANNTest, ANNQueryWrongInput) {
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("The use of function APPROX_COSINE_DISTANCE "
                                  "is not supported in this query")));
-  EXPECT_THAT(Query(
-                  R"sql(
+  EXPECT_THAT(
+      Query(
+          R"sql(
           SELECT b.MyKey FROM Base b
           WHERE b.Embedding IS NOT NULL
           ORDER BY APPROX_COSINE_DISTANCE(
             b.Embedding, ARRAY<FLOAT32>[0.0, 0.0],
             options => JSON '{"num_leaves_to_search": 1}')
           LIMIT 2)sql"),
-              absl::InvalidArgumentError(
-                  "Cannot compute cosine distance against zero vector."));
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Cannot compute cosine distance against zero vector")));
 }
 
 TEST_F(ANNTest, ANNQueryNoLimit) {

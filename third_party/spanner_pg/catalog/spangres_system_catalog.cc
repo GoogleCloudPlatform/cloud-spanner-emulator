@@ -546,9 +546,11 @@ absl::Status SpangresSystemCatalog::AddFunctionRegistryFunctions(
     std::string full_name =
         absl::StrJoin(catalog_function.mapped_name_path(), ".");
     if (allowlist.contains(full_name)) {
-      ZETASQL_ASSIGN_OR_RETURN(PostgresFunctionArguments mapped_function,
+      ZETASQL_ASSIGN_OR_RETURN(std::vector<PostgresFunctionArguments> mapped_functions,
                        mapper.ToPostgresFunctionArguments(catalog_function));
-      functions.push_back(mapped_function);
+      for (const auto& mapped_function : mapped_functions) {
+        functions.push_back(mapped_function);
+      }
     }
   }
 

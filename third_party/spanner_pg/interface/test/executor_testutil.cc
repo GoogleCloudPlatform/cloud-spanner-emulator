@@ -53,14 +53,17 @@ namespace {
 // removed entirely.
 static std::string StripParseLocations(
     absl::string_view original_debug_string) {
-  const std::string kParseLocationRegex = "parse_location=\\d+-\\d+(?:, )?";
+  const std::string kParseLocationRegex = "parse_location=\\d+-\\d+";
+  const std::string kOptionalCommaRegex = "(?:, )?";
   std::vector<std::string> lines = absl::StrSplit(original_debug_string, '\n');
   std::vector<std::string> stripped_lines;
   for (auto& line : lines) {
     if (absl::StrContains(line, "Literal(parse_location=")) {
       RE2::GlobalReplace(&line, kParseLocationRegex, "parse_location=??-??");
+    } else if (RE2::PartialMatch(line, "\\(" + kParseLocationRegex + "\\)")) {
+      RE2::GlobalReplace(&line, "\\(" + kParseLocationRegex + "\\)", "");
     } else {
-      RE2::GlobalReplace(&line, kParseLocationRegex, "");
+      RE2::GlobalReplace(&line, kParseLocationRegex + kOptionalCommaRegex, "");
     }
     if (!absl::EndsWith(line, "+-")) {
       stripped_lines.push_back(line);

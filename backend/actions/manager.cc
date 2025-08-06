@@ -130,8 +130,11 @@ void ActionRegistry::BuildActionRegistry() {
       table_validators_[table].emplace_back(
           std::make_unique<InterleaveParentValidator>(table, child));
 
-      table_effectors_[table].emplace_back(
-          std::make_unique<InterleaveParentEffector>(table, child));
+      if (child->interleave_type().value() ==
+          Table::InterleaveType::kInParent) {
+        table_effectors_[table].emplace_back(
+            std::make_unique<InterleaveParentEffector>(table, child));
+      }
     }
 
     // Interleave actions for parent table.

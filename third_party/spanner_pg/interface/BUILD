@@ -31,6 +31,8 @@
 
 # entry point from Spanner to Spangres
 
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
 package(
     default_visibility = [
         "//:__subpackages__",
@@ -206,6 +208,9 @@ cc_library(
         ":abstract_parser",
         ":parser_interface",
         "//third_party/spanner_pg/shims:error_shim",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
     ],
 )
 

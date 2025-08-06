@@ -34,6 +34,8 @@ This module contains build rules for generating a cc_library of absl::Status and
 factory functions from a data file of error messages.
 """
 
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
 def spangres_error_catalog(
         name,
         message_file = "//third_party/spanner_pg/errors:error_catalog.textproto",
@@ -85,7 +87,7 @@ def spangres_error_catalog(
     )
 
     # The actual library users of the catalog depend on.
-    native.cc_library(
+    cc_library(
         name = name,
         srcs = [cc_file],
         hdrs = [h_file],

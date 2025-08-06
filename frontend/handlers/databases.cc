@@ -265,10 +265,11 @@ absl::Status DropDatabase(RequestContext* ctx,
   if (maybe_database.ok()) {
     ZETASQL_ASSIGN_OR_RETURN(
         std::vector<std::shared_ptr<Session>> sessions,
-        ctx->env()->session_manager()->ListSessions(request->database()));
+        ctx->env()->session_manager()->ListSessions(
+            request->database(), /*include_multiplex_sessions=*/true));
     for (const auto& session : sessions) {
-      ZETASQL_RETURN_IF_ERROR(
-          ctx->env()->session_manager()->DeleteSession(session->session_uri()));
+      ZETASQL_RETURN_IF_ERROR(ctx->env()->session_manager()->DeleteSession(
+          session->session_uri(), /*delete_multiplex_sessions=*/true));
     }
   }
 

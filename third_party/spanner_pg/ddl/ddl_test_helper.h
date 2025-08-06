@@ -60,9 +60,7 @@ class DdlTestHelper {
     return translator_.get();
   }
   SpangresSchemaPrinter* SchemaPrinter() const { return schema_printer_.get(); }
-  interfaces::ParserInterface* Parser() const {
-    return parser_.get();
-  }
+  interfaces::ParserInterface* Parser() const { return parser_.get(); }
 
  private:
   // Not copyable or movable

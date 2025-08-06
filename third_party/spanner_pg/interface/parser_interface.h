@@ -108,8 +108,6 @@ class ParserInterface {
             .SetMemoryReservationManager(std::move(memory_reservation_manager))
             .Build()));
   }
-
-  virtual absl::StatusOr<ParserInterface*> GetParser() { return this; }
 };
 
 }  // namespace interfaces

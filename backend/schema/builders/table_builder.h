@@ -99,6 +99,16 @@ class Table::Builder {
     return *this;
   }
 
+  Builder& clear_on_delete() {
+    instance_->on_delete_action_ = std::nullopt;
+    return *this;
+  }
+
+  Builder& set_interleave_type(InterleaveType action) {
+    instance_->interleave_type_ = action;
+    return *this;
+  }
+
   Builder& add_foreign_key(const ForeignKey* foreign_key) {
     instance_->foreign_keys_.push_back(foreign_key);
     return *this;
@@ -177,6 +187,16 @@ class Table::Editor {
 
   Editor& set_on_delete(OnDeleteAction action) {
     instance_->on_delete_action_ = action;
+    return *this;
+  }
+
+  Editor& clear_on_delete() {
+    instance_->on_delete_action_ = std::nullopt;
+    return *this;
+  }
+
+  Editor& set_interleave_type(InterleaveType action) {
+    instance_->interleave_type_ = action;
     return *this;
   }
 

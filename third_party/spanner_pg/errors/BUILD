@@ -36,6 +36,7 @@
 #
 
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("//third_party/spanner_pg/errors:error_generator.bzl", "spangres_error_catalog")
 
 package(
@@ -61,6 +62,7 @@ bzl_library(
     name = "error_generator_bzl",
     srcs = ["error_generator.bzl"],
     visibility = ["//visibility:private"],
+    deps = ["@rules_cc//cc:defs.bzl"],
 )
 
 cc_binary(

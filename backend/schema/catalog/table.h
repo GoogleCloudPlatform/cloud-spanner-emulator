@@ -61,6 +61,8 @@ class Table : public SchemaNode {
     kCascade
   };
 
+  enum class InterleaveType { kInParent, kIn };
+
   // Returns the name of the table.
   std::string Name() const { return name_; }
 
@@ -89,6 +91,13 @@ class Table : public SchemaNode {
   // Returns the on delete action of this table.
   OnDeleteAction on_delete_action() const {
     return on_delete_action_.value_or(OnDeleteAction::kNoAction);
+  }
+
+  // Returns true if the on delete action of this table is set.
+  bool has_on_delete_action() const { return on_delete_action_.has_value(); }
+
+  std::optional<InterleaveType> interleave_type() const {
+    return interleave_type_;
   }
 
   // Returns the row deletion policy of this table.
@@ -323,6 +332,9 @@ class Table : public SchemaNode {
   // table is deleted. Set to nullopt if no action was specified by the user
   // in the CREATE TABLE statement.
   std::optional<OnDeleteAction> on_delete_action_ = std::nullopt;
+
+  // Interleave type of this table, default to kInParent.
+  std::optional<InterleaveType> interleave_type_ = std::nullopt;
 
   // Row deletion policy of this table. Set to nullopt if not specified.
   std::optional<ddl::RowDeletionPolicy> row_deletion_policy_ = std::nullopt;

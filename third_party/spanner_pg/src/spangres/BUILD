@@ -60,3 +60,12 @@ cc_library(
     ],
     alwayslink = 1,
 )
+
+cc_library(
+    name = "stub_catalog_wrappers",
+    srcs = ["stub_catalog_wrappers.c"],
+    deps = [
+        "//third_party/spanner_pg/interface:catalog_wrappers",
+        "//third_party/spanner_pg/postgres_includes",
+    ],
+)

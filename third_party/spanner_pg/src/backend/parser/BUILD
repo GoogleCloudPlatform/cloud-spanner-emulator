@@ -31,6 +31,7 @@
 
 load("@com_google_zetasql//bazel:bison.bzl", "genyacc")
 load("@com_google_zetasql//bazel:flex.bzl", "genlex")
+load("@rules_cc//cc:defs.bzl", "cc_library")
 
 
 
@@ -117,5 +118,22 @@ cc_library(
     copts = [
         "-D_GNU_SOURCE",
         "-fexceptions",
+    ],
+)
+
+cc_test(
+    name = "parser_test",
+    srcs = ["parser_test.cc"],
+    deps = [
+        ":parser",
+        "//third_party/spanner_pg/postgres_includes",
+        "//third_party/spanner_pg/shims:error_shim",
+        "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "//third_party/spanner_pg/src/spangres:parser",
+        "//third_party/spanner_pg/util:valid_memory_context_fixture",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
