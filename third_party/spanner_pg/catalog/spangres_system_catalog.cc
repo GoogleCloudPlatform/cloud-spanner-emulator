@@ -544,7 +544,7 @@ absl::Status SpangresSystemCatalog::AddFunctionRegistryFunctions(
   ZETASQL_ASSIGN_OR_RETURN(const CatalogProto catalog_proto, GetCatalogProto());
   for (const auto& catalog_function : catalog_proto.functions()) {
     std::string full_name =
-        absl::StrJoin(catalog_function.mapped_name_path(), ".");
+        absl::StrJoin(catalog_function.mapped_name_path().name_path(), ".");
     if (allowlist.contains(full_name)) {
       ZETASQL_ASSIGN_OR_RETURN(std::vector<PostgresFunctionArguments> mapped_functions,
                        mapper.ToPostgresFunctionArguments(catalog_function));

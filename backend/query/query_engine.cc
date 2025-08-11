@@ -167,6 +167,12 @@ absl::StatusOr<zetasql::AnalyzerOptions> MakeAnalyzerOptionsWithParameters(
       zetasql::FEATURE_V_1_4_SQL_GRAPH_PATH_TYPE);
   options.mutable_language()->EnableLanguageFeature(
       zetasql::FEATURE_V_1_4_SQL_GRAPH_PATH_MODE);
+  options.mutable_language()->EnableLanguageFeature(
+      zetasql::FEATURE_V_1_4_SQL_GRAPH_DYNAMIC_ELEMENT_TYPE);
+  options.mutable_language()->EnableLanguageFeature(
+      zetasql::FEATURE_V_1_4_SQL_GRAPH_DYNAMIC_LABEL_PROPERTIES_IN_DDL);
+  options.mutable_language()->EnableLanguageFeature(
+      zetasql::FEATURE_V_1_4_SQL_GRAPH_DYNAMIC_LABEL_EXTENSION_IN_DDL);
   ZETASQL_RETURN_IF_ERROR(
       options.mutable_language()->EnableReservableKeyword("GRAPH_TABLE"));
   return options;

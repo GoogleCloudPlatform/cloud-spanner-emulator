@@ -3329,10 +3329,12 @@ SchemaUpdaterImpl::CreateIndexDataTable(
     }
   }
 
+  std::vector<ddl::KeyPartClause> data_table_pk;
+
   // Add indexed columns to the index_data_table's columns and primary key.
   if (!index_pk.empty()) {
     // The primary key is a combination of (index_keys,indexed_table_keys)
-    std::vector<ddl::KeyPartClause> data_table_pk;
+
     data_table_pk.reserve(index_pk.size());
     // First create columns for the specified primary key.
 
@@ -3395,10 +3397,52 @@ SchemaUpdaterImpl::CreateIndexDataTable(
       ZETASQL_ASSIGN_OR_RETURN(parent_table, GetInterleaveConstraintTable(
                                          *interleave_in_table, builder));
     }
-    ZETASQL_RETURN_IF_ERROR(CreateInterleaveConstraint(
-        parent_table,
-        /*on_delete=*/Table::OnDeleteAction::kCascade,
-        /*interleave_type=*/Table::InterleaveType::kInParent, &builder));
+    // When an index is interleaved into a parent, we consider it a remote
+    // index unless it's interleaved into its indexed table or any of the
+    // indexed table's ancestors, without permuting any of the parent keys.
+    // For remote indexes, the index needs to be INTERLEAVE IN as the existence
+    // of the parent row cannot be guaranteed.
+    //
+    // As an example, consider the case where an index is interleaved under
+    // the table it is indexing, but permutes the keys. For row key e.g.
+    // (42, 43) in the indexed table, the index table key would be (43, 42).
+    // But there is no guarantee that row (43, 42) exists in the indexed table,
+    // which would be a requirement for INTERLEAVE IN PARENT relationship.
+    bool treat_as_remote = false;
+
+    if (!indexed_table->is_descendant_of(parent_table)) {
+      treat_as_remote = true;
+    } else {
+      // The index is interleaved into the data table or its ancestor. If the
+      // index table key does not have the interleave parent's key as an exact
+      // prefix (i.e. it permutes the keys), we treat it as remote per the
+      // comment above.
+      for (int i = 0; i < parent_table->primary_key().size(); ++i) {
+        const KeyColumn* parent_key_column = parent_table->primary_key()[i];
+        if (parent_key_column == nullptr ||
+            parent_key_column->column()->Name() !=
+                data_table_pk[i].key_name()) {
+          treat_as_remote = true;
+          break;
+        }
+      }
+    }
+
+    if (treat_as_remote) {
+      if (parent_table->primary_key().size() > index_pk.size()) {
+        return error::IndexKeysNotInterleavePrefix(index_name,
+                                                   parent_table->Name());
+      }
+      ZETASQL_RETURN_IF_ERROR(CreateInterleaveConstraint(
+          parent_table,
+          /*on_delete=*/std::nullopt,
+          /*interleave_type=*/Table::InterleaveType::kIn, &builder));
+    } else {
+      ZETASQL_RETURN_IF_ERROR(CreateInterleaveConstraint(
+          parent_table,
+          /*on_delete=*/Table::OnDeleteAction::kCascade,
+          /*interleave_type=*/Table::InterleaveType::kInParent, &builder));
+    }
   }
 
   // Add stored columns to index data table.
@@ -6055,6 +6099,95 @@ absl::Status SchemaUpdaterImpl::AddGraphElementTable(
         property_definition->property_declaration_name(),
         property_definition->sql());
   }
+  if (element->dynamic_label() != nullptr) {
+    auto* label_expr = element->dynamic_label()->label_expr();
+    ZETASQL_RET_CHECK(label_expr != nullptr);
+    ZETASQL_RET_CHECK(label_expr->Is<zetasql::ResolvedColumnRef>() ||
+              label_expr->Is<zetasql::ResolvedCatalogColumnRef>())
+        << "Dynamic label expression must be a ResolvedColumnRef or "
+           "ResolvedCatalogColumnRef. Got element "
+           "table AST: "
+        << element->DebugString();
+    if (label_expr->Is<zetasql::ResolvedColumnRef>()) {
+      ZETASQL_RET_CHECK(label_expr->GetAs<zetasql::ResolvedColumnRef>()
+                    ->column()
+                    .type()
+                    ->IsString())
+          << "Dynamic label expression should reference to a STRING type "
+             "column. Got type: "
+          << label_expr->GetAs<zetasql::ResolvedColumnRef>()
+                 ->column()
+                 .type()
+                 ->DebugString();
+      new_element_table.set_dynamic_label_expression(
+          label_expr->GetAs<zetasql::ResolvedColumnRef>()->column().name());
+    } else {
+      ZETASQL_RET_CHECK(label_expr->GetAs<zetasql::ResolvedCatalogColumnRef>()
+                    ->column()
+                    ->GetType()
+                    ->IsString())
+          << "Dynamic label expression should reference to a STRING type "
+             "column. Got type: "
+          << label_expr->GetAs<zetasql::ResolvedCatalogColumnRef>()
+                 ->column()
+                 ->GetType()
+                 ->DebugString();
+      new_element_table.set_dynamic_label_expression(
+          label_expr->GetAs<zetasql::ResolvedCatalogColumnRef>()
+              ->column()
+              ->Name());
+    }
+  }
+  if (element->dynamic_properties() != nullptr) {
+    const auto* dynamic_properties_ptr = element->dynamic_properties();
+    ZETASQL_RET_CHECK(dynamic_properties_ptr->property_expr() != nullptr);
+    ZETASQL_RET_CHECK(dynamic_properties_ptr->property_expr()
+                  ->Is<zetasql::ResolvedColumnRef>() ||
+              dynamic_properties_ptr->property_expr()
+                  ->Is<zetasql::ResolvedCatalogColumnRef>())
+        << "Dynamic properties expression must be a ResolvedColumnRef or "
+           "ResolvedCatalogColumnRef "
+           "type. Got element table AST: "
+        << element->DebugString();
+    if (dynamic_properties_ptr->property_expr()
+            ->Is<zetasql::ResolvedColumnRef>()) {
+      ZETASQL_RET_CHECK(dynamic_properties_ptr->property_expr()
+                    ->GetAs<zetasql::ResolvedColumnRef>()
+                    ->column()
+                    .type()
+                    ->IsJsonType())
+          << "Dynamic properties expression should reference to a JSON type "
+             "column. Got type: "
+          << dynamic_properties_ptr->property_expr()
+                 ->GetAs<zetasql::ResolvedColumnRef>()
+                 ->column()
+                 .type()
+                 ->DebugString();
+      new_element_table.set_dynamic_properties_expression(
+          dynamic_properties_ptr->property_expr()
+              ->GetAs<zetasql::ResolvedColumnRef>()
+              ->column()
+              .name());
+    } else {
+      ZETASQL_RET_CHECK(dynamic_properties_ptr->property_expr()
+                    ->GetAs<zetasql::ResolvedCatalogColumnRef>()
+                    ->column()
+                    ->GetType()
+                    ->IsJsonType())
+          << "Dynamic properties expression should reference to a JSON type "
+             "column. Got type: "
+          << dynamic_properties_ptr->property_expr()
+                 ->GetAs<zetasql::ResolvedCatalogColumnRef>()
+                 ->column()
+                 ->GetType()
+                 ->DebugString();
+      new_element_table.set_dynamic_properties_expression(
+          dynamic_properties_ptr->property_expr()
+              ->GetAs<zetasql::ResolvedCatalogColumnRef>()
+              ->column()
+              ->Name());
+    }
+  }
 
   if (is_node) {
     new_element_table.set_element_kind(PropertyGraph::GraphElementKind::NODE);
@@ -6069,6 +6202,28 @@ absl::Status SchemaUpdaterImpl::AddGraphElementTable(
                                    /*is_source=*/false, &new_element_table));
 
   graph_builder->add_edge_table(new_element_table);
+  return absl::OkStatus();
+}
+
+absl::Status CheckDynamicLabelElementCardinality(
+    absl::string_view property_graph_name,
+    const std::vector<
+        std::unique_ptr<const zetasql::ResolvedGraphElementTable>>&
+        element_tables,
+    bool is_node) {
+  const auto dynamic_label_count = absl::c_count_if(
+      element_tables,
+      [](const auto& element) { return element->dynamic_label() != nullptr; });
+  const auto none_dynamic_label_count =
+      element_tables.size() - dynamic_label_count;
+  if (dynamic_label_count > 1) {
+    return error::PropertyGraphMultipleElementTablesWithDynamicLabel(
+        property_graph_name, is_node);
+  } else if (dynamic_label_count == 1 && none_dynamic_label_count > 0) {
+    return error::
+        PropertyGraphDynamicLabelElementTablesUsedWithSchemaDefinedLabelsElementTables(  // NOLINT
+            property_graph_name, is_node);
+  }
   return absl::OkStatus();
 }
 
@@ -6104,11 +6259,18 @@ absl::Status SchemaUpdaterImpl::PopulatePropertyGraph(
     ZETASQL_RETURN_IF_ERROR(AddGraphElementTable(node_table.get(), /*is_node=*/true,
                                          graph_builder));
   }
+  ZETASQL_RETURN_IF_ERROR(CheckDynamicLabelElementCardinality(
+      ddl_create_property_graph.name(), graph_stmt->node_table_list(),
+      /*is_node=*/true));
+
   // Edge tables.
   for (const auto& edge_table : graph_stmt->edge_table_list()) {
     ZETASQL_RETURN_IF_ERROR(AddGraphElementTable(edge_table.get(), /*is_node=*/false,
                                          graph_builder));
   }
+  ZETASQL_RETURN_IF_ERROR(CheckDynamicLabelElementCardinality(
+      ddl_create_property_graph.name(), graph_stmt->edge_table_list(),
+      /*is_node=*/false));
 
   return absl::OkStatus();
 }

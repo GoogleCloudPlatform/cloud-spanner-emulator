@@ -1,0 +1,104 @@
+
+CREATE TABLE Users(
+  key float,
+  value float,
+  generated_column float GENERATED ALWAYS AS (key / 2.54) STORED,
+  PRIMARY KEY(key, generated_column)
+);
+--
+CREATE TABLE users (
+  key double precision NOT NULL,
+  value double precision,
+  generated_column double precision GENERATED ALWAYS AS ((key / (2.54)::double precision)) STORED NOT NULL,
+  PRIMARY KEY(key, generated_column)
+)
+==
+
+CREATE TABLE Users(
+  key bigint,
+  value float,
+  generated_column float GENERATED ALWAYS AS (value / 2.54) STORED,
+  PRIMARY KEY(key, generated_column)
+);
+--
+CREATE TABLE users (
+  key bigint NOT NULL,
+  value double precision,
+  generated_column double precision GENERATED ALWAYS AS ((value / (2.54)::double precision)) STORED NOT NULL,
+  PRIMARY KEY(key, generated_column)
+)
+==
+
+# TODO: investigate why the following tests do not fail in the
+# emulator.
+# CREATE TABLE Users(
+#   value1 bigint,
+#   value2 bigint,
+#   generated_column float GENERATED ALWAYS AS (value1 + value2) STORED,
+#   PRIMARY KEY(generated_column)
+# );
+# --
+# ERROR: INVALID_ARGUMENT: Generated primary key column `users.generated_column` can depend on at most 1 non-key column.
+# ==
+
+# TODO: investigate why the following tests do not fail in the
+# emulator.
+# CREATE TABLE Users(
+#   value bigint,
+#   generated_column1 bigint GENERATED ALWAYS AS (value + 1) STORED,
+#   generated_column2 bigint GENERATED ALWAYS AS (generated_column1 + 2) STORED,
+#   PRIMARY KEY(generated_column2)
+# );
+# --
+# ERROR: INVALID_ARGUMENT: Generated primary key column `users.generated_column2` cannot depend on other generated columns.
+# ==
+
+CREATE TABLE Users(
+  key bigint,
+  value bigint,
+  generated_column bigint GENERATED ALWAYS AS (cosh(value)) STORED,
+  PRIMARY KEY(key, generated_column)
+);
+--
+ERROR: INVALID_ARGUMENT: Postgres function cosh(double precision) is not supported
+==
+
+CREATE TABLE Users(
+  key varchar(10),
+  value varchar(10),
+  generated_column varchar(25) GENERATED ALWAYS AS (CONCAT(key, value)) STORED,
+  PRIMARY KEY(key, generated_column)
+);
+--
+CREATE TABLE users (
+  key character varying(10) NOT NULL,
+  value character varying(10),
+  generated_column character varying(25) GENERATED ALWAYS AS (concat(key, value)) STORED NOT NULL,
+  PRIMARY KEY(key, generated_column)
+)
+==
+
+# TODO: investigate why the following tests do not fail in the
+# emulator.
+# CREATE TABLE Users(
+#   key bigint,
+#   value bigint DEFAULT (1),
+#   generated_column bigint GENERATED ALWAYS AS (value + 1) STORED PRIMARY KEY
+# );
+# --
+# ERROR: INVALID_ARGUMENT: Generated primary key column `users.generated_column` cannot depend on non-key default columns.
+# ==
+
+CREATE TABLE Users(
+  key bigint DEFAULT (1),
+  value bigint,
+  generated_column bigint GENERATED ALWAYS AS (key + 1) STORED,
+  PRIMARY KEY(key, generated_column)
+);
+--
+CREATE TABLE users (
+  key bigint DEFAULT '1'::bigint NOT NULL,
+  value bigint,
+  generated_column bigint GENERATED ALWAYS AS ((key + '1'::bigint)) STORED NOT NULL,
+  PRIMARY KEY(key, generated_column)
+)

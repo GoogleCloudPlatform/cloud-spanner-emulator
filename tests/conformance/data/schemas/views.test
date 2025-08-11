@@ -1,0 +1,30 @@
+# Note that PG databases by default have lower case table and column names. To
+# use uppercase names, you have to quote them. But the GSQL and PG quoting
+# syntax is incompatible so we use lower-case names in both schemas to avoid
+# having to maintain two copies of each query.
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE t (
+  k INT64,
+  v INT64,
+) PRIMARY KEY (k);
+CREATE VIEW v_bool SQL SECURITY INVOKER AS SELECT true AS t;
+CREATE VIEW v_string SQL SECURITY INVOKER AS SELECT "HI" AS output;
+CREATE VIEW v_depend SQL SECURITY INVOKER AS SELECT v_string.output FROM v_string;
+CREATE VIEW v_mixed SQL SECURITY INVOKER AS SELECT true AS c1, 33 AS c2;
+CREATE VIEW v_table SQL SECURITY INVOKER AS SELECT t.k + t.v AS out FROM t;
+CREATE VIEW v_aliastable SQL SECURITY INVOKER AS SELECT tprime.k as output1 from t as tprime;
+CREATE VIEW v_aliascolumn SQL SECURITY INVOKER AS SELECT kprime1 + 1 as kprime2 from (SELECT t.k + 1 as kprime1 FROM t);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE t (
+  k bigint,
+  v bigint,
+  PRIMARY KEY (k)
+);
+CREATE VIEW v_bool SQL SECURITY INVOKER AS SELECT true AS t;
+CREATE VIEW v_string SQL SECURITY INVOKER AS SELECT 'HI'::text AS output;
+CREATE VIEW v_depend SQL SECURITY INVOKER AS SELECT v_string.output FROM v_string;
+CREATE VIEW v_mixed SQL SECURITY INVOKER AS SELECT true AS c1, 33::bigint AS c2;
+CREATE VIEW v_table SQL SECURITY INVOKER AS SELECT t.k + t.v AS out FROM t;
+CREATE VIEW v_aliastable SQL SECURITY INVOKER AS SELECT tprime.k as output1 from t as tprime;
+CREATE VIEW v_aliascolumn SQL SECURITY INVOKER AS SELECT kprime1 + 1 as kprime2 from (SELECT t.k + 1 as kprime1 FROM t) as alias;

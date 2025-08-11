@@ -121,6 +121,52 @@ class QueryableGraphElementLabel : public zetasql::GraphElementLabel {
   const google::spanner::emulator::backend::PropertyGraph::Label* const label_;
 };
 
+class QueryableGraphDynamicLabel : public zetasql::GraphDynamicLabel {
+ public:
+  QueryableGraphDynamicLabel(
+      zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+      const QueryablePropertyGraph* property_graph,
+      const google::spanner::emulator::backend::PropertyGraph::
+          GraphElementTable* element_table);
+
+  absl::string_view label_expression() const final { return label_expression_; }
+
+  absl::StatusOr<const zetasql::ResolvedExpr*> GetValueExpression()
+      const final {
+    return analyzer_output_->resolved_expr();
+  }
+
+ private:
+  std::string label_expression_;
+  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output_;
+};
+
+class QueryableGraphDynamicProperties
+    : public zetasql::GraphDynamicProperties {
+ public:
+  QueryableGraphDynamicProperties(
+      zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+      const QueryablePropertyGraph* property_graph,
+      const google::spanner::emulator::backend::PropertyGraph::
+          GraphElementTable* element_table);
+
+  absl::string_view properties_expression() const final {
+    return properties_expression_;
+  }
+
+  absl::StatusOr<const zetasql::ResolvedExpr*> GetValueExpression()
+      const final {
+    if (analyzer_output_ == nullptr) {
+      return absl::InternalError("Analyzer output is null");
+    }
+    return analyzer_output_->resolved_expr();
+  }
+
+ private:
+  std::string properties_expression_;
+  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output_;
+};
+
 class QueryableGraphElementTableInternal {
  public:
   QueryableGraphElementTableInternal(
@@ -153,6 +199,30 @@ class QueryableGraphElementTableInternal {
   absl::Status GetLabels(
       absl::flat_hash_set<const zetasql::GraphElementLabel*>& output) const;
 
+  bool HasDynamicLabel() const { return dynamic_label_.has_value(); }
+  absl::Status GetDynamicLabel(
+      const zetasql::GraphDynamicLabel*& dynamic_label) const {
+    if (!dynamic_label_.has_value()) {
+      return absl::NotFoundError(absl::StrCat(
+          "Dynamic label is not configured for the element table: ", Name()));
+    }
+    dynamic_label = dynamic_label_.value().get();
+    return absl::OkStatus();
+  }
+
+  bool HasDynamicProperties() const { return dynamic_properties_.has_value(); }
+  absl::Status GetDynamicProperties(
+      const zetasql::GraphDynamicProperties*& dynamic_properties) const {
+    if (!dynamic_properties_.has_value()) {
+      return absl::NotFoundError(
+          absl::StrCat("Dynamic properties is not configured for the element "
+                       "table: ",
+                       Name()));
+    }
+    dynamic_properties = dynamic_properties_.value().get();
+    return absl::OkStatus();
+  }
+
  protected:
   const QueryablePropertyGraph* const property_graph_;
   const google::spanner::emulator::backend::PropertyGraph::
@@ -167,6 +237,10 @@ class QueryableGraphElementTableInternal {
   CaseInsensitiveStringMap<
       std::unique_ptr<const QueryableGraphPropertyDefinition>>
       property_definitions_;
+  std::optional<std::unique_ptr<const QueryableGraphDynamicLabel>>
+      dynamic_label_;
+  std::optional<std::unique_ptr<const QueryableGraphDynamicProperties>>
+      dynamic_properties_;
 };
 
 class QueryableGraphNodeTable : public zetasql::GraphNodeTable {
@@ -218,6 +292,22 @@ class QueryableGraphNodeTable : public zetasql::GraphNodeTable {
       absl::flat_hash_set<const zetasql::GraphElementLabel*>& output)
       const override {
     return element_table_internals_->GetLabels(output);
+  }
+
+  bool HasDynamicLabel() const override {
+    return element_table_internals_->HasDynamicLabel();
+  }
+  absl::Status GetDynamicLabel(
+      const zetasql::GraphDynamicLabel*& dynamic_label) const override {
+    return element_table_internals_->GetDynamicLabel(dynamic_label);
+  }
+
+  bool HasDynamicProperties() const override {
+    return element_table_internals_->HasDynamicProperties();
+  }
+  absl::Status GetDynamicProperties(const zetasql::GraphDynamicProperties*&
+                                        dynamic_properties) const override {
+    return element_table_internals_->GetDynamicProperties(dynamic_properties);
   }
 
  private:
@@ -309,6 +399,22 @@ class QueryableGraphEdgeTable : public zetasql::GraphEdgeTable {
 
   const zetasql::GraphNodeTableReference* GetDestNodeTable() const override {
     return target_node_table_reference_.get();
+  }
+
+  bool HasDynamicLabel() const override {
+    return element_table_internals_->HasDynamicLabel();
+  }
+  absl::Status GetDynamicLabel(
+      const zetasql::GraphDynamicLabel*& dynamic_label) const override {
+    return element_table_internals_->GetDynamicLabel(dynamic_label);
+  }
+
+  bool HasDynamicProperties() const override {
+    return element_table_internals_->HasDynamicProperties();
+  }
+  absl::Status GetDynamicProperties(const zetasql::GraphDynamicProperties*&
+                                        dynamic_properties) const override {
+    return element_table_internals_->GetDynamicProperties(dynamic_properties);
   }
 
  private:

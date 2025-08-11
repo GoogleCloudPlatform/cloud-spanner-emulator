@@ -34,9 +34,9 @@ namespace emulator {
 namespace frontend {
 
 static constexpr absl::Duration kOldTransactionStalenessDuration =
-    absl::Minutes(2);
+    absl::Minutes(5);
 static constexpr absl::Duration kTransactionStalenessDuration =
-    absl::Minutes(1);
+    absl::Minutes(2);
 
 MultiplexedSessionTransactionManager::MultiplexedSessionTransactionManager()
     : last_clear_time_(absl::Now()),
@@ -82,7 +82,6 @@ void MultiplexedSessionTransactionManager::ClearOldTransactionsLocked() {
     // transactions to be deleted.
     if (it.second->IsClosed() || (absl::Now() - it.second->GetCreateTime()) >
                                      old_transaction_staleness_duration_) {
-      it.second->Close();
       transactions_to_delete.push_back(it.first);
     }
   }

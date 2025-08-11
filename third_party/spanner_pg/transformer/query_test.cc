@@ -57,6 +57,7 @@
 #include "absl/strings/str_split.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
+#include "third_party/spanner_pg/catalog/catalog_adapter_holder.h"
 #include "third_party/spanner_pg/interface/catalog_wrappers.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/test_catalog/spanner_test_catalog.h"
@@ -499,6 +500,11 @@ class TransformTestCase {
     parameter_types_ = parameter_types;
     return *this;
   }
+  TransformTestCase& SetLanguageFeature(zetasql::LanguageFeature feature,
+                                        bool value) {
+    language_features_.push_back(std::make_pair(feature, value));
+    return *this;
+  }
   TransformTestCase& SetFlagOverride(absl::Flag<bool>* flag, bool value) {
     flag_overrides_.push_back(std::make_pair(flag, value));
     return *this;
@@ -510,6 +516,10 @@ class TransformTestCase {
   const absl::flat_hash_map<std::string, const zetasql::Type*>&
   parameter_types() const {
     return parameter_types_;
+  }
+  const std::vector<std::pair<zetasql::LanguageFeature, bool>>&
+  language_features() const {
+    return language_features_;
   }
   const std::vector<std::pair<absl::Flag<bool>*, bool>>& flag_overrides()
       const {
@@ -534,6 +544,7 @@ class TransformTestCase {
   std::string pg_query_;
   std::string gsql_query_;
   absl::flat_hash_map<std::string, const zetasql::Type*> parameter_types_;
+  std::vector<std::pair<zetasql::LanguageFeature, bool>> language_features_;
   std::vector<std::pair<absl::Flag<bool>*, bool>> flag_overrides_;
 };
 
@@ -546,13 +557,21 @@ class QueryTransformationTest
 };
 
 TEST_P(QueryTransformationTest, TestTransform) {
-  std::unique_ptr<CatalogAdapterHolder> adapter_holder =
-      GetSpangresTestCatalogAdapterHolder(analyzer_options_);
   TransformTestCase test_case = GetParam();
 
   for (const auto& [flag, value] : test_case.flag_overrides()) {
     absl::SetFlag(flag, value);
   }
+
+  for (const auto& [feature, enabled] : test_case.language_features()) {
+    if (enabled) {
+      analyzer_options_.mutable_language()->EnableLanguageFeature(feature);
+    } else {
+      analyzer_options_.mutable_language()->DisableLanguageFeature(feature);
+    }
+  }
+  std::unique_ptr<CatalogAdapterHolder> adapter_holder =
+      GetSpangresTestCatalogAdapterHolder(analyzer_options_);
 
   // Build the analyzer options.
   zetasql::AnalyzerOptions analyzer_options =
@@ -1417,6 +1436,8 @@ TEST(TransformerTest, PruneUnusedPrunesInsert) {
 
 TEST(TransformerTest, InsertOnConflictDoNothing) {
   zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
+  options.mutable_language()->DisableLanguageFeature(
+      zetasql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
   ASSERT_TRUE(options.prune_unused_columns());
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(
@@ -1442,6 +1463,8 @@ TEST(TransformerTest, InsertOnConflictDoNothing) {
 
 TEST(TransformerTest, InsertOnConflictDoUpdate) {
   zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
+  options.mutable_language()->DisableLanguageFeature(
+      zetasql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
   ASSERT_TRUE(options.prune_unused_columns());
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(

@@ -59,27 +59,32 @@ namespace {
 
 absl::Status CheckAllSignaturesHaveNamespacedPaths(
     const FunctionProto& function) {
-  std::string name = absl::StrJoin(function.mapped_name_path(), ".");
+  std::string name =
+      absl::StrJoin(function.mapped_name_path().name_path(), ".");
   for (int i = 0; i < function.signatures_size(); ++i) {
     const FunctionSignatureProto& signature = function.signatures(i);
-    ZETASQL_RET_CHECK(signature.postgresql_name_path_size() == 2)
-        << "Function " << name << " signature[" << i
-        << "].postgresql_name_path must have 2 parts (namespace and name), "
-           "got: "
-        << absl::StrJoin(signature.postgresql_name_path(), ".");
+    for (const auto& pg_name_path : signature.postgresql_name_paths()) {
+      ZETASQL_RET_CHECK(pg_name_path.name_path().size() == 2)
+          << "Function " << name << " signature[" << i
+          << "] postgresql_name_path must have 2 parts (namespace and name), "
+             "got: "
+          << absl::StrJoin(pg_name_path.name_path(), ".");
+    }
   }
   return absl::OkStatus();
 }
 
 absl::Status CheckAtLeastOneSignature(const FunctionProto& function) {
-  std::string name = absl::StrJoin(function.mapped_name_path(), ".");
+  std::string name =
+      absl::StrJoin(function.mapped_name_path().name_path(), ".");
   ZETASQL_RET_CHECK(function.signatures_size() > 0)
       << "Function " << name << " must have at least one signature";
   return absl::OkStatus();
 }
 
 absl::Status CheckAllNamedArgumentsHaveName(const FunctionProto& function) {
-  std::string name = absl::StrJoin(function.mapped_name_path(), ".");
+  std::string name =
+      absl::StrJoin(function.mapped_name_path().name_path(), ".");
   for (int i = 0; i < function.signatures_size(); ++i) {
     const FunctionSignatureProto& signature = function.signatures(i);
     for (int j = 0; j < signature.arguments_size(); ++j) {
@@ -183,17 +188,18 @@ SpangresFunctionMapper::ToPostgresFunctionArguments(
 
   std::vector<PostgresFunctionArguments> result;
   std::string mapped_function_name =
-      absl::StrJoin(function.mapped_name_path(), ".");
+      absl::StrJoin(function.mapped_name_path().name_path(), ".");
 
   // Group signatures by postgresql name path
   absl::flat_hash_map<std::vector<std::string>,
                       std::vector<const FunctionSignatureProto*>>
       signatures_by_pg_name_path;
   for (const auto& signature : function.signatures()) {
-    std::vector<std::string> pg_name_path(
-        signature.postgresql_name_path().begin(),
-        signature.postgresql_name_path().end());
-    signatures_by_pg_name_path[pg_name_path].push_back(&signature);
+    for (const auto& pg_name_path : signature.postgresql_name_paths()) {
+      std::vector<std::string> name_path(pg_name_path.name_path().begin(),
+                                         pg_name_path.name_path().end());
+      signatures_by_pg_name_path[name_path].push_back(&signature);
+    }
   }
 
   // Creates one PostgresFunctionArguments per pg_name_path

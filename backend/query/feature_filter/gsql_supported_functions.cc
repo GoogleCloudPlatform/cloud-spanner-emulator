@@ -252,6 +252,15 @@ const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions() {
         "justify_hours",
         "justify_interval",
         "make_interval",
+        "property_names",
+        "labels",
+        "path_length",
+        "nodes",
+        "edges",
+        "is_acyclic",
+        "is_trail",
+        "is_simple",
+        "$dynamic_property_equals",
           // clang-format on
       };
   return supported_functions;

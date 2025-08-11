@@ -118,8 +118,10 @@ absl::StatusOr<std::unique_ptr<zetasql::EvaluatorTableIterator>>
 QueryableView::CreateEvaluatorTableIterator(
     absl::Span<const int> column_idxs) const {
   ZETASQL_RET_CHECK_NE(query_evaluator_, nullptr);
-  ZETASQL_ASSIGN_OR_RETURN(auto cursor,
-                   query_evaluator_->Evaluate(wrapped_view_->body()));
+  auto view_body = wrapped_view_->body_origin().has_value()
+                       ? wrapped_view_->body_origin().value()
+                       : wrapped_view_->body();
+  ZETASQL_ASSIGN_OR_RETURN(auto cursor, query_evaluator_->Evaluate(view_body));
   return std::make_unique<ViewRowCursorEvaluatorTableIterator>(
       std::move(cursor), column_idxs);
 }

@@ -63,6 +63,8 @@ class TestReadOnlyStore : public ReadOnlyStore {
                       absl::Span<const Column* const> columns,
                       const std::vector<zetasql::Value>& values = {});
 
+  absl::Status Delete(const Table* table, const Key& key);
+
  private:
   InMemoryStorage store_;
 };

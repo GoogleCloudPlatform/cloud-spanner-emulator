@@ -640,6 +640,114 @@ TEST_F(CatalogTest, FindPropertyGraph) {
               StatusIs(absl::StatusCode::kNotFound));
 }
 
+TEST_F(CatalogTest, FindPropertyGraphWithDynamicLabelAndProperties) {
+  MakeCatalog({
+      R"(
+    CREATE TABLE GraphNode (
+      id INT64 NOT NULL,
+      label STRING(MAX) NOT NULL,
+      properties JSON,
+    ) PRIMARY KEY (id)
+  )",
+      R"(
+    CREATE TABLE GraphEdge (
+      id INT64 NOT NULL,
+      dest_id INT64 NOT NULL,
+      edge_id INT64 NOT NULL,
+      label STRING(MAX) NOT NULL,
+      properties JSON,
+    ) PRIMARY KEY (id, dest_id, edge_id),
+      INTERLEAVE IN PARENT GraphNode
+  )",
+      R"(
+    CREATE OR REPLACE PROPERTY GRAPH aml
+      NODE TABLES (
+        GraphNode
+          DYNAMIC LABEL (label)
+          DYNAMIC PROPERTIES (properties)
+      )
+      EDGE TABLES (
+        GraphEdge
+          SOURCE KEY (id) REFERENCES GraphNode(id)
+          DESTINATION KEY (dest_id) REFERENCES GraphNode(id)
+          DYNAMIC LABEL (label)
+          DYNAMIC PROPERTIES (properties)
+      )
+  )",
+  });
+  // Test property graph.
+  const zetasql::PropertyGraph* graph;
+  ZETASQL_EXPECT_OK(catalog().FindPropertyGraph({"aml"}, graph, {}));
+  EXPECT_EQ(graph->FullName(), "aml");
+
+  absl::flat_hash_set<const zetasql::GraphElementLabel*> all_graph_labels;
+  ZETASQL_EXPECT_OK(graph->GetLabels(all_graph_labels));
+  EXPECT_EQ(all_graph_labels.size(), 2);
+
+  // Test labels from graph.
+  {
+    const zetasql::GraphElementLabel* graph_label;
+    ZETASQL_EXPECT_OK(graph->FindLabelByName("GraphNode", graph_label));
+    EXPECT_NE(graph_label, nullptr);
+    EXPECT_EQ(graph_label->FullName(), "aml.GraphNode");
+
+    absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>
+        property_declarations_from_label;
+    ZETASQL_EXPECT_OK(
+        graph_label->GetPropertyDeclarations(property_declarations_from_label));
+    EXPECT_EQ(property_declarations_from_label.size(), 3);
+  }
+  {
+    const zetasql::GraphElementLabel* graph_label;
+    ZETASQL_EXPECT_OK(graph->FindLabelByName("GraphEdge", graph_label));
+    EXPECT_NE(graph_label, nullptr);
+    EXPECT_EQ(graph_label->FullName(), "aml.GraphEdge");
+
+    absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>
+        property_declarations_from_label;
+    ZETASQL_EXPECT_OK(
+        graph_label->GetPropertyDeclarations(property_declarations_from_label));
+    EXPECT_EQ(property_declarations_from_label.size(), 5);
+  }
+
+  // Test property declarations from graph.
+  const zetasql::GraphPropertyDeclaration* property_declaration;
+  ZETASQL_EXPECT_OK(graph->FindPropertyDeclarationByName("id", property_declaration));
+  EXPECT_NE(property_declaration, nullptr);
+  EXPECT_EQ(property_declaration->FullName(), "aml.id");
+  EXPECT_EQ(property_declaration->Type(), zetasql::types::Int64Type());
+
+  ZETASQL_EXPECT_OK(
+      graph->FindPropertyDeclarationByName("label", property_declaration));
+  EXPECT_NE(property_declaration, nullptr);
+  EXPECT_EQ(property_declaration->FullName(), "aml.label");
+  EXPECT_EQ(property_declaration->Type(), zetasql::types::StringType());
+
+  ZETASQL_EXPECT_OK(
+      graph->FindPropertyDeclarationByName("properties", property_declaration));
+  EXPECT_NE(property_declaration, nullptr);
+  EXPECT_EQ(property_declaration->FullName(), "aml.properties");
+  EXPECT_EQ(property_declaration->Type(), zetasql::types::JsonType());
+
+  // Test node tables from graph.
+  absl::flat_hash_set<const zetasql::GraphNodeTable*> node_tables;
+  ZETASQL_EXPECT_OK(graph->GetNodeTables(node_tables));
+  EXPECT_EQ(node_tables.size(), 1);
+  const zetasql::GraphNodeTable* node_table = *node_tables.begin();
+  EXPECT_EQ(node_table->FullName(), "aml.GraphNode");
+  EXPECT_TRUE(node_table->HasDynamicLabel());
+  EXPECT_TRUE(node_table->HasDynamicProperties());
+
+  // Test edge tables from graph.
+  absl::flat_hash_set<const zetasql::GraphEdgeTable*> edge_tables;
+  ZETASQL_EXPECT_OK(graph->GetEdgeTables(edge_tables));
+  EXPECT_EQ(edge_tables.size(), 1);
+  const zetasql::GraphEdgeTable* edge_table = *edge_tables.begin();
+  EXPECT_EQ(edge_table->FullName(), "aml.GraphEdge");
+  EXPECT_TRUE(edge_table->HasDynamicLabel());
+  EXPECT_TRUE(edge_table->HasDynamicProperties());
+}
+
 TEST_F(CatalogTest, FindPropertyGraphIsNotFound) {
   const zetasql::PropertyGraph* graph;
   EXPECT_THAT(catalog().FindPropertyGraph({"BAR"}, graph, {}),

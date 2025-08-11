@@ -241,6 +241,9 @@ class QueryEngineTestBase : public testing::Test {
   const Schema* gpk_schema() { return gpk_schema_.get(); }
   const Schema* timestamp_date_schema() { return timestamp_date_schema_.get(); }
   const Schema* property_graph_schema() { return property_graph_schema_.get(); }
+  const Schema* dynamic_property_graph_schema() {
+    return dynamic_property_graph_schema_.get();
+  }
   RowReader* change_stream_partition_table_reader() {
     return &change_stream_partition_table_reader_;
   }
@@ -253,6 +256,9 @@ class QueryEngineTestBase : public testing::Test {
   }
   RowReader* reader() { return &reader_; }
   RowReader* property_graph_reader() { return &property_graph_reader_; }
+  RowReader* dynamic_property_graph_reader() {
+    return &dynamic_property_graph_reader_;
+  }
   QueryEngine& query_engine() { return query_engine_; }
   zetasql::TypeFactory* type_factory() { return &type_factory_; }
   const Schema* proto_schema() { return proto_schema_.get(); }
@@ -336,6 +342,7 @@ class QueryEngineTestBase : public testing::Test {
   std::unique_ptr<const Schema> gpk_schema_;
   std::unique_ptr<const Schema> timestamp_date_schema_;
   std::unique_ptr<const Schema> property_graph_schema_;
+  std::unique_ptr<const Schema> dynamic_property_graph_schema_;
 
  private:
   std::unique_ptr<const Schema> views_schema_ =
@@ -364,6 +371,37 @@ class QueryEngineTestBase : public testing::Test {
           {Int64(2), Int64(4)},
           {Int64(4), Int64(1)},
           {Int64(1), Int64(4)}}}}}};
+
+  test::TestRowReader dynamic_property_graph_reader_{
+      {{"node_table",
+        {{"id", "label", "properties"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType(),
+          zetasql::types::JsonType()},
+         {
+             {Int64(1), String("person"), zetasql::values::NullJson()},
+             {Int64(2), String("person"), zetasql::values::NullJson()},
+             {Int64(4), String("person"), zetasql::values::NullJson()},
+         }}},
+       {"edge_table",
+        {{"from_id", "to_id", "label", "properties"},
+         {zetasql::types::Int64Type(), zetasql::types::Int64Type(),
+          zetasql::types::StringType(), zetasql::types::JsonType()},
+         {
+             {Int64(1), Int64(2), String("knows"),
+              zetasql::values::Json(
+                  zetasql::JSONValue::ParseJSONString(
+                      R"({"location": "US", "active": true})")
+                      .value())},
+             {Int64(2), Int64(4), String("knows"),
+              zetasql::values::Json(
+                  zetasql::JSONValue::ParseJSONString(
+                      R"({"location": "UK", "active": false})")
+                      .value())},
+             {Int64(4), Int64(1), String("knows"),
+              zetasql::values::NullJson()},
+             {Int64(1), Int64(4), String("knows"),
+              zetasql::values::NullJson()},
+         }}}}};
 
   QueryEngine query_engine_{&type_factory_};
   test::ScopedEmulatorFeatureFlagsSetter feature_flags_setter_ =
@@ -430,6 +468,8 @@ class QueryEngineTest
       model_schema_ = test::CreateSchemaWithOneModel(&type_factory_);
       property_graph_schema_ =
           test::CreateSchemaWithOnePropertyGraph(&type_factory_);
+      dynamic_property_graph_schema_ =
+          test::CreateSchemaWithDynamicPropertyGraph(&type_factory_);
       ZETASQL_ASSERT_OK_AND_ASSIGN(gpk_schema_,
                            test::CreateGpkSchemaWithOneTable(&type_factory_));
       ZETASQL_ASSERT_OK_AND_ASSIGN(sequence_schema_,
@@ -1617,6 +1657,42 @@ TEST_P(QueryEngineTest, TestPropertyGraphBasicQuery) {
 
   ASSERT_NE(result.rows, nullptr);
   EXPECT_EQ(ToString(result), R"(node_id(INT64) : 2,1,4,)");
+}
+
+TEST_P(QueryEngineTest, TestPropertyGraphBasicQueryWithDynamicLabel) {
+  // Property graphs are not supported in PostgreSQL.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      "GRAPH test_graph "
+      "MATCH (a:Person)-[:KNOWS]->(b:Person) "
+      "RETURN a.id AS node_id"};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query,
+                                QueryContext{dynamic_property_graph_schema(),
+                                             dynamic_property_graph_reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), R"(node_id(INT64) : 1,2,4,1,)");
+}
+
+TEST_P(QueryEngineTest,
+       TestPropertyGraphBasicQueryWithDynamicLabelAndProperties) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      "GRAPH test_graph "
+      "MATCH (a:Person)-[:KNOWS {active:false, location:'UK'}]->(b:Person) "
+      "RETURN a.id AS node_id"};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query,
+                                QueryContext{dynamic_property_graph_schema(),
+                                             dynamic_property_graph_reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), R"(node_id(INT64) : 2,)");
 }
 
 TEST_P(QueryEngineTest, TestSQLPGQBasicQuery) {

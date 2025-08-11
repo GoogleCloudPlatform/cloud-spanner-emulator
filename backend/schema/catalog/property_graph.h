@@ -128,6 +128,27 @@ class PropertyGraph : public SchemaNode {
       target_node_reference_.edge_table_column_names = edge_table_column_names;
     }
 
+    bool has_dynamic_label_expression() const {
+      return dynamic_label_expression_.has_value();
+    }
+    bool has_dynamic_properties_expression() const {
+      return dynamic_properties_expression_.has_value();
+    }
+    // REQUIRES: has_dynamic_label_expression() == true
+    const std::string& dynamic_label_expression() const {
+      return dynamic_label_expression_.value();
+    }
+    // REQUIRES: has_dynamic_property_expression() == true
+    const std::string& dynamic_properties_expression() const {
+      return dynamic_properties_expression_.value();
+    }
+    void set_dynamic_label_expression(std::string_view expression) {
+      dynamic_label_expression_ = std::string(expression);
+    }
+    void set_dynamic_properties_expression(std::string_view expression) {
+      dynamic_properties_expression_ = std::string(expression);
+    }
+
     std::string DebugString() const;
 
    private:
@@ -143,6 +164,10 @@ class PropertyGraph : public SchemaNode {
     std::vector<std::string> label_names_;
     // Property definitions in this element table.
     std::vector<PropertyDefinition> property_definitions_;
+    // Dynamic label for an element table.
+    std::optional<std::string> dynamic_label_expression_;
+    // Dynamic property for an element table.
+    std::optional<std::string> dynamic_properties_expression_;
     // Source node reference for an edge table.
     GraphNodeReference source_node_reference_;
     // Target node reference for an edge table.

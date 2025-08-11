@@ -57,6 +57,8 @@ using google::spanner::emulator::backend::KeyColumn;
 using google::spanner::emulator::backend::OwningSchema;
 using google::spanner::emulator::backend::SchemaGraph;
 using google::spanner::emulator::backend::Table;
+using google::spanner::emulator::backend::
+    kCloudSpannerEmulatorFunctionCatalogName;
 
 namespace postgres_translator::spangres::test {
 
@@ -597,8 +599,9 @@ std::unique_ptr<zetasql::EnumerableCatalog> GetEmulatorCatalog() {
   static std::unique_ptr<const OwningSchema> schema =
       CreateSchema(*GetTypeFactory());
   static auto function_catalog =
-      std::make_unique<FunctionCatalog>(GetTypeFactory(),
-                                        /*catalog_name = */ "spanner");
+      std::make_unique<FunctionCatalog>(
+          GetTypeFactory(),
+          /*catalog_name = */ kCloudSpannerEmulatorFunctionCatalogName);
   return std::make_unique<Catalog>(schema.get(), function_catalog.get(),
                                    GetTypeFactory());
 }

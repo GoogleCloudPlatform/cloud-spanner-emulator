@@ -249,6 +249,7 @@ cc_test(
         ":transformer_test",
         "//third_party/spanner_pg/bootstrap_catalog",
         "//third_party/spanner_pg/catalog:catalog_adapter",
+        "//third_party/spanner_pg/catalog:catalog_adapter_holder",
         "//third_party/spanner_pg/interface:catalog_wrappers",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
