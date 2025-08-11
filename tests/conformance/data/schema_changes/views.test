@@ -59,6 +59,14 @@ CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT V4.a FROM V4;
 CREATE VIEW V2 SQL SECURITY INVOKER AS SELECT V1.a FROM V1;
 CREATE VIEW V3 SQL SECURITY INVOKER AS SELECT V2.a FROM V2;
 ==
+# Change the type of a column that another view depends on.
+CREATE VIEW V SQL SECURITY INVOKER AS SELECT TRUE AS T;
+CREATE VIEW D SQL SECURITY INVOKER AS SELECT CAST(V.T AS BOOL) AS C FROM V;
+CREATE OR REPLACE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS T;
+--
+CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS T;
+CREATE VIEW D SQL SECURITY INVOKER AS SELECT CAST(V.T AS BOOL) AS C FROM V;
+==
 # # # # --- Failure Test Cases --- # # # #
 # Cannot drop a table used by the view
 # --regex
@@ -207,3 +215,56 @@ CREATE VIEW foo SQL SECURITY INVOKER
   AS SELECT t.c1 AS a FROM t FOR UPDATE;
 --
 ERROR: Unexpected lock mode in query
+==
+# No security type.
+# --regex
+CREATE VIEW V AS SELECT TRUE AS T;
+--
+ERROR:.* `V` is missing the SQL SECURITY clause.
+==
+# Unknown security type.
+# --regex
+CREATE VIEW S1 SQL SECURITY FOO AS SELECT T.K FROM T;
+--
+ERROR: INVALID_ARGUMENT: .* Expecting 'INVOKER' but found 'FOO'
+==
+# Invalid type in view definition.
+# --regex
+CREATE VIEW V SQL SECURITY INVOKER AS SELECT CAST(1 AS INT32) AS OUT;
+--
+ERROR:.* Error (analyzing|parsing) the definition of view `V`: Type not found: INT32 .*
+==
+# View depends on a table that does not exist.
+# --regex
+CREATE VIEW Invalid SQL SECURITY INVOKER AS SELECT ONE FROM MISSING;
+--
+ERROR:.* Error (analyzing|parsing) the definition of view `Invalid`: Table not found: MISSING .*
+==
+# View does not use strict name resolution.
+# --regex
+CREATE TABLE T (K INT64, V STRING(MAX)) PRIMARY KEY (K);
+CREATE VIEW Invalid SQL SECURITY INVOKER AS SELECT K FROM T;
+--
+ERROR:.* K cannot be used without a qualifier in strict name resolution mode .*
+==
+# View has an unnamed output column.
+# --regex
+CREATE TABLE T (K INT64, V STRING(MAX)) PRIMARY KEY (K);
+CREATE VIEW Invalid SQL SECURITY INVOKER AS SELECT TRUE;
+--
+ERROR:.* CREATE VIEW columns must be named, but column 1 has no name .*
+==
+# Replacing view has analysis error.
+# --regex
+CREATE VIEW V SQL SECURITY INVOKER AS SELECT TRUE AS T;
+CREATE OR REPLACE VIEW V SQL SECURITY INVOKER AS SELECT ERROR;
+--
+ERROR:.* Cannot (alter|replace) VIEW `V` because new definition is invalid with the following diagnostic message:.* Unrecognized name: ERROR .*
+==
+# Replacing view has breaks dependent view.
+# --regex
+CREATE VIEW V SQL SECURITY INVOKER AS SELECT TRUE AS T;
+CREATE VIEW D SQL SECURITY INVOKER AS SELECT V.T = TRUE AS C FROM V;
+CREATE OR REPLACE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS T;
+--
+ERROR:.* Cannot (alter|replace) VIEW `V`. The new definition causes the definition of VIEW `D` to become invalid with the following diagnostic message:.* No matching signature .*

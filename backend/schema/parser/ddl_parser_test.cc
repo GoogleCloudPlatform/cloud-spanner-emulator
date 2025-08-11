@@ -7826,6 +7826,43 @@ TEST(ParseCreatePropertyGraph, ParseCreateIfNotExistsPropertyGraph) {
         })pb")));
 }
 
+TEST(ParseCreatePropertyGraph,
+     ParseCreatePropertyGraphWithDynamicLabelAndProperties) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE PROPERTY GRAPH aml
+      NODE TABLES (
+        GraphNode
+          DYNAMIC LABEL (label)
+          DYNAMIC PROPERTIES (properties)
+      )
+      EDGE TABLES (
+        GraphEdge
+          SOURCE KEY (id) REFERENCES GraphNode(id)
+          DESTINATION KEY (dest_id) REFERENCES GraphNode(id)
+          DYNAMIC LABEL (label)
+          DYNAMIC PROPERTIES (properties)
+      )
+    )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_property_graph {
+          name: "aml"
+          ddl_body: "CREATE PROPERTY GRAPH aml\n"
+                    "      NODE TABLES (\n"
+                    "        GraphNode\n"
+                    "          DYNAMIC LABEL (label)\n"
+                    "          DYNAMIC PROPERTIES (properties)\n"
+                    "      )\n"
+                    "      EDGE TABLES (\n"
+                    "        GraphEdge\n"
+                    "          SOURCE KEY (id) REFERENCES GraphNode(id)\n"
+                    "          DESTINATION KEY (dest_id) REFERENCES GraphNode(id)\n"
+                    "          DYNAMIC LABEL (label)\n"
+                    "          DYNAMIC PROPERTIES (properties)\n"
+                    "      )"
+        })pb")));
+}
+
 TEST(ParseDropPropertyGraph, ParseDropPropertyGraph) {
   EXPECT_THAT(ParseDDLStatement(R"sql(
     DROP PROPERTY GRAPH graph

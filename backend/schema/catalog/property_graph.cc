@@ -119,6 +119,13 @@ catalog::PropertyGraphProto PropertyGraph::ToProto() const {
       property_definition_proto.set_value_expression_sql(
           property_definition.value_expression_string);
     }
+    if (node.has_dynamic_label_expression()) {
+      node_proto.set_dynamic_label_expr(node.dynamic_label_expression());
+    }
+    if (node.has_dynamic_properties_expression()) {
+      node_proto.set_dynamic_property_expr(
+          node.dynamic_properties_expression());
+    }
   }
   for (const auto& edge : edge_tables_) {
     auto& edge_proto = *proto.add_edge_tables();
@@ -139,6 +146,13 @@ catalog::PropertyGraphProto PropertyGraph::ToProto() const {
           property_definition.name);
       property_definition_proto.set_value_expression_sql(
           property_definition.value_expression_string);
+    }
+    if (edge.has_dynamic_label_expression()) {
+      edge_proto.set_dynamic_label_expr(edge.dynamic_label_expression());
+    }
+    if (edge.has_dynamic_properties_expression()) {
+      edge_proto.set_dynamic_property_expr(
+          edge.dynamic_properties_expression());
     }
     SetNodeTableReferenceProto(edge.source_node_reference(),
                                *edge_proto.mutable_source_node_table());
@@ -170,6 +184,15 @@ std::string PropertyGraph::GraphElementTable::DebugString() const {
                   absl::StrJoin(key_clause_columns_, ", "), "\n");
   absl::StrAppend(&debug_string,
                   "  label_names: ", absl::StrJoin(label_names_, ", "), "\n");
+  if (has_dynamic_label_expression()) {
+    absl::StrAppend(&debug_string,
+                    "  dynamic_label_expression: ", dynamic_label_expression(),
+                    "\n");
+  }
+  if (has_dynamic_properties_expression()) {
+    absl::StrAppend(&debug_string, "  dynamic_properties_expression: ",
+                    dynamic_properties_expression(), "\n");
+  }
   if (element_kind_ == GraphElementKind::EDGE) {
     absl::StrAppend(&debug_string, "  source_node_reference: ",
                     source_node_reference_.DebugString(), "\n");

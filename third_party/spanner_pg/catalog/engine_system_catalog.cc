@@ -553,7 +553,7 @@ EngineSystemCatalog::GetFunctionSigPairs(
     absl::string_view function_name) const {
   const PostgresExtendedFunction* pg_function =
       GetFunction(std::string(function_name));
-  ZETASQL_RET_CHECK_NE(pg_function, nullptr);
+  ZETASQL_RET_CHECK_NE(pg_function, nullptr) << "Function not found: " << function_name;
   std::vector<FunctionSigPair> signatures;
   for (const std::unique_ptr<PostgresExtendedFunctionSignature>& signature :
        pg_function->GetPostgresSignatures()) {

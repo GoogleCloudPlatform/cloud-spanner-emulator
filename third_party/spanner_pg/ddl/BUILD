@@ -108,11 +108,8 @@ cc_library(
         "//third_party/spanner_pg/interface:parser_interface",
         "//third_party/spanner_pg/interface:parser_without_serialization_only",  # buildcleaner: keep
         "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
         "@com_google_zetasql//zetasql/base",
     ],
 )

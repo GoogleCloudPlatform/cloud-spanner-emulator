@@ -35,17 +35,12 @@
 #include <memory>
 #include <string>
 
-#include "absl/flags/flag.h"
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "third_party/spanner_pg/ddl/ddl_translator.h"
-#include "third_party/spanner_pg/ddl/pg_to_spanner_ddl_translator.h"
-#include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 #include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
 #include "third_party/spanner_pg/interface/parser_interface.h"
-#include "third_party/spanner_pg/interface/spangres_translator_factory.h"
 #include "third_party/spanner_pg/interface/spangres_translator_interface.h"
-#include "third_party/spanner_pg/interface/stub_builtin_function_catalog.h"
 
 namespace postgres_translator::spangres {
 
@@ -68,8 +63,6 @@ class DdlTestHelper {
   DdlTestHelper& operator=(const DdlTestHelper&) = delete;
   DdlTestHelper(DdlTestHelper&&) = delete;
   DdlTestHelper& operator=(DdlTestHelper&&) = delete;
-
-  absl::Status TranslateCreateTable(google::spanner::emulator::backend::ddl::DDLStatement& statement);
 
   std::unique_ptr<PostgreSQLToSpannerDDLTranslator> translator_;
   std::unique_ptr<SpangresSchemaPrinter> schema_printer_;

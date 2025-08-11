@@ -26,6 +26,7 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
@@ -59,6 +60,72 @@ void ValidateLabels(
         << graph.Labels().at(i).name;
     EXPECT_THAT(graph.Labels().at(i).property_names,
                 testing::UnorderedElementsAreArray(expected_property_names));
+  }
+}
+
+enum class ElementTableScope {
+  kNodeOnly,
+  kEdgeOnly,
+  kBoth,
+};
+
+void ValidateDynamicLabeledElements(const PropertyGraph& graph,
+                                    ElementTableScope dynamic_label_type) {
+  if (dynamic_label_type == ElementTableScope::kNodeOnly ||
+      dynamic_label_type == ElementTableScope::kBoth) {
+    EXPECT_TRUE(
+        absl::c_all_of(graph.NodeTables(), [](const GraphElementTable& table) {
+          return table.has_dynamic_label_expression();
+        }));
+  }
+  if (dynamic_label_type == ElementTableScope::kEdgeOnly ||
+      dynamic_label_type == ElementTableScope::kBoth) {
+    EXPECT_TRUE(
+        absl::c_all_of(graph.EdgeTables(), [](const GraphElementTable& table) {
+          return table.has_dynamic_label_expression();
+        }));
+  }
+  if (dynamic_label_type == ElementTableScope::kNodeOnly) {
+    EXPECT_TRUE(
+        absl::c_none_of(graph.EdgeTables(), [](const GraphElementTable& table) {
+          return table.has_dynamic_label_expression();
+        }));
+  }
+  if (dynamic_label_type == ElementTableScope::kEdgeOnly) {
+    EXPECT_TRUE(
+        absl::c_none_of(graph.NodeTables(), [](const GraphElementTable& table) {
+          return table.has_dynamic_label_expression();
+        }));
+  }
+}
+
+void ValidateDynamicPropertiesElements(const PropertyGraph& graph,
+                                       ElementTableScope dynamic_label_type) {
+  if (dynamic_label_type == ElementTableScope::kNodeOnly ||
+      dynamic_label_type == ElementTableScope::kBoth) {
+    EXPECT_TRUE(
+        absl::c_all_of(graph.NodeTables(), [](const GraphElementTable& table) {
+          return table.has_dynamic_properties_expression();
+        }));
+  }
+  if (dynamic_label_type == ElementTableScope::kEdgeOnly ||
+      dynamic_label_type == ElementTableScope::kBoth) {
+    EXPECT_TRUE(
+        absl::c_all_of(graph.EdgeTables(), [](const GraphElementTable& table) {
+          return table.has_dynamic_properties_expression();
+        }));
+  }
+  if (dynamic_label_type == ElementTableScope::kNodeOnly) {
+    EXPECT_TRUE(
+        absl::c_none_of(graph.EdgeTables(), [](const GraphElementTable& table) {
+          return table.has_dynamic_properties_expression();
+        }));
+  }
+  if (dynamic_label_type == ElementTableScope::kEdgeOnly) {
+    EXPECT_TRUE(
+        absl::c_none_of(graph.NodeTables(), [](const GraphElementTable& table) {
+          return table.has_dynamic_properties_expression();
+        }));
   }
 }
 
@@ -275,6 +342,239 @@ TEST_P(SchemaUpdaterTest, CreatePropertyGraphMultiNodeAndEdge) {
       {"BankAccount",
        {"AccountID", "AccountAlias"},
        {"AccountID", "AccountAlias"}});
+}
+
+TEST_P(SchemaUpdaterTest, CreatePropertyGraphDynamicNodeAndEdge) {
+  if (GetParam() == POSTGRESQL) {
+    return;
+  }
+  // Create a schema with a property graph and replace it.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+    CREATE TABLE GraphNode (
+      id INT64 NOT NULL,
+      label STRING(MAX) NOT NULL,
+      properties JSON,
+    ) PRIMARY KEY (id)
+  )",
+                                        R"(
+
+    CREATE TABLE GraphEdge (
+      id INT64 NOT NULL,
+      dest_id INT64 NOT NULL,
+      edge_id INT64 NOT NULL,
+      label STRING(MAX) NOT NULL,
+      properties JSON,
+    ) PRIMARY KEY (id, dest_id, edge_id),
+      INTERLEAVE IN PARENT GraphNode
+  )",
+                                        R"(
+    CREATE OR REPLACE PROPERTY GRAPH aml
+      NODE TABLES (
+        GraphNode
+          DYNAMIC LABEL (label)
+          DYNAMIC PROPERTIES (properties)
+      )
+      EDGE TABLES (
+        GraphEdge
+          SOURCE KEY (id) REFERENCES GraphNode(id)
+          DESTINATION KEY (dest_id) REFERENCES GraphNode(id)
+          DYNAMIC LABEL (label)
+          DYNAMIC PROPERTIES (properties)
+      )
+  )",
+                                    }));
+
+  const PropertyGraph* graph = schema->FindPropertyGraph("aml");
+  ASSERT_NE(graph, nullptr);
+  EXPECT_EQ(graph->Name(), "aml");
+
+  ValidatePropertyDeclarations(*graph, {{"id", "INT64"},
+                                        {"dest_id", "INT64"},
+                                        {"edge_id", "INT64"},
+                                        {"properties", "JSON"},
+                                        {"label", "STRING"}});
+  ValidateDynamicLabeledElements(*graph, ElementTableScope::kBoth);
+  ValidateDynamicPropertiesElements(*graph, ElementTableScope::kBoth);
+
+  ValidateLabels(
+      *graph,
+      {{"GraphNode", {"id", "label", "properties"}},
+       {"GraphEdge", {"id", "dest_id", "edge_id", "label", "properties"}}});
+}
+
+TEST_P(SchemaUpdaterTest, CreatePropertyGraphDynamicNodeOnly) {
+  if (GetParam() == POSTGRESQL) {
+    return;
+  }
+  // Create a schema with a property graph and replace it.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+    CREATE TABLE GraphNode (
+      id INT64 NOT NULL,
+      label STRING(MAX) NOT NULL,
+      properties JSON,
+    ) PRIMARY KEY (id)
+  )",
+                                        R"(
+
+    CREATE TABLE GraphEdge (
+      id INT64 NOT NULL,
+      dest_id INT64 NOT NULL,
+      edge_id INT64 NOT NULL,
+      label STRING(MAX) NOT NULL,
+      properties JSON,
+    ) PRIMARY KEY (id, dest_id, edge_id),
+      INTERLEAVE IN PARENT GraphNode
+  )",
+                                        R"(
+    CREATE OR REPLACE PROPERTY GRAPH aml
+      NODE TABLES (
+        GraphNode
+          DYNAMIC LABEL (label)
+          DYNAMIC PROPERTIES (properties)
+      )
+      EDGE TABLES (
+        GraphEdge
+          SOURCE KEY (id) REFERENCES GraphNode(id)
+          DESTINATION KEY (dest_id) REFERENCES GraphNode(id)
+      )
+  )",
+                                    }));
+
+  const PropertyGraph* graph = schema->FindPropertyGraph("aml");
+  ASSERT_NE(graph, nullptr);
+  EXPECT_EQ(graph->Name(), "aml");
+
+  ValidatePropertyDeclarations(*graph, {{"id", "INT64"},
+                                        {"dest_id", "INT64"},
+                                        {"edge_id", "INT64"},
+                                        {"properties", "JSON"},
+                                        {"label", "STRING"}});
+  ValidateDynamicLabeledElements(*graph, ElementTableScope::kNodeOnly);
+  ValidateDynamicPropertiesElements(*graph, ElementTableScope::kNodeOnly);
+
+  ValidateLabels(
+      *graph,
+      {{"GraphNode", {"id", "label", "properties"}},
+       {"GraphEdge", {"id", "dest_id", "edge_id", "label", "properties"}}});
+}
+
+TEST_P(SchemaUpdaterTest, CreateMultipleDynamicLabelNodeTablesFails) {
+  if (GetParam() == POSTGRESQL) {
+    return;
+  }
+  // Create a schema with a property graph and replace it.
+  auto schema_error = CreateSchema({
+      R"(
+    CREATE TABLE GraphNode (
+      id INT64 NOT NULL,
+      label STRING(MAX) NOT NULL,
+      properties JSON,
+    ) PRIMARY KEY (id)
+  )",
+      R"(
+    CREATE OR REPLACE PROPERTY GRAPH aml
+      NODE TABLES (
+        GraphNode
+          DYNAMIC LABEL (label)
+          DYNAMIC PROPERTIES (properties),
+        GraphNode AS GraphNode2
+          DYNAMIC LABEL (label)
+          DYNAMIC PROPERTIES (properties)
+      )
+  )",
+  });
+  EXPECT_THAT(schema_error,
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr(
+                      "Only one node table can be assigned a dynamic label")));
+}
+
+TEST_P(SchemaUpdaterTest,
+       CreateDynamicLabelNodeTablesWithSchemaDefinedLabelNodeTableFails) {
+  if (GetParam() == POSTGRESQL) {
+    return;
+  }
+  // Create a schema with a property graph and replace it.
+  auto schema_error = CreateSchema({
+      R"(
+    CREATE TABLE GraphNode (
+      id INT64 NOT NULL,
+      label STRING(MAX) NOT NULL,
+      properties JSON,
+    ) PRIMARY KEY (id)
+  )",
+      R"(
+    CREATE OR REPLACE PROPERTY GRAPH aml
+      NODE TABLES (
+        GraphNode
+          DYNAMIC LABEL (label)
+          DYNAMIC PROPERTIES (properties),
+        GraphNode AS GraphNode2
+      )
+  )",
+  });
+  EXPECT_THAT(schema_error,
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr(
+                      "more than one node table when using dynamic labels")));
+}
+
+TEST_P(SchemaUpdaterTest, DynamicLabelWrongDataTypeFails) {
+  if (GetParam() == POSTGRESQL) {
+    return;
+  }
+  // Create a schema with a property graph and replace it.
+  auto schema_error = CreateSchema({
+      R"(
+    CREATE TABLE GraphNode (
+      id INT64 NOT NULL,
+      label STRING(MAX) NOT NULL,
+      properties JSON,
+    ) PRIMARY KEY (id)
+  )",
+      R"(
+    CREATE OR REPLACE PROPERTY GRAPH aml
+      NODE TABLES (
+        GraphNode
+          DYNAMIC LABEL (properties)
+      )
+  )",
+  });
+  EXPECT_THAT(schema_error,
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr("must hold expression of type STRING")));
+}
+
+TEST_P(SchemaUpdaterTest, DynamicPropertiesWrongDataTypeFails) {
+  if (GetParam() == POSTGRESQL) {
+    return;
+  }
+  // Create a schema with a property graph and replace it.
+  auto schema_error = CreateSchema({
+      R"(
+    CREATE TABLE GraphNode (
+      id INT64 NOT NULL,
+      label STRING(MAX) NOT NULL,
+      properties JSON,
+    ) PRIMARY KEY (id)
+  )",
+      R"(
+    CREATE OR REPLACE PROPERTY GRAPH aml
+      NODE TABLES (
+        GraphNode
+          DYNAMIC PROPERTIES (label)
+      )
+  )",
+  });
+  EXPECT_THAT(schema_error,
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr("must hold expression of type JSON")));
 }
 
 TEST_P(SchemaUpdaterTest, CreatePropertyGraphMultiLabels) {

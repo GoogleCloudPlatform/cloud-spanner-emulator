@@ -63,6 +63,11 @@ absl::Status TestReadOnlyStore::Insert(
                       GetColumnIDs(columns), values);
 }
 
+absl::Status TestReadOnlyStore::Delete(const Table* table, const Key& key) {
+  return store_.Delete(absl::InfiniteFuture(), table->id(),
+                       KeyRange::Point(key));
+}
+
 absl::StatusOr<bool> TestReadOnlyStore::Exists(const Table* table,
                                                const Key& key) const {
   absl::Status s =

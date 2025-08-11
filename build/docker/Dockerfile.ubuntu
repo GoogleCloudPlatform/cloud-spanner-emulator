@@ -63,9 +63,9 @@ COPY . src/
 # not all the targets from the PostgreSQL source needs to be built and some of
 # the unused build targets will fail.
 ENV BAZEL_CXXOPTS="-std=c++17"
-RUN cd src                                                                  && \
-    CC=/usr/bin/gcc CXX=/usr/bin/g++                                           \
-    bazel build -c opt -- ... -third_party/spanner_pg/src/...
+RUN cd src && \
+    CC=/usr/bin/gcc CXX=/usr/bin/g++ \
+    bazel build -c opt --spawn_strategy=standalone -- ... -third_party/spanner_pg/src/...
 
 # Generate licenses file.
 RUN for file in $(find -L src/bazel-src/external                               \

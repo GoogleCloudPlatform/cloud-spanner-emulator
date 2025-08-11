@@ -340,6 +340,61 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOnePropertyGraph(
   return std::move(maybe_schema.value());
 }
 
+std::unique_ptr<const backend::Schema> CreateSchemaWithDynamicPropertyGraph(
+    zetasql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect) {
+  ZETASQL_VLOG(dialect == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL)
+      << "Dynamic property graphs are only supported in ZetaSQL, not "
+         "supported in PostgreSQL dialect.";
+  std::string node_table =
+      R"(
+          CREATE TABLE node_table (
+            id INT64 NOT NULL,
+            label STRING(MAX),
+            properties JSON,
+          ) PRIMARY KEY (id)
+      )";
+  std::string edge_table =
+      R"(
+        CREATE TABLE edge_table (
+          from_id INT64 NOT NULL,
+          to_id INT64 NOT NULL,
+          label STRING(MAX),
+          properties JSON,
+        ) PRIMARY KEY(from_id, to_id)
+      )";
+  std::string property_graph =
+      R"(
+          CREATE PROPERTY GRAPH test_graph
+              NODE TABLES(
+                node_table KEY(id)
+                  LABEL Test PROPERTIES(id)
+                  DYNAMIC LABEL (label)
+                  DYNAMIC PROPERTIES (properties)
+              )
+              EDGE TABLES(
+                edge_table
+                  KEY(from_id, to_id)
+                  SOURCE KEY(from_id) REFERENCES node_table(id)
+                  DESTINATION KEY(to_id) REFERENCES node_table(id)
+                  DEFAULT LABEL PROPERTIES ALL COLUMNS
+                  DYNAMIC LABEL (label)
+                  DYNAMIC PROPERTIES (properties)
+              )
+          )";
+  auto maybe_schema = CreateSchemaFromDDL(
+      {
+          node_table,
+          edge_table,
+          property_graph,
+      },
+      type_factory, "" /*proto_descriptor_bytes*/
+      ,
+      dialect);
+  ABSL_CHECK_OK(maybe_schema.status());  // Crash OK
+  return std::move(maybe_schema.value());
+}
+
 std::unique_ptr<const backend::Schema> CreateSimpleDefaultValuesSchema(
     zetasql::TypeFactory* type_factory) {
   auto maybe_schema = CreateSchemaFromDDL(

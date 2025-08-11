@@ -39,6 +39,10 @@ message ArgumentTypeProto {
   uint32 oid = 1;
 }
 
+message FunctionNamePathProto {
+  repeated string name_path = 1;
+}
+
 message FunctionArgumentProto {
   ArgumentTypeProto type = 1;
   zetasql.FunctionEnums.ArgumentCardinality cardinality = 2;
@@ -50,13 +54,13 @@ message FunctionSignatureProto {
   ArgumentTypeProto return_type = 1;
   repeated FunctionArgumentProto arguments = 2;
   uint32 oid = 3;
-  repeated string postgresql_name_path = 4;
+  repeated FunctionNamePathProto postgresql_name_paths = 4;
   bool is_enabled_in_catalog = 5;
 }
 
 message FunctionProto {
-  repeated string mapped_name_path = 1;
-  repeated string postgresql_name_path = 2;
+  FunctionNamePathProto mapped_name_path = 1;
+  repeated FunctionNamePathProto postgresql_name_paths = 2;
   repeated FunctionSignatureProto signatures = 3;
 }
 

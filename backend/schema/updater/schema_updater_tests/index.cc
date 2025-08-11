@@ -419,7 +419,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_NullFiltered_Unique) {
   EXPECT_FALSE(data_columns[3]->is_nullable());
 }
 
-TEST_P(SchemaUpdaterTest, CreateIndex_Interleave) {
+TEST_P(SchemaUpdaterTest, CreateIndex_InterleaveInParent) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T1 (
@@ -482,10 +482,64 @@ TEST_P(SchemaUpdaterTest, CreateIndex_InterleaveInRemoteParent) {
   EXPECT_THAT(data_columns[1], ColumnIs("c1", types::BytesType()));
   // k1 is the remaining key column of T2.
   EXPECT_THAT(data_columns[2], ColumnIs("k1", types::Int64Type()));
-
   EXPECT_EQ(idx_data->parent(), t1);
-  EXPECT_EQ(idx_data->interleave_type(), Table::InterleaveType::kInParent);
-  EXPECT_EQ(idx_data->on_delete_action(), Table::OnDeleteAction::kCascade);
+  EXPECT_EQ(idx_data->interleave_type().value(), Table::InterleaveType::kIn);
+  EXPECT_FALSE(idx_data->has_on_delete_action());
+}
+
+TEST_P(SchemaUpdaterTest, CreateIndex_RemoteIndexHasLessKeysThanParentTable) {
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE T1 (
+        k11 INT64,
+        k12 INT64
+      ) PRIMARY KEY (k11, k12)
+    )sql",
+                  R"sql(
+      CREATE TABLE T2 (
+        k11 INT64,
+        k12 INT64,
+        k21 INT64,
+        c1 BYTES(MAX)
+      ) PRIMARY KEY (k11,k12, k21)
+    )sql",
+                  R"sql(
+      CREATE INDEX RemoteIdx ON T2(k12), INTERLEAVE IN T1
+    )sql"}),
+              StatusIs(error::IndexKeysNotInterleavePrefix("RemoteIdx", "T1")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateIndex_InterleaveInRemoteParentMultiKeys) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE T1 (
+        k11 INT64,
+        k12 INT64
+      ) PRIMARY KEY (k11, k12)
+    )sql",
+                                        R"sql(
+      CREATE TABLE T2 (
+        k11 INT64,
+        k12 INT64,
+        k21 INT64,
+        c1 BYTES(MAX)
+      ) PRIMARY KEY (k11,k12, k21)
+    )sql",
+                                        R"sql(
+      CREATE INDEX RemoteIdx ON T2(k12, k21), INTERLEAVE IN T1
+    )sql"}));
+
+  auto t1 = schema->FindTable("T1");
+  EXPECT_NE(t1, nullptr);
+
+  auto idx = schema->FindIndex("RemoteIdx");
+  EXPECT_EQ(idx->parent(), t1);
+  EXPECT_NE(idx, nullptr);
+
+  auto idx_data = idx->index_data_table();
+  EXPECT_EQ(idx_data->parent(), t1);
+  EXPECT_EQ(idx_data->interleave_type(), Table::InterleaveType::kIn);
+  EXPECT_FALSE(idx_data->has_on_delete_action());
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_NullFilteredInterleave) {

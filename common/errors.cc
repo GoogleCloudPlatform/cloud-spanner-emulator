@@ -1210,6 +1210,32 @@ absl::Status GraphEdgeTableDestinationNodeTableNotFound(
                    "destination node table `", node_table_name, "`."));
 }
 
+absl::Status PropertyGraphMultipleElementTablesWithDynamicLabel(
+    absl::string_view property_graph_name, bool is_node_table) {
+  std::string element_type_string = is_node_table ? "node" : "edge";
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::StrCat(
+          "Property Graph `", property_graph_name, "` has multiple ",
+          element_type_string,
+          " tables with dynamic label definition. You can have at most "
+          "one dynamic label definition in either NODE or EDGE tables."));
+}
+
+absl::Status
+PropertyGraphDynamicLabelElementTablesUsedWithSchemaDefinedLabelsElementTables(
+    absl::string_view property_graph_name, bool is_node_table) {
+  std::string element_type_string = is_node_table ? "node" : "edge";
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::StrCat(
+          "Property Graph `", property_graph_name, "` has both dynamic label ",
+          element_type_string, " table and schema-defined label ",
+          element_type_string, " table(s). You can only define one ",
+          element_type_string,
+          " table in the graph statement when the table uses dynamic label."));
+}
+
 absl::Status UnsupportedChangeStreamOption(absl::string_view option_name) {
   return absl::Status(absl::StatusCode::kFailedPrecondition,
                       absl::Substitute("Invalid Change Stream Option: $0."
@@ -1986,6 +2012,14 @@ absl::Status IndexInterleaveTableUnacceptable(absl::string_view index_name,
                        index_name, indexed_table, parent_table));
 }
 
+absl::Status IndexKeysNotInterleavePrefix(absl::string_view index_name,
+                                          absl::string_view parent_table) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Index $0 specifies keys that are not a prefix of the "
+                       "keys of table $1, yet is to be interleaved in $1.",
+                       index_name, parent_table));
+}
 absl::Status IndexRefsTableKeyAsStoredColumn(absl::string_view index_name,
                                              absl::string_view stored_column,
                                              absl::string_view base_table) {

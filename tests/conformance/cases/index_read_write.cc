@@ -336,6 +336,180 @@ TEST_F(JsonIndexTest, BasicRead) {
       }));
 }
 
+class RemoteIndexTest : public DatabaseTest {
+ public:
+  absl::Status SetUpDatabase() override {
+    EmulatorFeatureFlags::Flags flags;
+    flags.enable_interleave_in = true;
+    emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+    return SetSchema({
+        R"(
+            CREATE TABLE ParentTable (
+              name STRING(MAX),
+              age INT64
+            ) PRIMARY KEY (name)
+          )",
+        R"(
+            CREATE TABLE TestTable (
+              id INT64 NOT NULL,
+              testname STRING(MAX),
+              info STRING(MAX)
+            ) PRIMARY KEY (id)
+          )",
+        R"(
+            CREATE INDEX RemoteIndex ON TestTable(testname)
+            STORING(info), INTERLEAVE IN ParentTable)"});
+  }
+};
+
+TEST_F(RemoteIndexTest, InsertsThenDeletes) {
+  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Adam", 20}));
+  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Timothy", 40}));
+
+  ZETASQL_EXPECT_OK(
+      Insert("TestTable", {"id", "testname", "info"}, {1, "Adam", "AdamInfo"}));
+  // Can insert a row in remote index without parent row.
+  ZETASQL_EXPECT_OK(
+      Insert("TestTable", {"id", "testname", "info"}, {2, "Bill", "BillInfo"}));
+
+  // Read back all rows.
+  EXPECT_THAT(
+      ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
+      IsOkAndHoldsRows({{"Adam", "AdamInfo"}, {"Bill", "BillInfo"}}));
+
+  // Delete the parent row, the index should stay the same.
+  ZETASQL_EXPECT_OK(Delete("ParentTable", {Key("Adam")}));
+  EXPECT_THAT(
+      ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
+      IsOkAndHoldsRows({{"Adam", "AdamInfo"}, {"Bill", "BillInfo"}}));
+
+  // Delete the indexed table row, the index should contain only 1 row now.
+  ZETASQL_EXPECT_OK(Delete("TestTable", {Key(2)}));
+  EXPECT_THAT(
+      ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
+      IsOkAndHoldsRows({{"Adam", "AdamInfo"}}));
+}
+
+TEST_F(RemoteIndexTest, InsertsThenUpdates) {
+  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Adam", 20}));
+  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Charlie", 30}));
+
+  ZETASQL_EXPECT_OK(
+      Insert("TestTable", {"id", "testname", "info"}, {1, "Adam", "AdamInfo"}));
+  // Insert a row in remote index without parent row.
+  ZETASQL_EXPECT_OK(
+      Insert("TestTable", {"id", "testname", "info"}, {2, "Bill", "BillInfo"}));
+  // Insert another row in remote index with parent row.
+  ZETASQL_EXPECT_OK(Insert("TestTable", {"id", "testname", "info"},
+                   {3, "Charlie", "CharlieInfo"}));
+
+  // Read back all rows.
+  EXPECT_THAT(
+      ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
+      IsOkAndHoldsRows({{"Adam", "AdamInfo"},
+                        {"Bill", "BillInfo"},
+                        {"Charlie", "CharlieInfo"}}));
+
+  // Update an indexed table row, the index should be updated accordingly.
+  ZETASQL_EXPECT_OK(Update("TestTable", {"id", "testname", "info"},
+                   {2, "NoLongerBill", "NotBillInfo"}));
+  ZETASQL_EXPECT_OK(Update("TestTable", {"id", "testname", "info"},
+                   {3, "NoLongerCharlie", "NotCharlieInfo"}));
+  EXPECT_THAT(
+      ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
+      IsOkAndHoldsRows({{"Adam", "AdamInfo"},
+                        {"NoLongerBill", "NotBillInfo"},
+                        {"NoLongerCharlie", "NotCharlieInfo"}}));
+}
+
+class RemoteIndexWithInterleaveInTest : public DatabaseTest {
+ public:
+  absl::Status SetUpDatabase() override {
+    EmulatorFeatureFlags::Flags flags;
+    flags.enable_interleave_in = true;
+    emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+    return SetSchema({
+        R"(
+            CREATE TABLE ParentTable (
+              name STRING(MAX),
+              age INT64
+            ) PRIMARY KEY (name)
+          )",
+        R"(
+            CREATE TABLE TestTable (
+              name STRING(MAX),
+              testname STRING(MAX),
+              info STRING(MAX)
+            ) PRIMARY KEY (name), INTERLEAVE IN ParentTable
+          )",
+        R"(
+            CREATE INDEX RemoteIndex ON TestTable(testname)
+            STORING(info), INTERLEAVE IN ParentTable)"});
+  }
+};
+
+TEST_F(RemoteIndexWithInterleaveInTest, InsertsThenDeletes) {
+  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Adam", 20}));
+  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Timothy", 40}));
+
+  ZETASQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
+                   {"Adam", "Adam", "AdamInfo"}));
+  // Can insert a row in remote index without parent row.
+  ZETASQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
+                   {"Bill", "Bill", "BillInfo"}));
+
+  // Read back all rows.
+  EXPECT_THAT(
+      ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
+      IsOkAndHoldsRows({{"Adam", "AdamInfo"}, {"Bill", "BillInfo"}}));
+
+  // Delete the parent row, the index should stay the same.
+  ZETASQL_EXPECT_OK(Delete("ParentTable", {Key("Adam")}));
+  EXPECT_THAT(
+      ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
+      IsOkAndHoldsRows({{"Adam", "AdamInfo"}, {"Bill", "BillInfo"}}));
+
+  // Delete the indexed table row, the index should contain only 1 row now.
+  ZETASQL_EXPECT_OK(Delete("TestTable", {Key("Bill")}));
+  EXPECT_THAT(
+      ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
+      IsOkAndHoldsRows({{"Adam", "AdamInfo"}}));
+}
+
+TEST_F(RemoteIndexWithInterleaveInTest, InsertsThenUpdates) {
+  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Adam", 20}));
+  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Charlie", 30}));
+
+  ZETASQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
+                   {"Adam", "Adam", "AdamInfo"}));
+  // Insert a row in remote index without parent row.
+  ZETASQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
+                   {"Bill", "Bill", "BillInfo"}));
+  // Insert another row in remote index with parent row.
+  ZETASQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
+                   {"Charlie", "Charlie", "CharlieInfo"}));
+
+  // Read back all rows.
+  EXPECT_THAT(
+      ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
+      IsOkAndHoldsRows({{"Adam", "AdamInfo"},
+                        {"Bill", "BillInfo"},
+                        {"Charlie", "CharlieInfo"}}));
+
+  // Update an indexed table row, the index should be updated accordingly.
+  ZETASQL_EXPECT_OK(Update("TestTable", {"name", "testname", "info"},
+                   {"Bill", "NoLongerBill", "NotBillInfo"}));
+  ZETASQL_EXPECT_OK(Update("TestTable", {"name", "testname", "info"},
+                   {"Charlie", "NoLongerCharlie", "NotCharlieInfo"}));
+  EXPECT_THAT(
+      ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
+      IsOkAndHoldsRows({{"Adam", "AdamInfo"},
+                        {"NoLongerBill", "NotBillInfo"},
+                        {"NoLongerCharlie", "NotCharlieInfo"}}));
+}
+
 }  // namespace
 
 }  // namespace test

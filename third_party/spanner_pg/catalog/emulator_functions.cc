@@ -47,6 +47,7 @@
 #include <vector>
 
 #include "zetasql/public/function.h"
+#include "zetasql/public/function.pb.h"
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/functions/arithmetics.h"
 #include "zetasql/public/functions/date_time_util.h"
@@ -243,10 +244,7 @@ absl::StatusOr<zetasql::Value> EvalArrayUpper(
 // spangres supports.
 std::unique_ptr<zetasql::Function> ArrayUpperFunction(
     absl::string_view catalog_name, absl::string_view function_name) {
-  const zetasql::Type* gsql_pg_jsonb_array =
-      postgres_translator::spangres::datatypes::GetPgJsonbArrayType();
-  const zetasql::Type* gsql_pg_numeric_array =
-      postgres_translator::spangres::datatypes::GetPgNumericArrayType();
+  const auto gsql_anyarray = zetasql::ARG_ARRAY_TYPE_ANY_1;
 
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(zetasql::FunctionEvaluator(EvalArrayUpper));
@@ -254,37 +252,7 @@ std::unique_ptr<zetasql::Function> ArrayUpperFunction(
       function_name, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{gsql_int64,
-                                       {gsql_bool_array, gsql_int64},
-                                       /*context_ptr=*/nullptr},
-          zetasql::FunctionSignature{gsql_int64,
-                                       {gsql_bytes_array, gsql_int64},
-                                       /*context_ptr=*/nullptr},
-          zetasql::FunctionSignature{gsql_int64,
-                                       {gsql_date_array, gsql_int64},
-                                       /*context_ptr=*/nullptr},
-          zetasql::FunctionSignature{gsql_int64,
-                                       {gsql_double_array, gsql_int64},
-                                       /*context_ptr=*/nullptr},
-          zetasql::FunctionSignature{gsql_int64,
-                                       {gsql_float_array, gsql_int64},
-                                       /*context_ptr=*/nullptr},
-          zetasql::FunctionSignature{gsql_int64,
-                                       {gsql_int64_array, gsql_int64},
-                                       /*context_ptr=*/nullptr},
-          zetasql::FunctionSignature{gsql_int64,
-                                       {gsql_pg_jsonb_array, gsql_int64},
-                                       /*context_ptr=*/nullptr},
-          zetasql::FunctionSignature{gsql_int64,
-                                       {gsql_pg_numeric_array, gsql_int64},
-                                       /*context_ptr=*/nullptr},
-          zetasql::FunctionSignature{gsql_int64,
-                                       {gsql_string_array, gsql_int64},
-                                       /*context_ptr=*/nullptr},
-          zetasql::FunctionSignature{gsql_int64,
-                                       {gsql_timestamp_array, gsql_int64},
-                                       /*context_ptr=*/nullptr},
-          zetasql::FunctionSignature{gsql_int64,
-                                       {gsql_interval_array, gsql_int64},
+                                       {gsql_anyarray, gsql_int64},
                                        /*context_ptr=*/nullptr},
       },
       function_options);

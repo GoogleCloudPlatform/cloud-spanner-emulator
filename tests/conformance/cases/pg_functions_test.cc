@@ -143,6 +143,89 @@ TEST_F(PGFunctionsTest, CastToTimestampUnsupportedTimestamp) {
                        HasSubstr("Timestamp is out of supported range")));
 }
 
+TEST_F(PGFunctionsTest, DateFunction) {
+  // America/New_York timezone is 4 hours behind timezone Z(ero).
+  EXPECT_THAT(
+      Query(
+          R"sql(SELECT spanner.date('2025-04-14 03:38:40+00'::timestamptz,
+                                    'America/New_York'))sql"),
+      IsOkAndHoldsRows({Date(2025, 4, 13)}));
+  EXPECT_THAT(Query(
+                  R"sql(SELECT spanner.date('2025-04-14 03:38:40+00',
+                                            'America/New_York'))sql"),
+              IsOkAndHoldsRows({Date(2025, 4, 13)}));
+  // `'2025-04-14 03:38:40+00'::date` would return `2025-04-14` at 00:00:00-07
+  // or 2025-04-14 07:00:00Z, which explains why the result is 2025-04-14 for
+  // America/New_York.
+  EXPECT_THAT(Query(
+                  R"sql(SELECT spanner.date('2025-04-14 03:38:40+00'::date,
+                                            'America/New_York'))sql"),
+              IsOkAndHoldsRows({Date(2025, 4, 14)}));
+
+  // timestamptz without timezone defaults to America/Los_Angeles, 2 to 3 hours
+  // behind America/Jamaica (GMT-05).
+  EXPECT_THAT(Query(
+                  R"sql(SELECT spanner.date('2025-04-14 23:38:40'::timestamptz,
+                                            'America/Jamaica'))sql"),
+              IsOkAndHoldsRows({Date(2025, 4, 15)}));
+  EXPECT_THAT(Query(
+                  R"sql(SELECT spanner.date('2025-04-14 23:38:40',
+                                            'America/Jamaica'))sql"),
+              IsOkAndHoldsRows({Date(2025, 4, 15)}));
+  // `'2025-04-14 23:38:40'::date` would return `2025-04-14` at 00:00:00-07
+  // or 2025-04-14 07:00:00Z, which explains why the result is 2025-04-14 for
+  // America/Jamaica.
+  EXPECT_THAT(Query(
+                  R"sql(SELECT spanner.date('2025-04-14 23:38:40'::date,
+                                            'America/Jamaica'))sql"),
+              IsOkAndHoldsRows({Date(2025, 4, 14)}));
+
+  // Null timestamptz and date.
+  EXPECT_THAT(Query(
+                  R"sql(SELECT spanner.date(null::timestamptz,
+                                            'America/New_York'))sql"),
+              IsOkAndHoldsRows({Null<Date>()}));
+  EXPECT_THAT(Query(
+                  R"sql(SELECT spanner.date(null::date,
+                                            'America/New_York'))sql"),
+              IsOkAndHoldsRows({Null<Date>()}));
+
+  // Error cases.
+  // Use unsupported `date()` function instead of `spanner.date()`.
+  EXPECT_THAT(
+      Query(R"sql(SELECT date('2025-04-14 03:38:40', 'America/New_York'))sql"),
+      // TODO: Remove check if the two environments ever
+      // become consistent.
+      StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
+                             : absl::StatusCode::kNotFound,
+               HasSubstr("does not exist")));
+  // Illegal timestamptz format.
+  EXPECT_THAT(
+      Query(
+          R"sql(SELECT spanner.date('2025-04-14 03:38:40-',
+                                    'America/New_York'))sql"),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("invalid input syntax for type timestamp with time zone")));
+  // Illegal month.
+  EXPECT_THAT(Query(
+                  R"sql(SELECT spanner.date('2025-14-14 03:38:40+07',
+                                            'America/New_York'))sql"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("date/time field value out of range")));
+  EXPECT_THAT(Query(R"sql(SELECT spanner.date(2016, 'America/New_York'))sql"),
+              // TODO: Remove check if the two environments ever
+              // become consistent.
+              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
+                                     : absl::StatusCode::kNotFound,
+                       HasSubstr("does not exist")));
+  EXPECT_THAT(Query(
+                  R"sql(SELECT spanner.date('2025-04-14 03:38:40+00',
+                                            'PST'))sql"),
+              StatusIs(absl::StatusCode::kOutOfRange,
+                       HasSubstr("Invalid time zone: PST")));
+}
+
 TEST_F(PGFunctionsTest, TimestamptzAdd) {
   absl::TimeZone time_zone;
   ASSERT_TRUE(absl::LoadTimeZone("America/Los_Angeles", &time_zone));

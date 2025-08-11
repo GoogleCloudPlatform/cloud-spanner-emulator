@@ -86,6 +86,7 @@ const absl::string_view kPgDdlTestFiles[] = {
     "ddl.create_table.test",
     "ddl.create_table_checkconstraint.test",
     "ddl.create_table_generatedcolumn_default.test",
+    "ddl.create_table_generatedprimarykey.test",
     "ddl.create_view.test",
     "ddl.create_change_stream.test",
     "ddl.foreign_keys.test",

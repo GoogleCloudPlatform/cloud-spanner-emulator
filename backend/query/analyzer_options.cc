@@ -97,6 +97,9 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::FEATURE_V_1_4_SQL_GRAPH_BOUNDED_PATH_QUANTIFICATION,
       zetasql::FEATURE_V_1_4_SQL_GRAPH_PATH_TYPE,
       zetasql::FEATURE_V_1_4_SQL_GRAPH_PATH_MODE,
+      zetasql::FEATURE_V_1_4_SQL_GRAPH_DYNAMIC_LABEL_PROPERTIES_IN_DDL,
+      zetasql::FEATURE_V_1_4_SQL_GRAPH_DYNAMIC_LABEL_EXTENSION_IN_DDL,
+      zetasql::FEATURE_V_1_4_SQL_GRAPH_DYNAMIC_ELEMENT_TYPE,
       zetasql::FEATURE_V_1_4_FOR_UPDATE,
   });
   if (EmulatorFeatureFlags::instance().flags().enable_protos) {

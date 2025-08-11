@@ -692,6 +692,7 @@ cc_library(
         "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/common:string_util",
         "@com_google_zetasql//zetasql/public:function",
+        "@com_google_zetasql//zetasql/public:function_cc_proto",
         "@com_google_zetasql//zetasql/public:interval_value",
         "@com_google_zetasql//zetasql/public:json_value",
         "@com_google_zetasql//zetasql/public:options_cc_proto",

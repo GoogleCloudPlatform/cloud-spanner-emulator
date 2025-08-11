@@ -76,6 +76,10 @@ class Table : public SchemaNode {
   // have a parent table.
   const Table* parent() const { return parent_table_; }
 
+  // Returns true if this table is a descendant of the given `table`, i.e.
+  // this table is in an interleaving chain from `table`.
+  bool is_descendant_of(const Table* table) const;
+
   // Returns the Change Stream that owns this table if one exists.
   const ChangeStream* owner_change_stream() const {
     return owner_change_stream_;

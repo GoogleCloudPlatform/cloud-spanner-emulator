@@ -33,28 +33,19 @@
 
 #include <memory>
 #include <string>
-#include <type_traits>
 #include <vector>
 
 #include "zetasql/base/logging.h"
 #include "absl/algorithm/container.h"
-#include "absl/flags/declare.h"
-#include "absl/flags/flag.h"
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/ddl/ddl_translator.h"
 #include "third_party/spanner_pg/ddl/pg_to_spanner_ddl_translator.h"
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
-#include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
 #include "third_party/spanner_pg/interface/parser_interface.h"
 #include "third_party/spanner_pg/interface/parser_output.h"
 #include "third_party/spanner_pg/interface/parser_without_serialization.h"
 // clang-format on
-#include "third_party/spanner_pg/interface/spangres_translator_factory.h"
-#include "third_party/spanner_pg/interface/spangres_translator_interface.h"
-#include "third_party/spanner_pg/interface/stub_builtin_function_catalog.h"
 #include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 

@@ -236,6 +236,20 @@ absl::Status Table::DeepClone(SchemaGraphEditor* editor,
   return absl::OkStatus();
 }
 
+bool Table::is_descendant_of(const Table* table) const {
+  if (this == table) {
+    return true;
+  }
+  const Table* current_ancestor = parent_table_;
+  while (current_ancestor != nullptr) {
+    if (current_ancestor == table) {
+      return true;
+    }
+    current_ancestor = current_ancestor->parent_table_;
+  }
+  return false;
+}
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

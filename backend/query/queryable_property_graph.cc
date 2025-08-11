@@ -91,6 +91,21 @@ std::string QueryableGraphPropertyDeclaration::FullName() const {
   return absl::StrCat(property_graph_->FullName(), ".", Name());
 }
 
+void ConfigureCatalogColumnCallBack(const zetasql::Table* data_source_table,
+                                    zetasql::AnalyzerOptions& options) {
+  options.SetLookupCatalogColumnCallback(
+      [data_source_table](const std::string& column_name)
+          -> absl::StatusOr<const zetasql::Column*> {
+        const zetasql::Column* column =
+            data_source_table->FindColumnByName(column_name);
+        if (column == nullptr) {
+          return absl::NotFoundError(
+              absl::StrCat("Cannot find column named ", column_name));
+        }
+        return column;
+      });
+}
+
 QueryableGraphPropertyDefinition::QueryableGraphPropertyDefinition(
     zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
     const zetasql::Table* data_source_table,
@@ -105,17 +120,7 @@ QueryableGraphPropertyDefinition::QueryableGraphPropertyDefinition(
   // definition expression back to existing columns in the catalog.
   zetasql::AnalyzerOptions local_options = analyzer_options;
   std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
-  local_options.SetLookupCatalogColumnCallback(
-      [data_source_table](const std::string& column_name)
-          -> absl::StatusOr<const zetasql::Column*> {
-        const zetasql::Column* column =
-            data_source_table->FindColumnByName(column_name);
-        if (column == nullptr) {
-          return absl::NotFoundError(
-              absl::StrCat("Cannot find column named ", column_name));
-        }
-        return column;
-      });
+  ConfigureCatalogColumnCallBack(data_source_table, local_options);
 
   // b/307318516: As we re-analyze each property definition expression below,
   // its parse locations are unlikely to be accurate. This could cause issues
@@ -202,6 +207,15 @@ QueryableGraphElementTableInternal::QueryableGraphElementTableInternal(
               &property_definition);
     }
   }
+  if (wrapped_element_table_->has_dynamic_label_expression()) {
+    dynamic_label_ = std::make_unique<QueryableGraphDynamicLabel>(
+        catalog, type_factory, property_graph, wrapped_element_table_);
+  }
+
+  if (wrapped_element_table_->has_dynamic_properties_expression()) {
+    dynamic_properties_ = std::make_unique<QueryableGraphDynamicProperties>(
+        catalog, type_factory, property_graph, wrapped_element_table_);
+  }
 }
 
 const zetasql::Table* QueryableGraphElementTableInternal::GetTable() const {
@@ -254,6 +268,86 @@ absl::Status QueryableGraphElementTableInternal::GetLabels(
     output.insert(label);
   }
   return absl::OkStatus();
+}
+
+QueryableGraphDynamicLabel::QueryableGraphDynamicLabel(
+    zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+    const QueryablePropertyGraph* property_graph,
+    const google::spanner::emulator::backend::PropertyGraph::GraphElementTable*
+        element_table) {
+  if (element_table->dynamic_label_expression().empty()) {
+    ABSL_LOG(FATAL) << "Dynamic label expression is empty for element table: "
+               << element_table->name();
+  }
+  const zetasql::Table* data_source_table;
+  const std::string& data_source_table_name = element_table->name();
+  absl::Status find_status =
+      catalog->FindTable({data_source_table_name}, &data_source_table);
+  if (!find_status.ok()) {
+    ABSL_LOG(FATAL) << "Data source table not found in catalog: "
+               << data_source_table_name;
+  }
+  label_expression_ = element_table->dynamic_label_expression();
+  zetasql::AnalyzerOptions analyzer_options =
+      MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
+  // Setup a callback for ZetaSQL's resolver to be able to map the property
+  // definition expression back to existing columns in the catalog.
+  zetasql::AnalyzerOptions local_options = analyzer_options;
+  ConfigureCatalogColumnCallBack(data_source_table, local_options);
+  absl::Status analyze_status =
+      zetasql::AnalyzeExpression(label_expression_, local_options, catalog,
+                                   type_factory, &analyzer_output_);
+  if (!analyze_status.ok()) {
+    ABSL_LOG(FATAL) << "Failed to analyze dynamic label expression: "
+               << label_expression_;
+  }
+  ABSL_CHECK_NE(analyzer_output_->resolved_expr(), nullptr);
+  ZETASQL_VLOG(analyzer_output_->resolved_expr()->type()->IsString() ||
+        (analyzer_output_->resolved_expr()->type()->IsArray() &&
+         analyzer_output_->resolved_expr()
+             ->type()
+             ->AsArray()
+             ->element_type()
+             ->IsString()))
+      << "Dynamic label expression must reference a table column of type "
+         "STRING or ARRAY<STRING>";
+}
+
+QueryableGraphDynamicProperties::QueryableGraphDynamicProperties(
+    zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+    const QueryablePropertyGraph* property_graph,
+    const google::spanner::emulator::backend::PropertyGraph::GraphElementTable*
+        element_table) {
+  if (element_table->dynamic_properties_expression().empty()) {
+    ABSL_LOG(FATAL) << "Dynamic properties expression is empty for element table: "
+               << element_table->name();
+  }
+  const zetasql::Table* data_source_table;
+  std::string data_source_table_name = element_table->name();
+  absl::Status find_status =
+      catalog->FindTable({data_source_table_name}, &data_source_table);
+  if (!find_status.ok()) {
+    ABSL_LOG(FATAL) << "Data source table not found in catalog: "
+               << data_source_table_name;
+  }
+  properties_expression_ = element_table->dynamic_properties_expression();
+  zetasql::AnalyzerOptions analyzer_options =
+      MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
+  // Setup a callback for ZetaSQL's resolver to be able to map the property
+  // definition expression back to existing columns in the catalog.
+  zetasql::AnalyzerOptions local_options = analyzer_options;
+  ConfigureCatalogColumnCallBack(data_source_table, local_options);
+  absl::Status analyze_status =
+      zetasql::AnalyzeExpression(properties_expression_, local_options,
+                                   catalog, type_factory, &analyzer_output_);
+  if (!analyze_status.ok()) {
+    ABSL_LOG(FATAL) << "Failed to analyze dynamic properties expression: "
+               << properties_expression_;
+  }
+  ABSL_CHECK_NE(analyzer_output_->resolved_expr(), nullptr);
+  ZETASQL_VLOG(analyzer_output_->resolved_expr()->type()->IsJson())
+      << "Dynamic properties expression must reference a table column of type "
+         "JSON";
 }
 
 QueryableGraphNodeTable::QueryableGraphNodeTable(

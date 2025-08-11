@@ -371,6 +371,8 @@ absl::Status IndexRefsUnsupportedColumn(absl::string_view index_name,
 absl::Status IndexInterleaveTableUnacceptable(absl::string_view index_name,
                                               absl::string_view indexed_table,
                                               absl::string_view parent_table);
+absl::Status IndexKeysNotInterleavePrefix(absl::string_view index_name,
+                                          absl::string_view parent_table);
 absl::Status IndexRefsTableKeyAsStoredColumn(absl::string_view index_name,
                                              absl::string_view stored_column,
                                              absl::string_view base_table);
@@ -462,6 +464,11 @@ absl::Status GraphEdgeTableSourceNodeTableNotFound(
 absl::Status GraphEdgeTableDestinationNodeTableNotFound(
     absl::string_view property_graph_name, absl::string_view edge_table_name,
     absl::string_view node_table_name);
+absl::Status PropertyGraphMultipleElementTablesWithDynamicLabel(
+    absl::string_view property_graph_name, bool is_node_table);
+absl::Status
+PropertyGraphDynamicLabelElementTablesUsedWithSchemaDefinedLabelsElementTables(
+    absl::string_view property_graph_name, bool is_node_table);
 
 // Schema access errors.
 absl::Status TableNotFound(absl::string_view table_name);

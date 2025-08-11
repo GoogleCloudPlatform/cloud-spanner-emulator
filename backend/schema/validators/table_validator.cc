@@ -62,25 +62,27 @@ absl::Status CheckKeyPartCompatibility(const Table* interleaved_table,
   const Column* child_key_col = child_key->column();
 
   if (child_key_col->Name() != parent_key_col->Name()) {
-    // The parent key column does not match the child key column. But perhaps
-    // the child declared the key column in a different position. Provide a
-    // more helpful error message in this case (as they do refer to the parent
-    // column, just at the wrong location).
+    // The parent key column does not match the child key column.
     auto child_pk = interleaved_table->owner_index()
                         ? interleaved_table->owner_index()->key_columns()
                         : interleaved_table->primary_key();
-    for (int i = 0; i < child_pk.size(); ++i) {
-      if (child_pk[i]->column()->Name() == parent_key_col->Name()) {
-        return error::IncorrectParentKeyPosition(object_type, object_name,
-                                                 parent_key_col->Name(), i);
-      }
-    }
     if (interleaved_table->owner_index() == nullptr ||
         !EmulatorFeatureFlags::instance().flags().enable_interleave_in) {
       // For tables, Spanner requires the child key column name to match the
       // parent key column name.
       // For indexes, names can be different, in which case the index is called
       // a remote index.
+      //
+      // Perhaps the child declared the key column in a different position.
+      // Provide a more helpful error message in this case (as they do refer to
+      // the parent column, just at the wrong location).
+      for (int i = 0; i < child_pk.size(); ++i) {
+        if (child_pk[i]->column()->Name() == parent_key_col->Name()) {
+          return error::IncorrectParentKeyPosition(object_type, object_name,
+                                                   parent_key_col->Name(), i);
+        }
+      }
+
       return error::MustReferenceParentKeyColumn(object_type, object_name,
                                                  parent_key_col->Name());
     }
