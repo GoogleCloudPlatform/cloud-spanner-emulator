@@ -193,7 +193,11 @@ ForwardTransformer::BuildGsqlAggregateOrderByList(
     } else {
       ZETASQL_RET_CHECK_LT(order_by_item.select_list_index - 1, arguments.size());
       const auto& expr = arguments[order_by_item.select_list_index - 1];
-      ZETASQL_RET_CHECK(expr->Is<zetasql::ResolvedColumnRef>());
+      if (!expr->Is<zetasql::ResolvedColumnRef>()) {
+        return absl::InvalidArgumentError(
+            "Aggregate function calls with an expression input can not have an "
+            "identical expression in the ORDER BY clause");
+      }
       order_by_column = expr->GetAs<zetasql::ResolvedColumnRef>()->column();
     }
 

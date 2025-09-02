@@ -201,7 +201,6 @@ TEST_F(TestSpangresFunctionMapper, MapsMetaTypes) {
   (*sig1_pg_name_path.add_name_path()) = "test";
   (*sig1->add_postgresql_name_paths()) = sig1_pg_name_path;
   sig1->mutable_return_type()->set_oid(BOOLOID);
-  sig1->set_is_enabled_in_catalog(true);
   FunctionArgumentProto* sig1_arg1 = sig1->add_arguments();
   sig1_arg1->mutable_type()->set_oid(ANYOID);
   sig1_arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);
@@ -230,7 +229,6 @@ TEST_F(TestSpangresFunctionMapper, MapsSamePgNamePathToSingleFunction) {
   (*sig1_pg_name_path.add_name_path()) = "textregexeq";
   (*sig1->add_postgresql_name_paths()) = sig1_pg_name_path;
   sig1->mutable_return_type()->set_oid(BOOLOID);
-  sig1->set_is_enabled_in_catalog(true);
   FunctionArgumentProto* sig1_arg1 = sig1->add_arguments();
   sig1_arg1->mutable_type()->set_oid(TEXTOID);
   sig1_arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);
@@ -246,7 +244,6 @@ TEST_F(TestSpangresFunctionMapper, MapsSamePgNamePathToSingleFunction) {
   (*sig2_pg_name_path.add_name_path()) = "textregexeq";
   (*sig2->add_postgresql_name_paths()) = sig2_pg_name_path;
   sig2->mutable_return_type()->set_oid(BOOLOID);
-  sig2->set_is_enabled_in_catalog(true);
   FunctionArgumentProto* sig2_arg1 = sig2->add_arguments();
   sig2_arg1->mutable_type()->set_oid(ANYOID);
   sig2_arg1->set_cardinality(zetasql::FunctionEnums::REPEATED);
@@ -258,7 +255,6 @@ TEST_F(TestSpangresFunctionMapper, MapsSamePgNamePathToSingleFunction) {
   (*sig3_pg_name_path.add_name_path()) = "textregexeq";
   (*sig3->add_postgresql_name_paths()) = sig3_pg_name_path;
   sig3->mutable_return_type()->set_oid(BOOLOID);
-  sig3->set_is_enabled_in_catalog(true);
   FunctionArgumentProto* sig3_arg1 = sig3->add_arguments();
   sig3_arg1->mutable_type()->set_oid(TEXTOID);
   sig3_arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);
@@ -313,7 +309,6 @@ TEST_F(TestSpangresFunctionMapper,
   (*sig1_pg_name_path.add_name_path()) = "float8pl";
   (*sig1->add_postgresql_name_paths()) = sig1_pg_name_path;
   sig1->mutable_return_type()->set_oid(FLOAT8OID);
-  sig1->set_is_enabled_in_catalog(true);
   FunctionArgumentProto* sig1_arg1 = sig1->add_arguments();
   sig1_arg1->mutable_type()->set_oid(FLOAT8OID);
   sig1_arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);
@@ -329,7 +324,6 @@ TEST_F(TestSpangresFunctionMapper,
   (*sig2_pg_name_path.add_name_path()) = "int8pl";
   (*sig2->add_postgresql_name_paths()) = sig2_pg_name_path;
   sig2->mutable_return_type()->set_oid(INT8OID);
-  sig2->set_is_enabled_in_catalog(true);
   FunctionArgumentProto* sig2_arg1 = sig2->add_arguments();
   sig2_arg1->mutable_type()->set_oid(INT8OID);
   sig2_arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);
@@ -377,7 +371,6 @@ TEST_F(TestSpangresFunctionMapper, MapsSpannerNamespacedFunction) {
   (*sig1->add_postgresql_name_paths()) = sig1_pg_name_path;
   sig1->set_oid(50001);
   sig1->mutable_return_type()->set_oid(INT8OID);
-  sig1->set_is_enabled_in_catalog(true);
   FunctionArgumentProto* sig1_arg1 = sig1->add_arguments();
   sig1_arg1->mutable_type()->set_oid(INT8OID);
   sig1_arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);
@@ -394,7 +387,6 @@ TEST_F(TestSpangresFunctionMapper, MapsSpannerNamespacedFunction) {
   (*sig2->add_postgresql_name_paths()) = sig2_pg_name_path;
   sig2->set_oid(50002);
   sig2->mutable_return_type()->set_oid(INT8OID);
-  sig2->set_is_enabled_in_catalog(true);
   FunctionArgumentProto* sig2_arg1 = sig2->add_arguments();
   sig2_arg1->mutable_type()->set_oid(INT8OID);
   sig2_arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);

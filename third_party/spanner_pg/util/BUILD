@@ -39,7 +39,7 @@ package(
     ],
 )
 
-licenses(["notice"])
+licenses(["restricted"])
 
 cc_library(
     name = "valid_memory_context_fixture",

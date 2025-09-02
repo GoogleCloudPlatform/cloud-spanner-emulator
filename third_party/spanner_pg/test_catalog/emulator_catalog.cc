@@ -38,6 +38,7 @@
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/type.h"
+#include "zetasql/base/no_destructor.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
 #include "backend/schema/builders/change_stream_builder.h"
@@ -599,10 +600,12 @@ std::unique_ptr<zetasql::EnumerableCatalog> GetEmulatorCatalog() {
   static std::unique_ptr<const OwningSchema> schema =
       CreateSchema(*GetTypeFactory());
   static auto function_catalog =
-      std::make_unique<FunctionCatalog>(
-          GetTypeFactory(),
-          /*catalog_name = */ kCloudSpannerEmulatorFunctionCatalogName);
-  return std::make_unique<Catalog>(schema.get(), function_catalog.get(),
+      zetasql_base::NoDestructor<std::unique_ptr<FunctionCatalog>>(
+          std::make_unique<FunctionCatalog>(
+              GetTypeFactory(),
+              /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+              /*latest_schema=*/schema.get()));
+  return std::make_unique<Catalog>(schema.get(), function_catalog->get(),
                                    GetTypeFactory());
 }
 

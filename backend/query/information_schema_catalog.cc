@@ -131,6 +131,7 @@ static constexpr char kBaseTable[] = "BASE TABLE";
 static constexpr char kCommitted[] = "COMMITTED";
 static constexpr char kInterleaveType[] = "INTERLEAVE_TYPE";
 static constexpr char kInParent[] = "IN PARENT";
+static constexpr char kIn[] = "IN";
 static constexpr char kView[] = "VIEW";
 static constexpr char kYes[] = "YES";
 static constexpr char kNo[] = "NO";
@@ -716,13 +717,25 @@ void InformationSchemaCatalog::FillTablesTable() {
         table->parent()
             ? String(SDLObjectName::GetInSchemaName(table->parent()->Name()))
             : NullString();
+
+    bool is_interleaved = table->parent() != nullptr;
+    bool is_interleaved_in_parent =
+        is_interleaved &&
+        table->interleave_type().value() == Table::InterleaveType::kInParent;
     specific_kvs[kOnDeleteAction] =
-        table->parent()
+        is_interleaved_in_parent
             ? String(OnDeleteActionToString(table->on_delete_action()))
             : NullString();
     specific_kvs[kSpannerState] = String(kCommitted);
-    // The emulator only supports INTERLEAVE IN PARENT.
-    specific_kvs[kInterleaveType] = String(kInParent);
+
+    std::string interleave_type = "";
+    if (is_interleaved_in_parent) {
+      interleave_type = kInParent;
+    } else if (is_interleaved) {
+      interleave_type = kIn;
+    }
+    specific_kvs[kInterleaveType] =
+        interleave_type.empty() ? NullString() : String(interleave_type);
 
     rows.push_back(GetRowFromRowKVs(tables, specific_kvs));
   }
@@ -738,6 +751,7 @@ void InformationSchemaCatalog::FillTablesTable() {
     specific_kvs[kSpannerState] = NullString();
     specific_kvs[kParentTableName] = NullString();
     specific_kvs[kOnDeleteAction] = NullString();
+    specific_kvs[kInterleaveType] = NullString();
     specific_kvs[kRowDeletionPolicyExpression] = NullString();
 
     rows.push_back(GetRowFromRowKVs(tables, specific_kvs));

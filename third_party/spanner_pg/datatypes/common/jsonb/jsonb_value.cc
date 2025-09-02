@@ -127,10 +127,7 @@ class PGJSONBParser {
     if (!IsValidString(val)) {
       return false;
     }
-    serializer_.dump(val, /*pretty_print=*/false, /*=ensure_ascii=*/false,
-                     /*indent_step=*/0);
-    AddToWorkingStack(normalization_output_buffer_);
-    normalization_output_buffer_.clear();
+    AddToWorkingStack(val, /*is_numeric=*/false);
     return true;
   }
 
@@ -431,6 +428,9 @@ void PgJsonbValue::AddToPrintingStack(
       return;
     }
     case NodeType::kString:
+      StrAppend(output, datatypes::common::jsonb::SerializeJsonbString(
+                            std::get<std::string>(node->value)));
+      break;
     case NodeType::kNumeric: {
       StrAppend(output, std::get<std::string>(node->value));
       return;
@@ -465,13 +465,7 @@ void PgJsonbValue::CheckRepresentation(std::vector<NodeType> types) const {
       << NodeTypeToString(static_cast<NodeType>(rep_->tag));
 }
 
-std::string PgJsonbValue::GetString() const {
-  CheckRepresentation({NodeType::kString});
-  return std::get<std::string>(rep_->value)
-      .substr(1, std::get<std::string>(rep_->value).size() - 2);
-}
-
-absl::string_view PgJsonbValue::GetSerializedString() const {
+absl::string_view PgJsonbValue::GetString() const {
   CheckRepresentation({NodeType::kString});
   return std::get<std::string>(rep_->value);
 }
@@ -579,21 +573,17 @@ bool PgJsonbValue::Exists(absl::string_view text) const {
     return true;
   }
 
-  // JSONB string is serialized with additional quotation marks.
-  std::string serialized_text =
-      datatypes::common::jsonb::SerializeJsonbString(text);
-
   if (IsArray()) {
     for (const auto& elem : std::get<JsonbArray>(rep_->value)) {
       if (elem->tag == NodeType::kString &&
-          std::get<std::string>(elem->value) == serialized_text) {
+          std::get<std::string>(elem->value) == text) {
         return true;
       }
     }
     return false;
   }
 
-  if (IsString() && std::get<std::string>(rep_->value) == serialized_text) {
+  if (IsString() && std::get<std::string>(rep_->value) == text) {
     return true;
   }
 

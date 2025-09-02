@@ -152,6 +152,13 @@ absl::flat_hash_map<Oid, std::vector<std::string>> proc_default_args_to_update =
          {"null::bigint", "null::double precision", "null::text"}},
 
         {/*score_ngrams=*/50036, {"null::text", "null::text"}},
+
+        {/*zstd_compress=*/50068, {"null::text", "3::bigint"}},
+        {/*zstd_compress=*/50069, {"null::text", "3::bigint"}},
+        {/*zstd_decompress_to_bytes=*/50070,
+         {"null::text", "1073741824::bigint"}},
+        {/*zstd_decompress_to_string=*/50071,
+         {"null::text", "1073741824::bigint"}},
 };
 
 // Metadata to identify procs in the bootstrap catalog whose argument names

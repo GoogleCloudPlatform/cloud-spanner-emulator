@@ -54,7 +54,8 @@ class TestReadOnlyStore : public ReadOnlyStore {
 
   absl::StatusOr<std::unique_ptr<StorageIterator>> Read(
       const Table* table, const KeyRange& key_range,
-      const absl::Span<const Column* const> columns) const override;
+      const absl::Span<const Column* const> columns,
+      bool allow_pending_commit_timestamps_in_read) const override;
 
   absl::StatusOr<bool> PrefixExists(const Table* table,
                                     const Key& prefix_key) const override;

@@ -15,6 +15,7 @@
 #
 
 load("@io_bazel_rules_go//go:def.bzl", "go_binary")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 
 package(
     default_visibility = [

@@ -1090,7 +1090,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50006"
     }
    ],
    "mode": "SCALAR",
@@ -1124,7 +1124,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50052"
     }
    ],
    "mode": "SCALAR",
@@ -1552,7 +1552,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50038"
     },
     {
      "resultType": "DOUBLE",
@@ -1562,7 +1562,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50043"
     }
    ],
    "mode": "SCALAR",
@@ -1792,7 +1792,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50067"
     }
    ],
    "mode": "SCALAR",
@@ -1811,7 +1811,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50015"
     }
    ],
    "mode": "SCALAR",
@@ -2084,32 +2084,32 @@
     {
      "resultType": "DOUBLE",
      "arguments": [
-      "ARRAY\u003cDOUBLE\u003e",
-      "ARRAY\u003cDOUBLE\u003e"
+      "ARRAY\u003cDOUBLE\u003e input_array_1",
+      "ARRAY\u003cDOUBLE\u003e input_array_2"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50046"
     },
     {
      "resultType": "DOUBLE",
      "arguments": [
-      "ARRAY\u003cFLOAT\u003e",
-      "ARRAY\u003cFLOAT\u003e"
+      "ARRAY\u003cFLOAT\u003e input_array_1",
+      "ARRAY\u003cFLOAT\u003e input_array_2"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50047"
     },
     {
      "resultType": "DOUBLE",
      "arguments": [
-      "ARRAY\u003cINT64\u003e",
-      "ARRAY\u003cINT64\u003e"
+      "ARRAY\u003cINT64\u003e input_array_1",
+      "ARRAY\u003cINT64\u003e input_array_2"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50045"
     }
    ],
    "mode": "SCALAR",
@@ -2162,7 +2162,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50039"
     },
     {
      "resultType": "DOUBLE",
@@ -2172,7 +2172,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50044"
     }
    ],
    "mode": "SCALAR",
@@ -2261,7 +2261,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50055"
     },
     {
      "resultType": "INT64",
@@ -2270,7 +2270,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50054"
     }
    ],
    "mode": "SCALAR",
@@ -2287,7 +2287,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50050"
     }
    ],
    "mode": "SCALAR",
@@ -2518,7 +2518,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50051"
     }
    ],
    "mode": "SCALAR",
@@ -2786,7 +2786,7 @@
      "resultType": "STRING",
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50008"
     }
    ],
    "mode": "SCALAR",
@@ -2803,7 +2803,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50007"
     }
    ],
    "mode": "SCALAR",
@@ -2820,7 +2820,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50056"
     }
    ],
    "mode": "SCALAR",
@@ -2837,7 +2837,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50049"
     }
    ],
    "mode": "SCALAR",
@@ -3683,7 +3683,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50042"
     }
    ],
    "mode": "SCALAR",
@@ -4226,7 +4226,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50040"
     },
     {
      "resultType": "PG.JSONB",
@@ -4236,7 +4236,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50041"
     }
    ],
    "mode": "SCALAR",
@@ -4667,7 +4667,7 @@
      "resultType": "TIMESTAMP",
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50005"
     }
    ],
    "mode": "SCALAR",
@@ -5251,7 +5251,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50053"
     }
    ],
    "mode": "SCALAR",
@@ -5646,7 +5646,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50009"
     },
     {
      "resultType": "TIMESTAMP",
@@ -5655,7 +5655,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50010"
     }
    ],
    "mode": "SCALAR",
@@ -5672,7 +5672,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50011"
     },
     {
      "resultType": "TIMESTAMP",
@@ -5681,7 +5681,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50012"
     }
    ],
    "mode": "SCALAR",
@@ -5699,7 +5699,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50013"
     }
    ],
    "mode": "SCALAR",
@@ -5879,7 +5879,7 @@
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
-     "postgresOid": "0"
+     "postgresOid": "50014"
     }
    ],
    "mode": "SCALAR",
@@ -6372,6 +6372,86 @@
     {
      "resultType": "TOKENLIST",
      "arguments": [
+      "ARRAY\u003cDOUBLE\u003e value",
+      "optional STRING comparison_type",
+      "optional STRING algorithm",
+      "optional DOUBLE min",
+      "optional DOUBLE max",
+      "optional DOUBLE granularity",
+      "optional INT64 tree_base",
+      "optional INT64 ieee_precision"
+     ],
+     "hasMappedFunction": true,
+     "explicitMappedFunctionName": "",
+     "postgresOid": "50025"
+    },
+    {
+     "resultType": "TOKENLIST",
+     "arguments": [
+      "ARRAY\u003cFLOAT\u003e value",
+      "optional STRING comparison_type",
+      "optional STRING algorithm",
+      "optional DOUBLE min",
+      "optional DOUBLE max",
+      "optional DOUBLE granularity",
+      "optional INT64 tree_base",
+      "optional INT64 ieee_precision"
+     ],
+     "hasMappedFunction": true,
+     "explicitMappedFunctionName": "",
+     "postgresOid": "50029"
+    },
+    {
+     "resultType": "TOKENLIST",
+     "arguments": [
+      "ARRAY\u003cINT64\u003e value",
+      "optional STRING comparison_type",
+      "optional STRING algorithm",
+      "optional INT64 min",
+      "optional INT64 max",
+      "optional INT64 granularity",
+      "optional INT64 tree_base",
+      "optional INT64 ieee_precision"
+     ],
+     "hasMappedFunction": true,
+     "explicitMappedFunctionName": "",
+     "postgresOid": "50027"
+    },
+    {
+     "resultType": "TOKENLIST",
+     "arguments": [
+      "DOUBLE value",
+      "optional STRING comparison_type",
+      "optional STRING algorithm",
+      "optional DOUBLE min",
+      "optional DOUBLE max",
+      "optional DOUBLE granularity",
+      "optional INT64 tree_base",
+      "optional INT64 ieee_precision"
+     ],
+     "hasMappedFunction": true,
+     "explicitMappedFunctionName": "",
+     "postgresOid": "50024"
+    },
+    {
+     "resultType": "TOKENLIST",
+     "arguments": [
+      "FLOAT value",
+      "optional STRING comparison_type",
+      "optional STRING algorithm",
+      "optional DOUBLE min",
+      "optional DOUBLE max",
+      "optional DOUBLE granularity",
+      "optional INT64 tree_base",
+      "optional INT64 ieee_precision"
+     ],
+     "hasMappedFunction": true,
+     "explicitMappedFunctionName": "",
+     "postgresOid": "50028"
+    },
+    {
+     "resultType": "TOKENLIST",
+     "arguments": [
       "INT64 value",
       "optional STRING comparison_type",
       "optional STRING algorithm",
@@ -6597,6 +6677,70 @@
    ],
    "mode": "SCALAR",
    "postgresNamespace": "pg_catalog"
+  },
+  {
+   "postgresFunctionName": "zstd_compress",
+   "mappedFunctionName": "zstd_compress",
+   "signatures": [
+    {
+     "resultType": "BYTES",
+     "arguments": [
+      "BYTES",
+      "optional INT64 level"
+     ],
+     "hasMappedFunction": true,
+     "explicitMappedFunctionName": "",
+     "postgresOid": "50068"
+    },
+    {
+     "resultType": "BYTES",
+     "arguments": [
+      "STRING",
+      "optional INT64 level"
+     ],
+     "hasMappedFunction": true,
+     "explicitMappedFunctionName": "",
+     "postgresOid": "50069"
+    }
+   ],
+   "mode": "SCALAR",
+   "postgresNamespace": "spanner"
+  },
+  {
+   "postgresFunctionName": "zstd_decompress_to_bytes",
+   "mappedFunctionName": "zstd_decompress_to_bytes",
+   "signatures": [
+    {
+     "resultType": "BYTES",
+     "arguments": [
+      "BYTES",
+      "optional INT64 size_limit"
+     ],
+     "hasMappedFunction": true,
+     "explicitMappedFunctionName": "",
+     "postgresOid": "50070"
+    }
+   ],
+   "mode": "SCALAR",
+   "postgresNamespace": "spanner"
+  },
+  {
+   "postgresFunctionName": "zstd_decompress_to_string",
+   "mappedFunctionName": "zstd_decompress_to_string",
+   "signatures": [
+    {
+     "resultType": "STRING",
+     "arguments": [
+      "BYTES",
+      "optional INT64 size_limit"
+     ],
+     "hasMappedFunction": true,
+     "explicitMappedFunctionName": "",
+     "postgresOid": "50071"
+    }
+   ],
+   "mode": "SCALAR",
+   "postgresNamespace": "spanner"
   }
  ]
 }

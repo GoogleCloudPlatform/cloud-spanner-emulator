@@ -68,13 +68,13 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::FEATURE_NUMERIC_TYPE,
       zetasql::FEATURE_TABLESAMPLE,
       zetasql::FEATURE_TIMESTAMP_NANOS,
-      zetasql::FEATURE_V_1_1_HAVING_IN_AGGREGATE,
-      zetasql::FEATURE_V_1_1_NULL_HANDLING_MODIFIER_IN_AGGREGATE,
-      zetasql::FEATURE_V_1_1_ORDER_BY_IN_AGGREGATE,
-      zetasql::FEATURE_V_1_1_LIMIT_IN_AGGREGATE,
-      zetasql::FEATURE_V_1_1_ORDER_BY_COLLATE,
-      zetasql::FEATURE_V_1_1_SELECT_STAR_EXCEPT_REPLACE,
-      zetasql::FEATURE_V_1_2_SAFE_FUNCTION_CALL,
+      zetasql::FEATURE_HAVING_IN_AGGREGATE,
+      zetasql::FEATURE_NULL_HANDLING_MODIFIER_IN_AGGREGATE,
+      zetasql::FEATURE_ORDER_BY_IN_AGGREGATE,
+      zetasql::FEATURE_LIMIT_IN_AGGREGATE,
+      zetasql::FEATURE_ORDER_BY_COLLATE,
+      zetasql::FEATURE_SELECT_STAR_EXCEPT_REPLACE,
+      zetasql::FEATURE_SAFE_FUNCTION_CALL,
       zetasql::FEATURE_JSON_TYPE,
       zetasql::FEATURE_JSON_ARRAY_FUNCTIONS,
       zetasql::FEATURE_JSON_CONSTRUCTOR_FUNCTIONS,
@@ -83,30 +83,30 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::FEATURE_JSON_STRICT_NUMBER_PARSING,
       zetasql::FEATURE_JSON_VALUE_EXTRACTION_FUNCTIONS,
       zetasql::FEATURE_JSON_LAX_VALUE_EXTRACTION_FUNCTIONS,
-      zetasql::FEATURE_V_1_3_DML_RETURNING,
-      zetasql::FEATURE_V_1_4_WITH_EXPRESSION,
+      zetasql::FEATURE_DML_RETURNING,
+      zetasql::FEATURE_WITH_EXPRESSION,
       zetasql::FEATURE_TABLE_VALUED_FUNCTIONS,
       zetasql::FEATURE_TOKENIZED_SEARCH,
-      zetasql::FEATURE_V_1_3_ADDITIONAL_STRING_FUNCTIONS,
-      zetasql::FEATURE_V_1_4_SEQUENCE_ARG,
-      zetasql::FEATURE_V_1_4_ENABLE_FLOAT_DISTANCE_FUNCTIONS,
-      zetasql::FEATURE_V_1_4_DOT_PRODUCT,
+      zetasql::FEATURE_ADDITIONAL_STRING_FUNCTIONS,
+      zetasql::FEATURE_SEQUENCE_ARG,
+      zetasql::FEATURE_JSON_MORE_VALUE_EXTRACTION_FUNCTIONS,
+      zetasql::FEATURE_ENABLE_FLOAT_DISTANCE_FUNCTIONS,
+      zetasql::FEATURE_DOT_PRODUCT,
       zetasql::FEATURE_INTERVAL_TYPE,
-      zetasql::FEATURE_V_1_4_SQL_GRAPH,
-      zetasql::FEATURE_V_1_4_SQL_GRAPH_ADVANCED_QUERY,
-      zetasql::FEATURE_V_1_4_SQL_GRAPH_BOUNDED_PATH_QUANTIFICATION,
-      zetasql::FEATURE_V_1_4_SQL_GRAPH_PATH_TYPE,
-      zetasql::FEATURE_V_1_4_SQL_GRAPH_PATH_MODE,
-      zetasql::FEATURE_V_1_4_SQL_GRAPH_DYNAMIC_LABEL_PROPERTIES_IN_DDL,
-      zetasql::FEATURE_V_1_4_SQL_GRAPH_DYNAMIC_LABEL_EXTENSION_IN_DDL,
-      zetasql::FEATURE_V_1_4_SQL_GRAPH_DYNAMIC_ELEMENT_TYPE,
-      zetasql::FEATURE_V_1_4_FOR_UPDATE,
+      zetasql::FEATURE_SQL_GRAPH,
+      zetasql::FEATURE_SQL_GRAPH_ADVANCED_QUERY,
+      zetasql::FEATURE_SQL_GRAPH_BOUNDED_PATH_QUANTIFICATION,
+      zetasql::FEATURE_SQL_GRAPH_PATH_TYPE,
+      zetasql::FEATURE_SQL_GRAPH_PATH_MODE,
+      zetasql::FEATURE_SQL_GRAPH_DYNAMIC_LABEL_PROPERTIES_IN_DDL,
+      zetasql::FEATURE_SQL_GRAPH_DYNAMIC_LABEL_EXTENSION_IN_DDL,
+      zetasql::FEATURE_SQL_GRAPH_DYNAMIC_ELEMENT_TYPE,
+      zetasql::FEATURE_FOR_UPDATE,
   });
   if (EmulatorFeatureFlags::instance().flags().enable_protos) {
     options.EnableLanguageFeature(zetasql::FEATURE_PROTO_BASE);
-    options.EnableLanguageFeature(
-        zetasql::FEATURE_V_1_3_BRACED_PROTO_CONSTRUCTORS);
-    options.EnableLanguageFeature(zetasql::FEATURE_V_1_3_REPLACE_FIELDS);
+    options.EnableLanguageFeature(zetasql::FEATURE_BRACED_PROTO_CONSTRUCTORS);
+    options.EnableLanguageFeature(zetasql::FEATURE_REPLACE_FIELDS);
   }
 
   options.SetSupportedStatementKinds({
@@ -139,7 +139,7 @@ zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
   if (dialect == DatabaseDialect::POSTGRESQL) {
     // PG needs ASC NULLS LAST and DESC NULLS FIRST for default values.
     language_opts.EnableLanguageFeature(
-        zetasql::FEATURE_V_1_3_NULLS_FIRST_LAST_IN_ORDER_BY);
+        zetasql::FEATURE_NULLS_FIRST_LAST_IN_ORDER_BY);
   }
   // Only CREATE VIEW and CREATE FUNCTION are supported in DDL.
   language_opts.SetSupportedStatementKinds({
@@ -168,7 +168,7 @@ zetasql::BuiltinFunctionOptions MakeGoogleSqlBuiltinFunctionOptions() {
       zetasql::FN_EUCLIDEAN_DISTANCE_SPARSE_INT64,
       zetasql::FN_EUCLIDEAN_DISTANCE_SPARSE_STRING,
       // Exclude additional string functions not yet supported in Spanner since
-      // we have enabled FEATURE_V_1_3_ADDITIONAL_STRING_FUNCTIONS for SOUNDEX.
+      // we have enabled FEATURE_ADDITIONAL_STRING_FUNCTIONS for SOUNDEX.
       zetasql::FN_INSTR_STRING,
       zetasql::FN_INSTR_BYTES,
       zetasql::FN_TRANSLATE_STRING,

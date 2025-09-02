@@ -31,6 +31,8 @@
 
 # Files which are Spangres specific implementations applied in the PostgreSQL backend code.
 
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
 package(
     default_visibility = ["//:__subpackages__"],
 )

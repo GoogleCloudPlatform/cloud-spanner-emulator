@@ -332,6 +332,7 @@ void column_def_alter() :
 {
     LOOKAHEAD(2) <SET> ( options_clause()
                          | column_default_clause()
+
                          | (<NOT> <NULLL> #set_not_null )
                          | (<PLACEMENT> <KEY> #set_placement_key )
                        )
@@ -339,6 +340,7 @@ void column_def_alter() :
                           | ( <NOT> <NULLL> #drop_not_null )
                           | (<PLACEMENT> <KEY> #drop_placement_key )
                         )
+
   | <ALTER> <IDENTITY> ( <RESTART> <COUNTER> <WITH> int_value() #restart_counter
                          | <SET> ( <SKIPP> <RANGE> int_value() #skip_range_min
                                                "," int_value() #skip_range_max
@@ -400,6 +402,7 @@ void column_default_clause() :
 {
   <DEFAULTT> "(" expression() #column_default_expression ")"
 }
+
 
 void primary_key() #void :
 {}

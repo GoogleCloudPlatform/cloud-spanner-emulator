@@ -120,6 +120,14 @@ zetasql::FunctionArgumentTypeOptions GetOptionalNamedArgumentOptions(
   return options;
 }
 
+zetasql::FunctionArgumentTypeOptions
+GetOptionalPositionalOrNamedArgumentOptions(absl::string_view name) {
+  zetasql::FunctionArgumentTypeOptions options;
+  options.set_cardinality(zetasql::FunctionArgumentType::OPTIONAL);
+  options.set_argument_name(name, zetasql::kPositionalOrNamed);
+  return options;
+}
+
 zetasql::FunctionArgumentTypeOptions GetRequiredPositionalArgumentOptions(
     absl::string_view name) {
   zetasql::FunctionArgumentTypeOptions options;
@@ -560,7 +568,12 @@ static void AddPgJsonbNewFunctions(
   functions.push_back(
       {"jsonb_query_array",
        "json_query_array",
-       {{{gsql_pg_jsonb_arr, {gsql_pg_jsonb}, /*context_ptr=*/nullptr}}},
+       {{
+           {gsql_pg_jsonb_arr, {gsql_pg_jsonb}, /*context_ptr=*/nullptr},
+           /*has_mapped_function=*/true,
+           /*explicit_mapped_function_name=*/"",
+           /*postgres_proc_oid=*/50042,
+       }},
        /*mode=*/zetasql::Function::SCALAR,
        /*postgres_namespace=*/"spanner"});
 }
@@ -677,14 +690,24 @@ static void AddFloatSignaturesForExistingFunctions(
           /*context_ptr=*/nullptr}}}});
   existing_float_functions_with_signature.push_back(
       {"euclidean_distance",
-       {{{gsql_double,
-          {gsql_float_arr, gsql_float_arr},
-          /*context_ptr=*/nullptr}}}});
+       {{
+           {gsql_double,
+            {gsql_float_arr, gsql_float_arr},
+            /*context_ptr=*/nullptr},
+           /*has_mapped_function=*/true,
+           /*explicit_mapped_function_name=*/"",
+           /*postgres_proc_oid=*/50044,
+       }}});
   existing_float_functions_with_signature.push_back(
       {"cosine_distance",
-       {{{gsql_double,
-          {gsql_float_arr, gsql_float_arr},
-          /*context_ptr=*/nullptr}}}});
+       {{
+           {gsql_double,
+            {gsql_float_arr, gsql_float_arr},
+            /*context_ptr=*/nullptr},
+           /*has_mapped_function=*/true,
+           /*explicit_mapped_function_name=*/"",
+           /*postgres_proc_oid=*/50043,
+       }}});
 
     existing_float_functions_with_signature.push_back(
         {"min", {{{gsql_float, {gsql_float}, /*context_ptr=*/nullptr}}}});
@@ -776,17 +799,39 @@ static void AddFloatNewFunctions(
                             {gsql_float, gsql_float},
                             /*context_ptr=*/nullptr}}}});
 
+  zetasql::FunctionArgumentTypeOptions input_array_1 =
+      GetRequiredPositionalArgumentOptions("input_array_1");
+  zetasql::FunctionArgumentTypeOptions input_array_2 =
+      GetRequiredPositionalArgumentOptions("input_array_2");
   functions.push_back({"dot_product",
                        "dot_product",
-                       {{{gsql_double,
-                          {gsql_int64_array, gsql_int64_array},
-                          /*context_ptr=*/nullptr}},
-                        {{gsql_double,
-                          {gsql_double_array, gsql_double_array},
-                          /*context_ptr=*/nullptr}},
-                        {{gsql_double,
-                          {gsql_float_array, gsql_float_array},
-                          /*context_ptr=*/nullptr}}},
+                       {{
+                            {gsql_double,
+                             {{gsql_int64_array, input_array_1},
+                              {gsql_int64_array, input_array_2}},
+                             /*context_ptr=*/nullptr},
+                            /*has_mapped_function=*/true,
+                            /*explicit_mapped_function_name=*/"",
+                            /*postgres_proc_oid=*/50045,
+                        },
+                        {
+                            {gsql_double,
+                             {{gsql_double_array, input_array_1},
+                              {gsql_double_array, input_array_2}},
+                             /*context_ptr=*/nullptr},
+                            /*has_mapped_function=*/true,
+                            /*explicit_mapped_function_name=*/"",
+                            /*postgres_proc_oid=*/50046,
+                        },
+                        {
+                            {gsql_double,
+                             {{gsql_float_array, input_array_1},
+                              {gsql_float_array, input_array_2}},
+                             /*context_ptr=*/nullptr},
+                            /*has_mapped_function=*/true,
+                            /*explicit_mapped_function_name=*/"",
+                            /*postgres_proc_oid=*/50047,
+                        }},
                        /*mode=*/zetasql::Function::SCALAR,
                        /*postgres_namespace=*/"spanner"});
 }
@@ -1411,83 +1456,152 @@ void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
 
   functions.push_back({"pending_commit_timestamp",
                        "pending_commit_timestamp",
-                       {{{gsql_timestamp, {}, /*context_ptr=*/nullptr}}},
+                       {{
+                           {gsql_timestamp, {}, /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50005,
+                       }},
                        /*mode=*/zetasql::Function::SCALAR,
                        /*postgres_namespace=*/"spanner"});
 
   functions.push_back({"bit_reverse",
                        "bit_reverse",
-                       {{{gsql_int64,
-                          {gsql_int64, gsql_bool},
-                          /*context_ptr=*/nullptr}}},
+                       {{
+                           {gsql_int64,
+                            {gsql_int64, gsql_bool},
+                            /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50006,
+                       }},
                        /*mode=*/zetasql::Function::SCALAR,
                        /*postgres_namespace=*/"spanner"});
 
-  functions.push_back({"farm_fingerprint",
-                       "farm_fingerprint",
-                       {{{gsql_int64, {gsql_bytes}, /*context_ptr=*/nullptr}},
-                        {{gsql_int64, {gsql_string}, /*context_ptr=*/nullptr}}},
-                       /*mode=*/zetasql::Function::SCALAR,
-                       /*postgres_namespace=*/"spanner"});
+  functions.push_back(
+      {"farm_fingerprint",
+       "farm_fingerprint",
+       {{
+            {gsql_int64, {gsql_bytes}, /*context_ptr=*/nullptr},
+            /*has_mapped_function=*/true,
+            /*explicit_mapped_function_name=*/"",
+            /*postgres_proc_oid=*/50055,
+        },
+        {
+            {gsql_int64, {gsql_string}, /*context_ptr=*/nullptr},
+            /*has_mapped_function=*/true,
+            /*explicit_mapped_function_name=*/"",
+            /*postgres_proc_oid=*/50054,
+        }},
+       /*mode=*/zetasql::Function::SCALAR,
+       /*postgres_namespace=*/"spanner"});
 
   functions.push_back({"get_internal_sequence_state",
                        "get_internal_sequence_state",
-                       {{{gsql_int64,
-                          {gsql_string},
-                          /*context_ptr=*/nullptr}}},
+                       {{
+                           {gsql_int64, {gsql_string}, /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50007,
+                       }},
                        /*mode=*/zetasql::Function::SCALAR,
                        /*postgres_namespace=*/"spanner"});
 
     functions.push_back(
         {"get_table_column_identity_state",
          "get_table_column_identity_state",
-         {{{gsql_int64, {gsql_string}, /*context_ptr=*/nullptr}}},
+         {{
+             {gsql_int64, {gsql_string}, /*context_ptr=*/nullptr},
+             /*has_mapped_function=*/true,
+             /*explicit_mapped_function_name=*/"",
+             /*postgres_proc_oid=*/50056,
+         }},
          /*mode=*/zetasql::Function::SCALAR,
          /*postgres_namespace=*/"spanner"});
 
   functions.push_back({"generate_uuid",
                        "generate_uuid",
-                       {{{gsql_string, {}, /*context_ptr=*/nullptr}}},
+                       {{
+                           {gsql_string, {}, /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50008,
+                       }},
                        /*mode=*/zetasql::Function::SCALAR,
                        /*postgres_namespace=*/"spanner"});
 
   functions.push_back(
       {"timestamp_from_unix_micros",
        "timestamp_from_unix_micros",
-       {{{gsql_timestamp, {gsql_int64}, /*context_ptr=*/nullptr}},
-       {{gsql_timestamp, {gsql_timestamp}, /*context_ptr=*/nullptr}}},
+       {{
+            {gsql_timestamp, {gsql_int64}, /*context_ptr=*/nullptr},
+            /*has_mapped_function=*/true,
+            /*explicit_mapped_function_name=*/"",
+            /*postgres_proc_oid=*/50009,
+        },
+        {
+            {gsql_timestamp, {gsql_timestamp}, /*context_ptr=*/nullptr},
+            /*has_mapped_function=*/true,
+            /*explicit_mapped_function_name=*/"",
+            /*postgres_proc_oid=*/50010,
+        }},
        /*mode=*/zetasql::Function::SCALAR,
        /*postgres_namespace=*/"spanner"});
 
   functions.push_back(
       {"timestamp_from_unix_millis",
        "timestamp_from_unix_millis",
-       {{{gsql_timestamp, {gsql_int64}, /*context_ptr=*/nullptr}},
-       {{gsql_timestamp, {gsql_timestamp}, /*context_ptr=*/nullptr}}},
+       {{
+            {gsql_timestamp, {gsql_int64}, /*context_ptr=*/nullptr},
+            /*has_mapped_function=*/true,
+            /*explicit_mapped_function_name=*/"",
+            /*postgres_proc_oid=*/50011,
+        },
+        {
+            {gsql_timestamp, {gsql_timestamp}, /*context_ptr=*/nullptr},
+            /*has_mapped_function=*/true,
+            /*explicit_mapped_function_name=*/"",
+            /*postgres_proc_oid=*/50012,
+        }},
        /*mode=*/zetasql::Function::SCALAR,
        /*postgres_namespace=*/"spanner"});
 
   functions.push_back({"timestamptz_add",
-      "pg.timestamptz_add",
-      {{{gsql_timestamp,
-         {gsql_timestamp, gsql_string},
-         /*context_ptr=*/nullptr}}},
-      /*mode=*/zetasql::Function::SCALAR,
-      /*postgres_namespace=*/"spanner"});
+                       "pg.timestamptz_add",
+                       {{
+                           {gsql_timestamp,
+                            {gsql_timestamp, gsql_string},
+                            /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50013,
+                       }},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
   functions.push_back({"timestamptz_subtract",
-      "pg.timestamptz_subtract",
-      {{{gsql_timestamp,
-         {gsql_timestamp, gsql_string},
-         /*context_ptr=*/nullptr}}},
-      /*mode=*/zetasql::Function::SCALAR,
-      /*postgres_namespace=*/"spanner"});
+                       "pg.timestamptz_subtract",
+                       {{
+                           {gsql_timestamp,
+                            {gsql_timestamp, gsql_string},
+                            /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50014,
+                       }},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
   functions.push_back({"date_bin",
-      "pg.date_bin",
-      {{{gsql_timestamp,
-         {gsql_string, gsql_timestamp, gsql_timestamp},
-         /*context_ptr=*/nullptr}}},
-      /*mode=*/zetasql::Function::SCALAR,
-      /*postgres_namespace=*/"spanner"});
+                       "pg.date_bin",
+                       {{
+                           {gsql_timestamp,
+                            {gsql_string, gsql_timestamp, gsql_timestamp},
+                            /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50015,
+                       }},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
   functions.push_back({"date_trunc",
       "pg.date_trunc",
       {{{gsql_timestamp,
@@ -1497,13 +1611,18 @@ void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
          {gsql_string, gsql_timestamp, gsql_string},
          /*context_ptr=*/nullptr}}}});
 
-    functions.push_back({"date",
-                         "date",
-                         {{{gsql_date,
+  functions.push_back({"date",
+                       "date",
+                       {{
+                           {gsql_date,
                             {gsql_timestamp, gsql_string},
-                            /*context_ptr=*/nullptr}}},
-                         /*mode=*/zetasql::Function::SCALAR,
-                         /*postgres_namespace=*/"spanner"});
+                            /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50067,
+                       }},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
 
     functions.push_back({"extract",
         "pg.extract",
@@ -1514,19 +1633,29 @@ void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
            {gsql_string, gsql_date},
            /*context_ptr=*/nullptr}}}});
   functions.push_back({"euclidean_distance",
-      "euclidean_distance",
-      {{{gsql_double,
-         {gsql_double_array, gsql_double_array},
-         /*context_ptr=*/nullptr}}},
-      /*mode=*/zetasql::Function::SCALAR,
-      /*postgres_namespace=*/"spanner"});
+                       "euclidean_distance",
+                       {{
+                           {gsql_double,
+                            {gsql_double_array, gsql_double_array},
+                            /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50039,
+                       }},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
   functions.push_back({"cosine_distance",
-      "cosine_distance",
-      {{{gsql_double,
-         {gsql_double_array, gsql_double_array},
-         /*context_ptr=*/nullptr}}},
-      /*mode=*/zetasql::Function::SCALAR,
-      /*postgres_namespace=*/"spanner"});
+                       "cosine_distance",
+                       {{
+                           {gsql_double,
+                            {gsql_double_array, gsql_double_array},
+                            /*context_ptr=*/nullptr},
+                           /*has_mapped_function=*/true,
+                           /*explicit_mapped_function_name=*/"",
+                           /*postgres_proc_oid=*/50038,
+                       }},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
 
     const zetasql::Type* gsql_pg_jsonb =
         types::PgJsonbMapping()->mapped_type();
@@ -1534,54 +1663,88 @@ void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions) {
         GetRequiredNamedArgumentOptions("model_endpoint");
     zetasql::FunctionArgumentTypeOptions args =
         GetRequiredNamedArgumentOptions("args");
-    functions.push_back({"ml_predict_row",
-                          "ml_predict_row",
-                          {
-                              {{gsql_pg_jsonb,
-                                {{gsql_string, model_endpoint},
-                                 {gsql_pg_jsonb, args}},
-                                /*context_ptr=*/nullptr}},
-                              {{gsql_pg_jsonb,
-                                {{gsql_pg_jsonb, model_endpoint},
-                                 {gsql_pg_jsonb, args}},
-                                /*context_ptr=*/nullptr}},
-                          },
-                          /*mode=*/zetasql::Function::SCALAR,
-                          /*postgres_namespace=*/"spanner"});
+    functions.push_back(
+        {"ml_predict_row",
+         "ml_predict_row",
+         {
+             {
+                 {gsql_pg_jsonb,
+                  {{gsql_string, model_endpoint}, {gsql_pg_jsonb, args}},
+                  /*context_ptr=*/nullptr},
+                 /*has_mapped_function=*/true,
+                 /*explicit_mapped_function_name=*/"",
+                 /*postgres_proc_oid=*/50041,
+             },
+             {
+                 {gsql_pg_jsonb,
+                  {{gsql_pg_jsonb, model_endpoint}, {gsql_pg_jsonb, args}},
+                  /*context_ptr=*/nullptr},
+                 /*has_mapped_function=*/true,
+                 /*explicit_mapped_function_name=*/"",
+                 /*postgres_proc_oid=*/50040,
+             },
+         },
+         /*mode=*/zetasql::Function::SCALAR,
+         /*postgres_namespace=*/"spanner"});
 
       functions.push_back({"int64_array",
                            "int64_array",
-                           {{{gsql_int64_array,
-                              {gsql_pg_jsonb},
-                              /*context_ptr=*/nullptr}}},
+                           {{
+                               {gsql_int64_array,
+                                {gsql_pg_jsonb},
+                                /*context_ptr=*/nullptr},
+                               /*has_mapped_function=*/true,
+                               /*explicit_mapped_function_name=*/"",
+                               /*postgres_proc_oid=*/50049,
+                           }},
                            /*mode=*/zetasql::Function::SCALAR,
                            /*postgres_namespace=*/"spanner"});
       functions.push_back({"float64_array",
                            "float64_array",
-                           {{{gsql_double_array,
-                              {gsql_pg_jsonb},
-                              /*context_ptr=*/nullptr}}},
+                           {{
+                               {gsql_double_array,
+                                {gsql_pg_jsonb},
+                                /*context_ptr=*/nullptr},
+                               /*has_mapped_function=*/true,
+                               /*explicit_mapped_function_name=*/"",
+                               /*postgres_proc_oid=*/50051,
+                           }},
                            /*mode=*/zetasql::Function::SCALAR,
                            /*postgres_namespace=*/"spanner"});
       functions.push_back({"float32_array",
                            "float32_array",
-                           {{{gsql_float_array,
-                              {gsql_pg_jsonb},
-                              /*context_ptr=*/nullptr}}},
+                           {{
+                               {gsql_float_array,
+                                {gsql_pg_jsonb},
+                                /*context_ptr=*/nullptr},
+                               /*has_mapped_function=*/true,
+                               /*explicit_mapped_function_name=*/"",
+                               /*postgres_proc_oid=*/50050,
+                           }},
                            /*mode=*/zetasql::Function::SCALAR,
                            /*postgres_namespace=*/"spanner"});
       functions.push_back({"bool_array",
                            "bool_array",
-                           {{{gsql_bool_array,
-                              {gsql_pg_jsonb},
-                              /*context_ptr=*/nullptr}}},
+                           {{
+                               {gsql_bool_array,
+                                {gsql_pg_jsonb},
+                                /*context_ptr=*/nullptr},
+                               /*has_mapped_function=*/true,
+                               /*explicit_mapped_function_name=*/"",
+                               /*postgres_proc_oid=*/50052,
+                           }},
                            /*mode=*/zetasql::Function::SCALAR,
                            /*postgres_namespace=*/"spanner"});
       functions.push_back({"string_array",
                            "string_array",
-                           {{{gsql_string_array,
-                              {gsql_pg_jsonb},
-                              /*context_ptr=*/nullptr}}},
+                           {{
+                               {gsql_string_array,
+                                {gsql_pg_jsonb},
+                                /*context_ptr=*/nullptr},
+                               /*has_mapped_function=*/true,
+                               /*explicit_mapped_function_name=*/"",
+                               /*postgres_proc_oid=*/50053,
+                           }},
                            /*mode=*/zetasql::Function::SCALAR,
                            /*postgres_namespace=*/"spanner"});
 }
@@ -1876,6 +2039,50 @@ void AddIntervalFunctions(std::vector<PostgresFunctionArguments>& functions) {
                           /*context_ptr=*/nullptr}}}});
 
   AddIntervalSignaturesForExistingFunctions(functions);
+}
+
+void AddCompressionFunctions(
+    std::vector<PostgresFunctionArguments>& functions) {
+  zetasql::FunctionArgumentTypeOptions level =
+      GetOptionalPositionalOrNamedArgumentOptions("level");
+  zetasql::FunctionArgumentTypeOptions size_limit =
+      GetOptionalNamedArgumentOptions("size_limit");
+  functions.push_back({"zstd_compress",
+                       "zstd_compress",
+                       {{{gsql_bytes,
+                          {gsql_bytes, {gsql_int64, level}},
+                          /*context_ptr=*/nullptr},
+                         /*has_mapped_function=*/true,
+                         /*explicit_mapped_function_name=*/"",
+                         /*postgres_proc_oid=*/50068},
+                        {{gsql_bytes,
+                          {gsql_string, {gsql_int64, level}},
+                          /*context_ptr=*/nullptr},
+                         /*has_mapped_function=*/true,
+                         /*explicit_mapped_function_name=*/"",
+                         /*postgres_proc_oid=*/50069}},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
+  functions.push_back({"zstd_decompress_to_bytes",
+                       "zstd_decompress_to_bytes",
+                       {{{gsql_bytes,
+                          {gsql_bytes, {gsql_int64, size_limit}},
+                          /*context_ptr=*/nullptr},
+                         /*has_mapped_function=*/true,
+                         /*explicit_mapped_function_name=*/"",
+                         /*postgres_proc_oid=*/50070}},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
+  functions.push_back({"zstd_decompress_to_string",
+                       "zstd_decompress_to_string",
+                       {{{gsql_string,
+                          {gsql_bytes, {gsql_int64, size_limit}},
+                          /*context_ptr=*/nullptr},
+                         /*has_mapped_function=*/true,
+                         /*explicit_mapped_function_name=*/"",
+                         /*postgres_proc_oid=*/50071}},
+                       /*mode=*/zetasql::Function::SCALAR,
+                       /*postgres_namespace=*/"spanner"});
 }
 
 void RemapFunctionsForSpanner(

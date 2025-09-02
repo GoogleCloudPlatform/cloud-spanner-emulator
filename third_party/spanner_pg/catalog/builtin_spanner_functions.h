@@ -73,6 +73,8 @@ void AddPgLeastGreatestFunctions(
 void RemapFunctionsForSpanner(
     std::vector<PostgresFunctionArguments>& functions);
 
+void AddCompressionFunctions(std::vector<PostgresFunctionArguments>& functions);
+
 }  // namespace spangres
 }  // namespace postgres_translator
 

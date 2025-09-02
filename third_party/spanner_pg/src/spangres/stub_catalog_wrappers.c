@@ -164,3 +164,17 @@ RangeTblEntry* AddRangeTableEntryByOidC(ParseState* pstate, Oid relation_oid,
                                         Alias* alias, bool inh, bool inFromCl) {
   abort();
 }
+
+// TODO: Remove this wrapper
+Oid GetNamespaceForFuncname(const char* unqualified_namespace_name) { abort(); }
+
+// TODO: Remove this wrapper
+void GetProcsCandidates(const char* schema_name, const char* func_name,
+                        const FormData_pg_proc*** outlist, size_t* outcount) {
+  abort();
+}
+
+// TODO: Remove this wrapper
+bool IsInNamespace(const FormData_pg_proc* procform, Oid namespace_oid) {
+  abort();
+}

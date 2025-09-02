@@ -47,6 +47,7 @@
 #include "absl/strings/substitute.h"
 #include "third_party/spanner_pg/ddl/ddl_translator.h"
 #include "third_party/spanner_pg/ddl/translation_utils.h"
+#include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
 #include "zetasql/base/ret_check.h"
@@ -346,7 +347,8 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
           ZETASQL_RET_CHECK(node.def->type == T_Integer || node.def->type == T_Float);
           break;
         }
-        case AT_ColumnDefault: {
+        case AT_ColumnDefault:
+        case AT_ColumnOnUpdate: {
           ZETASQL_RET_CHECK_NE(node.name, nullptr);
           break;
         }
@@ -584,6 +586,7 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter,
       case CONSTR_DEFAULT:
       case CONSTR_HIDDEN:
       case CONSTR_IDENTITY:
+      case CONSTR_ON_UPDATE:
         break;
       case CONSTR_VECTOR_LENGTH:
         if (node.vector_length < 0) {
@@ -1692,17 +1695,15 @@ absl::Status ValidateParseTreeNode(const CreateSearchIndexStmt& node) {
   ZETASQL_RET_CHECK_EQ(node.type, T_CreateSearchIndexStmt);
   // Make sure that if CreateSearchIndexStmt structure changes we update the
   // translator.
-  AssertPGNodeConsistsOf(
-      node, FieldTypeChecker<char*>(node.search_index_name),
-      FieldTypeChecker<RangeVar*>(node.search_index_name_rangevar),
-      FieldTypeChecker<RangeVar*>(node.table_name),
-      FieldTypeChecker<List*>(node.token_columns),
-      FieldTypeChecker<List*>(node.storing),
-      FieldTypeChecker<List*>(node.partition),
-      FieldTypeChecker<List*>(node.order),
-      FieldTypeChecker<Node*>(node.null_filters),
-      FieldTypeChecker<InterleaveSpec*>(node.interleave),
-      FieldTypeChecker<List*>(node.options));
+  AssertPGNodeConsistsOf(node, FieldTypeChecker<char*>(node.search_index_name),
+                         FieldTypeChecker<RangeVar*>(node.table_name),
+                         FieldTypeChecker<List*>(node.token_columns),
+                         FieldTypeChecker<List*>(node.storing),
+                         FieldTypeChecker<List*>(node.partition),
+                         FieldTypeChecker<List*>(node.order),
+                         FieldTypeChecker<Node*>(node.null_filters),
+                         FieldTypeChecker<InterleaveSpec*>(node.interleave),
+                         FieldTypeChecker<List*>(node.options));
 
   // `search_index_name` defines the name of the index.
   if (node.search_index_name == nullptr) {

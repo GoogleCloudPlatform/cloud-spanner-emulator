@@ -89,11 +89,12 @@ absl::StatusOr<ValueList> TransactionReadOnlyStore::ReadCommitted(
 
 absl::StatusOr<std::unique_ptr<StorageIterator>> TransactionReadOnlyStore::Read(
     const Table* table, const KeyRange& key_range,
-    absl::Span<const Column* const> columns) const {
+    absl::Span<const Column* const> columns,
+    bool allow_pending_commit_timestamps_in_read) const {
   std::unique_ptr<StorageIterator> itr;
-  ZETASQL_RETURN_IF_ERROR(read_only_store_->Read(
-      table, key_range, columns, &itr,
-      /*allow_pending_commit_timestamps_in_read=*/false));
+  ZETASQL_RETURN_IF_ERROR(
+      read_only_store_->Read(table, key_range, columns, &itr,
+                             allow_pending_commit_timestamps_in_read));
   return itr;
 }
 

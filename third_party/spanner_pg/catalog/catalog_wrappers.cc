@@ -61,11 +61,6 @@ namespace postgres_translator {
 // customers via the desired error code. If the message is not cloud safe,
 // use ERRCODE_INTERNAL_ERROR so that the actual error is logged but a generic
 // internal error is returned to the customer.
-//
-// TODO: Employ a better error-conversion strategy here.
-// Note that desired_error_code should not be ERRCODE_FEATURE_NOT_SUPPORTED
-// because those get turned into Http501 errors and we don't want that.
-// TODO: Return the right error code here.
 void ereport_helper(const absl::Status& status, int desired_error_code,
                     const std::string& error_message) {
   // Define the ERROR symbol locally as it is required by PostgreSQL's macro.
@@ -667,7 +662,13 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromTVF(
 //
 // This is a complement to GetProcsByNameFromBootstrapCatalog.
 static absl::Status GetProcsByNameFromUserCatalog(
-    const char* name, const FormData_pg_proc*** outlist, size_t* outcount) {
+    const char* schema_name, const char* func_name,
+    const FormData_pg_proc*** outlist, size_t* outcount) {
+  std::vector<std::string> name_path;
+  if (schema_name != nullptr) {
+    name_path.push_back(schema_name);
+  }
+  name_path.push_back(func_name);
   // Initialize outargs for early return.
   *outlist = nullptr;
   *outcount = 0;
@@ -681,13 +682,13 @@ static absl::Status GetProcsByNameFromUserCatalog(
   // For now, only look in the top-level catalog and only for TVFs.
   // TODO: Add support for nested catalogs.
   const zetasql::TableValuedFunction* tvf;
-  absl::Status status = catalog->FindTableValuedFunction({name}, &tvf);
+  absl::Status status = catalog->FindTableValuedFunction(name_path, &tvf);
   // NotFound is fine, just swallow it. Any other error is unexpected.
   if (!absl::IsNotFound(status)) {
     if (!status.ok()) {
       return status;
     }
-    if (tvf->Name() == name) {
+    if (tvf->Name() == func_name) {
       ZETASQL_ASSIGN_OR_RETURN(std::vector<const FormData_pg_proc*> new_procs,
                        BuildPgProcsFromTVF(tvf, adapter));
       found_procs.insert(found_procs.end(), new_procs.begin(), new_procs.end());
@@ -1203,7 +1204,7 @@ extern "C" void GetProcsByName(const char* name,
   size_t udf_count;
   const FormData_pg_proc** udf_procs;
   absl::Status udf_status = postgres_translator::GetProcsByNameFromUserCatalog(
-      name, &udf_procs, &udf_count);
+      nullptr, name, &udf_procs, &udf_count);
   if (!udf_status.ok()) {
     *outcount = 0;
     *outlist = nullptr;
@@ -1220,6 +1221,64 @@ extern "C" void GetProcsByName(const char* name,
       palloc(*outcount * sizeof **outlist));
   memcpy(*outlist, bootstrap_procs, bootstrap_count * sizeof *bootstrap_procs);
   memcpy(*outlist + bootstrap_count, udf_procs, udf_count * sizeof udf_procs);
+}
+
+extern "C" void GetProcsBySchemaAndFuncNames(const char* schema_name,
+                                             const char* func_name,
+                                             const FormData_pg_proc*** outlist,
+                                             size_t* outcount) {
+  // Skip the user catalog if the schema name is a bootstrap catalog namespace.
+  if (!schema_name ||
+      !OidIsValid(GetNamespaceByNameFromBootstrapCatalog(schema_name))) {
+    absl::Status udf_status =
+        postgres_translator::GetProcsByNameFromUserCatalog(
+            schema_name, func_name, outlist, outcount);
+    if (!udf_status.ok()) {
+      *outcount = 0;
+      *outlist = nullptr;
+    }
+    // Only look in the bootstrap catalog if there weren't any UDFs found.
+    // We intentionally do not merge the results from the user catalog and the
+    // bootstrap catalog.
+    if (*outcount > 0) {
+      return;
+    }
+  }
+
+  Oid namespaceId =
+      GetNamespaceByNameFromBootstrapCatalog(schema_name ?: "pg_catalog");
+  std::string schema_debug_substring =
+      schema_name ? absl::StrCat(" in schema '", schema_name, "' ") : "";
+  if (!OidIsValid(namespaceId)) {
+    ZETASQL_VLOG(4) << "Function '" << func_name << "'" << schema_debug_substring
+            << " not found in user catalog and specifies schema unknown "
+               "to bootstrap catalog";
+    return;
+  }
+
+  size_t bootstrap_count;
+  const FormData_pg_proc* const* bootstrap_procs;
+  GetProcsByNameFromBootstrapCatalog(func_name, &bootstrap_procs,
+                                     &bootstrap_count);
+  // TODO: Migrate filtering to GetProcsByNameFromBootstrapCatalog
+  // once GetProcsByName is deleted.
+  std::vector<const FormData_pg_proc*> matched_procs;
+  for (int i = 0; i < bootstrap_count; ++i) {
+    const FormData_pg_proc* proc = bootstrap_procs[i];
+    // weed out candidates based on the namespaceId
+    if (proc->pronamespace == namespaceId) {
+      matched_procs.push_back(proc);
+    }
+  }
+  if (!matched_procs.empty()) {
+    *outcount = matched_procs.size();
+    size_t outsize = sizeof(FormData_pg_proc*) * matched_procs.size();
+    *outlist = reinterpret_cast<const FormData_pg_proc**>(palloc(outsize));
+    memcpy(*outlist, matched_procs.data(), outsize);
+    return;
+  }
+  ZETASQL_VLOG(4) << "Function '" << func_name << "'" << schema_debug_substring
+          << " not found in user or bootstrap catalog";
 }
 
 // This wrapper just pulls catalog adapter from the thread-local, maybe converts
@@ -1317,4 +1376,23 @@ extern "C" int GetFunctionArgInfo(Oid proc_oid, Oid **p_argtypes,
   *p_argnames = NULL;
   *p_argmodes = NULL;
   return 0;
+}
+
+// TODO: Remove this wrapper
+extern "C" Oid GetNamespaceForFuncname(const char* unqualified_namespace_name) {
+  return GetNamespaceByNameFromBootstrapCatalog(unqualified_namespace_name);
+}
+
+// TODO: Remove this wrapper
+extern "C" void GetProcsCandidates(const char* schema_name,
+                                   const char* func_name,
+                                   const FormData_pg_proc*** outlist,
+                                   size_t* outcount) {
+  GetProcsByName(func_name, outlist, outcount);
+}
+
+// TODO: Remove this wrapper
+extern "C" bool IsInNamespace(const FormData_pg_proc* procform,
+                              Oid namespace_oid) {
+  return procform->pronamespace == namespace_oid;
 }

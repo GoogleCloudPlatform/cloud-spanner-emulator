@@ -1101,6 +1101,52 @@ TEST_F(CatalogWrappersTest, LooksUpUdfProcByName) {
   EXPECT_EQ(proc->prorettype, JSONBOID);
 }
 
+TEST_F(CatalogWrappersTest, LooksUpUdfProcBySchemaAndFuncNames) {
+  zetasql::AnalyzerOptions analyzer_options =
+      GetSpangresTestAnalyzerOptions();
+  std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
+      GetSpangresTestCatalogAdapterHolder(analyzer_options);
+
+  // `pg_catalog` namespace
+  {
+    const std::string kSchemaName = "pg_catalog";
+    const std::string kUdfName = "now";
+    const FormData_pg_proc** proc_list;
+    size_t proc_count;
+    GetProcsBySchemaAndFuncNames(kSchemaName.c_str(), kUdfName.c_str(),
+                                 &proc_list, &proc_count);
+
+    EXPECT_EQ(proc_count, 1);
+    if (proc_count > 0) {
+      const FormData_pg_proc* proc = proc_list[0];
+      EXPECT_STREQ(NameStr(proc->proname), kUdfName.c_str());
+      EXPECT_NE(proc->oid, InvalidOid);
+      EXPECT_NE(proc->pronamespace, InvalidOid);
+    }
+  }
+  // `spanner` namespace
+  {
+    const std::string kSchemaName = "spanner";
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        const Oid namespace_id,
+        PgBootstrapCatalog::Default()->GetNamespaceOid(kSchemaName));
+
+    const std::string kUdfName = "bool_array";
+    const FormData_pg_proc** proc_list;
+    size_t proc_count;
+    GetProcsBySchemaAndFuncNames(kSchemaName.c_str(), kUdfName.c_str(),
+                                 &proc_list, &proc_count);
+
+    EXPECT_EQ(proc_count, 1);
+    if (proc_count > 0) {
+      const FormData_pg_proc* proc = proc_list[0];
+      EXPECT_STREQ(NameStr(proc->proname), kUdfName.c_str());
+      EXPECT_NE(proc->oid, InvalidOid);
+      EXPECT_EQ(proc->pronamespace, namespace_id);
+    }
+  }
+}
+
 // Verify we can look up (by oid) a UDF and get a reasonable-looking proc.
 TEST_F(CatalogWrappersTest, LooksUpUdfProcByOid) {
   zetasql::AnalyzerOptions analyzer_options =
