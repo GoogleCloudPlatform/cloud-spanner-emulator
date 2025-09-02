@@ -260,6 +260,7 @@ message ColumnDefinition {
   }
 
   optional IdentityColumnDefinition identity_column = 17;
+
 }
 
 // Used for CREATE TABLE and CREATE INDEX

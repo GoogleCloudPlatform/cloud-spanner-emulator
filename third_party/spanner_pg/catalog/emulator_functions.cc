@@ -2216,11 +2216,9 @@ absl::StatusOr<zetasql::Value> EvalJsonbDelete(
       std::string del_string = args[1].string_value();
       for (int i = 0; i < jsonb_value.GetArraySize(); ++i) {
         if (jsonb_value.GetArrayElementIfExists(i)->IsString()) {
-          std::string serialized_delete_string =
-              SerializeJsonbString(del_string);
           absl::string_view element_string =
-              jsonb_value.GetArrayElementIfExists(i)->GetSerializedString();
-          if (element_string == serialized_delete_string) {
+              jsonb_value.GetArrayElementIfExists(i)->GetString();
+          if (element_string == del_string) {
             jsonb_value.RemoveArrayElement(i);
             --i;
           }
@@ -4574,6 +4572,7 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   // JSONB extraction functions.
   functions.push_back(JsonbArrayExtractionFunction<int64_t>(catalog_name));
   functions.push_back(JsonbFloatArrayExtractionFunction<double>(catalog_name));
+  functions.push_back(JsonbFloatArrayExtractionFunction<float>(catalog_name));
   functions.push_back(JsonbArrayExtractionFunction<bool>(catalog_name));
   functions.push_back(JsonbArrayExtractionFunction<std::string>(catalog_name));
 
@@ -4600,7 +4599,7 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   auto array_all_less_equal =
       ArrayAllFunction(catalog_name, "<=", "pg.array_all_less_equal");
   functions.push_back(std::move(array_all_less_equal));
-  // `<> all` is intentionally ommitted because it is equivalent to `NOT IN`
+  // `<> all` is intentionally omitted because it is equivalent to `NOT IN`
   // and the transformer handles it as such.
   auto array_slice_function = ArraySliceFunction(catalog_name);
   functions.push_back(std::move(array_slice_function));

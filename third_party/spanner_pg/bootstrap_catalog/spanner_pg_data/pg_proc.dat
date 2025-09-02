@@ -330,3 +330,31 @@
   prosrc => 'farm_fingerprint' },
 
 ]
+
+#############################
+# COMPRESSION FUNCTIONS
+#############################
+
+{ oid => '50068', proname => 'zstd_compress', pronamespace => 'spanner',
+  prorettype => 'bytea', proargtypes => 'bytea int8',
+  proargnames => '{,level}',
+  prosrc => 'zstd_compress' },
+
+{ oid => '50069', proname => 'zstd_compress', pronamespace => 'spanner',
+  prorettype => 'bytea', proargtypes => 'text int8',
+  proargnames => '{,level}',
+  prosrc => 'zstd_compress' },
+
+{ oid => '50070', proname => 'zstd_decompress_to_bytes',
+  pronamespace => 'spanner',
+  prorettype => 'bytea', proargtypes => 'bytea int8',
+  proargnames => '{,size_limit}',
+  prosrc => 'zstd_decompress_to_bytes' },
+
+{ oid => '50071', proname => 'zstd_decompress_to_string',
+  pronamespace => 'spanner',
+  prorettype => 'text', proargtypes => 'bytea int8',
+  proargnames => '{,size_limit}',
+  prosrc => 'zstd_decompress_to_string' },
+
+]

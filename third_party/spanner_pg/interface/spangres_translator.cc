@@ -232,6 +232,53 @@ SpangresTranslator::TranslateQuery(interfaces::TranslateQueryParams params) {
       std::move(parser_output), params.TransferCommonParams()));
 }
 
+// Update the query if it's a simple scenario that isn't supported by the
+// current implementation but can be rewritten to a supported form.
+// Specifically this handles the case where there is a single target SRF in a
+// SELECT statement without any FROM or JOIN clause.
+// E.g. `SELECT generate_series(1, 10);`
+void RewriteSimpleSrfInSelect(Query* pg_query) {
+  pg_query->hasTargetSRFs = false;
+  TargetEntry* target_entry = internal::PostgresCastNode(
+      TargetEntry, list_head(pg_query->targetList)->ptr_value);
+  FuncExpr* func_expr =
+      internal::PostgresCastNode(FuncExpr, target_entry->expr);
+  RangeTblEntry* rte = makeNode(RangeTblEntry);
+  // Set up the RTE for the SRF
+  pg_query->rtable = list_make1(rte);
+  pg_query->hasTargetSRFs = false;
+  // Set up the alias for the RTE
+  rte->eref = makeNode(Alias);
+  // To simplify, we'll always use `$array` as the alias.
+  rte->eref->aliasname = makeString(pstrdup("$array"))->sval;
+  rte->eref->colnames =
+      lappend(rte->eref->colnames, makeString(pstrdup(target_entry->resname)));
+  rte->alias = rte->eref;
+  rte->rtekind = RTE_FUNCTION;
+  rte->inFromCl = true;  // Defined in the FROM clause
+  // The FuncExpr is now the only entry in the rtable
+  RangeTblFunction* rt_func = makeNode(RangeTblFunction);
+  rt_func->funcexpr = reinterpret_cast<Node*>(func_expr);
+  rt_func->funccolcount = 1;  // 1 output column
+  rte->functions = list_make1(rt_func);
+  // With the SRF in the FROM clause, the FromExpr needs to be updated to
+  // reference the RTE.
+  FromExpr* from_expr = pg_query->jointree;
+  RangeTblRef* rt_ref = makeNode(RangeTblRef);
+  rt_ref->rtindex = 1;
+  from_expr->fromlist = list_make1(rt_ref);
+  // Update the target entry to be a var referencing the RTE
+  Var* var = makeNode(Var);
+  var->varno = 1;     // 1st and only relation in the RangeTblEntry
+  var->varattno = 1;  // 1st and only column in the relation
+  var->vartype = func_expr->funcresulttype;
+  var->vartypmod = -1;   // No type-specific modifier needed
+  var->varnosyn = 1;     // Syntactic version of varno
+  var->varattnosyn = 1;  // Syntactic version of varattno
+  var->location = func_expr->location;
+  target_entry->expr = reinterpret_cast<Expr*>(var);
+}
+
 // TODO: Refactor code to remove the two function parameters.
 absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
 SpangresTranslator::TranslateParsedTree(
@@ -337,6 +384,14 @@ SpangresTranslator::TranslateParsedTree(
 
   if (query_deparser_callback) {
     ZETASQL_RETURN_IF_ERROR(query_deparser_callback(pg_query));
+  }
+
+  // Perform a rewrite if there is a single target SRF and no FROM or JOIN
+  // clause.
+  if (pg_query->hasTargetSRFs && list_length(pg_query->targetList) == 1 &&
+      pg_query->rtable == nullptr &&
+      list_length(pg_query->jointree->fromlist) == 0) {
+    RewriteSimpleSrfInSelect(pg_query);
   }
 
   bool is_create_function_stmt = IsA(raw_stmt->stmt, CreateFunctionStmt);

@@ -52,12 +52,12 @@ class ReadApiTest : public test::ServerTest {
     ZETASQL_ASSERT_OK(CreateTestInstance());
     ZETASQL_ASSERT_OK(CreateTestDatabase());
     ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
-                         CreateTestSession(/*multiplexed=*/false));
+                         CreateTestSession(/*multiplexed=*/true));
     ZETASQL_ASSERT_OK(PopulateTestDatabase());
   }
 
   absl::Status PopulateTestDatabase() {
-    spanner_api::CommitRequest commit_request = PARSE_TEXT_PROTO(R"(
+    spanner_api::CommitRequest commit_request = PARSE_TEXT_PROTO(R"pb(
       single_use_transaction { read_write {} }
       mutations {
         insert {
@@ -78,7 +78,7 @@ class ReadApiTest : public test::ServerTest {
           }
         }
       }
-    )");
+    )pb");
     *commit_request.mutable_session() = test_session_uri_;
 
     spanner_api::CommitResponse commit_response;
@@ -91,14 +91,14 @@ class ReadApiTest : public test::ServerTest {
 TEST_F(ReadApiTest, CannotReadBeyondVersionGCLimit) {
   // Cloud Spanner does not allow read only transactions with a staleness > 1h.
   spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(
-      R"(
+      R"pb(
         transaction {
           single_use { read_only { exact_staleness { seconds: 3601 } } }
         }
         table: "test_table"
         columns: "int64_col"
         key_set { keys { values { string_value: "1" } } }
-      )");
+      )pb");
   read_request.set_session(test_session_uri_);
 
   spanner_api::ResultSet read_response;
@@ -108,9 +108,9 @@ TEST_F(ReadApiTest, CannotReadBeyondVersionGCLimit) {
 
 TEST_F(ReadApiTest, CanReadUsingAnAlreadyStartedTransaction) {
   // Begin a new read only transaction.
-  spanner_api::BeginTransactionRequest txn_request = PARSE_TEXT_PROTO(R"(
+  spanner_api::BeginTransactionRequest txn_request = PARSE_TEXT_PROTO(R"pb(
     options { read_only {} }
-  )");
+  )pb");
   txn_request.set_session(test_session_uri_);
 
   spanner_api::Transaction txn_response;
@@ -120,7 +120,7 @@ TEST_F(ReadApiTest, CanReadUsingAnAlreadyStartedTransaction) {
   spanner_api::TransactionSelector selector;
   selector.set_id(txn_response.id());
 
-  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"(
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"pb(
     table: "test_table"
     columns: "int64_col"
     columns: "string_col"
@@ -128,7 +128,7 @@ TEST_F(ReadApiTest, CanReadUsingAnAlreadyStartedTransaction) {
       keys { values { string_value: "1" } }
       keys { values { string_value: "2" } }
     }
-  )");
+  )pb");
   read_request.set_session(test_session_uri_);
   *read_request.mutable_transaction() = selector;
 
@@ -136,57 +136,139 @@ TEST_F(ReadApiTest, CanReadUsingAnAlreadyStartedTransaction) {
   spanner_api::ResultSet read_response;
   ZETASQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_THAT(read_response, test::EqualsProto(
-                                 R"(metadata {
-                                      row_type {
-                                        fields {
-                                          name: "int64_col"
-                                          type { code: INT64 }
-                                        }
-                                        fields {
-                                          name: "string_col"
-                                          type { code: STRING }
+                                 R"pb(metadata {
+                                        row_type {
+                                          fields {
+                                            name: "int64_col"
+                                            type { code: INT64 }
+                                          }
+                                          fields {
+                                            name: "string_col"
+                                            type { code: STRING }
+                                          }
                                         }
                                       }
-                                    }
-                                    rows {
-                                      values { string_value: "1" }
-                                      values { string_value: "row_1" }
-                                    }
-                                    rows {
-                                      values { string_value: "2" }
-                                      values { string_value: "row_2" }
-                                    })"));
+                                      rows {
+                                        values { string_value: "1" }
+                                        values { string_value: "row_1" }
+                                      }
+                                      rows {
+                                        values { string_value: "2" }
+                                        values { string_value: "row_2" }
+                                      })pb"));
+  ASSERT_FALSE(read_response.has_precommit_token());
 
   // StreamingRead
   std::vector<spanner_api::PartialResultSet> streaming_read_response;
   ZETASQL_EXPECT_OK(StreamingRead(read_request, &streaming_read_response));
   EXPECT_THAT(streaming_read_response,
               testing::ElementsAre(test::EqualsProto(
-                  R"(metadata {
-                       row_type {
-                         fields {
-                           name: "int64_col"
-                           type { code: INT64 }
-                         }
-                         fields {
-                           name: "string_col"
-                           type { code: STRING }
+                  R"pb(metadata {
+                         row_type {
+                           fields {
+                             name: "int64_col"
+                             type { code: INT64 }
+                           }
+                           fields {
+                             name: "string_col"
+                             type { code: STRING }
+                           }
                          }
                        }
-                     }
-                     values { string_value: "1" }
-                     values { string_value: "row_1" }
-                     values { string_value: "2" }
-                     values { string_value: "row_2" }
-                     chunked_value: false
-                  )")));
+                       values { string_value: "1" }
+                       values { string_value: "row_1" }
+                       values { string_value: "2" }
+                       values { string_value: "row_2" }
+                       chunked_value: false
+                  )pb")));
+  ASSERT_FALSE(streaming_read_response.front().has_precommit_token());
+}
+
+TEST_F(ReadApiTest, ReadWriteTransactionReturnsPrecommitToken) {
+  // Begin a new read/write transaction.
+  spanner_api::BeginTransactionRequest txn_request = PARSE_TEXT_PROTO(R"pb(
+    options { read_write {} }
+  )pb");
+  txn_request.set_session(test_session_uri_);
+
+  spanner_api::Transaction txn_response;
+  ZETASQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
+
+  // Perform read using the transaction that was started above.
+  spanner_api::TransactionSelector selector;
+  selector.set_id(txn_response.id());
+
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"pb(
+    table: "test_table"
+    columns: "int64_col"
+    columns: "string_col"
+    key_set {
+      keys { values { string_value: "1" } }
+      keys { values { string_value: "2" } }
+    }
+  )pb");
+  read_request.set_session(test_session_uri_);
+  *read_request.mutable_transaction() = selector;
+
+  // Read.
+  spanner_api::ResultSet read_response;
+  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  EXPECT_THAT(read_response, test::EqualsProto(
+                                 R"pb(metadata {
+                                        row_type {
+                                          fields {
+                                            name: "int64_col"
+                                            type { code: INT64 }
+                                          }
+                                          fields {
+                                            name: "string_col"
+                                            type { code: STRING }
+                                          }
+                                        }
+                                      }
+                                      precommit_token {}
+                                      rows {
+                                        values { string_value: "1" }
+                                        values { string_value: "row_1" }
+                                      }
+                                      rows {
+                                        values { string_value: "2" }
+                                        values { string_value: "row_2" }
+                                      })pb"));
+  ASSERT_TRUE(read_response.has_precommit_token());
+
+  // StreamingRead
+  std::vector<spanner_api::PartialResultSet> streaming_read_response;
+  ZETASQL_EXPECT_OK(StreamingRead(read_request, &streaming_read_response));
+  EXPECT_THAT(streaming_read_response,
+              testing::ElementsAre(test::EqualsProto(
+                  R"pb(metadata {
+                         row_type {
+                           fields {
+                             name: "int64_col"
+                             type { code: INT64 }
+                           }
+                           fields {
+                             name: "string_col"
+                             type { code: STRING }
+                           }
+                         }
+                       }
+                       precommit_token {}
+                       values { string_value: "1" }
+                       values { string_value: "row_1" }
+                       values { string_value: "2" }
+                       values { string_value: "row_2" }
+                       chunked_value: false
+                  )pb")));
+  ASSERT_TRUE(streaming_read_response.front().has_precommit_token());
 }
 
 TEST_F(ReadApiTest, CanPerformStrongReadUsingSingleUseTransaction) {
   // Perform a strong read using a read only single use transaction which will
   // be created on the fly on the server.
   // Read using a close-open range, only keys 1 and 2 will be read.
-  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"(
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"pb(
     transaction { single_use { read_only { strong: true } } }
     table: "test_table"
     columns: "int64_col"
@@ -197,39 +279,39 @@ TEST_F(ReadApiTest, CanPerformStrongReadUsingSingleUseTransaction) {
         end_open { values { string_value: "3" } }
       }
     }
-  )");
+  )pb");
   read_request.set_session(test_session_uri_);
 
   spanner_api::ResultSet read_response;
   ZETASQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_THAT(read_response, test::EqualsProto(
-                                 R"(metadata {
-                                      row_type {
-                                        fields {
-                                          name: "int64_col"
-                                          type { code: INT64 }
-                                        }
-                                        fields {
-                                          name: "string_col"
-                                          type { code: STRING }
+                                 R"pb(metadata {
+                                        row_type {
+                                          fields {
+                                            name: "int64_col"
+                                            type { code: INT64 }
+                                          }
+                                          fields {
+                                            name: "string_col"
+                                            type { code: STRING }
+                                          }
                                         }
                                       }
-                                    }
-                                    rows {
-                                      values { string_value: "1" }
-                                      values { string_value: "row_1" }
-                                    }
-                                    rows {
-                                      values { string_value: "2" }
-                                      values { string_value: "row_2" }
-                                    })"));
+                                      rows {
+                                        values { string_value: "1" }
+                                        values { string_value: "row_1" }
+                                      }
+                                      rows {
+                                        values { string_value: "2" }
+                                        values { string_value: "row_2" }
+                                      })pb"));
 }
 
 TEST_F(ReadApiTest, CanPerformDefaultStrongReadUsingTemporaryTransaction) {
   // Perform a strong read using a read only single use transaction when
   // transaction selector is not set.
   // Read using a open-open range, only key 2 will be read.
-  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"(
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"pb(
     transaction {}
     table: "test_table"
     columns: "int64_col"
@@ -240,28 +322,28 @@ TEST_F(ReadApiTest, CanPerformDefaultStrongReadUsingTemporaryTransaction) {
         end_open { values { string_value: "3" } }
       }
     }
-  )");
+  )pb");
   read_request.set_session(test_session_uri_);
 
   spanner_api::ResultSet read_response;
   ZETASQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_THAT(read_response, test::EqualsProto(
-                                 R"(metadata {
-                                      row_type {
-                                        fields {
-                                          name: "int64_col"
-                                          type { code: INT64 }
-                                        }
-                                        fields {
-                                          name: "string_col"
-                                          type { code: STRING }
+                                 R"pb(metadata {
+                                        row_type {
+                                          fields {
+                                            name: "int64_col"
+                                            type { code: INT64 }
+                                          }
+                                          fields {
+                                            name: "string_col"
+                                            type { code: STRING }
+                                          }
                                         }
                                       }
-                                    }
-                                    rows {
-                                      values { string_value: "2" }
-                                      values { string_value: "row_2" }
-                                    })"));
+                                      rows {
+                                        values { string_value: "2" }
+                                        values { string_value: "row_2" }
+                                      })pb"));
 }
 
 TEST_F(ReadApiTest, DirectedReadsWithROTxnSucceeds) {
@@ -337,7 +419,7 @@ TEST_F(ReadApiTest, CanBeginNewReadWriteTransactionAndPerformRead) {
   // also be used to perform the read. The transaction returned may be re-used
   // for further read and/or writes until it's aborted or completed.
   // Read using an open-open range, only key 2 will be read.
-  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"(
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"pb(
     transaction { begin { read_write {} } }
     table: "test_table"
     columns: "int64_col"
@@ -348,7 +430,7 @@ TEST_F(ReadApiTest, CanBeginNewReadWriteTransactionAndPerformRead) {
         end_open { values { string_value: "3" } }
       }
     }
-  )");
+  )pb");
   read_request.set_session(test_session_uri_);
 
   spanner_api::ResultSet read_response;
@@ -367,6 +449,7 @@ TEST_F(ReadApiTest, CanBeginNewReadWriteTransactionAndPerformRead) {
                                         }
                                         transaction { id: "$0" }
                                       }
+                                      precommit_token {}
                                       rows {
                                         values { string_value: "2" }
                                         values { string_value: "row_2" }
@@ -376,13 +459,13 @@ TEST_F(ReadApiTest, CanBeginNewReadWriteTransactionAndPerformRead) {
 
 TEST_F(ReadApiTest, CannotReadUsingPartitionedDMLTransaction) {
   // Partitioned DML transactions are not supported.
-  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"(
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"pb(
     transaction { begin { partitioned_dml {} } }
     table: "test_table"
     columns: "int64_col"
     columns: "string_col"
     key_set { all: true }
-  )");
+  )pb");
   read_request.set_session(test_session_uri_);
 
   spanner_api::ResultSet read_response;
@@ -391,9 +474,9 @@ TEST_F(ReadApiTest, CannotReadUsingPartitionedDMLTransaction) {
 }
 
 TEST_F(ReadApiTest, CannotReadUsingInvalidTransaction) {
-  spanner_api::BeginTransactionRequest txn_request = PARSE_TEXT_PROTO(R"(
+  spanner_api::BeginTransactionRequest txn_request = PARSE_TEXT_PROTO(R"pb(
     options { read_only {} }
-  )");
+  )pb");
   txn_request.set_session(test_session_uri_);
 
   spanner_api::Transaction txn_response;
@@ -404,12 +487,12 @@ TEST_F(ReadApiTest, CannotReadUsingInvalidTransaction) {
   // Transaction id+1 doesn't exist already on server and is thus invalid.
   selector.set_id(std::to_string(id + 1));
 
-  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"(
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"pb(
     table: "test_table"
     columns: "int64_col"
     columns: "string_col"
     key_set { all: true }
-  )");
+  )pb");
   read_request.set_session(test_session_uri_);
   *read_request.mutable_transaction() = selector;
 

@@ -1086,6 +1086,16 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       ZETASQL_RETURN_IF_ERROR(RenameTable(ddl_statement->rename_table()));
       break;
     }
+    case ddl::DDLStatement::kCreateRole:
+    case ddl::DDLStatement::kDropRole:
+    case ddl::DDLStatement::kGrantPrivilege:
+    case ddl::DDLStatement::kRevokePrivilege:
+    case ddl::DDLStatement::kGrantMembership:
+    case ddl::DDLStatement::kRevokeMembership: {
+      // At the moment we don't do anything with FGAC statements, we simply
+      // allow them to be parsed.
+      break;
+    }
     default:
       ZETASQL_RET_CHECK(false) << "Unsupported ddl statement: "
                        << ddl_statement->statement_case();

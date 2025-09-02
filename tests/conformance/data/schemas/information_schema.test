@@ -44,6 +44,13 @@ CREATE TABLE no_action_child (
   value  STRING(MAX)
 ) PRIMARY KEY (key1, key2 DESC, child_key ASC),
   INTERLEAVE IN PARENT base ON DELETE NO ACTION;
+CREATE TABLE npi_child (
+  key1 INT64,
+  key2 STRING(256),
+  child_key BOOL,
+  value  STRING(MAX)
+) PRIMARY KEY (key1, key2 DESC, child_key ASC),
+  INTERLEAVE IN base;
 CREATE UNIQUE NULL_FILTERED INDEX cascade_child_by_value
   ON cascade_child(key1, key2 DESC, value2 ASC)
   STORING(value1), INTERLEAVE IN base;
@@ -55,6 +62,7 @@ CREATE TABLE row_deletion_policy (
   key INT64,
   created_at TIMESTAMP,
 ) PRIMARY KEY (key), ROW DELETION POLICY (OLDER_THAN(created_at, INTERVAL 7 DAY));
+CREATE INDEX remote_index_int ON base(int_value), INTERLEAVE IN row_deletion_policy;
 CREATE VIEW base_view SQL SECURITY INVOKER AS SELECT base.key1 FROM base;
 CREATE CHANGE STREAM test_stream FOR base(bool_value,int_value),no_action_child OPTIONS ( retention_period = '36h' );
 CREATE CHANGE STREAM test_stream2 FOR base,no_action_child(),cascade_child(value1,value2,created_at) OPTIONS ( retention_period = '2d' , value_capture_type = 'OLD_AND_NEW_VALUES' );
@@ -173,6 +181,16 @@ CREATE TABLE no_action_child (
   -- version above.
   PRIMARY KEY (key1, key2, child_key)
 ) INTERLEAVE IN PARENT base ON DELETE NO ACTION;
+CREATE TABLE npi_child (
+  key1 bigint,
+  key2 varchar(256),
+  child_key bool,
+  value varchar,
+  -- PostgreSQL doesn't support creating an index backed by a primary key
+  -- that specifies an order so this primary key is different to the GSQL
+  -- version above.
+  PRIMARY KEY (key1, key2, child_key)
+) INTERLEAVE IN base;
 CREATE UNIQUE INDEX cascade_child_by_value
   -- Note that key2 can't have a DESC order because we can't define the
   -- ordering of the primary key in PG as stated above.
@@ -191,6 +209,7 @@ CREATE TABLE row_deletion_policy (
   created_at timestamptz,
   PRIMARY KEY (key)
 ) TTL INTERVAL '7 days' on created_at;
+CREATE INDEX remote_index_int ON base(int_value) INTERLEAVE IN row_deletion_policy;
 CREATE VIEW base_view SQL SECURITY INVOKER AS SELECT base.key1 FROM base;
 CREATE CHANGE STREAM test_stream FOR base(bool_value,int_value),no_action_child WITH ( retention_period = '36h' );
 CREATE CHANGE STREAM test_stream2 FOR base,no_action_child(),cascade_child(value1,value2,created_at) WITH ( retention_period = '2d' , value_capture_type = 'OLD_AND_NEW_VALUES' );

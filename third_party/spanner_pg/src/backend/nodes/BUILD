@@ -29,7 +29,7 @@
 # MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #------------------------------------------------------------------------------
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 
 
@@ -76,4 +76,17 @@ cc_library(
         "//third_party/spanner_pg/util:nodetag_to_string",
     ],
     alwayslink = 1,
+)
+
+cc_test(
+    name = "serializer_deserializer_test",
+    srcs = ["serializer_deserializer_test.cc"],
+    deps = [
+        "//third_party/spanner_pg/src/backend:backend_with_stub_shims",
+        "//third_party/spanner_pg/util:postgres",
+        "//third_party/spanner_pg/util:valid_memory_context_fixture",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
 )

@@ -2116,24 +2116,26 @@ TEST_P(InformationSchemaTest, DefaultTables) {
     filter = "t.table_catalog = '' and ";
     // clang-format off
     expected = std::vector<ValueRow>({
-      {"BASE TABLE", "base", Ns(), "COMMITTED", Ns(), Ns()},
-      {"VIEW", "base_view", Ns(), Ns(), Ns(), Ns()},
-      {"BASE TABLE", "cascade_child", "base", "COMMITTED", "CASCADE", Ns()}, // NOLINT
-      {"BASE TABLE", "edge_table", Ns(), "COMMITTED", Ns(), Ns()},  // NOLINT
-      {"BASE TABLE", "no_action_child", "base", "COMMITTED", "NO ACTION", Ns()},
-      {"BASE TABLE", "node_table", Ns(), "COMMITTED", Ns(), Ns()},  // NOLINT
-      {"BASE TABLE", "row_deletion_policy", Ns(), "COMMITTED", Ns(), expected_interval}, // NOLINT
+      {"BASE TABLE", "base", Ns(), "COMMITTED", Ns(), Ns(), Ns()},
+      {"VIEW", "base_view", Ns(), Ns(), Ns(), Ns(), Ns()},
+      {"BASE TABLE", "cascade_child", "base", "COMMITTED", "CASCADE", "IN PARENT", Ns()}, // NOLINT
+      {"BASE TABLE", "edge_table", Ns(), "COMMITTED", Ns(), Ns(), Ns()},  // NOLINT
+      {"BASE TABLE", "no_action_child", "base", "COMMITTED", "NO ACTION", "IN PARENT", Ns()},  // NOLINT
+      {"BASE TABLE", "node_table", Ns(), "COMMITTED", Ns(), Ns(), Ns()},  // NOLINT
+      {"BASE TABLE", "npi_child", "base", "COMMITTED", Ns(), "IN", Ns()},
+      {"BASE TABLE", "row_deletion_policy", Ns(), "COMMITTED", Ns(), Ns(), expected_interval}, // NOLINT
     });
     // clang-format on
   } else {
     std::string expected_interval = "INTERVAL '7 DAYS' ON created_at";
     // clang-format off
     expected = std::vector<ValueRow>({
-      {"BASE TABLE", "base", Ns(), "COMMITTED", Ns(), Ns()},
-      {"VIEW", "base_view", Ns(), Ns(), Ns(), Ns()},
-      {"BASE TABLE", "cascade_child", "base", "COMMITTED", "CASCADE", Ns()}, // NOLINT
-      {"BASE TABLE", "no_action_child", "base", "COMMITTED", "NO ACTION", Ns()},
-      {"BASE TABLE", "row_deletion_policy", Ns(), "COMMITTED", Ns(), expected_interval}, // NOLINT
+      {"BASE TABLE", "base", Ns(), "COMMITTED", Ns(), Ns(), Ns()},
+      {"VIEW", "base_view", Ns(), Ns(), Ns(), Ns(), Ns()},
+      {"BASE TABLE", "cascade_child", "base", "COMMITTED", "CASCADE", "IN PARENT", Ns()}, // NOLINT
+      {"BASE TABLE", "no_action_child", "base", "COMMITTED", "NO ACTION", "IN PARENT", Ns()}, // NOLINT
+      {"BASE TABLE", "npi_child", "base", "COMMITTED", Ns(), "IN", Ns()},
+      {"BASE TABLE", "row_deletion_policy", Ns(), "COMMITTED", Ns(), Ns(), expected_interval}, // NOLINT
     });
     // clang-format on
   }
@@ -2145,6 +2147,7 @@ TEST_P(InformationSchemaTest, DefaultTables) {
           t.parent_table_name,
           t.spanner_state,
           t.on_delete_action,
+          t.interleave_type,
           t.row_deletion_policy_expression
         from
           information_schema.tables AS t
@@ -2156,9 +2159,7 @@ TEST_P(InformationSchemaTest, DefaultTables) {
           t.table_schema,
           t.table_name
       )",
-      filter,
-      (GetParam() == POSTGRESQL ? "public" :
-       "")));
+      filter, (GetParam() == POSTGRESQL ? "public" : "")));
   LogResults(results);
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
@@ -2262,6 +2263,10 @@ TEST_P(InformationSchemaTest, GSQLDefaultColumns) {
     {"", "", "no_action_child", "key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "no_action_child", "child_key", 3, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "no_action_child", "value", 4, Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "npi_child", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "npi_child", "key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "npi_child", "child_key", 3, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "npi_child", "value", 4, Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "row_deletion_policy", "key", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "row_deletion_policy", "created_at", 2, Ns(), Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "edge_table", "FromId", 1, Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
@@ -2428,11 +2433,13 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
     auto expected = ExpectedRows(results, {
       {TableCatalogForDialect(), "public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "INDEX", "", "NO", "YES", "READ_WRITE", "YES"},  // NOLINT
       {TableCatalogForDialect(), "public", "base", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
+      {TableCatalogForDialect(), "public", "base", "remote_index_int", "INDEX", "row_deletion_policy", "NO", "NO", "READ_WRITE", "NO"},  // NOLINT
       {TableCatalogForDialect(), "public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", "YES", "NO", "READ_WRITE", "YES"},  // NOLINT
       {TableCatalogForDialect(), "public", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
       {TableCatalogForDialect(), "public", "cascade_child", "cascade_child_by_value", "INDEX", "base", "YES", "NO", "READ_WRITE", "NO"},  // NOLINT
       {TableCatalogForDialect(), "public", "no_action_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
       {TableCatalogForDialect(), "public", "no_action_child", "no_action_child_by_value", "INDEX", "", "NO", "NO", "READ_WRITE", "NO"},  // NOLINT
+      {TableCatalogForDialect(), "public", "npi_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
       {TableCatalogForDialect(), "public", "row_deletion_policy", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
     });
     // clang-format on
@@ -2444,11 +2451,13 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
     auto expected = ExpectedRows(results, {
         {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "INDEX", "", false, true, "READ_WRITE", true},  // NOLINT
         {"", "", "base", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+        {"", "", "base", "remote_index_int", "INDEX", "row_deletion_policy", false, false, "READ_WRITE", false},  // NOLINT
         {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", true, true, "READ_WRITE", true},  // NOLINT
         {"", "", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
         {"", "", "cascade_child", "cascade_child_by_value", "INDEX", "base", true, true, "READ_WRITE", false},  // NOLINT
         {"", "", "no_action_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
         {"", "", "no_action_child", "no_action_child_by_value", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
+        {"", "", "npi_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
         {"", "", "row_deletion_policy", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
         {"", "", "edge_table", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
         {"", "", "node_table", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
@@ -2543,6 +2552,7 @@ TEST_P(InformationSchemaTest, DefaultIndexColumns) {
       {TableCatalogForDialect(), "public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
       {TableCatalogForDialect(), "public", "base", "PRIMARY_KEY", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
       {TableCatalogForDialect(), "public", "base", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
+      {TableCatalogForDialect(), "public", "base", "remote_index_int", "int_value", 1, "ASC", "NO", "bigint"},  // NOLINT
       {TableCatalogForDialect(), "public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "child_key", 1, "ASC", "NO", "boolean"},  // NOLINT
       {TableCatalogForDialect(), "public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "value1", 2, "ASC NULLS FIRST", "NO", "character varying(256)"},  // NOLINT
       {TableCatalogForDialect(), "public", "cascade_child", "PRIMARY_KEY", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
@@ -2555,6 +2565,9 @@ TEST_P(InformationSchemaTest, DefaultIndexColumns) {
       {TableCatalogForDialect(), "public", "no_action_child", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
       {TableCatalogForDialect(), "public", "no_action_child", "PRIMARY_KEY", "child_key", 3, "ASC", "NO", "boolean"},  // NOLINT
       {TableCatalogForDialect(), "public", "no_action_child", "no_action_child_by_value", "value", 1, "ASC", "YES", "character varying"},  // NOLINT
+      {TableCatalogForDialect(), "public", "npi_child", "PRIMARY_KEY", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
+      {TableCatalogForDialect(), "public", "npi_child", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
+      {TableCatalogForDialect(), "public", "npi_child", "PRIMARY_KEY", "child_key", 3, "ASC", "NO", "boolean"},  // NOLINT
       {TableCatalogForDialect(), "public", "row_deletion_policy", "PRIMARY_KEY", "key", 1, "ASC", "NO", "bigint"},  // NOLINT
     });
     // clang-format on
@@ -2568,6 +2581,7 @@ TEST_P(InformationSchemaTest, DefaultIndexColumns) {
         {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "key2", 2, "DESC", "NO", "STRING(256)"},  // NOLINT
         {"", "", "base", "PRIMARY_KEY", "key1", 1, "ASC", "YES", "INT64"},  // NOLINT
         {"", "", "base", "PRIMARY_KEY", "key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
+        {"", "", "base", "remote_index_int", "int_value", 1, "ASC", "NO", "INT64"},  // NOLINT
         {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "child_key", 1, "ASC", "NO", "BOOL"},  // NOLINT
         {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "value1", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
         {"", "", "cascade_child", "PRIMARY_KEY", "key1", 1, "ASC", "YES", "INT64"},  // NOLINT
@@ -2581,6 +2595,9 @@ TEST_P(InformationSchemaTest, DefaultIndexColumns) {
         {"", "", "no_action_child", "PRIMARY_KEY", "key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
         {"", "", "no_action_child", "PRIMARY_KEY", "child_key", 3, "ASC", "YES", "BOOL"},  // NOLINT
         {"", "", "no_action_child", "no_action_child_by_value", "value", 1, "ASC", "YES", "STRING(MAX)"},  // NOLINT
+        {"", "", "npi_child", "PRIMARY_KEY", "key1", 1, "ASC", "YES", "INT64"},  // NOLINT
+        {"", "", "npi_child", "PRIMARY_KEY", "key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
+        {"", "", "npi_child", "PRIMARY_KEY", "child_key", 3, "ASC", "YES", "BOOL"},  // NOLINT
         {"", "", "row_deletion_policy", "PRIMARY_KEY", "key", 1, "ASC", "YES", "INT64"},  // NOLINT
         {"", "", "edge_table", "PRIMARY_KEY", "FromId", 1, "ASC", "NO", "INT64"},  // NOLINT
         {"", "", "edge_table", "PRIMARY_KEY", "ToId", 2, "ASC", "NO", "INT64"},  // NOLINT
@@ -2771,12 +2788,16 @@ TEST_P(InformationSchemaTest, DefaultTableConstraints) {
       {"public", "CK_IS_NOT_NULL_no_action_child_child_key", "public", "no_action_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"public", "CK_IS_NOT_NULL_no_action_child_key1", "public", "no_action_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"public", "CK_IS_NOT_NULL_no_action_child_key2", "public", "no_action_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"public", "CK_IS_NOT_NULL_npi_child_child_key", "public", "npi_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"public", "CK_IS_NOT_NULL_npi_child_key1", "public", "npi_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"public", "CK_IS_NOT_NULL_npi_child_key2", "public", "npi_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"public", "CK_IS_NOT_NULL_row_deletion_policy_key", "public", "row_deletion_policy", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"public", "CK_base_\\w{16}_1", "public", "base", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"public", "IDX_cascade_child_child_key_value1_U_\\w{16}", "public", "cascade_child", "UNIQUE", "NO", "NO", "YES"},  // NOLINT
       {"public", "PK_base", "public", "base", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"public", "PK_cascade_child", "public", "cascade_child", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"public", "PK_no_action_child", "public", "no_action_child", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+      {"public", "PK_npi_child", "public", "npi_child", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"public", "PK_row_deletion_policy", "public", "row_deletion_policy", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"public", "check_constraint_name", "public", "base", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"public", "fk_base_cascade_child", "public", "base", "FOREIGN KEY", "NO", "NO", "YES"},  // NOLINT
@@ -2803,6 +2824,8 @@ TEST_P(InformationSchemaTest, DefaultTableConstraints) {
              "NO", "NO", "YES"},  // NOLINT
             {"", "", "PK_no_action_child", "", "", "no_action_child",
              "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+            {"", "", "PK_npi_child", "", "", "npi_child", "PRIMARY KEY", "NO",
+             "NO", "YES"},  // NOLINT
             {"", "", "PK_row_deletion_policy", "", "", "row_deletion_policy",
              "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
             {"", "", "check_constraint_name", "", "", "base", "CHECK", "NO",
@@ -2909,6 +2932,7 @@ TEST_P(InformationSchemaTest, DefaultConstraintTableUsage) {
       {schema, "cascade_child", schema, "PK_cascade_child"},  // NOLINT
       {schema, "cascade_child", schema, "fk_base_cascade_child"},  // NOLINT
       {schema, "no_action_child", schema, "PK_no_action_child"},  // NOLINT
+      {schema, "npi_child", schema, "PK_npi_child"},  // NOLINT
       {schema, "row_deletion_policy", schema, "PK_row_deletion_policy"},  // NOLINT
     });
     // clang-format on
@@ -2926,6 +2950,7 @@ TEST_P(InformationSchemaTest, DefaultConstraintTableUsage) {
       {"", "", "cascade_child", "", "", "PK_cascade_child"},  // NOLINT
       {"", "", "cascade_child", "", "", "fk_base_cascade_child"},  // NOLINT
       {"", "", "no_action_child", "", "", "PK_no_action_child"},  // NOLINT
+      {"", "", "npi_child", "", "", "PK_npi_child"},  // NOLINT
       {"", "", "row_deletion_policy", "", "", "PK_row_deletion_policy"},  // NOLINT
       {"", "", "edge_table", "", "", "CK_IS_NOT_NULL_edge_table_FromId"},  // NOLINT
       {"", "", "edge_table", "", "", "CK_IS_NOT_NULL_edge_table_ToId"},  // NOLINT
@@ -3139,6 +3164,9 @@ TEST_P(InformationSchemaTest, DefaultKeyColumnUsage) {
       {schema, "PK_no_action_child", schema, "no_action_child", "key1", 1, Ni()},  // NOLINT
       {schema, "PK_no_action_child", schema, "no_action_child", "key2", 2, Ni()},  // NOLINT
       {schema, "PK_no_action_child", schema, "no_action_child", "child_key", 3, Ni()},  // NOLINT
+      {schema, "PK_npi_child", schema, "npi_child", "key1", 1, Ni()},  // NOLINT
+      {schema, "PK_npi_child", schema, "npi_child", "key2", 2, Ni()},  // NOLINT
+      {schema, "PK_npi_child", schema, "npi_child", "child_key", 3, Ni()},  // NOLINT
       {schema, "PK_row_deletion_policy", schema, "row_deletion_policy", "key", 1, Ni()},  // NOLINT
       {schema, "fk_base_cascade_child", schema, "base", "bool_value", 1, 1},  // NOLINT
       {schema, "fk_base_cascade_child", schema, "base", "key2", 2, 2},  // NOLINT
@@ -3158,6 +3186,9 @@ TEST_P(InformationSchemaTest, DefaultKeyColumnUsage) {
       {"", "", "PK_no_action_child", "", "", "no_action_child", "key1", 1, Ni()},  // NOLINT
       {"", "", "PK_no_action_child", "", "", "no_action_child", "key2", 2, Ni()},  // NOLINT
       {"", "", "PK_no_action_child", "", "", "no_action_child", "child_key", 3, Ni()},  // NOLINT
+      {"", "", "PK_npi_child", "", "", "npi_child", "key1", 1, Ni()},  // NOLINT
+      {"", "", "PK_npi_child", "", "", "npi_child", "key2", 2, Ni()},  // NOLINT
+      {"", "", "PK_npi_child", "", "", "npi_child", "child_key", 3, Ni()},  // NOLINT
       {"", "", "PK_row_deletion_policy", "", "", "row_deletion_policy", "key", 1, Ni()},  // NOLINT
       {"", "", "fk_base_cascade_child", "", "", "base", "bool_value", 1, 1},  // NOLINT
       {"", "", "fk_base_cascade_child", "", "", "base", "key2", 2, 2},  // NOLINT
@@ -3286,6 +3317,12 @@ TEST_P(InformationSchemaTest, DefaultConstraintColumnUsage) {
       {schema, "no_action_child", "key1", schema, "PK_no_action_child"},  // NOLINT
       {schema, "no_action_child", "key2", schema, "CK_IS_NOT_NULL_no_action_child_key2"},  // NOLINT
       {schema, "no_action_child", "key2", schema, "PK_no_action_child"},  // NOLINT
+      {schema, "npi_child", "child_key", schema, "CK_IS_NOT_NULL_npi_child_child_key"},  // NOLINT
+      {schema, "npi_child", "child_key", schema, "PK_npi_child"},  // NOLINT
+      {schema, "npi_child", "key1", schema, "CK_IS_NOT_NULL_npi_child_key1"},  // NOLINT
+      {schema, "npi_child", "key1", schema, "PK_npi_child"},  // NOLINT
+      {schema, "npi_child", "key2", schema, "CK_IS_NOT_NULL_npi_child_key2"},  // NOLINT
+      {schema, "npi_child", "key2", schema, "PK_npi_child"},  // NOLINT
       {schema, "row_deletion_policy", "key", schema, "CK_IS_NOT_NULL_row_deletion_policy_key"},  // NOLINT
       {schema, "row_deletion_policy", "key", schema, "PK_row_deletion_policy"},  // NOLINT
     });
@@ -3311,6 +3348,9 @@ TEST_P(InformationSchemaTest, DefaultConstraintColumnUsage) {
       {"", "", "no_action_child", "child_key", "", "", "PK_no_action_child"},  // NOLINT
       {"", "", "no_action_child", "key1", "", "", "PK_no_action_child"},  // NOLINT
       {"", "", "no_action_child", "key2", "", "", "PK_no_action_child"},  // NOLINT
+      {"", "", "npi_child", "child_key", "", "", "PK_npi_child"},  // NOLINT
+      {"", "", "npi_child", "key1", "", "", "PK_npi_child"},  // NOLINT
+      {"", "", "npi_child", "key2", "", "", "PK_npi_child"},  // NOLINT
       {"", "", "row_deletion_policy", "key", "", "", "PK_row_deletion_policy"},  // NOLINT
       {"", "", "edge_table", "FromId", "", "", "CK_IS_NOT_NULL_edge_table_FromId"},  // NOLINT
       {"", "", "edge_table", "FromId", "", "", "PK_edge_table"},  // NOLINT
@@ -3496,6 +3536,9 @@ TEST_P(InformationSchemaTest, DefaultCheckConstraints) {
       {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_no_action_child_child_key", "child_key IS NOT NULL", "COMMITTED"},  // NOLINT
       {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_no_action_child_key1", "key1 IS NOT NULL", "COMMITTED"},  // NOLINT
       {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_no_action_child_key2", "key2 IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_npi_child_child_key", "child_key IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_npi_child_key1", "key1 IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_npi_child_key2", "key2 IS NOT NULL", "COMMITTED"},  // NOLINT
       {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_row_deletion_policy_key", "key IS NOT NULL", "COMMITTED"},  // NOLINT
       {TableCatalogForDialect(), "public", "CK_base_\\w{16}_1", "(int_value > '0'::bigint)", "COMMITTED"},  // NOLINT
       {TableCatalogForDialect(), "public", "check_constraint_name", "(int_value > '0'::bigint)", "COMMITTED"},  // NOLINT

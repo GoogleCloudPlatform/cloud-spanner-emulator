@@ -6,4 +6,11 @@
   typinput => 'textin', typoutput => 'textout',
   typreceive => '-', typsend => '-',
   typalign => 'i', typstorage => 'p' },
+      { oid => '50072', array_type_oid => '50073',
+  descr => 'representation for MAP type in Spanner',
+  typname => 'map', typnamespace => 'spanner',
+  typlen => '-1', typbyval => 'f', typcategory => 'X',
+  typinput => 'textin', typoutput => 'textout',
+  typreceive => '-', typsend => '-',
+  typalign => 'c', typstorage => 'p' },
   ]

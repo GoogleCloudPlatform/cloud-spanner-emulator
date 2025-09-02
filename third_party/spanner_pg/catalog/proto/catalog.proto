@@ -55,7 +55,6 @@ message FunctionSignatureProto {
   repeated FunctionArgumentProto arguments = 2;
   uint32 oid = 3;
   repeated FunctionNamePathProto postgresql_name_paths = 4;
-  bool is_enabled_in_catalog = 5;
 }
 
 message FunctionProto {

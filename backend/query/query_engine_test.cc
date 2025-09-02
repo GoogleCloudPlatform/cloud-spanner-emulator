@@ -2530,6 +2530,7 @@ TEST_P(QueryEngineTest, JsonConverterFunctionsForGsql) {
       // Converter functions.
       {"int64", R"(SELECT INT64(JSON '10'))"},
       {"float64", R"(SELECT FLOAT64(JSON '10'))"},
+      {"float32", R"(SELECT FLOAT32(JSON '10'))"},
       {"bool", R"(SELECT BOOL(JSON 'true'))"},
       {"string", R"(SELECT STRING(JSON '"string_value"'))"},
       // JSON type functions.
@@ -2542,6 +2543,7 @@ TEST_P(QueryEngineTest, JsonConverterFunctionsForGsql) {
       // SAFE versions of these functions.
       {"safe.int64", R"(SELECT SAFE.INT64(JSON '"10"'))"},
       {"safe.float64", R"(SELECT SAFE.FLOAT64(JSON '"10"'))"},
+      {"safe.float32", R"(SELECT SAFE.FLOAT32(JSON '10'))"},
       {"safe.bool", R"(SELECT SAFE.BOOL(JSON '"TRUE"'))"},
       {"safe.string", R"(SELECT SAFE.STRING(JSON '1'))"},
       {"safe.json_type", R"(SELECT SAFE.JSON_TYPE(JSON '[10]'))"},
@@ -2552,13 +2554,45 @@ TEST_P(QueryEngineTest, JsonConverterFunctionsForGsql) {
           "safe.lax_string",
           R"(SELECT SAFE.LAX_STRING(JSON '1'))",
       },
+      // --- JSON_SET ---
+      {"JSON_SET: Insert New Key & Update Existing",
+       "SELECT JSON_SET(JSON '{\"a\": 1}', '$.b', 2, '$.a', 10)"},
+      {"JSON_SET: Nested Path Insert",
+       "SELECT JSON_SET(JSON '{\"a\": {}}', '$.a.b', \"test\")"},
+
+      // --- JSON_ARRAY_APPEND ---
+      {"APPEND: Single value to root array",
+       "SELECT JSON_ARRAY_APPEND(JSON '[1, 2]', '$', 3)"},
+      {"APPEND: Array elements individually to nested",
+       "SELECT JSON_ARRAY_APPEND(JSON '{\"a\": [1]}', '$.a', [2, 3])"},
+
+      // --- JSON_ARRAY_INSERT ---
+      {"INSERT: In middle of nested array",
+       "SELECT JSON_ARRAY_INSERT(JSON '{\"a\": [1, 3]}', '$.a[1]', 2)"},
+      {"INSERT: Out of bounds (pads null)",
+       "SELECT JSON_ARRAY_INSERT(JSON '[\"a\"]', '$[2]', \"x\")"},
+
+      // --- JSON_REMOVE ---
+      {"REMOVE: Key from nested object",
+       "SELECT JSON_REMOVE(JSON '{\"a\": {\"b\": 1, \"c\": 2}}', '$.a.c')"},
+      {"REMOVE: Element from array index",
+       "SELECT JSON_REMOVE(JSON '[1, 2, 3]', '$[1]')"},
+
+      // --- JSON_STRIP_NULLS ---
+      {"STRIP_NULLS: Nested objects/arrays and string 'null'",
+       "SELECT JSON_STRIP_NULLS(JSON '{\"a\": [1, null, {\"b\": null, \"c\": "
+       "3, \"d\": \"null\"}], \"e\": null, \"f\": {}}')"},
+      {"STRIP_NULLS: Removal leading to empty structures",
+       "SELECT JSON_STRIP_NULLS(JSON '{\"a\": {\"b\": null}, \"c\": [null, "
+       "null]}')"},
   };
 
   for (const auto& test_case : test_cases) {
-    ZETASQL_ASSERT_OK(query_engine().ExecuteSql(Query{test_case.function_call},
-                                        QueryContext{schema(), reader()}))
-        << test_case.name
-        << " failed with function call: " << test_case.function_call;
+    auto result = query_engine().ExecuteSql(Query{test_case.function_call},
+                                            QueryContext{schema(), reader()});
+    ZETASQL_EXPECT_OK(result) << test_case.name << " failed with function call "
+                      << test_case.function_call
+                      << " with status: " << result.status();
   }
 }
 

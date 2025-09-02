@@ -65,7 +65,8 @@ class TransactionReadOnlyStore : public ReadOnlyStore {
 
   absl::StatusOr<std::unique_ptr<StorageIterator>> Read(
       const Table* table, const KeyRange& key_range,
-      absl::Span<const Column* const> columns) const override;
+      absl::Span<const Column* const> columns,
+      bool allow_pending_commit_timestamps_in_read) const override;
 
  private:
   const TransactionStore* read_only_store_;

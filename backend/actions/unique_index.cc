@@ -41,10 +41,13 @@ absl::Status UniqueIndexVerifier::Verify(const ActionContext* ctx,
   // Prefix key from the index data table.
   Key index_key = op.key.Prefix(index_->key_columns().size());
 
-  // Find all entries for the the given index key.
+  // Find all entries for the the given index key. We allow reading pending
+  // commit timestamp columns here for consistency with actual Spanner which
+  // permits multiple inserts to the same unique index.
   ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<StorageIterator> itr,
-                   ctx->store()->Read(index_->index_data_table(),
-                                      KeyRange::Prefix(index_key), {}));
+                   ctx->store()->Read(
+                       index_->index_data_table(), KeyRange::Prefix(index_key),
+                       {}, /*allow_pending_commit_timestamps_in_read=*/true));
   if (!itr->Next()) {
     return error::Internal(
         absl::StrCat("Missing entry for index: ", index_->Name(),

@@ -292,29 +292,6 @@ cc_test(
     ],
 )
 
-cc_test(
-    name = "serializer_deserializer_test",
-    srcs = ["serializer_deserializer_test.cc"],
-    copts = [
-        # The ereport module reimplements PostgreSQL's ereport() in terms of
-        # C++ exceptions, on "lesser of two evils" grounds.
-        # See docstrings in `ereport.h` for details.
-        # This means that all of the shims (which may have exceptions pass through them)
-        # need to be compiled with -fexceptions or risk missing destructors (and causing
-        # TSAN OOMs).
-        "-fexceptions",
-    ],
-    deps = [
-        ":error_shim",
-        "//third_party/spanner_pg/src/backend:backend_with_stub_shims",
-        "//third_party/spanner_pg/util:postgres",
-        "//third_party/spanner_pg/util:valid_memory_context_fixture",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-    ],
-)
-
 cc_library(
     name = "timezone_helper",
     srcs = ["timezone_helper.cc"],

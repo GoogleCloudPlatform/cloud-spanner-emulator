@@ -285,8 +285,6 @@ TEST_F(JsonbValueTest, JsonbStringsAndNumbers) {
   EXPECT_THAT(jsonb.IsObject(), true);
   EXPECT_TRUE(jsonb.GetMemberIfExists("name").value().IsString());
   EXPECT_EQ(jsonb.GetMemberIfExists("name").value().GetString(), "Niels");
-  EXPECT_EQ(jsonb.GetMemberIfExists("name").value().GetSerializedString(),
-            "\"Niels\"");
 
   // Validate the numbers APIs.
   PgJsonbValue number = jsonb.GetMemberIfExists("answer")
@@ -714,12 +712,10 @@ TEST_F(JsonbValueTest, JsonbObjectWithSpecialCharactersInValues) {
       PgJsonbValue::Parse(R"({ "\n_0": "\t_0" , "\t_1":  "\n_1" })",
                           &tree_nodes));
   EXPECT_THAT(jsonb.IsObject(), true);
-  EXPECT_EQ(jsonb.GetMemberIfExists("\n_0").value().GetString(), R"(\t_0)");
-  EXPECT_EQ(jsonb.GetMemberIfExists("\n_0").value().GetSerializedString(),
-            R"("\t_0")");
-  EXPECT_EQ(jsonb.GetMemberIfExists("\t_1").value().GetString(), R"(\n_1)");
-  EXPECT_EQ(jsonb.GetMemberIfExists("\t_1").value().GetSerializedString(),
-            R"("\n_1")");
+  EXPECT_EQ(jsonb.GetMemberIfExists("\n_0").value().GetString(), "\t_0");
+  EXPECT_EQ(jsonb.GetMemberIfExists("\n_0").value().Serialize(), R"("\t_0")");
+  EXPECT_EQ(jsonb.GetMemberIfExists("\t_1").value().GetString(), "\n_1");
+  EXPECT_EQ(jsonb.GetMemberIfExists("\t_1").value().Serialize(), R"("\n_1")");
 }
 
 TEST_F(JsonbValueTest, JsonbArrayWithSpecialCharacters) {
@@ -729,8 +725,8 @@ TEST_F(JsonbValueTest, JsonbArrayWithSpecialCharacters) {
       PgJsonbValue::Parse(R"([ "\n_0", "\t_1" ])", &tree_nodes));
   EXPECT_THAT(jsonb.IsArray(), true);
   EXPECT_THAT(jsonb.GetArraySize(), 2);
-  EXPECT_THAT(jsonb.GetArrayElementIfExists(0).value().GetString(), R"(\n_0)");
-  EXPECT_THAT(jsonb.GetArrayElementIfExists(0).value().GetSerializedString(),
+  EXPECT_THAT(jsonb.GetArrayElementIfExists(0).value().GetString(), "\n_0");
+  EXPECT_THAT(jsonb.GetArrayElementIfExists(0).value().Serialize(),
               R"("\n_0")");
   EXPECT_THAT(jsonb.Serialize(), R"(["\n_0", "\t_1"])");
 }

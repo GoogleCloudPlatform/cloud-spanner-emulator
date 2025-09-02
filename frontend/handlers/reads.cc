@@ -169,6 +169,12 @@ absl::Status StreamingRead(
           *responses.front().mutable_metadata()->mutable_transaction(),
           txn->ToProto());
     }
+    // Set an empty precommit token for multiplexed read-write transactions.
+    if (session->multiplexed() && txn->IsReadWrite()) {
+      for (auto& response : responses) {
+        response.mutable_precommit_token();
+      }
+    }
 
     // Send results back to client.
     for (const auto& response : responses) {

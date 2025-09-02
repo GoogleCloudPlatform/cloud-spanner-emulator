@@ -92,7 +92,17 @@ class ReadOnlyStore {
   // Reads the given key range from the store.
   virtual absl::StatusOr<std::unique_ptr<StorageIterator>> Read(
       const Table* table, const KeyRange& key_range,
-      absl::Span<const Column* const> columns) const = 0;
+      absl::Span<const Column* const> columns,
+      bool allow_pending_commit_timestamps_in_read) const = 0;
+
+  // Reads the given key range from the store. Reading pending commit timestamps
+  // is disallowed.
+  absl::StatusOr<std::unique_ptr<StorageIterator>> Read(
+      const Table* table, const KeyRange& key_range,
+      absl::Span<const Column* const> columns) {
+    return Read(table, key_range, columns,
+                /*allow_pending_commit_timestamps_in_read=*/false);
+  }
 
   // Only reads committed values for the given key, ignoring any mutations
   // buffered within the transaction.

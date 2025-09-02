@@ -506,12 +506,20 @@ cc_test(
     srcs = ["emulator_parser_test.cc"],
     deps = [
         ":emulator_parser",
+        ":interfaces_with_stub_implementations",
         ":pg_arena_factory",
+        "//backend/query:function_catalog",
+        "//backend/schema/catalog:proto_bundle",
+        "//backend/schema/catalog:schema",
+        "//backend/schema/graph:schema_graph",
         "//third_party/spanner_pg/shims:memory_context_pg_arena",
         "//third_party/spanner_pg/test_catalog:emulator_catalog",
         "@com_google_googletest//:gtest",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:analyzer_options",
+        "@com_google_zetasql//zetasql/public:catalog",
         "@com_google_zetasql//zetasql/public:simple_catalog",
+        "@com_google_zetasql//zetasql/public:type",
     ],
 )
 

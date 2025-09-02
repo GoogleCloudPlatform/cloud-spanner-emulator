@@ -92,6 +92,10 @@ class CommitTimestamps : public DatabaseTest {
             CommitTimestampIndexTable(Name, CommitTS)
         )",
         R"(
+          CREATE UNIQUE INDEX CommitTimestampUniqueIndex ON
+            CommitTimestampIndexTable(Name, CommitTS)
+        )",
+        R"(
           CREATE VIEW CommitTimestampView
             SQL SECURITY INVOKER AS
             SELECT t.ID, t.CommitTS AS TS FROM CommitTimestampTable t
@@ -561,28 +565,28 @@ TEST_F(CommitTimestamps, CanInsertMultipleRowsInDml) {
 
 TEST_F(CommitTimestamps, CanInsertMultipleRowsWithIndexedTimestamp) {
   ZETASQL_EXPECT_OK(Commit({
-      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 0,
-                 kCommitTimestampSentinel),
-      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 1,
-                 kCommitTimestampSentinel),
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 0,
+                 kCommitTimestampSentinel, "A"),
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 1,
+                 kCommitTimestampSentinel, "B"),
   }));
 }
 
 TEST_F(CommitTimestamps, CanInsertMultipleRowsWithIndexedTimestampInDml) {
   ZETASQL_EXPECT_OK(CommitDml({
-      SqlStatement("INSERT INTO CommitTimestampIndexTable (ID, CommitTS) "
-                   "VALUES (0, PENDING_COMMIT_TIMESTAMP())"),
-      SqlStatement("INSERT INTO CommitTimestampIndexTable (ID, CommitTS) "
-                   "VALUES (1, PENDING_COMMIT_TIMESTAMP())"),
+      SqlStatement("INSERT INTO CommitTimestampIndexTable (ID, CommitTS, Name) "
+                   "VALUES (0, PENDING_COMMIT_TIMESTAMP(), 'A')"),
+      SqlStatement("INSERT INTO CommitTimestampIndexTable (ID, CommitTS, Name) "
+                   "VALUES (1, PENDING_COMMIT_TIMESTAMP(), 'B')"),
   }));
 }
 
 TEST_F(CommitTimestamps, CannotUpdateMultipleRowsWithIndexedTimestampInDml) {
   ZETASQL_ASSERT_OK(Commit({
-      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 0,
-                 kCommitTimestampSentinel),
-      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 1,
-                 kCommitTimestampSentinel),
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 0,
+                 kCommitTimestampSentinel, "A"),
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 1,
+                 kCommitTimestampSentinel, "B"),
   }));
 
   EXPECT_THAT(
@@ -597,10 +601,10 @@ TEST_F(CommitTimestamps, CannotUpdateMultipleRowsWithIndexedTimestampInDml) {
 
 TEST_F(CommitTimestamps, CanUpdateMultipleRowsWithIndexedTimestampInSingleDml) {
   ZETASQL_ASSERT_OK(Commit({
-      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 0,
-                 kCommitTimestampSentinel),
-      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 1,
-                 kCommitTimestampSentinel),
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 0,
+                 kCommitTimestampSentinel, "A"),
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 1,
+                 kCommitTimestampSentinel, "B"),
   }));
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(
@@ -628,10 +632,10 @@ TEST_F(CommitTimestamps, CanUpdateMultipleRowsInDml) {
 
 TEST_F(CommitTimestamps, CanUpdateMultipleRowsWithIndexedTimestamp) {
   ZETASQL_ASSERT_OK(Commit({
-      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 0,
-                 kCommitTimestampSentinel),
-      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS"}, 1,
-                 kCommitTimestampSentinel),
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 0,
+                 kCommitTimestampSentinel, "A"),
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 1,
+                 kCommitTimestampSentinel, "B"),
   }));
 
   ZETASQL_EXPECT_OK(Commit({

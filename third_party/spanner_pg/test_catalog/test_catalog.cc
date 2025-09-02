@@ -69,6 +69,9 @@ void MutateLanguageOptionsForSpangres(zetasql::LanguageOptions* options) {
   // Proto and enum are not supported in spangres.
   options->DisableLanguageFeature(zetasql::FEATURE_PROTO_BASE);
 
+  // TODO: Support Map type in Spangres RQG.
+  options->DisableLanguageFeature(zetasql::FEATURE_MAP_TYPE);
+
   options->EnableLanguageFeature(
       zetasql::FEATURE_V_1_3_NULLS_FIRST_LAST_IN_ORDER_BY);
 

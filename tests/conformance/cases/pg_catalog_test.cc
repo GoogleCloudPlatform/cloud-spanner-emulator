@@ -61,7 +61,9 @@ static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
 
 class PGCatalogTest : public DatabaseTest {
  public:
-  PGCatalogTest() : feature_flags_({.enable_postgresql_interface = true}) {}
+  PGCatalogTest()
+      : feature_flags_({.enable_postgresql_interface = true,
+                        .enable_interleave_in = true}) {}
 
   void SetUp() override {
     dialect_ = database_api::DatabaseDialect::POSTGRESQL;
@@ -281,6 +283,15 @@ TEST_F(PGCatalogTest, PGAttribute) {
        false, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
        0},
 
+      {"npi_child", "key1", "int8", 1, 0, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"npi_child", "key2", "varchar", 2, 0, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"npi_child", "child_key", "bool", 3, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"npi_child", "value", "varchar", 4, 0, -1, std::string{'\0'}, false,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+
       {"row_deletion_policy", "key", "int8", 1, 0, -1, std::string{'\0'}, true,
        false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
       {"row_deletion_policy", "created_at", "timestamptz", 2, 0, -1,
@@ -348,6 +359,13 @@ TEST_F(PGCatalogTest, PGAttribute) {
       {"PK_no_action_child", "child_key", "bool", 3, 0, -1, std::string{'\0'},
        true, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
        0},
+      {"PK_npi_child", "key1", "int8", 1, 0, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"PK_npi_child", "key2", "varchar", 2, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"PK_npi_child", "child_key", "bool", 3, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+
       {"PK_row_deletion_policy", "key", "int8", 1, 0, -1, std::string{'\0'},
        true, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
        0},
@@ -368,6 +386,10 @@ TEST_F(PGCatalogTest, PGAttribute) {
       {"no_action_child_by_value", "value", "varchar", 1, 0, -1,
        std::string{'\0'}, false, false, false, std::string{'\0'},
        std::string{'\0'}, false, true, 0},
+
+      {"remote_index_int", "int_value", "int8", 1, 0, -1, std::string{'\0'},
+       true, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
+       0},
 
       // named_schema.ns_table_1
       {"PK_ns_table_1", "key1", "int8", 1, 0, -1, std::string{'\0'}, true,
@@ -440,13 +462,14 @@ TEST_F(PGCatalogTest, PGClass) {
       {"PK_cascade_child", "public", PgOid(75002), false, "p", "i", 3, 0, true},
       {"PK_no_action_child", "public", PgOid(75002), false, "p", "i", 3, 0,
        true},
+      {"PK_npi_child", "public", PgOid(75002), false, "p", "i", 3, 0, true},
       {"PK_row_deletion_policy", "public", PgOid(75002), false, "p", "i", 1, 0,
        true},
       {"cascade_child_by_value", "public", PgOid(75002), false, "p", "i", 4, 0,
        true},
       {"no_action_child_by_value", "public", PgOid(75002), false, "p", "i", 1,
        0, true},
-
+      {"remote_index_int", "public", PgOid(75002), false, "p", "i", 1, 0, true},
       {"PK_ns_table_1", "named_schema", PgOid(75002), false, "p", "i", 1, 0,
        true},
       {"PK_ns_table_2", "named_schema", PgOid(75002), false, "p", "i", 1, 0,
@@ -465,6 +488,7 @@ TEST_F(PGCatalogTest, PGClass) {
       {"base", "public", PgOid(75001), true, "p", "r", 24, 2, true},
       {"cascade_child", "public", PgOid(75001), true, "p", "r", 6, 0, true},
       {"no_action_child", "public", PgOid(75001), true, "p", "r", 4, 0, true},
+      {"npi_child", "public", PgOid(75001), false, "p", "r", 4, 0, true},
       {"row_deletion_policy", "public", PgOid(75001), false, "p", "r", 2, 0,
        true},
 
@@ -614,6 +638,8 @@ TEST_F(PGCatalogTest, PGConstraint) {
                         "cascade_child", " ", " ", std::vector<int>{1, 2, 3}},
                        {"PK_no_action_child", "public", "p", true,
                         "no_action_child", " ", " ", std::vector<int>{1, 2, 3}},
+                       {"PK_npi_child", "public", "p", true, "npi_child", " ",
+                        " ", std::vector<int>{1, 2, 3}},
                        {"PK_row_deletion_policy", "public", "p", true,
                         "row_deletion_policy", " ", " ", std::vector<int>{1}},
                        {"PK_ns_table_1", "named_schema", "p", true,
@@ -680,6 +706,7 @@ TEST_F(PGCatalogTest, PGIndex) {
       {"IDX_base_bool_value_key2_N_\\w{16}", "base", 2, 2, false, false,
        std::vector<int>{3, 2}},
       {"PK_base", "base", 2, 2, true, true, std::vector<int>{1, 2}},
+      {"remote_index_int", "base", 1, 1, false, false, std::vector<int>{4}},
       {"IDX_cascade_child_child_key_value1_U_\\w{16}", "cascade_child", 2, 2,
        true, false, std::vector<int>{3, 4}},
       {"PK_cascade_child", "cascade_child", 3, 3, true, true,
@@ -690,6 +717,8 @@ TEST_F(PGCatalogTest, PGIndex) {
        std::vector<int>{1, 2, 3}},
       {"no_action_child_by_value", "no_action_child", 1, 1, false, false,
        std::vector<int>{4}},
+      {"PK_npi_child", "npi_child", 3, 3, true, true,
+       std::vector<int>{1, 2, 3}},
       {"PK_ns_table_1", "ns_table_1", 1, 1, true, true, std::vector<int>{1}},
       {"PK_ns_table_1", "ns_table_1", 1, 1, true, true, std::vector<int>{1}},
       {"ns_index", "ns_table_1", 1, 1, true, false, std::vector<int>{1}},
@@ -762,6 +791,7 @@ TEST_F(PGCatalogTest, PGIndexes) {
 
            {"public", "base", "IDX_base_bool_value_key2_N_\\w{16}", Ns(), Ns()},
            {"public", "base", "PK_base", Ns(), Ns()},
+           {"public", "base", "remote_index_int", Ns(), Ns()},
            {"public", "cascade_child",
             "IDX_cascade_child_child_key_value1_U_\\w{16}", Ns(), Ns()},
            {"public", "cascade_child", "PK_cascade_child", Ns(), Ns()},
@@ -769,6 +799,7 @@ TEST_F(PGCatalogTest, PGIndexes) {
            {"public", "no_action_child", "PK_no_action_child", Ns(), Ns()},
            {"public", "no_action_child", "no_action_child_by_value", Ns(),
             Ns()},
+           {"public", "npi_child", "PK_npi_child", Ns(), Ns()},
            {"public", "row_deletion_policy", "PK_row_deletion_policy", Ns(),
             Ns()}}));
   // NOLINTEND
@@ -949,6 +980,7 @@ TEST_F(PGCatalogTest, PGTables) {
       {"public", "base", Ns(), Ns(), true, Nb(), Nb(), Nb()},
       {"public", "cascade_child", Ns(), Ns(), true, Nb(), Nb(), Nb()},
       {"public", "no_action_child", Ns(), Ns(), true, Nb(), Nb(), Nb()},
+      {"public", "npi_child", Ns(), Ns(), false, Nb(), Nb(), Nb()},
       {"public", "row_deletion_policy", Ns(), Ns(), false, Nb(), Nb(), Nb()},
   });
   EXPECT_THAT(Query(R"sql(

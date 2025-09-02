@@ -33,81 +33,108 @@
 
 #include <memory>
 
+#include "zetasql/public/analyzer_options.h"
+#include "zetasql/public/catalog.h"
 #include "zetasql/public/simple_catalog.h"
+#include "zetasql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "backend/query/function_catalog.h"
+#include "backend/schema/catalog/proto_bundle.h"
+#include "backend/schema/catalog/schema.h"
+#include "backend/schema/graph/schema_graph.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
+#include "third_party/spanner_pg/interface/spangres_translator_interface.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "third_party/spanner_pg/test_catalog/emulator_catalog.h"
 
 namespace postgres_translator {
 namespace spangres {
 
+using ::google::spanner::emulator::backend::
+    kCloudSpannerEmulatorFunctionCatalogName;
 using ::google::spanner::emulator::backend::FunctionCatalog;
+using ::google::spanner::emulator::backend::Schema;
 
 namespace {
 
-TEST(EmulatorParserTest, ParseAndAnalyzePostgreSQL) {
+class PGEmulatorParserTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        extra_arena_,
+        MemoryContextPGArena::Init(/*memory_reservation_manager=*/nullptr));
+    type_factory_ = std::make_unique<zetasql::TypeFactory>();
+
+    // Create a dummy schema for the emulator catalog with POSTGRESQL dialect.
+    // This is required for POSTGRESQL functions to be registered.
+    schema_ = std::make_unique<Schema>(
+        /*graph=*/
+        google::spanner::emulator::backend::SchemaGraph::CreateEmpty(),
+        /*proto_bundle=*/
+        google::spanner::emulator::backend::ProtoBundle::CreateEmpty(),
+        /*dialect=*/
+        google::spanner::emulator::backend::database_api::
+            DatabaseDialect::POSTGRESQL,
+        /*database_id=*/"test_db"
+    );
+  }
+
+  std::unique_ptr<interfaces::PGArena> extra_arena_ = nullptr;
+  std::unique_ptr<zetasql::TypeFactory> type_factory_;
+  zetasql::AnalyzerOptions analyzer_options_ =
+      test::GetPGEmulatorTestAnalyzerOptions();
+  std::unique_ptr<Schema> schema_;
+};
+
+TEST_F(PGEmulatorParserTest, ParseAndAnalyzePostgreSQL) {
   std::unique_ptr<zetasql::EnumerableCatalog> catalog =
       test::GetEmulatorCatalog();
-  auto type_factory = std::make_unique<zetasql::TypeFactory>();
-  zetasql::AnalyzerOptions analyzer_options =
-      test::GetPGEmulatorTestAnalyzerOptions();
-
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<interfaces::PGArena> extra_arena,
-                       MemoryContextPGArena::Init(nullptr));
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const zetasql::AnalyzerOutput> output,
       ParseAndAnalyzePostgreSQL(
-          "select 1234567890123", catalog.get(), analyzer_options,
-          type_factory.get(),
-          std::make_unique<FunctionCatalog>(type_factory.get())));
+          "select 1234567890123", catalog.get(), analyzer_options_,
+          type_factory_.get(),
+          std::make_unique<FunctionCatalog>(
+              type_factory_.get(), kCloudSpannerEmulatorFunctionCatalogName,
+              schema_.get())));
 }
 
-TEST(EmulatorParserTest, TranslateTableLevelExpression) {
-  auto type_factory = std::make_unique<zetasql::TypeFactory>();
-
+TEST_F(PGEmulatorParserTest, TranslateTableLevelExpression) {
   zetasql::SimpleTable simple_table("T");
   ABSL_CHECK_OK(simple_table.AddColumn(
-      new zetasql::SimpleColumn("T", "K", type_factory->get_int64()), true));
+      new zetasql::SimpleColumn("T", "K", type_factory_->get_int64()), true));
 
   zetasql::SimpleCatalog catalog("pg simple catalog");
   catalog.AddTable(&simple_table);
-  zetasql::AnalyzerOptions analyzer_options =
-      test::GetPGEmulatorTestAnalyzerOptions();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<interfaces::PGArena> extra_arena,
-                       MemoryContextPGArena::Init(nullptr));
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       postgres_translator::interfaces::ExpressionTranslateResult result,
       TranslateTableLevelExpression(
-          "\"K\" > 0", "T", catalog, analyzer_options, type_factory.get(),
-          std::make_unique<FunctionCatalog>(type_factory.get())));
+          "\"K\" > 0", "T", catalog, analyzer_options_, type_factory_.get(),
+          std::make_unique<FunctionCatalog>(
+              type_factory_.get(), kCloudSpannerEmulatorFunctionCatalogName,
+              schema_.get())));
 }
 
-TEST(EmulatorParserTest, TranslateQueryInView) {
-  auto type_factory = std::make_unique<zetasql::TypeFactory>();
-
+TEST_F(PGEmulatorParserTest, TranslateQueryInView) {
   zetasql::SimpleTable simple_table("T");
   ABSL_CHECK_OK(simple_table.AddColumn(
-      new zetasql::SimpleColumn("T", "K", type_factory->get_int64()),
+      new zetasql::SimpleColumn("T", "K", type_factory_->get_int64()),
       /*is_owned=*/true));
 
   zetasql::SimpleCatalog catalog("pg simple catalog");
   catalog.AddTable(&simple_table);
-  zetasql::AnalyzerOptions analyzer_options =
-      test::GetPGEmulatorTestAnalyzerOptions();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<interfaces::PGArena> extra_arena,
-      MemoryContextPGArena::Init(/*memory_reservation_manager=*/nullptr));
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       postgres_translator::interfaces::ExpressionTranslateResult result,
       TranslateQueryInView(
-          R"(SELECT "K" FROM "T")", catalog, analyzer_options,
-          type_factory.get(),
-          std::make_unique<FunctionCatalog>(type_factory.get())));
+          R"(SELECT "K" FROM "T")", catalog, analyzer_options_,
+          type_factory_.get(),
+          std::make_unique<FunctionCatalog>(
+              type_factory_.get(), kCloudSpannerEmulatorFunctionCatalogName,
+              schema_.get())));
 }
 
 }  // namespace

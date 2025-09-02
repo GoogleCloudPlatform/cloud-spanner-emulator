@@ -16,6 +16,8 @@
 
 # Test cases for schema_updater_test.cc.
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 package(
     default_visibility = ["//:__subpackages__"],
 )

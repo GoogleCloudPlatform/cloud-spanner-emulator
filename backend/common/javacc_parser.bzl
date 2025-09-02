@@ -16,6 +16,8 @@
 
 """Build rules for generating parser for the given grammar file with Javacc."""
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 def generate_javacc_parser(name, srcs, parser_class_name, extra_deps, extra_headers, extra_srcs, **kwds):
     """Builds a javacc parser in C++ from the given grammar definition.
 
@@ -98,7 +100,7 @@ def generate_javacc_parser(name, srcs, parser_class_name, extra_deps, extra_head
     )
 
     # Finally use generated AST and Parser files to produce c++ parser.
-    native.cc_library(
+    cc_library(
         name = name,
         srcs = schema_ast_genfiles + schema_parser_genfiles + extra_srcs,
         hdrs = [

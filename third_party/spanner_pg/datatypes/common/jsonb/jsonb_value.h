@@ -172,12 +172,7 @@ class PgJsonbValue {
 
   // Returns a string view of a JSONB string value.
   // Requires IsString() to be true.
-  std::string GetString() const;
-
-  // Returns a serialized string view of a JSONB string value with two
-  // additional double quotation marks.
-  // Requires IsString() to be true.
-  absl::string_view GetSerializedString() const;
+  absl::string_view GetString() const;
 
   // Returns a boolean value of a JSONB boolean value.
   // Requires IsBoolean() to be true.

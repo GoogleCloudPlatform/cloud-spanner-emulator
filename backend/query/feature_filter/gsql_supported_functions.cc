@@ -104,6 +104,7 @@ const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions() {
         "$extract",
         "$extract_date",
         "farm_fingerprint",
+        "float32",
         "float64",
         "floor",
         "format",

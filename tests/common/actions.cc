@@ -114,7 +114,8 @@ absl::StatusOr<ValueList> TestReadOnlyStore::ReadCommitted(
 
 absl::StatusOr<std::unique_ptr<StorageIterator>> TestReadOnlyStore::Read(
     const Table* table, const KeyRange& key_range,
-    const absl::Span<const Column* const> columns) const {
+    const absl::Span<const Column* const> columns,
+    bool allow_pending_commit_timestamps_in_read) const {
   std::unique_ptr<StorageIterator> itr;
   ZETASQL_RETURN_IF_ERROR(store_.Read(absl::InfiniteFuture(), table->id(), key_range,
                               GetColumnIDs(columns), &itr));

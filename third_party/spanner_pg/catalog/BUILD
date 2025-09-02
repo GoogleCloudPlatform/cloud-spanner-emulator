@@ -179,6 +179,7 @@ cc_test(
         "//third_party/spanner_pg/datatypes/extended:pg_oid_type",
         "//third_party/spanner_pg/interface:emulator_builtin_function_catalog",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "//third_party/spanner_pg/src/backend/catalog:generated_catalog_headers",
         "//third_party/spanner_pg/test_catalog",
         "//third_party/spanner_pg/util:valid_memory_context_fixture",
         "@com_google_absl//absl/container:flat_hash_set",
