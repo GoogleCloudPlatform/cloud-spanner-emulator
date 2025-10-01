@@ -40,6 +40,8 @@ namespace emulator {
 namespace backend {
 
 // Analyzes a SQL expression in `expression` for a column.
+// `is_pending_commit_timestamp` should be nullptr if PENDING_COMMIT_TIMESTAMP
+// is not supported for this expression.
 absl::Status AnalyzeColumnExpression(
     absl::string_view expression, const zetasql::Type* target_type,
     const Table* table, const Schema* schema,
@@ -49,7 +51,8 @@ absl::Status AnalyzeColumnExpression(
     absl::flat_hash_set<std::string>* dependent_column_names,
     absl::flat_hash_set<const SchemaNode*>* dependent_sequences,
     bool allow_volatile_expression,
-    absl::flat_hash_set<const SchemaNode*>* udf_dependencies);
+    absl::flat_hash_set<const SchemaNode*>* udf_dependencies,
+    bool* is_pending_commit_timestamp);
 
 // Analyzes the view definition in `view_definition`. Returns the
 // table, column and other view dependencies in `dependencies` and

@@ -268,9 +268,9 @@ cc_library(
 )
 
 cc_library(
-    name = "generated_column",
-    srcs = ["generated_column.cc"],
-    hdrs = ["generated_column.h"],
+    name = "evaluated_column",
+    srcs = ["evaluated_column.cc"],
+    hdrs = ["evaluated_column.h"],
     deps = [
         ":action",
         ":context",
@@ -466,10 +466,10 @@ cc_library(
         ":check_constraint",
         ":column_value",
         ":context",
+        ":evaluated_column",
         ":existence",
         ":foreign_key",
         ":foreign_key_actions",
-        ":generated_column",
         ":index",
         ":interleave",
         ":ops",

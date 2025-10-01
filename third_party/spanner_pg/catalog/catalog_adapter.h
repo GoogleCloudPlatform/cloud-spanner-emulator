@@ -103,11 +103,20 @@ class CatalogAdapter {
       const std::string& namespace_name);
   // Gets oid of a known namespace. Returns error if namespace is unknown. This
   // version of the API exists mostly to support internal PostgreSQL catalog
-  // APIs, usually as part of Search Path when testing for namespace existance.
+  // APIs, usually as part of Search Path when testing for namespace existence.
   absl::StatusOr<Oid> GetOidFromNamespaceName(
       const std::string& namespace_name);
 
-  // Generates a new oid for a pg_proc representing a UDF from the
+  // Returns true if the pg_proc struct representing a UDF from the
+  // EngineUserCatalog has been stored for the given oid.
+  bool IsUDFProcStored(Oid oid);
+  // Generates a new Oid for a pg_proc (if not already generated) representing a
+  // UDF from the EngineUserCatalog for the reverse transformer. The passed in
+  // function object will be stored for later retrieval by Oid. The pg_proc
+  // struct will be generated and stored for later retrieval by Oid as well in
+  // the call to GetProcsByOid override in catalog_wrappers.cc.
+  absl::StatusOr<Oid> GetOrGenerateUDFProcOid(const zetasql::Function* udf);
+  // Generates a new oid for a pg_proc representing a TVF from the
   // EngineUserCatalog. The passed in pg_proc struct will have its oid filled in
   // with the new oid and will be stored for later retrieval by oid. The
   // generated oid is also returned.
@@ -116,10 +125,15 @@ class CatalogAdapter {
   // REQUIRED: pg_proc->oid is InvalidOid.
   // IMPORTANT: CatalogAdapter does not take ownership of the pg_proc struct.
   // The struct should be unowned and backed by MemoryContext memory.
-  absl::StatusOr<Oid> GenerateAndStoreUDFProcOid(
-      FormData_pg_proc* pg_proc, const zetasql::Function* udf);
   absl::StatusOr<Oid> GenerateAndStoreTVFProcOid(
       FormData_pg_proc* pg_proc, const zetasql::TableValuedFunction* tvf);
+
+  // Stores a pg_proc representing a UDF from the EngineUserCatalog. The passed
+  // in pg_proc struct must have its oid filled in and will be stored for later
+  // retrieval by Oid.
+  // REQUIRED: pg_proc->oid is not InvalidOid.
+  absl::Status StoreUDFProc(FormData_pg_proc* pg_proc);
+
   // Looks up the pg_proc struct from a function oid for functions that were
   // generated from the User Catalog (UDFs, not builtins). This complements
   // bootstrap_catalog lookup for builtin function procs.
@@ -198,6 +212,7 @@ class CatalogAdapter {
   // created for this query.
   // Procs contain their oids, and name resolution is handled in the analyzer,
   // so a bidirectional map is not needed here.
+  absl::flat_hash_map<std::string, Oid> udf_to_oid_map_;
   absl::flat_hash_map<Oid, const FormData_pg_proc*> oid_to_udf_proc_map_;
   absl::flat_hash_map<Oid, const zetasql::Function*> oid_to_udf_map_;
   absl::flat_hash_map<Oid, const zetasql::TableValuedFunction*>

@@ -46,6 +46,7 @@
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "absl/base/attributes.h"
 #include "absl/base/const_init.h"
+#include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"

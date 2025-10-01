@@ -48,7 +48,7 @@ TEST(InformationSchemaCatalogTest, SpannerSysColumnsMetadataCount) {
   SpannerSysCatalog spanner_sys_catalog;
   InformationSchemaCatalog catalog(InformationSchemaCatalog::kName, &schema,
                                    &spanner_sys_catalog);
-  EXPECT_EQ(SpannerSysColumnsMetadata().size(), 293);
+  EXPECT_EQ(SpannerSysColumnsMetadata().size(), 450);
 }
 
 TEST(InformationSchemaCatalogTest, PGColumnsMetadataCount) {
@@ -72,7 +72,7 @@ TEST(InformationSchemaCatalogTest, PGSpannerSysColumnsMetadataCount) {
   SpannerSysCatalog spanner_sys_catalog;
   InformationSchemaCatalog catalog(InformationSchemaCatalog::kPGName, &schema,
                                    &spanner_sys_catalog);
-  EXPECT_EQ(SpannerSysColumnsMetadata().size(), 293);
+  EXPECT_EQ(SpannerSysColumnsMetadata().size(), 450);
 }
 }  // namespace
 }  // namespace google::spanner::emulator::backend

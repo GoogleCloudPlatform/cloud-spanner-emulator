@@ -52,14 +52,20 @@ using ::spanner::OverrideSpannerFlagsInUnittest;
 ABSL_DECLARE_FLAG(bool, spangres_use_emulator_numeric_type);
 ABSL_DECLARE_FLAG(bool, spangres_use_emulator_jsonb_type);
 ABSL_DECLARE_FLAG(bool, spangres_use_emulator_oid_type);
-ABSL_DECLARE_FLAG(bool, spangres_enable_pg_vector_search_ann_functions);
+ABSL_DECLARE_FLAG(bool, spangres_enable_fts_text_array_signatures);
 ABSL_DECLARE_FLAG(bool, spangres_enable_generate_series_function);
+ABSL_DECLARE_FLAG(bool, spangres_enable_ilike_operator);
+ABSL_DECLARE_FLAG(bool, spangres_enable_pg_vector_search_ann_functions);
+ABSL_DECLARE_FLAG(bool, spangres_enable_tokenize_number_array_signatures);
 
 int main(int argc, char* argv[]) {
   InitGoogle(argv[0], &argc, &argv, true);
   OverrideSpannerFlagsInUnittest();
-  absl::SetFlag(&FLAGS_spangres_enable_pg_vector_search_ann_functions, false);
+  absl::SetFlag(&FLAGS_spangres_enable_fts_text_array_signatures, false);
   absl::SetFlag(&FLAGS_spangres_enable_generate_series_function, false);
+  absl::SetFlag(&FLAGS_spangres_enable_ilike_operator, false);
+  absl::SetFlag(&FLAGS_spangres_enable_pg_vector_search_ann_functions, false);
+  absl::SetFlag(&FLAGS_spangres_enable_tokenize_number_array_signatures, false);
   absl::SetFlag(&FLAGS_spangres_use_emulator_catalog, true);
   absl::SetFlag(&FLAGS_spangres_use_emulator_numeric_type, true);
   absl::SetFlag(&FLAGS_spangres_use_emulator_jsonb_type, true);

@@ -15,6 +15,7 @@
 //
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,8 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/flags/declare.h"
+#include "absl/flags/flag.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -117,7 +120,8 @@ class SchemaChangeTest
             .enable_fk_delete_cascade_action = true,
             .enable_fk_enforcement_option = true,
             .enable_interleave_in = true,
-        }) {}
+        }) {
+  }
   const ScopedEmulatorFeatureFlagsSetter flag_setter_;
   absl::Status SetUpDatabase() override { return absl::OkStatus(); }
 

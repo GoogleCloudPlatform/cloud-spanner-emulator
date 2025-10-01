@@ -131,6 +131,64 @@ TEST(ParseAlterDatabase, ValidSetDefaultLeaderToNonEmptyString) {
                                   })pb"));
 }
 
+TEST(ParseAlterDatabase, ValidSetReadLeaseRegionsToNonEmptyString) {
+  absl::string_view ddl = R"(
+    ALTER DATABASE db SET OPTIONS ( read_lease_regions = 'us-east1,us-west1' )
+  )";
+  DDLStatement statement;
+  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  EXPECT_THAT(statement, test::EqualsProto(
+                             R"pb(alter_database {
+                                    set_options {
+                                      options {
+                                        option_name: "read_lease_regions"
+                                        string_value: "us-east1,us-west1"
+                                      }
+                                    }
+                                    db_name: "db"
+                                  })pb"));
+}
+
+TEST(ParseAlterDatabase, ClearReadLeaseRegions) {
+  absl::string_view ddl = R"(
+    ALTER DATABASE db SET OPTIONS ( read_lease_regions = NULL )
+  )";
+  DDLStatement statement;
+  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  EXPECT_THAT(statement, test::EqualsProto(
+                             R"pb(alter_database {
+                                    set_options {
+                                      options {
+                                        option_name: "read_lease_regions"
+                                        null_value: true
+                                      }
+                                    }
+                                    db_name: "db"
+                                  })pb"));
+}
+
+TEST(ParseAlterDatabase, InvalidReadLeaseRegions) {
+  // Non string value.
+  absl::string_view ddl1 = R"(
+    ALTER DATABASE db SET OPTIONS ( read_lease_regions = 1 )
+  )";
+  // Empty string.
+  absl::string_view ddl2 = R"(
+    ALTER DATABASE db SET OPTIONS ( read_lease_regions = '' )
+  )";
+  // Badly escaped string.
+  absl::string_view ddl3 = R"(
+    ALTER DATABASE db SET OPTIONS ( read_lease_regions = '\' )
+  )";
+  DDLStatement statement;
+  EXPECT_THAT(ParseDDLStatement(ddl1, &statement),
+              StatusIs(StatusCode::kInvalidArgument));
+  EXPECT_THAT(ParseDDLStatement(ddl2, &statement),
+              StatusIs(StatusCode::kInvalidArgument));
+  EXPECT_THAT(ParseDDLStatement(ddl3, &statement),
+              StatusIs(StatusCode::kInvalidArgument));
+}
+
 TEST(ParseAlterDatabase, ValidSetVersionRetentionPeriodToNonEmptyString) {
   absl::string_view ddl = R"(
     ALTER DATABASE db SET OPTIONS (version_retention_period = '7d' )

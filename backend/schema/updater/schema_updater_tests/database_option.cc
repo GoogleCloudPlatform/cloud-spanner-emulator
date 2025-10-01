@@ -79,6 +79,23 @@ TEST_P(DatabaseOptionTest, ValidDefaultLeaderOptionName) {
   }
 }
 
+TEST_P(DatabaseOptionTest, ValidReadLeaseRegionsOptionName) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"(
+      ALTER DATABASE db SET spanner.read_lease_regions = 'us-east1'
+                                      )"},
+                                      /*proto_descriptor_bytes=*/"",
+                                      /*dialect=*/POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+      ALTER DATABASE db SET OPTIONS (read_lease_regions = "us-east1")
+        )"}));
+  }
+}
+
 TEST_P(DatabaseOptionTest, ValidDefaultSequenceKindOptionName) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {

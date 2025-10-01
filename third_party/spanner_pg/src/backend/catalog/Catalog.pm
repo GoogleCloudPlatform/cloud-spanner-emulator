@@ -290,6 +290,9 @@ sub ParseData
 	# Scan the input file.
 	while (<$ifd>)
 	{
+		# Ignore comment lines starting with a '#'
+		next if /^\s*#/;
+
 		my $hash_ref;
 
 		if (/{/)

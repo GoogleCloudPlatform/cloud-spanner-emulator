@@ -53,6 +53,8 @@ namespace emulator {
 namespace backend {
 namespace {
 
+using ::google::spanner::emulator::backend::
+    kCloudSpannerEmulatorFunctionCatalogName;
 using zetasql_base::testing::StatusIs;
 namespace database_api = ::google::spanner::admin::database::v1;
 
@@ -76,7 +78,9 @@ class PgChangeStreamQueryValidatorTest : public testing::Test {
         postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
     return postgres_translator::spangres::ParseAndAnalyzePostgreSQL(
         sql, catalog_.get(), analyzer_options_, &type_factory_,
-        std::make_unique<FunctionCatalog>(&type_factory_));
+        std::make_unique<FunctionCatalog>(
+            &type_factory_, kCloudSpannerEmulatorFunctionCatalogName,
+            schema_.get()));
   }
 
   zetasql::TypeFactory type_factory_;

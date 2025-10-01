@@ -57,6 +57,7 @@ extern const char kModelEndpointsOptionName[];
 
 extern const char kWitnessLocationOptionName[];
 extern const char kDefaultLeaderOptionName[];
+extern const char kReadLeaseRegionsOptionName[];
 extern const char kVersionRetentionPeriodOptionName[];
 extern const char kDefaultSequenceKindOptionName[];
 extern const char kDefaultTimeZoneOptionName[];

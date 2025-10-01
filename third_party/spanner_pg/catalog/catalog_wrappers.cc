@@ -35,6 +35,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/log/absl_log.h"
 #include "zetasql/public/catalog.h"
 #include "zetasql/public/function_signature.h"
 #include "absl/log/log.h"
@@ -42,6 +43,8 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/str_join.h"
+#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
@@ -461,7 +464,8 @@ static absl::StatusOr<List*> ExpandNSItemVarsForJoinCpp(
 // Memory is allocated from and owned by CurrentMemoryContext, but
 // CatalogAdapter will retain a pointer to it for later retrieval.
 static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromUDF(
-    const zetasql::Function* udf, CatalogAdapter* adapter) {
+    const zetasql::Function* udf, CatalogAdapter* adapter,
+    Oid proc_oid = InvalidOid) {
   std::vector<const FormData_pg_proc*> result;
 
   // Each signature will be created as a separate pg_proc.
@@ -476,10 +480,13 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromUDF(
   FormData_pg_proc* proc = reinterpret_cast<FormData_pg_proc*>(palloc0(
       sizeof(FormData_pg_proc) + signature->arguments().size() * sizeof(Oid)));
 
-  // This oid will be assigned by CatalogAdapter later. It checks for InvalidOid
-  // as a sanity check that we aren't assigning a duplicate.
-  proc->oid = InvalidOid;
-  ZETASQL_ASSIGN_OR_RETURN(proc->oid, adapter->GenerateAndStoreUDFProcOid(proc, udf));
+  // Get the OID for the proc. If it's already been generated, use that.
+  // Otherwise, generate a new one.
+  if (proc_oid == InvalidOid) {
+    ZETASQL_ASSIGN_OR_RETURN(proc_oid, adapter->GetOrGenerateUDFProcOid(udf));
+  }
+  proc->oid = proc_oid;
+  ZETASQL_RETURN_IF_ERROR(adapter->StoreUDFProc(proc));
   ZETASQL_RET_CHECK(udf->Name().size() < NAMEDATALEN);
   memcpy(NameStr(proc->proname), udf->Name().c_str(), udf->Name().size() + 1);
 
@@ -492,7 +499,7 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromUDF(
     udf_namespace = udf->FunctionNamePath()[0];
   }
   ZETASQL_ASSIGN_OR_RETURN(proc->pronamespace,
-                   adapter->GetOidFromNamespaceName(udf_namespace));
+                   adapter->GetOrGenerateOidFromNamespaceName(udf_namespace));
 
   // These fields are currently unused by the caller, but we might as well fill
   // them in with PG defaults. These defaults come from pg_proc.h.
@@ -682,13 +689,20 @@ static absl::Status GetProcsByNameFromUserCatalog(
   // For now, only look in the top-level catalog and only for TVFs.
   // TODO: Add support for nested catalogs.
   const zetasql::TableValuedFunction* tvf;
-  absl::Status status = catalog->FindTableValuedFunction(name_path, &tvf);
+  absl::Status status = catalog->FindTableValuedFunction({func_name}, &tvf);
   // NotFound is fine, just swallow it. Any other error is unexpected.
   if (!absl::IsNotFound(status)) {
     if (!status.ok()) {
       return status;
     }
-    if (tvf->Name() == func_name) {
+    ZETASQL_RET_CHECK(tvf->function_name_path().size() > 0);
+    ZETASQL_RET_CHECK(tvf->function_name_path().size() < 3);
+    bool tvf_is_spanner_namespace = tvf->function_name_path().size() == 1 ||
+                                    tvf->function_name_path()[0] == "spanner";
+    bool is_schema_spanner =
+        schema_name != nullptr && strcmp(schema_name, "spanner") == 0;
+    if (tvf->Name() == func_name &&
+        (is_schema_spanner == tvf_is_spanner_namespace)) {
       ZETASQL_ASSIGN_OR_RETURN(std::vector<const FormData_pg_proc*> new_procs,
                        BuildPgProcsFromTVF(tvf, adapter));
       found_procs.insert(found_procs.end(), new_procs.begin(), new_procs.end());
@@ -704,7 +718,7 @@ static absl::Status GetProcsByNameFromUserCatalog(
   return absl::OkStatus();
 }
 
-// This is a helper function that handles retrieving UDF data for
+// This is a helper function that handles retrieving TVF data for
 // GetFunctionArgInfo. Returns true iff the TVF is found with one signature.
 static bool GetArgInfoForTVF(Oid tvf_oid, std::vector<Oid>& argument_types,
                              std::vector<std::string>& argument_names) {
@@ -744,6 +758,48 @@ static bool GetArgInfoForTVF(Oid tvf_oid, std::vector<Oid>& argument_types,
   }
   // TVF not found.
   return false;
+}
+
+// This is a helper function that handles retrieving UDF data for
+// GetFunctionArgInfo. Returns true iff the UDF is found with one signature.
+static bool GetArgInfoForUDF(Oid udf_oid, std::vector<Oid>& argument_types,
+                             std::vector<std::string>& argument_names) {
+  const auto adapter = postgres_translator::GetCatalogAdapter();
+  if (!adapter.ok()) {
+    postgres_translator::ereport_helper(adapter.status(),
+                                        ERRCODE_INTERNAL_ERROR,
+                                        "Failed to get catalog adapter");
+    return false;  // Unreachable.
+  }
+  auto udf = adapter.value()->GetUDFFromOid(udf_oid);
+  if (!udf.ok()) {
+    if (udf.status().code() != absl::StatusCode::kNotFound) {
+      postgres_translator::ereport_helper(udf.status(), ERRCODE_INTERNAL_ERROR,
+                                        "Failed to get UDF");
+    }
+    return false;
+  }
+
+  if (udf.value()->NumSignatures() != 1) {
+    postgres_translator::ereport_helper(
+        udf.status(), ERRCODE_INTERNAL_ERROR,
+        "UDF with multiple signatures is not supported");
+    return false;  // Unreachable.
+  }
+  const zetasql::FunctionSignature* signature =
+      udf.value()->GetSignature(0);
+  for (const auto& arg : signature->arguments()) {
+    auto pg_type =
+        adapter.value()->GetEngineSystemCatalog()->GetTypeFromReverseMapping(
+            arg.type());
+    argument_types.push_back(pg_type->PostgresTypeOid());
+    if (arg.has_argument_name()) {
+      argument_names.push_back(arg.argument_name());
+    } else {
+      argument_names.push_back("");
+    }
+  }
+  return true;
 }
 
 absl::StatusOr<TableName> TableNameFromRangeVar(RangeVar& relation) {
@@ -961,12 +1017,20 @@ const FormData_pg_opclass* GetOpclassFromBootstrapCatalog(Oid opclass_id) {
 
 const FormData_pg_language* GetLanguageByNameFromBootstrapCatalog(
     const char* name) {
+  if (name == nullptr) {
+    ABSL_LOG(ERROR);
+    return nullptr;
+  }
   return postgres_translator::PgBootstrapCatalog::Default()
       ->GetLanguageByName(name)
       .value_or(nullptr);
 }
 
 extern "C" Oid GetNamespaceByNameFromBootstrapCatalog(const char* name) {
+  if (name == nullptr) {
+    ABSL_LOG(ERROR);
+    return InvalidOid;
+  }
   return postgres_translator::PgBootstrapCatalog::Default()
       ->GetNamespaceOid(name)
       .value_or(InvalidOid);
@@ -1195,61 +1259,29 @@ extern "C" Oid GetOrGenerateOidFromNamespaceOidAndRelationNameC(
       .value_or(InvalidOid);
 }
 
-extern "C" void GetProcsByName(const char* name,
-                               const FormData_pg_proc*** outlist,
-                               size_t* outcount) {
-  size_t bootstrap_count;
-  const FormData_pg_proc* const* bootstrap_procs;
-  GetProcsByNameFromBootstrapCatalog(name, &bootstrap_procs, &bootstrap_count);
-  size_t udf_count;
-  const FormData_pg_proc** udf_procs;
-  absl::Status udf_status = postgres_translator::GetProcsByNameFromUserCatalog(
-      nullptr, name, &udf_procs, &udf_count);
-  if (!udf_status.ok()) {
-    *outcount = 0;
-    *outlist = nullptr;
-    postgres_translator::ereport_helper(
-        udf_status, ERRCODE_INTERNAL_ERROR,
-        "Failed to look up UDFs from user catalog");
-  }
-
-  // Merge the two lists and let the caller choose which proc they want. PG
-  // uses signatures and namespaces to decide which function is the best match.
-  // See FuncnameGetCandidates for details.
-  *outcount = bootstrap_count + udf_count;
-  *outlist = reinterpret_cast<const FormData_pg_proc**>(
-      palloc(*outcount * sizeof **outlist));
-  memcpy(*outlist, bootstrap_procs, bootstrap_count * sizeof *bootstrap_procs);
-  memcpy(*outlist + bootstrap_count, udf_procs, udf_count * sizeof udf_procs);
-}
-
 extern "C" void GetProcsBySchemaAndFuncNames(const char* schema_name,
                                              const char* func_name,
                                              const FormData_pg_proc*** outlist,
                                              size_t* outcount) {
-  // Skip the user catalog if the schema name is a bootstrap catalog namespace.
-  if (!schema_name ||
-      !OidIsValid(GetNamespaceByNameFromBootstrapCatalog(schema_name))) {
-    absl::Status udf_status =
-        postgres_translator::GetProcsByNameFromUserCatalog(
-            schema_name, func_name, outlist, outcount);
-    if (!udf_status.ok()) {
-      *outcount = 0;
-      *outlist = nullptr;
-    }
-    // Only look in the bootstrap catalog if there weren't any UDFs found.
-    // We intentionally do not merge the results from the user catalog and the
-    // bootstrap catalog.
-    if (*outcount > 0) {
-      return;
-    }
+  // TVFs use `spanner` catalog but expect no schema name set when searching.
+  absl::Status udf_status = postgres_translator::GetProcsByNameFromUserCatalog(
+      schema_name, func_name, outlist, outcount);
+  if (!udf_status.ok()) {
+    *outcount = 0;
+    *outlist = nullptr;
+  }
+  // Only look in the bootstrap catalog if there weren't any UDFs found.
+  // We intentionally do not merge the results from the user catalog and the
+  // bootstrap catalog.
+  if (*outcount > 0) {
+    return;
   }
 
-  Oid namespaceId =
+  Oid namespace_oid =
       GetNamespaceByNameFromBootstrapCatalog(schema_name ?: "pg_catalog");
   std::string schema_debug_substring =
       schema_name ? absl::StrCat(" in schema '", schema_name, "' ") : "";
-  if (!OidIsValid(namespaceId)) {
+  if (!OidIsValid(namespace_oid)) {
     ZETASQL_VLOG(4) << "Function '" << func_name << "'" << schema_debug_substring
             << " not found in user catalog and specifies schema unknown "
                "to bootstrap catalog";
@@ -1265,13 +1297,13 @@ extern "C" void GetProcsBySchemaAndFuncNames(const char* schema_name,
   std::vector<const FormData_pg_proc*> matched_procs;
   for (int i = 0; i < bootstrap_count; ++i) {
     const FormData_pg_proc* proc = bootstrap_procs[i];
-    // weed out candidates based on the namespaceId
-    if (proc->pronamespace == namespaceId) {
+    // weed out candidates based on the namespace_oid
+    if (proc->pronamespace == namespace_oid) {
       matched_procs.push_back(proc);
     }
   }
+  *outcount = matched_procs.size();
   if (!matched_procs.empty()) {
-    *outcount = matched_procs.size();
     size_t outsize = sizeof(FormData_pg_proc*) * matched_procs.size();
     *outlist = reinterpret_cast<const FormData_pg_proc**>(palloc(outsize));
     memcpy(*outlist, matched_procs.data(), outsize);
@@ -1291,7 +1323,33 @@ extern "C" const FormData_pg_proc* GetProcByOid(Oid oid) {
                                         ERRCODE_INTERNAL_ERROR,
                                         "Failed to get catalog adapter");
   }
-  auto proc = postgres_translator::GetProcByOid(*adapter, oid);
+  postgres_translator::CatalogAdapter* adapter_ptr = adapter.value();
+  // In the forward direction, a UDF has its proc oid assigned and
+  // its pg_proc built and stored in the CatalogAdapter at the same
+  // time inside the analyzer
+  // In the reverse direction, a UDF has its proc oid assigned in the
+  // reverse transformer, but the pg_proc is not built and stored in
+  // the CatalogAdapter until the deparser runs.
+  // This function is used by both the analyzer and deparser so we
+  // need to handle both cases.
+  absl::StatusOr<const zetasql::Function*> udf =
+      adapter_ptr->GetUDFFromOid(oid);
+  bool is_udf = udf.ok();
+  if (is_udf && !adapter_ptr->IsUDFProcStored(oid)) {
+    auto procs = BuildPgProcsFromUDF(udf.value(), adapter_ptr, oid);
+    if (!procs.ok() || procs.value().empty()) {
+      postgres_translator::ereport_helper(procs.status(),
+                                          ERRCODE_INTERNAL_ERROR,
+                                          "Failed to build proc from UDF");
+      return nullptr;
+    }
+    return procs.value()[0];
+  }
+
+  // If this is not a UDF or if the UDF pg_proc was already stored in
+  // the CatalogAdapter, use GetProcByOid to look it up.
+  absl::StatusOr<const FormData_pg_proc*> proc =
+      postgres_translator::GetProcByOid(*adapter, oid);
   if (proc.ok()) {
     return proc.value();
   } else if (!absl::IsNotFound(proc.status())) {
@@ -1355,10 +1413,24 @@ extern "C" int GetFunctionArgInfo(Oid proc_oid, Oid **p_argtypes,
                                         "Proc lookup by oid failed");
     return 0;  // Unreachable.
   }
-  // Function not found in BootstrapCatalog which means it may be a UDF.
+  // Function not found in BootstrapCatalog which means it may be a TVF.
   std::vector<std::string> argument_names;
   std::vector<Oid> argument_types;
   if (postgres_translator::GetArgInfoForTVF(proc_oid, argument_types,
+                                            argument_names)) {
+    // Cannot point directly to the data for TVFs so we need to copy it.
+    *p_argtypes = (Oid*)palloc(argument_types.size() * sizeof(Oid));
+    memcpy(*p_argtypes, argument_types.data(),
+           sizeof(Oid) * argument_types.size());
+    *p_argnames = (char**)palloc(argument_names.size() * sizeof(char*));
+    for (int i = 0; i < argument_names.size(); ++i) {
+      (*p_argnames)[i] = pstrdup(argument_names[i].c_str());
+    }
+    *p_argmodes = NULL;  // Ignore argmodes for TVFs.
+    return argument_types.size();
+  };
+  // Function not found in TVF catalog which means it may be a UDF.
+  if (postgres_translator::GetArgInfoForUDF(proc_oid, argument_types,
                                             argument_names)) {
     // Cannot point directly to the data for UDFs so we need to copy it.
     *p_argtypes = (Oid*)palloc(argument_types.size() * sizeof(Oid));
@@ -1370,17 +1442,16 @@ extern "C" int GetFunctionArgInfo(Oid proc_oid, Oid **p_argtypes,
     }
     *p_argmodes = NULL;  // Ignore argmodes for UDFs.
     return argument_types.size();
-  };
+  }
   // Function not found.
-  *p_argtypes = NULL;
-  *p_argnames = NULL;
-  *p_argmodes = NULL;
-  return 0;
+  postgres_translator::ereport_helper(proc_proto.status(),
+                                      ERRCODE_INTERNAL_ERROR, "Proc not found");
+  return 0;  // Unreachable.
 }
 
 // TODO: Remove this wrapper
 extern "C" Oid GetNamespaceForFuncname(const char* unqualified_namespace_name) {
-  return GetNamespaceByNameFromBootstrapCatalog(unqualified_namespace_name);
+  return GetOrGenerateOidFromNamespaceNameC(unqualified_namespace_name);
 }
 
 // TODO: Remove this wrapper
@@ -1388,11 +1459,11 @@ extern "C" void GetProcsCandidates(const char* schema_name,
                                    const char* func_name,
                                    const FormData_pg_proc*** outlist,
                                    size_t* outcount) {
-  GetProcsByName(func_name, outlist, outcount);
+  GetProcsBySchemaAndFuncNames(schema_name, func_name, outlist, outcount);
 }
 
 // TODO: Remove this wrapper
 extern "C" bool IsInNamespace(const FormData_pg_proc* procform,
                               Oid namespace_oid) {
-  return procform->pronamespace == namespace_oid;
+  return true;
 }

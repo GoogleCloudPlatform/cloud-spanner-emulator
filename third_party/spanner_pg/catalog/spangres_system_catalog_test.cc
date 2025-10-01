@@ -630,9 +630,9 @@ TEST_F(SpangresSystemCatalogTest, MinAggregateRemapTest) {
   ASSERT_NE(min_function, nullptr);
 
   static const zetasql::Type* gsql_pg_numeric =
-      spangres::datatypes::GetPgNumericType();
+      types::PgNumericMapping()->mapped_type();
   static const zetasql::Type* gsql_pg_oid =
-      spangres::datatypes::GetPgOidType();
+      types::PgOidMapping()->mapped_type();
 
   bool has_signature_for_float = false;
   bool has_signature_for_double = false;
@@ -650,24 +650,21 @@ TEST_F(SpangresSystemCatalogTest, MinAggregateRemapTest) {
       has_signature_for_float = true;
       EXPECT_EQ(signature->mapped_function()->FullName(/*include_group=*/false),
                 "pg.min");
-    } else if (
-        argument_type->Equals(gsql_pg_numeric)) {
-      has_signature_for_numeric = true;
-      EXPECT_EQ(signature->mapped_function()->FullName(/*include_group=*/false),
-                "pg.numeric_min");
-    } else if (
-        argument_type->Equals(gsql_pg_oid)) {
-      has_signature_for_oid = true;
-      EXPECT_EQ(signature->mapped_function()->FullName(/*include_group=*/false),
-                "pg.min");
     } else {
       EXPECT_EQ(signature->mapped_function()->FullName(/*include_group=*/false),
                 "min");
+      if (argument_type->Equals(gsql_pg_numeric)) {
+        has_signature_for_numeric = true;
+      } else if (argument_type->Equals(gsql_pg_oid)) {
+        has_signature_for_oid = true;
+      }
     }
   }
-  ASSERT_TRUE(has_signature_for_double);
 
-    ASSERT_TRUE(has_signature_for_numeric);
+  ASSERT_TRUE(has_signature_for_float);
+  ASSERT_TRUE(has_signature_for_double);
+  ASSERT_TRUE(has_signature_for_numeric);
+  ASSERT_TRUE(has_signature_for_oid);
 }
 
 TEST_F(SpangresSystemCatalogTest, NanOrderingFunctionsEnabled) {
@@ -899,74 +896,6 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
                                {TEXTOID, TEXTOID},
                                {zetasql::InputArgumentType(gsql_string),
                                 zetasql::InputArgumentType(gsql_string)});
-  // Datetime functions
-  AssertPGFunctionIsRegistered("date_mi", "pg.date_mi", {DATEOID, DATEOID},
-                               {zetasql::InputArgumentType(gsql_date),
-                                zetasql::InputArgumentType(gsql_date)});
-  AssertPGFunctionIsRegistered("date_mii", "pg.date_mii", {DATEOID, INT8OID},
-                               {zetasql::InputArgumentType(gsql_date),
-                                zetasql::InputArgumentType(gsql_int64)});
-  AssertPGFunctionIsRegistered("date_pli", "pg.date_pli", {DATEOID, INT8OID},
-                               {zetasql::InputArgumentType(gsql_date),
-                                zetasql::InputArgumentType(gsql_int64)});
-  AssertPGFunctionIsRegistered("spanner", "date", "date",
-                               {TIMESTAMPTZOID, TEXTOID},
-                               {zetasql::InputArgumentType(gsql_timestamp),
-                                zetasql::InputArgumentType(gsql_string)});
-  // Formatting functions
-  AssertPGFunctionIsRegistered("to_date", "pg.to_date", {TEXTOID, TEXTOID},
-                               {zetasql::InputArgumentType(gsql_string),
-                                zetasql::InputArgumentType(gsql_string)});
-  AssertPGFunctionIsRegistered("to_number", "pg.to_number", {TEXTOID, TEXTOID},
-                               {zetasql::InputArgumentType(gsql_string),
-                                zetasql::InputArgumentType(gsql_string)});
-  AssertPGFunctionIsRegistered("to_timestamp", "pg.to_timestamp",
-                               {TEXTOID, TEXTOID},
-                               {zetasql::InputArgumentType(gsql_string),
-                                zetasql::InputArgumentType(gsql_string)});
-  AssertPGFunctionIsRegistered("to_char", "pg.to_char", {INT8OID, TEXTOID},
-                               {zetasql::InputArgumentType(gsql_int64),
-                                zetasql::InputArgumentType(gsql_string)});
-  AssertPGFunctionIsRegistered("to_char", "pg.to_char",
-                               {TIMESTAMPTZOID, TEXTOID},
-                               {zetasql::InputArgumentType(gsql_timestamp),
-                                zetasql::InputArgumentType(gsql_string)});
-  AssertPGFunctionIsRegistered("to_char", "pg.to_char", {FLOAT8OID, TEXTOID},
-                               {zetasql::InputArgumentType(gsql_double),
-                                zetasql::InputArgumentType(gsql_string)});
-  AssertPGFunctionIsRegistered("to_char", "pg.to_char", {NUMERICOID, TEXTOID},
-                               {zetasql::InputArgumentType(gsql_pg_numeric),
-                                zetasql::InputArgumentType(gsql_string)});
-  // String functions
-  AssertPGFunctionIsRegistered("quote_ident", "pg.quote_ident", {TEXTOID},
-                               {zetasql::InputArgumentType(gsql_string)});
-  AssertPGFunctionIsRegistered("substring", "pg.substring", {TEXTOID, TEXTOID},
-                               {zetasql::InputArgumentType(gsql_string),
-                                zetasql::InputArgumentType(gsql_string)});
-  AssertPGFunctionIsRegistered("regexp_match", "pg.regexp_match",
-                               {TEXTOID, TEXTOID},
-                               {zetasql::InputArgumentType(gsql_string),
-                                zetasql::InputArgumentType(gsql_string)});
-  AssertPGFunctionIsRegistered("regexp_match", "pg.regexp_match",
-                               {TEXTOID, TEXTOID, TEXTOID},
-                               {zetasql::InputArgumentType(gsql_string),
-                                zetasql::InputArgumentType(gsql_string),
-                                zetasql::InputArgumentType(gsql_string)});
-  AssertPGFunctionIsRegistered("regexp_split_to_array",
-                               "pg.regexp_split_to_array", {TEXTOID, TEXTOID},
-                               {zetasql::InputArgumentType(gsql_string),
-                                zetasql::InputArgumentType(gsql_string)});
-  AssertPGFunctionIsRegistered("regexp_split_to_array",
-                               "pg.regexp_split_to_array",
-                               {TEXTOID, TEXTOID, TEXTOID},
-                               {zetasql::InputArgumentType(gsql_string),
-                                zetasql::InputArgumentType(gsql_string),
-                                zetasql::InputArgumentType(gsql_string)});
-
-  // Verify mapping between functions that have different names.
-  AssertPGFunctionIsRegistered("int8pl", "$add", {INT8OID, INT8OID},
-                               {zetasql::InputArgumentType(gsql_int64),
-                                zetasql::InputArgumentType(gsql_int64)});
 }
 
 TEST_F(SpangresSystemCatalogTest, IntervalFunctions) {

@@ -2533,6 +2533,12 @@ TEST_P(QueryEngineTest, JsonConverterFunctionsForGsql) {
       {"float32", R"(SELECT FLOAT32(JSON '10'))"},
       {"bool", R"(SELECT BOOL(JSON 'true'))"},
       {"string", R"(SELECT STRING(JSON '"string_value"'))"},
+      // Array converter functions.
+      {"int64_array", R"(SELECT INT64_ARRAY(JSON '[10]'))"},
+      {"float64_array", R"(SELECT FLOAT64_ARRAY(JSON '[10]'))"},
+      {"float32_array", R"(SELECT FLOAT32_ARRAY(JSON '[10]'))"},
+      {"bool_array", R"(SELECT BOOL_ARRAY(JSON '[true]'))"},
+      {"string_array", R"(SELECT STRING_ARRAY(JSON '["string_value"]'))"},
       // JSON type functions.
       {"json_type", R"(SELECT JSON_TYPE(JSON '10'))"},
       // LAX converter functions.
@@ -2546,6 +2552,13 @@ TEST_P(QueryEngineTest, JsonConverterFunctionsForGsql) {
       {"safe.float32", R"(SELECT SAFE.FLOAT32(JSON '10'))"},
       {"safe.bool", R"(SELECT SAFE.BOOL(JSON '"TRUE"'))"},
       {"safe.string", R"(SELECT SAFE.STRING(JSON '1'))"},
+      // Safe array converter functions.
+      {"safe.int64_array", R"(SELECT SAFE.INT64_ARRAY(JSON '[10]'))"},
+      {"safe.float64_array", R"(SELECT SAFE.FLOAT64_ARRAY(JSON '[10]'))"},
+      {"safe.float32_array", R"(SELECT SAFE.FLOAT32_ARRAY(JSON '[10]'))"},
+      {"safe.bool_array", R"(SELECT SAFE.BOOL_ARRAY(JSON '[true]'))"},
+      {"safe.string_array",
+       R"(SELECT SAFE.STRING_ARRAY(JSON '["string_value"]'))"},
       {"safe.json_type", R"(SELECT SAFE.JSON_TYPE(JSON '[10]'))"},
       {"safe.lax_int64", R"(SELECT SAFE.LAX_INT64(JSON '"10"'))"},
       {"safe.lax_float64", R"(SELECT SAFE.LAX_FLOAT64(JSON '"10"'))"},
@@ -2554,6 +2567,8 @@ TEST_P(QueryEngineTest, JsonConverterFunctionsForGsql) {
           "safe.lax_string",
           R"(SELECT SAFE.LAX_STRING(JSON '1'))",
       },
+      // JSON_CONTAINS function.
+      {"json_contains", R"(SELECT JSON_CONTAINS(JSON '1', JSON '1'))"},
       // --- JSON_SET ---
       {"JSON_SET: Insert New Key & Update Existing",
        "SELECT JSON_SET(JSON '{\"a\": 1}', '$.b', 2, '$.a', 10)"},

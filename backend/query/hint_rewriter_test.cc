@@ -36,8 +36,10 @@ namespace backend {
 namespace {
 
 TEST(HintRewriterTest, RewritesOnlyEmptyHintQualifier) {
-  zetasql::SimpleTable table{"test_table",
-                               {{"test_col", zetasql::types::StringType()}}};
+  zetasql::SimpleTable table{
+      "test_table",
+      {zetasql::SimpleTable::NameAndType{"test_col",
+                                           zetasql::types::StringType()}}};
   // Make a resolved AST for
   // `@{force_index=test_index} SELECT test_col FROM test_table`
   std::vector<std::unique_ptr<zetasql::ResolvedOutputColumn>> output_columns;

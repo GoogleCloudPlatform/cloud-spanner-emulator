@@ -4591,8 +4591,9 @@ isoweek2j(int year, int week)
 	// Updated calculation of the formula below, to protect against overflow.
 	// `return ((week - 1) * 7) + (day4 - day0);`
 	int tmp;
-	if (pg_mul_s32_overflow((week - 1), 7, &tmp) ||
-		  pg_add_s32_overflow(tmp, (day4 - day0), &tmp)) {
+	if (pg_sub_s32_overflow(week, 1, &tmp) ||
+			pg_mul_s32_overflow(tmp, 7, &tmp) ||
+			pg_add_s32_overflow(tmp, (day4 - day0), &tmp)) {
 		ereport(ERROR,
 				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
 				errmsg("timestamp out of range")));

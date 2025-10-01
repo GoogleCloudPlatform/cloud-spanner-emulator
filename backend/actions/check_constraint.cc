@@ -104,10 +104,10 @@ absl::Status CheckConstraintVerifier::VerifyInsertUpdateOp(
   for (int i = 0; i < dependent_columns.size(); ++i) {
     column_values[dependent_columns[i]->Name()] = itr->ColumnValue(i);
   }
-  // The generated column values have been updated in
-  // GeneratedColumnEffector::Effect before the CheckConstraintVerifier is
+  // The evaluated column values have been updated in
+  // EvaluatedColumnEffector::Effect before the CheckConstraintVerifier is
   // executed, so that we are able to evaluate the check constraints depending
-  // on the generated values.
+  // on the evaluated column values.
   for (int i = 0; i < columns.size(); ++i) {
     column_values[columns[i]->Name()] = values[i];
   }

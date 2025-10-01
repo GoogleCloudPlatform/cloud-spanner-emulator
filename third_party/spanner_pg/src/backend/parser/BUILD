@@ -31,7 +31,7 @@
 
 load("@com_google_zetasql//bazel:bison.bzl", "genyacc")
 load("@com_google_zetasql//bazel:flex.bzl", "genlex")
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 
 

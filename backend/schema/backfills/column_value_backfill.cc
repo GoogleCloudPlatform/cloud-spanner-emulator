@@ -23,7 +23,7 @@
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
 #include "absl/status/statusor.h"
-#include "backend/actions/generated_column.h"
+#include "backend/actions/evaluated_column.h"
 #include "backend/datamodel/types.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
@@ -134,11 +134,11 @@ absl::Status BackfillColumnValue(const Column* old_column,
   return absl::OkStatus();
 }
 
-absl::Status BackfillGeneratedColumnValue(
-    const Column* generated_column, const SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK(generated_column != nullptr &&
-            (generated_column->is_generated() ||
-             generated_column->has_default_value()));
+absl::Status BackfillEvaluatedColumnValue(
+    const Column* evaluated_column, const SchemaValidationContext* context) {
+  ZETASQL_RET_CHECK(evaluated_column != nullptr &&
+            (evaluated_column->is_generated() ||
+             evaluated_column->has_default_value()));
   ZETASQL_RET_CHECK_NE(context, nullptr);
   FunctionCatalog function_catalog(context->type_factory());
   function_catalog.SetLatestSchema(context->validated_new_schema());
@@ -146,8 +146,8 @@ absl::Status BackfillGeneratedColumnValue(
       context->validated_new_schema()->default_time_zone());
   Catalog catalog(context->validated_new_schema(), &function_catalog,
                   context->type_factory(), analyzer_options);
-  const Table* table = generated_column->table();
-  GeneratedColumnEffector effector(table, analyzer_options, &catalog);
+  const Table* table = evaluated_column->table();
+  EvaluatedColumnEffector effector(table, analyzer_options, &catalog);
 
   std::vector<ColumnID> column_ids = GetColumnIDs(table->columns());
   std::unique_ptr<StorageIterator> itr;
@@ -166,12 +166,12 @@ absl::Status BackfillGeneratedColumnValue(
     }
 
     ZETASQL_ASSIGN_OR_RETURN(zetasql::Value value,
-                     effector.ComputeGeneratedColumnValue(generated_column,
+                     effector.ComputeEvaluatedColumnValue(evaluated_column,
                                                           row_column_values));
 
     ZETASQL_RETURN_IF_ERROR(context->storage()->Write(
         context->pending_commit_timestamp(), table->id(), itr->Key(),
-        {generated_column->id()}, {value}));
+        {evaluated_column->id()}, {value}));
   }
 
   return itr->Status();

@@ -83,6 +83,7 @@ const char kModelEndpointOptionName[] = "endpoint";
 const char kModelEndpointsOptionName[] = "endpoints";
 const char kWitnessLocationOptionName[] = "witness_location";
 const char kDefaultLeaderOptionName[] = "default_leader";
+const char kReadLeaseRegionsOptionName[] = "read_lease_regions";
 const char kVersionRetentionPeriodOptionName[] = "version_retention_period";
 const char kDefaultSequenceKindOptionName[] = "default_sequence_kind";
 const char kDefaultTimeZoneOptionName[] = "default_time_zone";
@@ -1854,6 +1855,37 @@ void VisitDefaultLeaderDatabaseOptionValNode(const SimpleNode* value_node,
   }
 }
 
+void VisitReadLeaseRegionsDatabaseOptionValNode(
+    const SimpleNode* value_node, SetOption* option,
+    std::vector<std::string>* errors) {
+  ABSL_DCHECK_EQ(option->option_name(), "read_lease_regions");
+  if (value_node->getId() == JJTSTR_VAL &&
+      ValidateStringLiteralImage(value_node->image(), /*force=*/true, nullptr)
+          .ok()) {
+    std::string string_value;
+    std::string error = "";
+    if (!UnescapeStringLiteral(value_node->image(), &string_value, &error)) {
+      errors->push_back(error);
+      return;
+    }
+    if (string_value.empty()) {
+      errors->push_back(
+          "Empty string is an invalid value for read_lease_regions. If you'd "
+          "like "
+          "to clear a previously set value, use NULL.");
+      return;
+    }
+    option->set_string_value(string_value);
+  } else if (value_node->getId() == JJTNULLL) {
+    option->set_null_value(true);
+  } else {
+    errors->push_back(
+        absl::StrCat("Unexpected value for option: ", "read_lease_regions",
+                     ". Supported option values are strings and NULL."));
+    return;
+  }
+}
+
 void VisitDefaultSequenceKindDatabaseOptionValNode(
     const SimpleNode* value_node, SetOption* option,
     std::vector<std::string>* errors) {
@@ -1963,6 +1995,10 @@ void VisitDatabaseOptionKeyValNode(const SimpleNode* node, OptionList* options,
       errors->push_back("Option: default_leader is null.");
       return;
     }
+  } else if (option_name == kReadLeaseRegionsOptionName) {
+    SetOption* option = options->Add();
+    option->set_option_name("read_lease_regions");
+    VisitReadLeaseRegionsDatabaseOptionValNode(value_node, option, errors);
   } else if (option_name == kDefaultSequenceKindOptionName &&
              EmulatorFeatureFlags::instance().flags().enable_identity_columns) {
     SetOption* option = options->Add();

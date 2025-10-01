@@ -29,13 +29,11 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include <string>
 #include <vector>
 
 #include "zetasql/public/function.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
-#include "absl/flags/flag.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 
@@ -163,270 +161,14 @@ void AddAggregateFunctions(std::vector<PostgresFunctionArguments>& functions) {
        AGGREGATE});
 }
 
-void AddBooleanFunctions(std::vector<PostgresFunctionArguments>& functions) {
-  const zetasql::Type* gsql_bool = zetasql::types::BoolType();
-  const zetasql::Type* gsql_bytes = zetasql::types::BytesType();
-  const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
-  const zetasql::Type* gsql_double = zetasql::types::DoubleType();
-  const zetasql::Type* gsql_string = zetasql::types::StringType();
-  const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
-  const zetasql::Type* gsql_date = zetasql::types::DateType();
-
-  functions.push_back(
-      {"booleq",
-       "$equal",
-       {{{gsql_bool, {gsql_bool, gsql_bool}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"byteaeq",
-       "$equal",
-       {{{gsql_bool, {gsql_bytes, gsql_bytes}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"float8eq",
-       "$equal",
-       {{{gsql_bool, {gsql_double, gsql_double}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"int8eq",
-       "$equal",
-       {{{gsql_bool, {gsql_int64, gsql_int64}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"texteq",
-       "$equal",
-       {{{gsql_bool, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}}}});
-  functions.push_back({"timestamptz_eq",
-                       "$equal",
-                       {{{gsql_bool,
-                          {gsql_timestamp, gsql_timestamp},
-                          /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"date_eq",
-       "$equal",
-       {{{gsql_bool, {gsql_date, gsql_date},
-          /*context_ptr=*/nullptr}}}});
-
-  functions.push_back(
-      {"boolne",
-       "$not_equal",
-       {{{gsql_bool, {gsql_bool, gsql_bool}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"byteane",
-       "$not_equal",
-       {{{gsql_bool, {gsql_bytes, gsql_bytes}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"float8ne",
-       "$not_equal",
-       {{{gsql_bool, {gsql_double, gsql_double}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"int8ne",
-       "$not_equal",
-       {{{gsql_bool, {gsql_int64, gsql_int64}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"textne",
-       "$not_equal",
-       {{{gsql_bool, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}}}});
-  functions.push_back({"timestamptz_ne",
-                       "$not_equal",
-                       {{{gsql_bool,
-                          {gsql_timestamp, gsql_timestamp},
-                          /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"date_ne",
-       "$not_equal",
-       {{{gsql_bool, {gsql_date, gsql_date},
-          /*context_ptr=*/nullptr}}}});
-
-  functions.push_back(
-      {"boollt",
-       "$less",
-       {{{gsql_bool, {gsql_bool, gsql_bool}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"bytealt",
-       "$less",
-       {{{gsql_bool, {gsql_bytes, gsql_bytes}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"float8lt",
-       "$less",
-       {{{gsql_bool, {gsql_double, gsql_double}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"int8lt",
-       "$less",
-       {{{gsql_bool, {gsql_int64, gsql_int64}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"text_lt",
-       "$less",
-       {{{gsql_bool, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}}}});
-  functions.push_back({"timestamptz_lt",
-                       "$less",
-                       {{{gsql_bool,
-                          {gsql_timestamp, gsql_timestamp},
-                          /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"date_lt",
-       "$less",
-       {{{gsql_bool, {gsql_date, gsql_date},
-          /*context_ptr=*/nullptr}}}});
-
-  functions.push_back(
-      {"boolle",
-       "$less_or_equal",
-       {{{gsql_bool, {gsql_bool, gsql_bool}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"byteale",
-       "$less_or_equal",
-       {{{gsql_bool, {gsql_bytes, gsql_bytes}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"float8le",
-       "$less_or_equal",
-       {{{gsql_bool, {gsql_double, gsql_double}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"int8le",
-       "$less_or_equal",
-       {{{gsql_bool, {gsql_int64, gsql_int64}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"text_le",
-       "$less_or_equal",
-       {{{gsql_bool, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}}}});
-  functions.push_back({"timestamptz_le",
-                       "$less_or_equal",
-                       {{{gsql_bool,
-                          {gsql_timestamp, gsql_timestamp},
-                          /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"date_le",
-       "$less_or_equal",
-       {{{gsql_bool, {gsql_date, gsql_date},
-          /*context_ptr=*/nullptr}}}});
-
-  functions.push_back(
-      {"boolge",
-       "$greater_or_equal",
-       {{{gsql_bool, {gsql_bool, gsql_bool}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"byteage",
-       "$greater_or_equal",
-       {{{gsql_bool, {gsql_bytes, gsql_bytes}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"float8ge",
-       "$greater_or_equal",
-       {{{gsql_bool, {gsql_double, gsql_double}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"int8ge",
-       "$greater_or_equal",
-       {{{gsql_bool, {gsql_int64, gsql_int64}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"text_ge",
-       "$greater_or_equal",
-       {{{gsql_bool, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}}}});
-  functions.push_back({"timestamptz_ge",
-                       "$greater_or_equal",
-                       {{{gsql_bool,
-                          {gsql_timestamp, gsql_timestamp},
-                          /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"date_ge",
-       "$greater_or_equal",
-       {{{gsql_bool, {gsql_date, gsql_date},
-          /*context_ptr=*/nullptr}}}});
-
-  functions.push_back(
-      {"boolgt",
-       "$greater",
-       {{{gsql_bool, {gsql_bool, gsql_bool}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"byteagt",
-       "$greater",
-       {{{gsql_bool, {gsql_bytes, gsql_bytes}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"float8gt",
-       "$greater",
-       {{{gsql_bool, {gsql_double, gsql_double}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"int8gt",
-       "$greater",
-       {{{gsql_bool, {gsql_int64, gsql_int64}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"text_gt",
-       "$greater",
-       {{{gsql_bool, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}}}});
-  functions.push_back({"timestamptz_gt",
-                       "$greater",
-                       {{{gsql_bool,
-                          {gsql_timestamp, gsql_timestamp},
-                          /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"date_gt",
-       "$greater",
-       {{{gsql_bool, {gsql_date, gsql_date},
-          /*context_ptr=*/nullptr}}}});
-
-  // TODO : Investigate and/or add support for between, in, and
-  // in_array.
-  functions.push_back(
-      {"textlike",
-       "$like",
-       {{{gsql_bool, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"bytealike",
-       "$like",
-       {{{gsql_bool, {gsql_bytes, gsql_bytes}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"like",
-       "$like",
-       {{{gsql_bool, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}},
-        {{gsql_bool, {gsql_bytes, gsql_bytes}, /*context_ptr=*/nullptr}}}});
-}
-
-void AddLogicFunctions(std::vector<PostgresFunctionArguments>& functions) {}
-
 void AddMiscellaneousFunctions(
     std::vector<PostgresFunctionArguments>& functions) {
-  const zetasql::Type* gsql_double = zetasql::types::DoubleType();
   const zetasql::Type* gsql_string = zetasql::types::StringType();
-  const zetasql::Type* gsql_int64_arr = zetasql::types::Int64ArrayType();
   const zetasql::Type* gsql_string_arr = zetasql::types::StringArrayType();
-  const zetasql::Type* gsql_bool_arr = zetasql::types::BoolArrayType();
-  const zetasql::Type* gsql_double_arr = zetasql::types::DoubleArrayType();
-  const zetasql::Type* gsql_bytes_arr = zetasql::types::BytesArrayType();
-  const zetasql::Type* gsql_timestamp_arr =
-      zetasql::types::TimestampArrayType();
-  const zetasql::Type* gsql_date_arr = zetasql::types::DateArrayType();
-  const zetasql::Type* gsql_pg_numeric_array =
-      spangres::types::PgNumericArrayMapping()->mapped_type();
-  const zetasql::Type* gsql_uuid_arr = zetasql::types::UuidArrayType();
-
-  functions.push_back(
-      {"random", "rand", {{{gsql_double, {}, /*context_ptr=*/nullptr}}}});
-  functions.push_back({"array_cat",
-                       "array_concat",
-                       {{{gsql_int64_arr,
-                          {gsql_int64_arr, gsql_int64_arr},
-                          /*context_ptr=*/nullptr}},
-                        {{gsql_string_arr,
-                          {gsql_string_arr, gsql_string_arr},
-                          /*context_ptr=*/nullptr}},
-                        {{gsql_bool_arr,
-                          {gsql_bool_arr, gsql_bool_arr},
-                          /*context_ptr=*/nullptr}},
-                        {{gsql_double_arr,
-                          {gsql_double_arr, gsql_double_arr},
-                          /*context_ptr=*/nullptr}},
-                        {{gsql_bytes_arr,
-                          {gsql_bytes_arr, gsql_bytes_arr},
-                          /*context_ptr=*/nullptr}},
-                        {{gsql_timestamp_arr,
-                          {gsql_timestamp_arr, gsql_timestamp_arr},
-                          /*context_ptr=*/nullptr}},
-                        {{gsql_pg_numeric_array,
-                          {gsql_pg_numeric_array, gsql_pg_numeric_array},
-                          /*context_ptr=*/nullptr}},
-                        {{gsql_date_arr,
-                          {gsql_date_arr, gsql_date_arr},
-                          /*context_ptr=*/nullptr}},
-                        {{gsql_uuid_arr,
-                          {gsql_uuid_arr, gsql_uuid_arr},
-                          /*context_ptr=*/nullptr}}}});
+  // TODO: b/446759597 - Automate registration of array_to_string
   // Should be <required>, <required>, <optional>, but we don't support
   // optional. Workaround is to put in both variants as separate signatures.
-  // Note: byte array is supported by googlesql but intentionally ommitted
+  // Note: byte array is supported by googlesql but intentionally omitted
   // because the signatures don't match on the second argument.
   functions.push_back({"array_to_string",
                        "array_to_string",
@@ -438,41 +180,6 @@ void AddMiscellaneousFunctions(
                              {gsql_string_arr, gsql_string},
                              /*context_ptr=*/nullptr}},
                        }});
-}
-
-void AddNetFunctions(std::vector<PostgresFunctionArguments>& functions) {}
-
-void AddHllCountFunctions(std::vector<PostgresFunctionArguments>& functions) {}
-
-void AddKllQuantilesFunctions(
-    std::vector<PostgresFunctionArguments>& functions) {}
-
-void AddHashingFunctions(std::vector<PostgresFunctionArguments>& functions) {
-  const zetasql::Type* gsql_bytes = zetasql::types::BytesType();
-  functions.push_back(
-      {"sha256",
-       "sha256",
-       {{{gsql_bytes, {gsql_bytes}, /*context_ptr=*/nullptr}}}});
-  functions.push_back(
-      {"sha512",
-       "sha512",
-       {{{gsql_bytes, {gsql_bytes}, /*context_ptr=*/nullptr}}}});
-}
-
-void AddEncryptionFunctions(std::vector<PostgresFunctionArguments>& functions) {
-}
-
-void AddGeographyFunctions(std::vector<PostgresFunctionArguments>& functions) {}
-
-void AddAnonFunctions(std::vector<PostgresFunctionArguments>& functions) {}
-
-void AddSequenceFunctions(std::vector<PostgresFunctionArguments>& functions) {
-  const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
-  const zetasql::Type* gsql_string = zetasql::types::StringType();
-  functions.push_back(
-      {"nextval",
-       "get_next_sequence_value",
-       {{{gsql_int64, {gsql_string}, /*context_ptr=*/nullptr}}}});
 }
 
 }  // namespace postgres_translator

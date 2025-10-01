@@ -1511,6 +1511,9 @@ template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
 absl::StatusOr<zetasql::Value> EvalMapFloatingPointToInt(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 1);
+  if (args[0].is_null()) {
+    return zetasql::Value::NullInt64();
+  }
 
   double num = static_cast<double>(args[0].Get<T>());
 
@@ -3123,58 +3126,6 @@ class MinMaxEvaluator : public zetasql::AggregateFunctionEvaluator {
   bool is_min_;
 };
 
-std::unique_ptr<zetasql::Function> MinAggregator(
-    const std::string& catalog_name) {
-  zetasql::AggregateFunctionEvaluatorFactory aggregate_fn =
-      [](const zetasql::FunctionSignature& sig)
-      -> std::unique_ptr<zetasql::AggregateFunctionEvaluator> {
-    if (sig.result_type().type()->IsFloat()) {
-      return std::make_unique<MinFloatingPointEvaluator<float>>();
-    } else if (sig.result_type().type()->IsDouble()) {
-      return std::make_unique<MinFloatingPointEvaluator<double>>();
-    } else {
-      return std::make_unique<MinMaxEvaluator>(
-          sig.result_type().type(), /* is_min =*/true);
-    }
-  };
-
-  zetasql::FunctionOptions options;
-  options.set_aggregate_function_evaluator_factory(aggregate_fn);
-  return std::make_unique<zetasql::Function>(
-      kPGMinFunctionName, catalog_name, zetasql::Function::AGGREGATE,
-      std::vector<zetasql::FunctionSignature>{
-          zetasql::FunctionSignature{zetasql::types::DoubleType(),
-                                       {zetasql::types::DoubleType()},
-                                       nullptr},
-          zetasql::FunctionSignature{zetasql::types::FloatType(),
-                                       {zetasql::types::FloatType()},
-                                       nullptr},
-          zetasql::FunctionSignature{spangres::datatypes::GetPgOidType(),
-                                       {spangres::datatypes::GetPgOidType()},
-                                       nullptr}},
-      options);
-}
-
-std::unique_ptr<zetasql::Function> MaxAggregator(
-    const std::string& catalog_name) {
-  zetasql::AggregateFunctionEvaluatorFactory aggregate_fn =
-      [](const zetasql::FunctionSignature& sig)
-      -> std::unique_ptr<zetasql::AggregateFunctionEvaluator> {
-    return std::make_unique<MinMaxEvaluator>(
-        sig.result_type().type(), /* is_min =*/false);
-  };
-
-  zetasql::FunctionOptions options;
-  options.set_aggregate_function_evaluator_factory(aggregate_fn);
-  return std::make_unique<zetasql::Function>(
-      kPGMaxFunctionName, catalog_name, zetasql::Function::AGGREGATE,
-      std::vector<zetasql::FunctionSignature>{
-          zetasql::FunctionSignature{spangres::datatypes::GetPgOidType(),
-                                       {spangres::datatypes::GetPgOidType()},
-                                       nullptr}},
-      options);
-}
-
 class MinMaxNumericEvaluator : public zetasql::AggregateFunctionEvaluator {
  public:
   explicit MinMaxNumericEvaluator(bool is_min) : is_min_(is_min) {}
@@ -3231,41 +3182,82 @@ class MinMaxNumericEvaluator : public zetasql::AggregateFunctionEvaluator {
   const bool is_min_;
 };
 
-std::unique_ptr<zetasql::Function> MinNumericAggregator(
+std::unique_ptr<zetasql::Function> PgMinAggregator(
     const std::string& catalog_name) {
-  const zetasql::Type* gsql_pg_numeric =
-      postgres_translator::spangres::datatypes::GetPgNumericType();
-
   zetasql::AggregateFunctionEvaluatorFactory aggregate_fn =
-      [](const zetasql::FunctionSignature& sig) {
-        return std::make_unique<MinMaxNumericEvaluator>(/* is_min =*/true);
-      };
+      [](const zetasql::FunctionSignature& sig)
+      -> std::unique_ptr<zetasql::AggregateFunctionEvaluator> {
+    if (sig.result_type().type()->IsFloat()) {
+      return std::make_unique<MinFloatingPointEvaluator<float>>();
+    } else if (sig.result_type().type()->IsDouble()) {
+      return std::make_unique<MinFloatingPointEvaluator<double>>();
+    }
+    return nullptr;
+  };
 
   zetasql::FunctionOptions options;
   options.set_aggregate_function_evaluator_factory(aggregate_fn);
   return std::make_unique<zetasql::Function>(
-      kPGNumericMinFunctionName, catalog_name, zetasql::Function::AGGREGATE,
-      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
-          gsql_pg_numeric, {gsql_pg_numeric}, nullptr}},
+      kPGMinFunctionName, catalog_name, zetasql::Function::AGGREGATE,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{zetasql::types::DoubleType(),
+                                       {zetasql::types::DoubleType()},
+                                       nullptr},
+          zetasql::FunctionSignature{zetasql::types::FloatType(),
+                                       {zetasql::types::FloatType()},
+                                       nullptr}},
       options);
 }
 
-std::unique_ptr<zetasql::Function> MaxNumericAggregator(
+std::unique_ptr<zetasql::Function> MinAggregator(
     const std::string& catalog_name) {
   const zetasql::Type* gsql_pg_numeric =
       postgres_translator::spangres::datatypes::GetPgNumericType();
-
   zetasql::AggregateFunctionEvaluatorFactory aggregate_fn =
-      [](const zetasql::FunctionSignature& sig) {
-        return std::make_unique<MinMaxNumericEvaluator>(/* is_min =*/false);
-      };
+      [](const zetasql::FunctionSignature& sig)
+      -> std::unique_ptr<zetasql::AggregateFunctionEvaluator> {
+    if (sig.result_type().type() == spangres::datatypes::GetPgNumericType()) {
+      return std::make_unique<MinMaxNumericEvaluator>(/* is_min =*/true);
+    } else {
+      return std::make_unique<MinMaxEvaluator>(sig.result_type().type(),
+                                               /* is_min =*/true);
+    }
+  };
 
   zetasql::FunctionOptions options;
   options.set_aggregate_function_evaluator_factory(aggregate_fn);
   return std::make_unique<zetasql::Function>(
-      kPGNumericMaxFunctionName, catalog_name, zetasql::Function::AGGREGATE,
-      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
-          gsql_pg_numeric, {gsql_pg_numeric}, nullptr}},
+      kZetaSQLMinFunctionName, catalog_name, zetasql::Function::AGGREGATE,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{spangres::datatypes::GetPgOidType(),
+                                       {spangres::datatypes::GetPgOidType()},
+                                       nullptr},
+          zetasql::FunctionSignature{
+              gsql_pg_numeric, {gsql_pg_numeric}, nullptr}},
+      options);
+}
+
+std::unique_ptr<zetasql::Function> MaxAggregator(
+    const std::string& catalog_name) {
+  const zetasql::Type* gsql_pg_numeric =
+      postgres_translator::spangres::datatypes::GetPgNumericType();
+  zetasql::AggregateFunctionEvaluatorFactory aggregate_fn =
+      [](const zetasql::FunctionSignature& sig)
+      -> std::unique_ptr<zetasql::AggregateFunctionEvaluator> {
+    return std::make_unique<MinMaxEvaluator>(sig.result_type().type(),
+                                             /* is_min =*/false);
+  };
+
+  zetasql::FunctionOptions options;
+  options.set_aggregate_function_evaluator_factory(aggregate_fn);
+  return std::make_unique<zetasql::Function>(
+      kZetaSQLMaxFunctionName, catalog_name, zetasql::Function::AGGREGATE,
+      std::vector<zetasql::FunctionSignature>{
+          zetasql::FunctionSignature{spangres::datatypes::GetPgOidType(),
+                                       {spangres::datatypes::GetPgOidType()},
+                                       nullptr},
+          zetasql::FunctionSignature{
+              gsql_pg_numeric, {gsql_pg_numeric}, nullptr}},
       options);
 }
 
@@ -3274,7 +3266,7 @@ enum SumAvgAggregatorType { Sum, Avg };
 // Can evaluate a sum for INT64, FLOAT, DOUBLE and PG.NUMERIC.
 class SumEvaluator : public zetasql::AggregateFunctionEvaluator {
  public:
-  explicit SumEvaluator() {}
+  explicit SumEvaluator() = default;
   ~SumEvaluator() override = default;
 
   absl::Status Reset() override { return absl::OkStatus(); }
@@ -4431,14 +4423,12 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   functions.push_back(std::move(least_greatest_funcs.first));   // least
   functions.push_back(std::move(least_greatest_funcs.second));  // greatest
 
+  auto pg_min_agg = PgMinAggregator(catalog_name);
+  functions.push_back(std::move(pg_min_agg));
   auto min_agg = MinAggregator(catalog_name);
   functions.push_back(std::move(min_agg));
   auto max_agg = MaxAggregator(catalog_name);
   functions.push_back(std::move(max_agg));
-  auto min_numeric_agg = MinNumericAggregator(catalog_name);
-  functions.push_back(std::move(min_numeric_agg));
-  auto max_numeric_agg = MaxNumericAggregator(catalog_name);
-  functions.push_back(std::move(max_numeric_agg));
   auto sum_agg = SumAggregator(catalog_name);
   functions.push_back(std::move(sum_agg));
   auto avg_agg = AvgAggregator(catalog_name);

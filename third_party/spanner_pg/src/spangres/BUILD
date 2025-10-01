@@ -48,7 +48,10 @@ cc_library(
         "memory.h",
         "memory_cc.h",
     ],
-    deps = ["//third_party/spanner_pg/interface:memory_reservation_manager"],
+    deps = [
+        "//third_party/spanner_pg/interface:memory_reservation_manager",
+        "@com_google_absl//absl/log",
+    ],
     alwayslink = 1,
 )
 

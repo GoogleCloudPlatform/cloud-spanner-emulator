@@ -154,59 +154,11 @@ class PostgresFunctionArguments {
 // annotated with its category to easily find the function definition.
 
 // Time.
-void AddDatetimeExtractFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
-
-// Time.
 void AddDatetimeConversionFunctions(
     std::vector<PostgresFunctionArguments>& functions);
 
-// Time.
-void AddTimeAndDatetimeConstructionAndConversionFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
-
-// Time.
-void AddDatetimeCurrentFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
-
-// Time.
-void AddDatetimeAddSubFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
-
-// Time.
-void AddDatetimeDiffTruncLastFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
-
-// Time.
-void AddDatetimeFormatFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
-
-// Time.
-void AddDatetimeFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Time.
-void AddIntervalFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Math.
-void AddArithmeticFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Math.
-void AddBitwiseFunctions(std::vector<PostgresFunctionArguments>& functions);
-
 // Miscellaneous.
 void AddAggregateFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Math.
-void AddApproxFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Math.
-void AddStatisticalFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Math.
-void AddAnalyticFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Miscellaneous.
-void AddBooleanFunctions(std::vector<PostgresFunctionArguments>& functions);
 
 // Miscellaneous.
 void AddLogicFunctions(std::vector<PostgresFunctionArguments>& functions);
@@ -214,54 +166,8 @@ void AddLogicFunctions(std::vector<PostgresFunctionArguments>& functions);
 // String.
 void AddStringFunctions(std::vector<PostgresFunctionArguments>& functions);
 
-// String.
-void AddRegexFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// String.
-void AddProto3ConversionFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
-
 // Miscellaneous.
 void AddMiscellaneousFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
-
-// String.
-void AddJSONFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Math.
-void AddNumericFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Math.
-void AddTrigonometricFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
-
-// Miscellaneous.
-void AddNetFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Miscellaneous.
-void AddHllCountFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Miscellaneous.
-void AddKllQuantilesFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
-
-// Miscellaneous.
-void AddHashingFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Miscellaneous.
-void AddEncryptionFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Miscellaneous.
-void AddGeographyFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Miscellaneous.
-void AddAnonFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Miscellaneous.
-void AddSequenceFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// String.
-void AddContainsSubstrFunction(
     std::vector<PostgresFunctionArguments>& functions);
 
 // Expr.

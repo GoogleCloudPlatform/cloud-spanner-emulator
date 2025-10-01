@@ -114,7 +114,6 @@ cc_library(
         "//backend/query:queryable_view",
         "//backend/schema/catalog:schema",
         "//backend/schema/graph:schema_node",
-        "//common:constants",
         "//common:errors",
         "//common:limits",
         "@com_google_absl//absl/container:flat_hash_set",

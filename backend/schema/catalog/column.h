@@ -126,16 +126,13 @@ class Column : public SchemaNode {
   bool is_stored() const { return is_stored_; }
 
   // Returns whether the column has a default value.
-  bool has_default_value() const {
-    return expression_.has_value() && has_default_value_;
-  }
+  bool has_default_value() const { return has_default_value_; }
 
-  // Returns the expression if the column is a generated column or if it has
-  // a default value.
+  // Returns the expression if the column is an evaluated column.
   const std::optional<std::string>& expression() const { return expression_; }
 
-  // Returns the original dialect expression if the column is a generated column
-  // or if it has a default value.
+  // Returns the original dialect expression if the column is an evaluated
+  // column.
   const std::optional<std::string>& original_expression() const {
     return original_expression_;
   }
@@ -259,14 +256,14 @@ class Column : public SchemaNode {
   // Length for STRING and BYTES. If unset, indicates the max allowed length.
   std::optional<int64_t> declared_max_length_ = std::nullopt;
 
-  // Expression for generated column or default value.
+  // Expression for an evaluated column.
   std::optional<std::string> expression_ = std::nullopt;
 
   // Enforce the size of a search vector. Currently it can only apply on ARRAY
   // column "Embeddings ARRAY<FLOAT64>(vector_length=>128)".
   std::optional<uint32_t> vector_length_ = std::nullopt;
 
-  // Original dialect expression for generated column or default value.
+  // Original dialect expression for an evaluated column.
   std::optional<std::string> original_expression_ = std::nullopt;
 
   // Whether the column has a default value.

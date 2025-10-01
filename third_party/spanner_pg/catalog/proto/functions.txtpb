@@ -36,6 +36,8 @@ functions {
       name_path: "pg"
       name_path: "float8pl"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -59,6 +61,8 @@ functions {
       name_path: "pg"
       name_path: "numeric_add"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -82,6 +86,8 @@ functions {
       name_path: "pg"
       name_path: "int8pl"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -114,6 +120,8 @@ functions {
       name_path: "pg"
       name_path: "int8and"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -146,6 +154,8 @@ functions {
       name_path: "pg"
       name_path: "int8shl"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -171,6 +181,8 @@ functions {
       name_path: "pg"
       name_path: "int8not"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -203,6 +215,8 @@ functions {
       name_path: "pg"
       name_path: "int8or"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -235,6 +249,8 @@ functions {
       name_path: "pg"
       name_path: "int8shr"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -267,6 +283,8 @@ functions {
       name_path: "pg"
       name_path: "int8xor"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -295,6 +313,8 @@ functions {
       name_path: "pg"
       name_path: "float8div"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -318,6 +338,8 @@ functions {
       name_path: "pg"
       name_path: "numeric_div"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -346,6 +368,8 @@ functions {
       name_path: "pg"
       name_path: "booleq"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -369,6 +393,8 @@ functions {
       name_path: "pg"
       name_path: "byteaeq"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -392,6 +418,8 @@ functions {
       name_path: "pg"
       name_path: "date_eq"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -415,6 +443,8 @@ functions {
       name_path: "pg"
       name_path: "float4eq"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -438,6 +468,8 @@ functions {
       name_path: "pg"
       name_path: "float8eq"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -461,6 +493,8 @@ functions {
       name_path: "pg"
       name_path: "interval_eq"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -484,6 +518,8 @@ functions {
       name_path: "pg"
       name_path: "int8eq"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -507,6 +543,8 @@ functions {
       name_path: "pg"
       name_path: "numeric_eq"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -530,6 +568,8 @@ functions {
       name_path: "pg"
       name_path: "oideq"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -553,6 +593,8 @@ functions {
       name_path: "pg"
       name_path: "texteq"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -576,6 +618,8 @@ functions {
       name_path: "pg"
       name_path: "timestamptz_eq"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -599,6 +643,8 @@ functions {
       name_path: "pg"
       name_path: "uuid_eq"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -627,6 +673,8 @@ functions {
       name_path: "pg"
       name_path: "boolgt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -650,6 +698,8 @@ functions {
       name_path: "pg"
       name_path: "byteagt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -673,6 +723,8 @@ functions {
       name_path: "pg"
       name_path: "date_gt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -696,6 +748,8 @@ functions {
       name_path: "pg"
       name_path: "float4gt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -719,6 +773,8 @@ functions {
       name_path: "pg"
       name_path: "float8gt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -742,6 +798,8 @@ functions {
       name_path: "pg"
       name_path: "interval_gt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -765,6 +823,8 @@ functions {
       name_path: "pg"
       name_path: "int8gt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -788,6 +848,8 @@ functions {
       name_path: "pg"
       name_path: "numeric_gt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -811,6 +873,8 @@ functions {
       name_path: "pg"
       name_path: "oidgt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -834,6 +898,8 @@ functions {
       name_path: "pg"
       name_path: "text_gt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -857,6 +923,8 @@ functions {
       name_path: "pg"
       name_path: "timestamptz_gt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -880,6 +948,8 @@ functions {
       name_path: "pg"
       name_path: "uuid_gt"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -908,6 +978,8 @@ functions {
       name_path: "pg"
       name_path: "boolge"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -931,6 +1003,8 @@ functions {
       name_path: "pg"
       name_path: "byteage"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -954,6 +1028,8 @@ functions {
       name_path: "pg"
       name_path: "date_ge"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -977,6 +1053,8 @@ functions {
       name_path: "pg"
       name_path: "float4ge"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1000,6 +1078,8 @@ functions {
       name_path: "pg"
       name_path: "float8ge"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1023,6 +1103,8 @@ functions {
       name_path: "pg"
       name_path: "interval_ge"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1046,6 +1128,8 @@ functions {
       name_path: "pg"
       name_path: "int8ge"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1069,6 +1153,8 @@ functions {
       name_path: "pg"
       name_path: "numeric_ge"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1092,6 +1178,8 @@ functions {
       name_path: "pg"
       name_path: "oidge"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1115,6 +1203,8 @@ functions {
       name_path: "pg"
       name_path: "text_ge"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1138,6 +1228,8 @@ functions {
       name_path: "pg"
       name_path: "timestamptz_ge"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1161,6 +1253,8 @@ functions {
       name_path: "pg"
       name_path: "uuid_ge"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -1189,6 +1283,8 @@ functions {
       name_path: "pg"
       name_path: "boollt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1212,6 +1308,8 @@ functions {
       name_path: "pg"
       name_path: "bytealt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1235,6 +1333,8 @@ functions {
       name_path: "pg"
       name_path: "date_lt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1258,6 +1358,8 @@ functions {
       name_path: "pg"
       name_path: "float4lt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1281,6 +1383,8 @@ functions {
       name_path: "pg"
       name_path: "float8lt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1304,6 +1408,8 @@ functions {
       name_path: "pg"
       name_path: "interval_lt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1327,6 +1433,8 @@ functions {
       name_path: "pg"
       name_path: "int8lt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1350,6 +1458,8 @@ functions {
       name_path: "pg"
       name_path: "numeric_lt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1373,6 +1483,8 @@ functions {
       name_path: "pg"
       name_path: "oidlt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1396,6 +1508,8 @@ functions {
       name_path: "pg"
       name_path: "text_lt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1419,6 +1533,8 @@ functions {
       name_path: "pg"
       name_path: "timestamptz_lt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1442,6 +1558,8 @@ functions {
       name_path: "pg"
       name_path: "uuid_lt"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -1470,6 +1588,8 @@ functions {
       name_path: "pg"
       name_path: "boolle"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1493,6 +1613,8 @@ functions {
       name_path: "pg"
       name_path: "byteale"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1516,6 +1638,8 @@ functions {
       name_path: "pg"
       name_path: "date_le"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1539,6 +1663,8 @@ functions {
       name_path: "pg"
       name_path: "float4le"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1562,6 +1688,8 @@ functions {
       name_path: "pg"
       name_path: "float8le"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1585,6 +1713,8 @@ functions {
       name_path: "pg"
       name_path: "interval_le"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1608,6 +1738,8 @@ functions {
       name_path: "pg"
       name_path: "int8le"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1631,6 +1763,8 @@ functions {
       name_path: "pg"
       name_path: "numeric_le"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1654,6 +1788,8 @@ functions {
       name_path: "pg"
       name_path: "oidle"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1677,6 +1813,8 @@ functions {
       name_path: "pg"
       name_path: "text_le"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1700,6 +1838,8 @@ functions {
       name_path: "pg"
       name_path: "timestamptz_le"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1723,6 +1863,8 @@ functions {
       name_path: "pg"
       name_path: "uuid_le"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -1755,6 +1897,8 @@ functions {
       name_path: "pg"
       name_path: "bytealike"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1782,6 +1926,8 @@ functions {
       name_path: "pg"
       name_path: "textlike"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -1810,6 +1956,8 @@ functions {
       name_path: "pg"
       name_path: "float8mul"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1833,6 +1981,8 @@ functions {
       name_path: "pg"
       name_path: "numeric_mul"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1856,6 +2006,8 @@ functions {
       name_path: "pg"
       name_path: "int8mul"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -1884,6 +2036,8 @@ functions {
       name_path: "pg"
       name_path: "boolne"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1907,6 +2061,8 @@ functions {
       name_path: "pg"
       name_path: "byteane"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1930,6 +2086,8 @@ functions {
       name_path: "pg"
       name_path: "date_ne"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1953,6 +2111,8 @@ functions {
       name_path: "pg"
       name_path: "float4ne"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1976,6 +2136,8 @@ functions {
       name_path: "pg"
       name_path: "float8ne"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -1999,6 +2161,8 @@ functions {
       name_path: "pg"
       name_path: "interval_ne"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2022,6 +2186,8 @@ functions {
       name_path: "pg"
       name_path: "int8ne"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2045,6 +2211,8 @@ functions {
       name_path: "pg"
       name_path: "numeric_ne"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2068,6 +2236,8 @@ functions {
       name_path: "pg"
       name_path: "oidne"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2091,6 +2261,8 @@ functions {
       name_path: "pg"
       name_path: "textne"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2114,6 +2286,8 @@ functions {
       name_path: "pg"
       name_path: "timestamptz_ne"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2137,6 +2311,8 @@ functions {
       name_path: "pg"
       name_path: "uuid_ne"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -2165,6 +2341,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_array_element"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2188,6 +2366,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_object_field"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -2216,6 +2396,8 @@ functions {
       name_path: "pg"
       name_path: "float8mi"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2239,6 +2421,8 @@ functions {
       name_path: "pg"
       name_path: "numeric_sub"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2262,6 +2446,8 @@ functions {
       name_path: "pg"
       name_path: "int8mi"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -2283,6 +2469,8 @@ functions {
       name_path: "pg"
       name_path: "float8um"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2299,6 +2487,8 @@ functions {
       name_path: "pg"
       name_path: "float4um"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2315,6 +2505,8 @@ functions {
       name_path: "pg"
       name_path: "numeric_uminus"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2331,6 +2523,8 @@ functions {
       name_path: "pg"
       name_path: "int8um"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -2356,6 +2550,8 @@ functions {
       name_path: "pg"
       name_path: "float4abs"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2376,6 +2572,8 @@ functions {
       name_path: "pg"
       name_path: "float8abs"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2396,6 +2594,8 @@ functions {
       name_path: "pg"
       name_path: "numeric_abs"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2416,6 +2616,8 @@ functions {
       name_path: "pg"
       name_path: "int8abs"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -2441,6 +2643,8 @@ functions {
       name_path: "pg"
       name_path: "acos"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -2473,6 +2677,8 @@ functions {
       name_path: "pg"
       name_path: "array_cat"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2496,6 +2702,8 @@ functions {
       name_path: "pg"
       name_path: "array_cat"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2519,6 +2727,8 @@ functions {
       name_path: "pg"
       name_path: "array_cat"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2542,6 +2752,58 @@ functions {
       name_path: "pg"
       name_path: "array_cat"
     }
+    enable_in_emulator: true
+    deprecated: false
+  }
+  signatures {
+    return_type {
+      oid: 1021
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1021
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "array_cat"
+    }
+    enable_in_emulator: true
+    deprecated: false
+  }
+  signatures {
+    return_type {
+      oid: 1187
+    }
+    arguments {
+      type {
+        oid: 1187
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1187
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "array_cat"
+    }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2565,6 +2827,8 @@ functions {
       name_path: "pg"
       name_path: "array_cat"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2588,6 +2852,8 @@ functions {
       name_path: "pg"
       name_path: "array_cat"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2611,6 +2877,8 @@ functions {
       name_path: "pg"
       name_path: "array_cat"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2634,6 +2902,8 @@ functions {
       name_path: "pg"
       name_path: "array_cat"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2657,6 +2927,8 @@ functions {
       name_path: "pg"
       name_path: "array_cat"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2680,6 +2952,8 @@ functions {
       name_path: "pg"
       name_path: "array_cat"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -2705,6 +2979,8 @@ functions {
       name_path: "pg"
       name_path: "asin"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -2730,6 +3006,8 @@ functions {
       name_path: "pg"
       name_path: "atan"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -2762,6 +3040,8 @@ functions {
       name_path: "pg"
       name_path: "atan2"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -2795,6 +3075,8 @@ functions {
       name_path: "spanner"
       name_path: "bit_reverse"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -2821,6 +3103,8 @@ functions {
       name_path: "spanner"
       name_path: "bool_array"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -2846,6 +3130,8 @@ functions {
       name_path: "pg"
       name_path: "ceiling"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2866,6 +3152,8 @@ functions {
       name_path: "pg"
       name_path: "ceiling"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -2895,6 +3183,8 @@ functions {
       name_path: "pg"
       name_path: "concat"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -2920,6 +3210,8 @@ functions {
       name_path: "pg"
       name_path: "cos"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -2953,6 +3245,8 @@ functions {
       name_path: "spanner"
       name_path: "cosine_distance"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -2977,6 +3271,8 @@ functions {
       name_path: "spanner"
       name_path: "cosine_distance"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -2995,6 +3291,8 @@ functions {
       name_path: "pg"
       name_path: "now"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3030,6 +3328,8 @@ functions {
       name_path: "pg"
       name_path: "make_date"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -3054,6 +3354,8 @@ functions {
       name_path: "spanner"
       name_path: "date"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3080,6 +3382,8 @@ functions {
       name_path: "spanner"
       name_path: "debug_tokenlist"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -3112,6 +3416,8 @@ functions {
       name_path: "pg"
       name_path: "numeric_div_trunc"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -3135,6 +3441,8 @@ functions {
       name_path: "pg"
       name_path: "int8div"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3170,6 +3478,8 @@ functions {
       name_path: "spanner"
       name_path: "dot_product"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -3196,6 +3506,8 @@ functions {
       name_path: "spanner"
       name_path: "dot_product"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -3222,6 +3534,8 @@ functions {
       name_path: "spanner"
       name_path: "dot_product"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3255,6 +3569,8 @@ functions {
       name_path: "spanner"
       name_path: "euclidean_distance"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -3279,6 +3595,8 @@ functions {
       name_path: "spanner"
       name_path: "euclidean_distance"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3304,6 +3622,8 @@ functions {
       name_path: "pg"
       name_path: "dexp"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3330,6 +3650,8 @@ functions {
       name_path: "spanner"
       name_path: "farm_fingerprint"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -3347,6 +3669,8 @@ functions {
       name_path: "spanner"
       name_path: "farm_fingerprint"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3373,6 +3697,8 @@ functions {
       name_path: "spanner"
       name_path: "float32_array"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3399,6 +3725,8 @@ functions {
       name_path: "spanner"
       name_path: "float64_array"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3424,6 +3752,8 @@ functions {
       name_path: "pg"
       name_path: "floor"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -3440,6 +3770,8 @@ functions {
       name_path: "pg"
       name_path: "floor"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3459,6 +3791,8 @@ functions {
       name_path: "spanner"
       name_path: "generate_uuid"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3485,6 +3819,8 @@ functions {
       name_path: "spanner"
       name_path: "get_internal_sequence_state"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3510,6 +3846,8 @@ functions {
       name_path: "pg"
       name_path: "nextval"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3536,6 +3874,8 @@ functions {
       name_path: "spanner"
       name_path: "get_table_column_identity_state"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3562,6 +3902,8 @@ functions {
       name_path: "spanner"
       name_path: "int64_array"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3588,6 +3930,8 @@ functions {
       name_path: "spanner"
       name_path: "jsonb_query_array"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3613,6 +3957,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_typeof"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3638,6 +3984,8 @@ functions {
       name_path: "pg"
       name_path: "length"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -3654,6 +4002,8 @@ functions {
       name_path: "pg"
       name_path: "length"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3679,6 +4029,8 @@ functions {
       name_path: "pg"
       name_path: "dlog1"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3704,6 +4056,8 @@ functions {
       name_path: "pg"
       name_path: "dlog10"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3729,6 +4083,8 @@ functions {
       name_path: "pg"
       name_path: "lower"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3761,6 +4117,8 @@ functions {
       name_path: "pg"
       name_path: "lpad"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -3791,6 +4149,8 @@ functions {
       name_path: "pg"
       name_path: "lpad"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3816,6 +4176,8 @@ functions {
       name_path: "pg"
       name_path: "ltrim"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -3839,6 +4201,8 @@ functions {
       name_path: "pg"
       name_path: "ltrim"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3874,6 +4238,8 @@ functions {
       name_path: "spanner"
       name_path: "ml_predict_row"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -3900,6 +4266,8 @@ functions {
       name_path: "spanner"
       name_path: "ml_predict_row"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3932,6 +4300,8 @@ functions {
       name_path: "pg"
       name_path: "numeric_mod"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -3959,6 +4329,8 @@ functions {
       name_path: "pg"
       name_path: "int8mod"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -3977,6 +4349,8 @@ functions {
       name_path: "pg"
       name_path: "gen_random_uuid"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -4021,6 +4395,8 @@ functions {
       name_path: "spanner"
       name_path: "approx_cosine_distance"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4055,6 +4431,8 @@ functions {
       name_path: "spanner"
       name_path: "approx_cosine_distance"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -4099,6 +4477,8 @@ functions {
       name_path: "spanner"
       name_path: "approx_dot_product"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4133,6 +4513,8 @@ functions {
       name_path: "spanner"
       name_path: "approx_dot_product"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -4177,6 +4559,8 @@ functions {
       name_path: "spanner"
       name_path: "approx_euclidean_distance"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4211,6 +4595,8 @@ functions {
       name_path: "spanner"
       name_path: "approx_euclidean_distance"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -4246,6 +4632,8 @@ functions {
       name_path: "pg"
       name_path: "array_all_equal"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -4281,6 +4669,8 @@ functions {
       name_path: "pg"
       name_path: "array_all_greater"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -4316,6 +4706,8 @@ functions {
       name_path: "pg"
       name_path: "array_all_greater_equal"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -4351,6 +4743,8 @@ functions {
       name_path: "pg"
       name_path: "array_all_less"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -4386,6 +4780,8 @@ functions {
       name_path: "pg"
       name_path: "array_all_less_equal"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -4421,6 +4817,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontained"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4446,6 +4844,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontained"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4471,6 +4871,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontained"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4496,6 +4898,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontained"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4521,6 +4925,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontained"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4546,6 +4952,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontained"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4571,6 +4979,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontained"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4596,6 +5006,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontained"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4621,6 +5033,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontained"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -4656,6 +5070,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontains"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4681,6 +5097,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontains"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4706,6 +5124,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontains"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4731,6 +5151,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontains"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4756,6 +5178,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontains"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4781,6 +5205,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontains"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4806,6 +5232,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontains"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4831,6 +5259,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontains"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4856,6 +5286,8 @@ functions {
       name_path: "pg"
       name_path: "arraycontains"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -4889,6 +5321,8 @@ functions {
       name_path: "pg"
       name_path: "array_length"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4912,6 +5346,8 @@ functions {
       name_path: "pg"
       name_path: "array_length"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4935,6 +5371,8 @@ functions {
       name_path: "pg"
       name_path: "array_length"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4958,6 +5396,8 @@ functions {
       name_path: "pg"
       name_path: "array_length"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -4981,6 +5421,8 @@ functions {
       name_path: "pg"
       name_path: "array_length"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5004,6 +5446,8 @@ functions {
       name_path: "pg"
       name_path: "array_length"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5027,6 +5471,8 @@ functions {
       name_path: "pg"
       name_path: "array_length"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5050,6 +5496,8 @@ functions {
       name_path: "pg"
       name_path: "array_length"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5073,6 +5521,8 @@ functions {
       name_path: "pg"
       name_path: "array_length"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5096,6 +5546,8 @@ functions {
       name_path: "pg"
       name_path: "array_length"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5119,6 +5571,8 @@ functions {
       name_path: "pg"
       name_path: "array_length"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5142,6 +5596,8 @@ functions {
       name_path: "pg"
       name_path: "array_length"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -5177,6 +5633,8 @@ functions {
       name_path: "pg"
       name_path: "arrayoverlap"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5202,6 +5660,8 @@ functions {
       name_path: "pg"
       name_path: "arrayoverlap"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5227,6 +5687,8 @@ functions {
       name_path: "pg"
       name_path: "arrayoverlap"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5252,6 +5714,8 @@ functions {
       name_path: "pg"
       name_path: "arrayoverlap"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5277,6 +5741,8 @@ functions {
       name_path: "pg"
       name_path: "arrayoverlap"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5302,6 +5768,8 @@ functions {
       name_path: "pg"
       name_path: "arrayoverlap"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5327,6 +5795,8 @@ functions {
       name_path: "pg"
       name_path: "arrayoverlap"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5352,6 +5822,8 @@ functions {
       name_path: "pg"
       name_path: "arrayoverlap"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5377,6 +5849,8 @@ functions {
       name_path: "pg"
       name_path: "arrayoverlap"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -5420,6 +5894,8 @@ functions {
       name_path: "pg"
       name_path: "array_slice"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -5453,6 +5929,8 @@ functions {
       name_path: "pg"
       name_path: "array_upper"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5476,6 +5954,8 @@ functions {
       name_path: "pg"
       name_path: "array_upper"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5499,6 +5979,8 @@ functions {
       name_path: "pg"
       name_path: "array_upper"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5522,6 +6004,8 @@ functions {
       name_path: "pg"
       name_path: "array_upper"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5545,6 +6029,8 @@ functions {
       name_path: "pg"
       name_path: "array_upper"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5568,6 +6054,8 @@ functions {
       name_path: "pg"
       name_path: "array_upper"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5591,6 +6079,8 @@ functions {
       name_path: "pg"
       name_path: "array_upper"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5614,6 +6104,8 @@ functions {
       name_path: "pg"
       name_path: "array_upper"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5637,6 +6129,8 @@ functions {
       name_path: "pg"
       name_path: "array_upper"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5660,6 +6154,8 @@ functions {
       name_path: "pg"
       name_path: "array_upper"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5683,6 +6179,8 @@ functions {
       name_path: "pg"
       name_path: "array_upper"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5706,6 +6204,8 @@ functions {
       name_path: "pg"
       name_path: "array_upper"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -5732,6 +6232,8 @@ functions {
       name_path: "pg"
       name_path: "cast_to_date"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -5758,6 +6260,8 @@ functions {
       name_path: "pg"
       name_path: "cast_to_double"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -5784,6 +6288,8 @@ functions {
       name_path: "pg"
       name_path: "cast_to_float"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -5810,6 +6316,8 @@ functions {
       name_path: "pg"
       name_path: "cast_to_int64"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -5836,6 +6344,8 @@ functions {
       name_path: "pg"
       name_path: "cast_to_interval"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -5862,6 +6372,8 @@ functions {
       name_path: "pg"
       name_path: "cast_to_numeric"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5878,6 +6390,8 @@ functions {
       name_path: "pg"
       name_path: "cast_to_numeric"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5894,6 +6408,8 @@ functions {
       name_path: "pg"
       name_path: "cast_to_numeric"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5910,6 +6426,8 @@ functions {
       name_path: "pg"
       name_path: "cast_to_numeric"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5940,6 +6458,8 @@ functions {
       name_path: "pg"
       name_path: "cast_to_numeric"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -5966,6 +6486,8 @@ functions {
       name_path: "pg"
       name_path: "cast_to_string"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -5982,6 +6504,8 @@ functions {
       name_path: "pg"
       name_path: "cast_to_string"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6008,6 +6532,8 @@ functions {
       name_path: "pg"
       name_path: "cast_to_timestamp"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6049,6 +6575,8 @@ functions {
       name_path: "spanner"
       name_path: "date_bin"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6082,6 +6610,8 @@ functions {
       name_path: "pg"
       name_path: "date_mi"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6115,6 +6645,8 @@ functions {
       name_path: "pg"
       name_path: "date_mii"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6148,6 +6680,8 @@ functions {
       name_path: "pg"
       name_path: "date_part"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -6171,6 +6705,8 @@ functions {
       name_path: "pg"
       name_path: "date_part"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6204,6 +6740,8 @@ functions {
       name_path: "pg"
       name_path: "date_pli"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6237,6 +6775,8 @@ functions {
       name_path: "pg"
       name_path: "date_trunc"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -6267,6 +6807,8 @@ functions {
       name_path: "pg"
       name_path: "date_trunc"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6300,6 +6842,8 @@ functions {
       name_path: "pg"
       name_path: "extract"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -6323,29 +6867,8 @@ functions {
       name_path: "pg"
       name_path: "extract"
     }
-  }
-  signatures {
-    return_type {
-      oid: 1700
-    }
-    arguments {
-      type {
-        oid: 25
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-    }
-    arguments {
-      type {
-        oid: 1186
-      }
-      cardinality: REQUIRED
-      named_argument_kind: POSITIONAL_ONLY
-    }
-    postgresql_name_paths {
-      name_path: "pg"
-      name_path: "extract"
-    }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6379,6 +6902,8 @@ functions {
       name_path: "pg"
       name_path: "extract"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6412,6 +6937,8 @@ functions {
       name_path: "pg"
       name_path: "float4pl"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6445,6 +6972,8 @@ functions {
       name_path: "pg"
       name_path: "float4div"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6478,6 +7007,8 @@ functions {
       name_path: "pg"
       name_path: "float4mul"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6511,6 +7042,8 @@ functions {
       name_path: "pg"
       name_path: "float4mi"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6544,6 +7077,8 @@ functions {
       name_path: "pg"
       name_path: "format_type"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6584,6 +7119,8 @@ functions {
       name_path: "pg"
       name_path: "generate_series"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -6617,6 +7154,8 @@ functions {
       name_path: "pg"
       name_path: "greatest"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -6640,6 +7179,8 @@ functions {
       name_path: "pg"
       name_path: "greatest"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -6663,6 +7204,8 @@ functions {
       name_path: "pg"
       name_path: "greatest"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -6686,6 +7229,8 @@ functions {
       name_path: "pg"
       name_path: "greatest"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -6709,6 +7254,8 @@ functions {
       name_path: "pg"
       name_path: "greatest"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -6732,6 +7279,8 @@ functions {
       name_path: "pg"
       name_path: "greatest"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -6755,6 +7304,8 @@ functions {
       name_path: "pg"
       name_path: "greatest"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -6778,6 +7329,8 @@ functions {
       name_path: "pg"
       name_path: "greatest"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -6801,6 +7354,8 @@ functions {
       name_path: "pg"
       name_path: "greatest"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -6824,6 +7379,8 @@ functions {
       name_path: "pg"
       name_path: "greatest"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -6847,6 +7404,39 @@ functions {
       name_path: "pg"
       name_path: "greatest"
     }
+    enable_in_emulator: true
+    deprecated: false
+  }
+}
+functions {
+  mapped_name_path {
+    name_path: "pg"
+    name_path: "ilike"
+  }
+  signatures {
+    return_type {
+      oid: 16
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "texticlike"
+    }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -6880,6 +7470,8 @@ functions {
       name_path: "pg"
       name_path: "interval_pl"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6913,6 +7505,8 @@ functions {
       name_path: "pg"
       name_path: "interval_div"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6946,6 +7540,8 @@ functions {
       name_path: "pg"
       name_path: "interval_mul"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -6979,6 +7575,8 @@ functions {
       name_path: "pg"
       name_path: "interval_mi"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7005,6 +7603,8 @@ functions {
       name_path: "pg"
       name_path: "interval_um"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7032,6 +7632,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_build_array"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7066,6 +7668,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_build_object"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7099,6 +7703,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_concat"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7132,6 +7738,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_contained"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7165,6 +7773,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_contains"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7198,6 +7808,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_delete"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -7221,6 +7833,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_delete"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7254,6 +7868,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_delete_path"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7287,6 +7903,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_eq"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7320,6 +7938,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_exists"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7353,6 +7973,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_exists_all"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7386,6 +8008,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_exists_any"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7419,6 +8043,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_ge"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7452,6 +8078,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_gt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7499,6 +8127,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_insert"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7532,6 +8162,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_le"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7565,6 +8197,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_lt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7598,6 +8232,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_ne"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7624,6 +8260,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_object_keys"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -7671,6 +8309,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_set"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7725,6 +8365,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_set_lax"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7751,6 +8393,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_strip_nulls"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7780,6 +8424,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_array_element_text"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -7803,6 +8449,8 @@ functions {
       name_path: "pg"
       name_path: "jsonb_object_field_text"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7829,6 +8477,8 @@ functions {
       name_path: "pg"
       name_path: "justify_days"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7855,6 +8505,8 @@ functions {
       name_path: "pg"
       name_path: "justify_hours"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7881,6 +8533,8 @@ functions {
       name_path: "pg"
       name_path: "justify_interval"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -7914,6 +8568,8 @@ functions {
       name_path: "pg"
       name_path: "least"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -7937,6 +8593,8 @@ functions {
       name_path: "pg"
       name_path: "least"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -7960,6 +8618,8 @@ functions {
       name_path: "pg"
       name_path: "least"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -7983,6 +8643,8 @@ functions {
       name_path: "pg"
       name_path: "least"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8006,6 +8668,8 @@ functions {
       name_path: "pg"
       name_path: "least"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8029,6 +8693,8 @@ functions {
       name_path: "pg"
       name_path: "least"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8052,6 +8718,8 @@ functions {
       name_path: "pg"
       name_path: "least"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8075,6 +8743,8 @@ functions {
       name_path: "pg"
       name_path: "least"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8098,6 +8768,8 @@ functions {
       name_path: "pg"
       name_path: "least"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8121,6 +8793,8 @@ functions {
       name_path: "pg"
       name_path: "least"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8144,6 +8818,8 @@ functions {
       name_path: "pg"
       name_path: "least"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -8220,6 +8896,8 @@ functions {
       name_path: "pg"
       name_path: "make_interval"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -8246,6 +8924,8 @@ functions {
       name_path: "pg"
       name_path: "map_double_to_int"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -8272,6 +8952,8 @@ functions {
       name_path: "pg"
       name_path: "map_float_to_int"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -8298,6 +8980,8 @@ functions {
       name_path: "pg"
       name_path: "quote_ident"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -8331,6 +9015,8 @@ functions {
       name_path: "pg"
       name_path: "regexp_match"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8361,6 +9047,8 @@ functions {
       name_path: "pg"
       name_path: "regexp_match"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -8394,6 +9082,8 @@ functions {
       name_path: "pg"
       name_path: "regexp_split_to_array"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8424,6 +9114,8 @@ functions {
       name_path: "pg"
       name_path: "regexp_split_to_array"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -8457,6 +9149,8 @@ functions {
       name_path: "pg"
       name_path: "substring"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -8490,6 +9184,8 @@ functions {
       name_path: "pg"
       name_path: "textregexne"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -8520,6 +9216,8 @@ functions {
       name_path: "spanner"
       name_path: "timestamptz_add"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8543,6 +9241,8 @@ functions {
       name_path: "pg"
       name_path: "timestamptz_pl_interval"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -8573,6 +9273,8 @@ functions {
       name_path: "spanner"
       name_path: "timestamptz_subtract"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8596,6 +9298,8 @@ functions {
       name_path: "pg"
       name_path: "timestamptz_mi_interval"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -8629,6 +9333,8 @@ functions {
       name_path: "pg"
       name_path: "timestamptz_mi"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -8662,6 +9368,8 @@ functions {
       name_path: "pg"
       name_path: "to_char"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8685,6 +9393,8 @@ functions {
       name_path: "pg"
       name_path: "to_char"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8708,6 +9418,8 @@ functions {
       name_path: "pg"
       name_path: "to_char"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8731,6 +9443,8 @@ functions {
       name_path: "pg"
       name_path: "to_char"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8754,6 +9468,8 @@ functions {
       name_path: "pg"
       name_path: "to_char"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8777,6 +9493,8 @@ functions {
       name_path: "pg"
       name_path: "to_char"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -8810,6 +9528,8 @@ functions {
       name_path: "pg"
       name_path: "to_date"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -8836,6 +9556,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8852,6 +9574,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8868,6 +9592,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8884,6 +9610,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8900,6 +9628,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8916,6 +9646,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8932,6 +9664,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8948,6 +9682,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8964,6 +9700,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8980,6 +9718,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -8996,6 +9736,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9012,6 +9754,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9028,6 +9772,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9044,6 +9790,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9060,6 +9808,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9076,6 +9826,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9092,6 +9844,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9108,6 +9862,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9124,6 +9880,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9140,6 +9898,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9156,6 +9916,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9172,6 +9934,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9188,6 +9952,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9204,6 +9970,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9220,6 +9988,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9236,6 +10006,8 @@ functions {
       name_path: "pg"
       name_path: "to_jsonb"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9269,6 +10041,8 @@ functions {
       name_path: "pg"
       name_path: "to_number"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9302,6 +10076,8 @@ functions {
       name_path: "pg"
       name_path: "to_timestamp"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9338,6 +10114,8 @@ functions {
       name_path: "pg"
       name_path: "power"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9370,6 +10148,8 @@ functions {
       name_path: "pg"
       name_path: "textregexeq"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9409,6 +10189,8 @@ functions {
       name_path: "pg"
       name_path: "regexp_replace"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9441,6 +10223,8 @@ functions {
       name_path: "pg"
       name_path: "repeat"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9480,6 +10264,8 @@ functions {
       name_path: "pg"
       name_path: "replace"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9505,6 +10291,8 @@ functions {
       name_path: "pg"
       name_path: "reverse"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9530,6 +10318,8 @@ functions {
       name_path: "pg"
       name_path: "round"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9562,6 +10352,8 @@ functions {
       name_path: "pg"
       name_path: "rpad"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9592,6 +10384,8 @@ functions {
       name_path: "pg"
       name_path: "rpad"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9617,6 +10411,8 @@ functions {
       name_path: "pg"
       name_path: "rtrim"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -9640,6 +10436,8 @@ functions {
       name_path: "pg"
       name_path: "rtrim"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9715,6 +10513,8 @@ functions {
       name_path: "spanner"
       name_path: "score"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9766,6 +10566,8 @@ functions {
       name_path: "spanner"
       name_path: "score_ngrams"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9833,6 +10635,8 @@ functions {
       name_path: "spanner"
       name_path: "search"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9892,6 +10696,8 @@ functions {
       name_path: "spanner"
       name_path: "search_ngrams"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9943,6 +10749,8 @@ functions {
       name_path: "spanner"
       name_path: "search_substring"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9968,6 +10776,8 @@ functions {
       name_path: "pg"
       name_path: "sha256"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -9993,6 +10803,8 @@ functions {
       name_path: "pg"
       name_path: "sha512"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10018,6 +10830,8 @@ functions {
       name_path: "pg"
       name_path: "sign"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10043,6 +10857,8 @@ functions {
       name_path: "pg"
       name_path: "sin"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10126,6 +10942,8 @@ functions {
       name_path: "spanner"
       name_path: "snippet"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10152,6 +10970,90 @@ functions {
       name_path: "spanner"
       name_path: "soundex"
     }
+    enable_in_emulator: true
+    deprecated: false
+  }
+}
+functions {
+  mapped_name_path {
+    name_path: "split_substr"
+  }
+  postgresql_name_paths {
+    name_path: "spanner"
+    name_path: "split_substr"
+  }
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    oid: 50076
+    postgresql_name_paths {
+      name_path: "spanner"
+      name_path: "split_substr"
+    }
+    enable_in_emulator: false
+    deprecated: false
+  }
+  signatures {
+    return_type {
+      oid: 25
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    oid: 50075
+    postgresql_name_paths {
+      name_path: "spanner"
+      name_path: "split_substr"
+    }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -10177,6 +11079,8 @@ functions {
       name_path: "pg"
       name_path: "dsqrt"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10209,6 +11113,8 @@ functions {
       name_path: "pg"
       name_path: "starts_with"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10235,6 +11141,8 @@ functions {
       name_path: "spanner"
       name_path: "string_array"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10267,6 +11175,8 @@ functions {
       name_path: "pg"
       name_path: "strpos"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10275,7 +11185,7 @@ functions {
   }
   signatures {
     return_type {
-      oid: 25
+      oid: 17
     }
     arguments {
       type {
@@ -10299,6 +11209,8 @@ functions {
       name_path: "pg"
       name_path: "substring"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -10326,10 +11238,12 @@ functions {
       name_path: "pg"
       name_path: "substring"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
-      oid: 25
+      oid: 17
     }
     arguments {
       type {
@@ -10349,10 +11263,9 @@ functions {
       type {
         oid: 20
       }
-      cardinality: OPTIONAL
+      cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
-    oid: 2085
     postgresql_name_paths {
       name_path: "pg"
       name_path: "substr"
@@ -10361,6 +11274,8 @@ functions {
       name_path: "pg"
       name_path: "substring"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -10384,10 +11299,9 @@ functions {
       type {
         oid: 20
       }
-      cardinality: OPTIONAL
+      cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
-    oid: 877
     postgresql_name_paths {
       name_path: "pg"
       name_path: "substr"
@@ -10396,6 +11310,8 @@ functions {
       name_path: "pg"
       name_path: "substring"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10421,6 +11337,8 @@ functions {
       name_path: "pg"
       name_path: "tan"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10447,6 +11365,8 @@ functions {
       name_path: "spanner"
       name_path: "timestamp_from_unix_micros"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -10464,6 +11384,8 @@ functions {
       name_path: "spanner"
       name_path: "timestamp_from_unix_micros"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10490,6 +11412,8 @@ functions {
       name_path: "spanner"
       name_path: "timestamp_from_unix_millis"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -10507,6 +11431,8 @@ functions {
       name_path: "spanner"
       name_path: "timestamp_from_unix_millis"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10532,6 +11458,8 @@ functions {
       name_path: "pg"
       name_path: "to_timestamp"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10558,6 +11486,8 @@ functions {
       name_path: "spanner"
       name_path: "token"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -10575,6 +11505,8 @@ functions {
       name_path: "spanner"
       name_path: "token"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
   signatures {
     return_type {
@@ -10592,6 +11524,8 @@ functions {
       name_path: "spanner"
       name_path: "token"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -10609,6 +11543,8 @@ functions {
       name_path: "spanner"
       name_path: "token"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -10636,6 +11572,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenize_bool"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10687,6 +11625,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenize_fulltext"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -10729,6 +11669,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenize_fulltext"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10756,6 +11698,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenize_jsonb"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -10807,6 +11751,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenize_ngrams"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -10849,6 +11795,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenize_ngrams"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -10932,6 +11880,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenize_number"
     }
+    enable_in_emulator: false
+    deprecated: true
   }
   signatures {
     return_type {
@@ -11006,6 +11956,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenize_number"
     }
+    enable_in_emulator: false
+    deprecated: true
   }
   signatures {
     return_type {
@@ -11080,6 +12032,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenize_number"
     }
+    enable_in_emulator: true
+    deprecated: true
   }
   signatures {
     return_type {
@@ -11154,6 +12108,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenize_number"
     }
+    enable_in_emulator: false
+    deprecated: true
   }
   signatures {
     return_type {
@@ -11228,6 +12184,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenize_number"
     }
+    enable_in_emulator: false
+    deprecated: true
   }
   signatures {
     return_type {
@@ -11302,6 +12260,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenize_number"
     }
+    enable_in_emulator: false
+    deprecated: true
   }
 }
 functions {
@@ -11385,6 +12345,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenize_substring"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -11459,6 +12421,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenize_substring"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -11486,6 +12450,8 @@ functions {
       name_path: "spanner"
       name_path: "tokenlist_concat"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -11511,6 +12477,8 @@ functions {
       name_path: "pg"
       name_path: "btrim"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -11534,6 +12502,8 @@ functions {
       name_path: "pg"
       name_path: "btrim"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -11550,14 +12520,15 @@ functions {
       type {
         oid: 25
       }
-      cardinality: OPTIONAL
+      cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
     }
-    oid: 884
     postgresql_name_paths {
       name_path: "pg"
       name_path: "btrim"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -11583,6 +12554,8 @@ functions {
       name_path: "pg"
       name_path: "trunc"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
   signatures {
     return_type {
@@ -11606,6 +12579,8 @@ functions {
       name_path: "pg"
       name_path: "trunc"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -11631,6 +12606,8 @@ functions {
       name_path: "pg"
       name_path: "upper"
     }
+    enable_in_emulator: true
+    deprecated: false
   }
 }
 functions {
@@ -11666,6 +12643,8 @@ functions {
       name_path: "spanner"
       name_path: "zstd_compress"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
   signatures {
     return_type {
@@ -11692,6 +12671,8 @@ functions {
       name_path: "spanner"
       name_path: "zstd_compress"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -11727,6 +12708,8 @@ functions {
       name_path: "spanner"
       name_path: "zstd_decompress_to_bytes"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 functions {
@@ -11762,6 +12745,8 @@ functions {
       name_path: "spanner"
       name_path: "zstd_decompress_to_string"
     }
+    enable_in_emulator: false
+    deprecated: false
   }
 }
 

@@ -51,13 +51,6 @@ void AddFullTextSearchFunctions(
 
 void AddIntervalFunctions(std::vector<PostgresFunctionArguments>& functions);
 
-void AddPgComparisonFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
-
-void AddPgArrayFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-void AddPgDatetimeFunctions(std::vector<PostgresFunctionArguments>& functions);
-
 void AddPgFormattingFunctions(
     std::vector<PostgresFunctionArguments>& functions);
 
@@ -72,8 +65,6 @@ void AddPgLeastGreatestFunctions(
 // Postgres' order semantics (e.g. PG.MIN).
 void RemapFunctionsForSpanner(
     std::vector<PostgresFunctionArguments>& functions);
-
-void AddCompressionFunctions(std::vector<PostgresFunctionArguments>& functions);
 
 }  // namespace spangres
 }  // namespace postgres_translator

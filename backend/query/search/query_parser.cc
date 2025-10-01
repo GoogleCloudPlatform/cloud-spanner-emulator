@@ -46,6 +46,10 @@ namespace query {
 namespace search {
 
 namespace {
+constexpr absl::string_view kSeparators = "~`!@#$%^&_+{}[]<>,?* \r\n\t\b\f_;";
+}  // namespace
+
+namespace {
 
 // Borrowed from backend/schema/parser/query_parser.cc DDLErrorHandler.
 // The class is used by query parser to record the parsing errors.
@@ -140,6 +144,17 @@ absl::Status QueryParser::NormalizeParsedTree(SimpleNode* tree) {
 }
 
 absl::Status QueryParser::ParseSearchQuery() {
+  // Trim leading and trailing separators to avoid parsing errors.
+  auto start = search_query_.find_first_not_of(kSeparators.data(), 0,
+                                               kSeparators.size());
+  if (start == std::string::npos) {
+    search_query_.clear();
+  } else {
+    auto end = search_query_.find_last_not_of(
+        kSeparators.data(), std::string::npos, kSeparators.size());
+    search_query_.erase(end + 1);
+    search_query_.erase(0, start);
+  }
   if (search_query_.empty()) {
     return absl::OkStatus();
   }

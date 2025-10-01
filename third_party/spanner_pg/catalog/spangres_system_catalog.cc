@@ -51,6 +51,7 @@
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
+#include "zetasql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
@@ -80,11 +81,50 @@
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
-ABSL_FLAG(
-    std::vector<std::string>, catalog_functions_allowlist,
-    std::vector<std::string>({}),
-    "List of functions to be registered from the protobuf catalog instead of "
-    "manually.");
+static zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+    kCatalogManualRegistration({
+        "pg.array_all_equal",
+        "pg.array_all_greater",
+        "pg.array_all_greater_equal",
+        "pg.array_all_less",
+        "pg.array_all_less_equal",
+        "pg.array_slice",
+        "pg.greatest",
+        "pg.least",
+
+        "pg.cast_to_date",
+        "pg.cast_to_double",
+        "pg.cast_to_float",
+        "pg.cast_to_int64",
+        "pg.cast_to_interval",
+        "pg.cast_to_numeric",
+        "pg.cast_to_string",
+        "pg.cast_to_timestamp",
+        "pg.map_double_to_int",
+        "pg.map_float_to_int",
+
+        "pg.jsonb_build_object",
+        "pg.jsonb_build_array",
+
+        "pg.generate_array",
+
+        // Registered through make_date
+        "date",
+        // Registered through pg.extract
+        "pg.extract_interval",
+        // Registered through timestamp_seconds
+        "pg.to_timestamp",
+        // Registered through substr
+        "pg.substring",
+
+        "pg.date_part",
+        "pg.jsonb_eq",
+        "pg.jsonb_ge",
+        "pg.jsonb_gt",
+        "pg.jsonb_le",
+        "pg.jsonb_lt",
+        "pg.jsonb_ne",
+    });
 
 namespace postgres_translator {
 namespace spangres {
@@ -538,19 +578,17 @@ absl::StatusOr<const CatalogProto> GetCatalogProto() {
 absl::Status SpangresSystemCatalog::AddFunctionRegistryFunctions(
     std::vector<PostgresFunctionArguments>& functions) {
   SpangresFunctionMapper mapper(this);
-  absl::flat_hash_set<std::string> allowlist(
-      absl::GetFlag(FLAGS_catalog_functions_allowlist).begin(),
-      absl::GetFlag(FLAGS_catalog_functions_allowlist).end());
   ZETASQL_ASSIGN_OR_RETURN(const CatalogProto catalog_proto, GetCatalogProto());
   for (const auto& catalog_function : catalog_proto.functions()) {
     std::string full_name =
         absl::StrJoin(catalog_function.mapped_name_path().name_path(), ".");
-    if (allowlist.contains(full_name)) {
-      ZETASQL_ASSIGN_OR_RETURN(std::vector<PostgresFunctionArguments> mapped_functions,
-                       mapper.ToPostgresFunctionArguments(catalog_function));
-      for (const auto& mapped_function : mapped_functions) {
-        functions.push_back(mapped_function);
-      }
+    if (kCatalogManualRegistration->contains(full_name)) {
+      continue;
+    }
+    ZETASQL_ASSIGN_OR_RETURN(std::vector<PostgresFunctionArguments> mapped_functions,
+                     mapper.ToPostgresFunctionArguments(catalog_function));
+    for (const auto& mapped_function : mapped_functions) {
+      functions.push_back(mapped_function);
     }
   }
 
@@ -559,24 +597,16 @@ absl::Status SpangresSystemCatalog::AddFunctionRegistryFunctions(
 
 absl::Status SpangresSystemCatalog::AddFunctions(
     const zetasql::LanguageOptions& language_options) {
+
   // Populate the set of ZetaSQL functions supported in Spangres.
   std::vector<PostgresFunctionArguments> functions;
 
   ZETASQL_RETURN_IF_ERROR(AddFunctionRegistryFunctions(functions));
   AddAggregateFunctions(functions);
-  AddArithmeticFunctions(functions);
-  AddBitwiseFunctions(functions);
-  AddBooleanFunctions(functions);
-  AddDatetimeCurrentFunctions(functions);
   AddMiscellaneousFunctions(functions);
-  AddNumericFunctions(functions);
-  AddRegexFunctions(functions);
   AddStringFunctions(functions);
-  AddTrigonometricFunctions(functions);
   AddDatetimeConversionFunctions(functions);
-  AddHashingFunctions(functions);
   AddSpannerFunctions(functions);
-  AddSequenceFunctions(functions);
 
     spangres::AddPgNumericFunctions(functions);
       ZETASQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_numeric"));
@@ -597,9 +627,6 @@ absl::Status SpangresSystemCatalog::AddFunctions(
     spangres::AddPgJsonbFunctions(functions);
 
   spangres::AddPgOidFunctions(functions);
-  spangres::AddPgArrayFunctions(functions);
-  spangres::AddPgComparisonFunctions(functions);
-  spangres::AddPgDatetimeFunctions(functions);
   spangres::AddPgFormattingFunctions(functions);
   spangres::AddPgStringFunctions(functions);
   spangres::AddFloatFunctions(functions);
