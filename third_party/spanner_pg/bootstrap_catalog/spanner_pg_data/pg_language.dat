@@ -1,0 +1,8 @@
+[
+# Spanner internal language is used for Spanner functions that are not
+# implemented in PG.
+{ oid => '50078', oid_symbol => 'SpannerINTERNALlanguageId',
+  descr => 'Spanner built-in functions', lanname => 'spanner_internal',
+  lanvalidator => 'fmgr_spanner_internal_validator' },
+
+]

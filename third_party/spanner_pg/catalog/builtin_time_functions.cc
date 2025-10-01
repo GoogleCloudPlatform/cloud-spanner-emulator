@@ -29,54 +29,22 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include <string>
-
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 
 namespace postgres_translator {
-void AddDatetimeExtractFunctions(
-    std::vector<PostgresFunctionArguments>& functions) {}
 
 void AddDatetimeConversionFunctions(
     std::vector<PostgresFunctionArguments>& functions) {
   const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
-  const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
   const zetasql::Type* gsql_date = zetasql::types::DateType();
-  functions.push_back(
-      {"to_timestamp",
-       "timestamp_seconds",
-       {{{gsql_timestamp, {gsql_int64}, /*context_ptr=*/nullptr}}}});
+  // TODO: b/446758553 - Automate registration of date function
   functions.push_back(
       {"make_date",
        "date",
        {{{gsql_date, {gsql_int64, gsql_int64, gsql_int64},
           /*context_ptr=*/nullptr}}}});
 }
-
-void AddTimeAndDatetimeConstructionAndConversionFunctions(
-    std::vector<PostgresFunctionArguments>& functions) {}
-
-void AddDatetimeCurrentFunctions(
-    std::vector<PostgresFunctionArguments>& functions) {
-  const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
-  functions.push_back({"now",
-                       "current_timestamp",
-                       {{{gsql_timestamp, {}, /*context_ptr=*/nullptr}}}});
-}
-
-void AddDatetimeAddSubFunctions(
-    std::vector<PostgresFunctionArguments>& functions) {}
-
-void AddDatetimeDiffTruncLastFunctions(
-    std::vector<PostgresFunctionArguments>& functions) {}
-
-void AddDatetimeFormatFunctions(
-    std::vector<PostgresFunctionArguments>& functions) {}
-
-void AddDatetimeFunctions(std::vector<PostgresFunctionArguments>& functions) {}
-
-void AddIntervalFunctions(std::vector<PostgresFunctionArguments>& functions) {}
 
 }  // namespace postgres_translator

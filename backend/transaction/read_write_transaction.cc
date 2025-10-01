@@ -422,21 +422,21 @@ ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
   resolved_mutation_op.table = table;
   resolved_mutation_op.type = mutation_op.type;
 
-  // Vector of generated values for each row of operation.
-  std::vector<std::vector<zetasql::Value>> generated_values(
+  // Vector of evaluated values for each row of operation.
+  std::vector<std::vector<zetasql::Value>> evaluated_values(
       mutation_op.rows.size(), std::vector<zetasql::Value>());
-  std::vector<const Column*> columns_with_generated_values;
+  std::vector<const Column*> columns_with_evaluated_values;
   // Compute values for default primary keys that don't appear in this
   // mutation op:
-  ZETASQL_RETURN_IF_ERROR(action_registry_->ExecuteGeneratedKeyEffectors(
-      mutation_op, &generated_values, &columns_with_generated_values));
+  ZETASQL_RETURN_IF_ERROR(action_registry_->ExecuteEvaluatedKeyEffectors(
+      mutation_op, &evaluated_values, &columns_with_evaluated_values));
 
   ZETASQL_ASSIGN_OR_RETURN(std::vector<const Column*> columns,
                    GetColumnsByName(table, mutation_op.columns));
-  // If we have key columns with generated default values, append them here:
-  if (!columns_with_generated_values.empty()) {
-    columns.insert(columns.end(), columns_with_generated_values.begin(),
-                   columns_with_generated_values.end());
+  // If we have key columns with evaluated values, append them here:
+  if (!columns_with_evaluated_values.empty()) {
+    columns.insert(columns.end(), columns_with_evaluated_values.begin(),
+                   columns_with_evaluated_values.end());
   }
 
   ZETASQL_ASSIGN_OR_RETURN(std::vector<std::optional<int>> key_indices,
@@ -445,9 +445,9 @@ ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
   for (int i = 0; i < mutation_op.rows.size(); i++) {
     const ValueList& row = mutation_op.rows[i];
     ValueList new_row = row;
-    // If we have key columns with generated/default values, append them here:
-    new_row.insert(new_row.end(), generated_values[i].begin(),
-                   generated_values[i].end());
+    // If we have key columns with evaluated values, append them here:
+    new_row.insert(new_row.end(), evaluated_values[i].begin(),
+                   evaluated_values[i].end());
 
     ZETASQL_RET_CHECK_EQ(new_row.size(), columns.size())
         << "MutationOp has difference in size of column and value vectors, "

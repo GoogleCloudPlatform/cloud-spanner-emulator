@@ -32,10 +32,10 @@
 #include "backend/actions/check_constraint.h"
 #include "backend/actions/column_value.h"
 #include "backend/actions/context.h"
+#include "backend/actions/evaluated_column.h"
 #include "backend/actions/existence.h"
 #include "backend/actions/foreign_key.h"
 #include "backend/actions/foreign_key_actions.h"
-#include "backend/actions/generated_column.h"
 #include "backend/actions/index.h"
 #include "backend/actions/interleave.h"
 #include "backend/actions/ops.h"
@@ -72,17 +72,17 @@ absl::Status ActionRegistry::ExecuteEffectors(const ActionContext* ctx,
   return absl::OkStatus();
 }
 
-absl::Status ActionRegistry::ExecuteGeneratedKeyEffectors(
+absl::Status ActionRegistry::ExecuteEvaluatedKeyEffectors(
     const MutationOp& op,
-    std::vector<std::vector<zetasql::Value>>* generated_values,
-    std::vector<const Column*>* columns_with_generated_values) {
-  if (table_generated_key_effectors_.find(op.table) ==
-      table_generated_key_effectors_.end()) {
+    std::vector<std::vector<zetasql::Value>>* evaluated_values,
+    std::vector<const Column*>* columns_with_evaluated_values) {
+  if (table_evaluated_key_effectors_.find(op.table) ==
+      table_evaluated_key_effectors_.end()) {
     return absl::OkStatus();
   }
 
-  ZETASQL_RETURN_IF_ERROR(table_generated_key_effectors_[op.table]->Effect(
-      op, generated_values, columns_with_generated_values));
+  ZETASQL_RETURN_IF_ERROR(table_evaluated_key_effectors_[op.table]->Effect(
+      op, evaluated_values, columns_with_evaluated_values));
   return absl::OkStatus();
 }
 
@@ -193,17 +193,17 @@ void ActionRegistry::BuildActionRegistry() {
               &catalog_));
     }
 
-    // A set containing key columns with default/generated values.
-    absl::flat_hash_set<std::string> default_or_generated_key_columns;
-    // Effector for primary key default and generated columns.
+    // A set containing key columns with evaluated values.
+    absl::flat_hash_set<std::string> evaluated_key_columns;
+    // Effector for primary key evaluated columns.
     for (const Column* column : table->columns()) {
       if ((column->has_default_value()
            || column->is_generated()
            ) &&
           table->FindKeyColumn(column->Name()) != nullptr) {
-        default_or_generated_key_columns.insert(column->Name());
-        table_generated_key_effectors_[table->Name()] =
-            std::make_unique<GeneratedColumnEffector>(
+        evaluated_key_columns.insert(column->Name());
+        table_evaluated_key_effectors_[table->Name()] =
+            std::make_unique<EvaluatedColumnEffector>(
                 table,
                 MakeGoogleSqlAnalyzerOptions(schema_->default_time_zone()),
                 &catalog_,
@@ -212,12 +212,12 @@ void ActionRegistry::BuildActionRegistry() {
       }
     }
 
-    // Effector for non-key generated and default columns.
+    // Effector for non-key evaluated columns.
     for (const Column* column : table->columns()) {
-      if (!default_or_generated_key_columns.contains(column->Name()) &&
+      if (!evaluated_key_columns.contains(column->Name()) &&
           (column->is_generated() || column->has_default_value())) {
         table_effectors_[table].emplace_back(
-            std::make_unique<GeneratedColumnEffector>(
+            std::make_unique<EvaluatedColumnEffector>(
                 table,
                 MakeGoogleSqlAnalyzerOptions(schema_->default_time_zone()),
                 &catalog_));

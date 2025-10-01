@@ -43,8 +43,8 @@
 #include "absl/strings/match.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter_holder.h"
-#include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/interface/ereport.h"
+#include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
 #include "third_party/spanner_pg/util/postgres.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
@@ -84,7 +84,8 @@ RangeVar* MakeRangeVar(const char* table_name,
 std::vector<Oid> GetProcOids(const std::string& proc_name) {
   const FormData_pg_proc** proc_list;
   size_t proc_count;
-  GetProcsByName(proc_name.c_str(), &proc_list, &proc_count);
+  GetProcsBySchemaAndFuncNames(nullptr, proc_name.c_str(), &proc_list,
+                               &proc_count);
 
   std::vector<Oid> proc_oids;
   for (int proc_index = 0; proc_index < proc_count; ++proc_index) {
@@ -97,8 +98,7 @@ std::vector<Oid> GetProcOids(const std::string& proc_name) {
 std::vector<const FormData_pg_amop*> GetAmopsByOprOid(const Oid& opid) {
   const FormData_pg_amop* const* amop_list;
   size_t amop_count;
-  GetAmopsByAmopOpIdFromBootstrapCatalog(opid, &amop_list,
-                                         &amop_count);
+  GetAmopsByAmopOpIdFromBootstrapCatalog(opid, &amop_list, &amop_count);
 
   std::vector<const FormData_pg_amop*> amops;
   for (int amop_index = 0; amop_index < amop_count; ++amop_index) {
@@ -684,18 +684,16 @@ TEST(GetAmopList, SuccessfulAmop) {
   // Get a sample operator oid.
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       const Oid int8_eq_oid,
-      PgBootstrapCatalog::Default()->GetOperatorOidByOprLeftRight(
-          "=", INT8OID, INT8OID));
-  std::vector<const FormData_pg_amop*> amopList =
-      GetAmopsByOprOid(int8_eq_oid);
+      PgBootstrapCatalog::Default()->GetOperatorOidByOprLeftRight("=", INT8OID,
+                                                                  INT8OID));
+  std::vector<const FormData_pg_amop*> amopList = GetAmopsByOprOid(int8_eq_oid);
 
   EXPECT_EQ(amopList.size(), 5);
   EXPECT_EQ(amopList[0]->amopopr, int8_eq_oid);
 }
 
 TEST(GetAmopList, FailedAmop) {
-  std::vector<const FormData_pg_amop*> amopList =
-      GetAmopsByOprOid(InvalidOid);
+  std::vector<const FormData_pg_amop*> amopList = GetAmopsByOprOid(InvalidOid);
   EXPECT_TRUE(amopList.empty());
 }
 
@@ -969,10 +967,9 @@ TEST_F(CatalogWrappersTest, GetsTableNameInNamespace) {
   // Register table names and oids with the catalog adapter.
   std::vector<std::string> name_in_namespace{"namespace_name", "rel_name"};
   std::vector<std::string> name_in_public_namespace{"public", "rel_name"};
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      Oid table_oid,
-      catalog_adapter->GetOrGenerateOidFromTableName(
-          TableName(name_in_namespace)));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid table_oid,
+                       catalog_adapter->GetOrGenerateOidFromTableName(
+                           TableName(name_in_namespace)));
   Oid namespace_oid = GetOrGenerateOidFromNamespaceNameC("namespace_name");
   EXPECT_NE(namespace_oid, InvalidOid);
   EXPECT_NE(namespace_oid, table_oid);
@@ -987,10 +984,9 @@ TEST_F(CatalogWrappersTest, GetsTableNameInNamespace) {
   // table oid for "public.rel_name" or "rel_name". Reverse translation from
   // googlesql will never trigger this case, because the table name we get from
   // googlesql will always be "rel_name", and never "public.rel_name".
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      Oid table_oid_in_public,
-      catalog_adapter->GetOrGenerateOidFromTableName(
-          TableName(name_in_public_namespace)));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid table_oid_in_public,
+                       catalog_adapter->GetOrGenerateOidFromTableName(
+                           TableName(name_in_public_namespace)));
 
   EXPECT_STREQ(GetTableNameC(table_oid_in_public), "rel_name");
   EXPECT_STREQ(GetNamespaceNameC(table_oid_in_public), "public");
@@ -1086,7 +1082,8 @@ TEST_F(CatalogWrappersTest, LooksUpUdfProcByName) {
   const std::string kTvfName = "read_json_keyvalue_change_stream";
   const FormData_pg_proc** proc_list;
   size_t proc_count;
-  GetProcsByName(kTvfName.c_str(), &proc_list, &proc_count);
+  GetProcsBySchemaAndFuncNames("spanner", kTvfName.c_str(), &proc_list,
+                               &proc_count);
 
   ASSERT_EQ(proc_count, 1);
   const FormData_pg_proc* proc = proc_list[0];
@@ -1156,7 +1153,8 @@ TEST_F(CatalogWrappersTest, LooksUpUdfProcByOid) {
   const std::string kTvfName = "read_json_keyvalue_change_stream";
   const FormData_pg_proc** proc_list;
   size_t proc_count;
-  GetProcsByName(kTvfName.c_str(), &proc_list, &proc_count);
+  GetProcsBySchemaAndFuncNames("spanner", kTvfName.c_str(), &proc_list,
+                               &proc_count);
   ASSERT_EQ(proc_count, 1);
 
   const FormData_pg_proc* proc = GetProcByOid(proc_list[0]->oid);
@@ -1186,11 +1184,13 @@ TEST_F(CatalogWrappersTest, UdfLookUpCaseSensitive) {
   const FormData_pg_proc** proc_list;
   size_t proc_count;
   // With the correct case, expect to find our UDF (no error throw).
-  GetProcsByName(kTvfNameCorrectCase.c_str(), &proc_list, &proc_count);
+  GetProcsBySchemaAndFuncNames("spanner", kTvfNameCorrectCase.c_str(),
+                               &proc_list, &proc_count);
   ASSERT_EQ(proc_count, 1);
 
   // With the incorrect case, we don't find it.
-  GetProcsByName(kTvfNameIncorrectCase.c_str(), &proc_list, &proc_count);
+  GetProcsBySchemaAndFuncNames("spanner", kTvfNameIncorrectCase.c_str(),
+                               &proc_list, &proc_count);
   EXPECT_EQ(proc_count, 0);
 }
 
@@ -1200,14 +1200,14 @@ TEST_F(CatalogWrappersTest, GetFunctionArgInfo) {
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
 
-  Oid * argtypes;
-  char ** argnames;
-  char * argmodes;
+  Oid* argtypes;
+  char** argnames;
+  char* argmodes;
 
   // All arrays are correctly allocating memory and returning the right values.
   constexpr Oid jsonb_array_elements_oid = 3219;
-  int nargs = GetFunctionArgInfo(jsonb_array_elements_oid, &argtypes,
-                                 &argnames, &argmodes);
+  int nargs = GetFunctionArgInfo(jsonb_array_elements_oid, &argtypes, &argnames,
+                                 &argmodes);
   ASSERT_EQ(nargs, 2);
   ASSERT_NE(argtypes, nullptr);
   EXPECT_EQ(argtypes[0], 3802);
@@ -1229,20 +1229,19 @@ TEST_F(CatalogWrappersTest, GetFunctionArgInfo) {
   EXPECT_EQ(argnames, nullptr);
   EXPECT_EQ(argmodes, nullptr);
 
-  // NotFound errors should return 0 and set the output pointers to nullptr.
-  nargs = GetFunctionArgInfo(InvalidOid, &argtypes, &argnames, &argmodes);
-  EXPECT_EQ(nargs, 0);
-  EXPECT_EQ(argtypes, nullptr);
-  EXPECT_EQ(argnames, nullptr);
-  EXPECT_EQ(argmodes, nullptr);
+  // NotFound errors should throw an ereport exception.
+  EXPECT_THROW(
+    GetFunctionArgInfo(InvalidOid, &argtypes, &argnames, &argmodes),
+    postgres_translator::PostgresEreportException);
 
-  // UDFs rely on a lookup map that is constructed when creating pg_proc structs
+  // TVFs rely on a lookup map that is constructed when creating pg_proc structs
   // which would happen during parsing. This call to GetProcsByName initializes
   // the map for this test.
   const std::string kTvfName = "read_json_keyvalue_change_stream";
   const FormData_pg_proc** proc_list;
   size_t proc_count;
-  GetProcsByName(kTvfName.c_str(), &proc_list, &proc_count);
+  GetProcsBySchemaAndFuncNames("spanner", kTvfName.c_str(), &proc_list,
+                               &proc_count);
 
   ASSERT_EQ(proc_count, 1);
   const Oid read_json_keyvalue_change_stream_oid = proc_list[0]->oid;

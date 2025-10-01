@@ -153,7 +153,6 @@ absl::Status ValidateColumnSignatureChange(
   if (!dependent_column->expression().has_value()) {
     return absl::OkStatus();
   }
-  absl::flat_hash_set<const SchemaNode*> unused_new_deps;
   absl::flat_hash_set<const SchemaNode*> unused_udf_dependencies;
   absl::flat_hash_set<std::string> dependent_column_names;
   std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
@@ -166,7 +165,8 @@ absl::Status ValidateColumnSignatureChange(
       dependent_table, temp_new_schema, type_factory, name_and_types,
       "check constraints", &dependent_column_names,
       /*dependent_sequences=*/nullptr,
-      /*allow_volatile_expression=*/false, &unused_udf_dependencies);
+      /*allow_volatile_expression=*/false, &unused_udf_dependencies,
+      /*is_pending_commit_timestamp=*/nullptr);
   if (!status.ok()) {
     return error::DependentColumnBecomesInvalid(modify_action, dependency_name,
                                                 dependent_column->Name(),

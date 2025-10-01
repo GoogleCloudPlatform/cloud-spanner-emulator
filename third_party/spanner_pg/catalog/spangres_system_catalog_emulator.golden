@@ -172,24 +172,6 @@
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
      "postgresOid": "0"
-    },
-    {
-     "resultType": "ARRAY\u003cTOKENLIST\u003e",
-     "arguments": [
-      "TOKENLIST"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    },
-    {
-     "resultType": "ARRAY\u003cUUID\u003e",
-     "arguments": [
-      "UUID"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
     }
    ],
    "mode": "AGGREGATE",
@@ -280,16 +262,6 @@
      "postgresOid": "0"
     },
     {
-     "resultType": "ARRAY\u003cPG.NUMERIC\u003e",
-     "arguments": [
-      "ARRAY\u003cPG.NUMERIC\u003e",
-      "ARRAY\u003cPG.NUMERIC\u003e"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    },
-    {
      "resultType": "ARRAY\u003cPG.OID\u003e",
      "arguments": [
       "ARRAY\u003cPG.OID\u003e",
@@ -314,26 +286,6 @@
      "arguments": [
       "ARRAY\u003cTIMESTAMP\u003e",
       "ARRAY\u003cTIMESTAMP\u003e"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    },
-    {
-     "resultType": "ARRAY\u003cUUID\u003e",
-     "arguments": [
-      "ARRAY\u003cUUID\u003e",
-      "ARRAY\u003cUUID\u003e"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    },
-    {
-     "resultType": "ARRAY\u003cUUID\u003e",
-     "arguments": [
-      "ARRAY\u003cUUID\u003e",
-      "ARRAY\u003cUUID\u003e"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -424,7 +376,7 @@
       "INT64"
      ],
      "hasMappedFunction": true,
-     "explicitMappedFunctionName": "pg.array_length",
+     "explicitMappedFunctionName": "",
      "postgresOid": "0"
     },
     {
@@ -434,7 +386,7 @@
       "INT64"
      ],
      "hasMappedFunction": true,
-     "explicitMappedFunctionName": "pg.array_length",
+     "explicitMappedFunctionName": "",
      "postgresOid": "0"
     },
     {
@@ -451,16 +403,6 @@
      "resultType": "INT64",
      "arguments": [
       "ARRAY\u003cTIMESTAMP\u003e",
-      "INT64"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    },
-    {
-     "resultType": "INT64",
-     "arguments": [
-      "ARRAY\u003cUUID\u003e",
       "INT64"
      ],
      "hasMappedFunction": true,
@@ -581,7 +523,7 @@
       "INT64"
      ],
      "hasMappedFunction": true,
-     "explicitMappedFunctionName": "pg.array_upper",
+     "explicitMappedFunctionName": "",
      "postgresOid": "0"
     },
     {
@@ -591,7 +533,7 @@
       "INT64"
      ],
      "hasMappedFunction": true,
-     "explicitMappedFunctionName": "pg.array_upper",
+     "explicitMappedFunctionName": "",
      "postgresOid": "0"
     },
     {
@@ -608,16 +550,6 @@
      "resultType": "INT64",
      "arguments": [
       "ARRAY\u003cTIMESTAMP\u003e",
-      "INT64"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    },
-    {
-     "resultType": "INT64",
-     "arguments": [
-      "ARRAY\u003cUUID\u003e",
       "INT64"
      ],
      "hasMappedFunction": true,
@@ -635,8 +567,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cBOOL\u003e",
-      "ARRAY\u003cBOOL\u003e"
+      "ARRAY\u003cBOOL\u003e search_values",
+      "ARRAY\u003cBOOL\u003e array_to_search"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -645,8 +577,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cBYTES\u003e",
-      "ARRAY\u003cBYTES\u003e"
+      "ARRAY\u003cBYTES\u003e search_values",
+      "ARRAY\u003cBYTES\u003e array_to_search"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -655,8 +587,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cDATE\u003e",
-      "ARRAY\u003cDATE\u003e"
+      "ARRAY\u003cDATE\u003e search_values",
+      "ARRAY\u003cDATE\u003e array_to_search"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -665,8 +597,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cINT64\u003e",
-      "ARRAY\u003cINT64\u003e"
+      "ARRAY\u003cINT64\u003e search_values",
+      "ARRAY\u003cINT64\u003e array_to_search"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -675,8 +607,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cINTERVAL\u003e",
-      "ARRAY\u003cINTERVAL\u003e"
+      "ARRAY\u003cINTERVAL\u003e search_values",
+      "ARRAY\u003cINTERVAL\u003e array_to_search"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -685,18 +617,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cPG.NUMERIC\u003e",
-      "ARRAY\u003cPG.NUMERIC\u003e"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "pg.array_contained",
-     "postgresOid": "0"
-    },
-    {
-     "resultType": "BOOL",
-     "arguments": [
-      "ARRAY\u003cSTRING\u003e",
-      "ARRAY\u003cSTRING\u003e"
+      "ARRAY\u003cPG.NUMERIC\u003e search_values",
+      "ARRAY\u003cPG.NUMERIC\u003e array_to_search"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -705,8 +627,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cTIMESTAMP\u003e",
-      "ARRAY\u003cTIMESTAMP\u003e"
+      "ARRAY\u003cSTRING\u003e search_values",
+      "ARRAY\u003cSTRING\u003e array_to_search"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -715,8 +637,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cUUID\u003e",
-      "ARRAY\u003cUUID\u003e"
+      "ARRAY\u003cTIMESTAMP\u003e search_values",
+      "ARRAY\u003cTIMESTAMP\u003e array_to_search"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -733,8 +655,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cBOOL\u003e",
-      "ARRAY\u003cBOOL\u003e"
+      "ARRAY\u003cBOOL\u003e array_to_search",
+      "ARRAY\u003cBOOL\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -743,8 +665,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cBYTES\u003e",
-      "ARRAY\u003cBYTES\u003e"
+      "ARRAY\u003cBYTES\u003e array_to_search",
+      "ARRAY\u003cBYTES\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -753,8 +675,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cDATE\u003e",
-      "ARRAY\u003cDATE\u003e"
+      "ARRAY\u003cDATE\u003e array_to_search",
+      "ARRAY\u003cDATE\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -763,8 +685,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cINT64\u003e",
-      "ARRAY\u003cINT64\u003e"
+      "ARRAY\u003cINT64\u003e array_to_search",
+      "ARRAY\u003cINT64\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -773,8 +695,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cINTERVAL\u003e",
-      "ARRAY\u003cINTERVAL\u003e"
+      "ARRAY\u003cINTERVAL\u003e array_to_search",
+      "ARRAY\u003cINTERVAL\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -783,18 +705,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cPG.NUMERIC\u003e",
-      "ARRAY\u003cPG.NUMERIC\u003e"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "pg.array_contains",
-     "postgresOid": "0"
-    },
-    {
-     "resultType": "BOOL",
-     "arguments": [
-      "ARRAY\u003cSTRING\u003e",
-      "ARRAY\u003cSTRING\u003e"
+      "ARRAY\u003cPG.NUMERIC\u003e array_to_search",
+      "ARRAY\u003cPG.NUMERIC\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -803,8 +715,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cTIMESTAMP\u003e",
-      "ARRAY\u003cTIMESTAMP\u003e"
+      "ARRAY\u003cSTRING\u003e array_to_search",
+      "ARRAY\u003cSTRING\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -813,8 +725,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cUUID\u003e",
-      "ARRAY\u003cUUID\u003e"
+      "ARRAY\u003cTIMESTAMP\u003e array_to_search",
+      "ARRAY\u003cTIMESTAMP\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -831,8 +743,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cBOOL\u003e",
-      "ARRAY\u003cBOOL\u003e"
+      "ARRAY\u003cBOOL\u003e array_to_search",
+      "ARRAY\u003cBOOL\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -841,8 +753,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cBYTES\u003e",
-      "ARRAY\u003cBYTES\u003e"
+      "ARRAY\u003cBYTES\u003e array_to_search",
+      "ARRAY\u003cBYTES\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -851,8 +763,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cDATE\u003e",
-      "ARRAY\u003cDATE\u003e"
+      "ARRAY\u003cDATE\u003e array_to_search",
+      "ARRAY\u003cDATE\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -861,8 +773,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cINT64\u003e",
-      "ARRAY\u003cINT64\u003e"
+      "ARRAY\u003cINT64\u003e array_to_search",
+      "ARRAY\u003cINT64\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -871,8 +783,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cINTERVAL\u003e",
-      "ARRAY\u003cINTERVAL\u003e"
+      "ARRAY\u003cINTERVAL\u003e array_to_search",
+      "ARRAY\u003cINTERVAL\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -881,18 +793,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cPG.NUMERIC\u003e",
-      "ARRAY\u003cPG.NUMERIC\u003e"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "pg.array_overlap",
-     "postgresOid": "0"
-    },
-    {
-     "resultType": "BOOL",
-     "arguments": [
-      "ARRAY\u003cSTRING\u003e",
-      "ARRAY\u003cSTRING\u003e"
+      "ARRAY\u003cPG.NUMERIC\u003e array_to_search",
+      "ARRAY\u003cPG.NUMERIC\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -901,8 +803,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cTIMESTAMP\u003e",
-      "ARRAY\u003cTIMESTAMP\u003e"
+      "ARRAY\u003cSTRING\u003e array_to_search",
+      "ARRAY\u003cSTRING\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -911,25 +813,8 @@
     {
      "resultType": "BOOL",
      "arguments": [
-      "ARRAY\u003cUUID\u003e",
-      "ARRAY\u003cUUID\u003e"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "pg_catalog"
-  },
-  {
-   "postgresFunctionName": "ascii",
-   "mappedFunctionName": "ascii",
-   "signatures": [
-    {
-     "resultType": "INT64",
-     "arguments": [
-      "STRING"
+      "ARRAY\u003cTIMESTAMP\u003e array_to_search",
+      "ARRAY\u003cTIMESTAMP\u003e search_values"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -1479,23 +1364,6 @@
      "resultType": "PG.NUMERIC",
      "arguments": [
       "PG.NUMERIC"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "pg_catalog"
-  },
-  {
-   "postgresFunctionName": "chr",
-   "mappedFunctionName": "chr",
-   "signatures": [
-    {
-     "resultType": "STRING",
-     "arguments": [
-      "INT64"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -2765,20 +2633,6 @@
    "postgresNamespace": "pg_catalog"
   },
   {
-   "postgresFunctionName": "gen_random_uuid",
-   "mappedFunctionName": "new_uuid",
-   "signatures": [
-    {
-     "resultType": "UUID",
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "pg_catalog"
-  },
-  {
    "postgresFunctionName": "generate_uuid",
    "mappedFunctionName": "generate_uuid",
    "signatures": [
@@ -3816,24 +3670,6 @@
    "postgresNamespace": "pg_catalog"
   },
   {
-   "postgresFunctionName": "left",
-   "mappedFunctionName": "left",
-   "signatures": [
-    {
-     "resultType": "STRING",
-     "arguments": [
-      "STRING",
-      "INT64"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "pg_catalog"
-  },
-  {
    "postgresFunctionName": "length",
    "mappedFunctionName": "length",
    "signatures": [
@@ -4727,20 +4563,6 @@
    "postgresNamespace": "pg_catalog"
   },
   {
-   "postgresFunctionName": "random",
-   "mappedFunctionName": "rand",
-   "signatures": [
-    {
-     "resultType": "DOUBLE",
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "pg_catalog"
-  },
-  {
    "postgresFunctionName": "regexp_match",
    "mappedFunctionName": "pg.regexp_match",
    "signatures": [
@@ -4862,24 +4684,6 @@
      "resultType": "STRING",
      "arguments": [
       "STRING"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "pg_catalog"
-  },
-  {
-   "postgresFunctionName": "right",
-   "mappedFunctionName": "right",
-   "signatures": [
-    {
-     "resultType": "STRING",
-     "arguments": [
-      "STRING",
-      "INT64"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -5936,7 +5740,7 @@
       "STRING"
      ],
      "hasMappedFunction": true,
-     "explicitMappedFunctionName": "pg.to_char",
+     "explicitMappedFunctionName": "",
      "postgresOid": "0"
     },
     {
@@ -6086,15 +5890,6 @@
     {
      "resultType": "PG.JSONB",
      "arguments": [
-      "ARRAY\u003cUUID\u003e"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    },
-    {
-     "resultType": "PG.JSONB",
-     "arguments": [
       "BOOL"
      ],
      "hasMappedFunction": true,
@@ -6195,15 +5990,6 @@
      "resultType": "PG.JSONB",
      "arguments": [
       "TIMESTAMP"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    },
-    {
-     "resultType": "PG.JSONB",
-     "arguments": [
-      "UUID"
      ],
      "hasMappedFunction": true,
      "explicitMappedFunctionName": "",
@@ -6372,86 +6158,6 @@
     {
      "resultType": "TOKENLIST",
      "arguments": [
-      "ARRAY\u003cDOUBLE\u003e value",
-      "optional STRING comparison_type",
-      "optional STRING algorithm",
-      "optional DOUBLE min",
-      "optional DOUBLE max",
-      "optional DOUBLE granularity",
-      "optional INT64 tree_base",
-      "optional INT64 ieee_precision"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "50025"
-    },
-    {
-     "resultType": "TOKENLIST",
-     "arguments": [
-      "ARRAY\u003cFLOAT\u003e value",
-      "optional STRING comparison_type",
-      "optional STRING algorithm",
-      "optional DOUBLE min",
-      "optional DOUBLE max",
-      "optional DOUBLE granularity",
-      "optional INT64 tree_base",
-      "optional INT64 ieee_precision"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "50029"
-    },
-    {
-     "resultType": "TOKENLIST",
-     "arguments": [
-      "ARRAY\u003cINT64\u003e value",
-      "optional STRING comparison_type",
-      "optional STRING algorithm",
-      "optional INT64 min",
-      "optional INT64 max",
-      "optional INT64 granularity",
-      "optional INT64 tree_base",
-      "optional INT64 ieee_precision"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "50027"
-    },
-    {
-     "resultType": "TOKENLIST",
-     "arguments": [
-      "DOUBLE value",
-      "optional STRING comparison_type",
-      "optional STRING algorithm",
-      "optional DOUBLE min",
-      "optional DOUBLE max",
-      "optional DOUBLE granularity",
-      "optional INT64 tree_base",
-      "optional INT64 ieee_precision"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "50024"
-    },
-    {
-     "resultType": "TOKENLIST",
-     "arguments": [
-      "FLOAT value",
-      "optional STRING comparison_type",
-      "optional STRING algorithm",
-      "optional DOUBLE min",
-      "optional DOUBLE max",
-      "optional DOUBLE granularity",
-      "optional INT64 tree_base",
-      "optional INT64 ieee_precision"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "50028"
-    },
-    {
-     "resultType": "TOKENLIST",
-     "arguments": [
       "INT64 value",
       "optional STRING comparison_type",
       "optional STRING algorithm",
@@ -6569,178 +6275,6 @@
    ],
    "mode": "SCALAR",
    "postgresNamespace": "pg_catalog"
-  },
-  {
-   "postgresFunctionName": "uuid_eq",
-   "mappedFunctionName": "$equal",
-   "signatures": [
-    {
-     "resultType": "BOOL",
-     "arguments": [
-      "UUID",
-      "UUID"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "pg_catalog"
-  },
-  {
-   "postgresFunctionName": "uuid_ge",
-   "mappedFunctionName": "$greater_or_equal",
-   "signatures": [
-    {
-     "resultType": "BOOL",
-     "arguments": [
-      "UUID",
-      "UUID"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "pg_catalog"
-  },
-  {
-   "postgresFunctionName": "uuid_gt",
-   "mappedFunctionName": "$greater",
-   "signatures": [
-    {
-     "resultType": "BOOL",
-     "arguments": [
-      "UUID",
-      "UUID"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "pg_catalog"
-  },
-  {
-   "postgresFunctionName": "uuid_le",
-   "mappedFunctionName": "$less_or_equal",
-   "signatures": [
-    {
-     "resultType": "BOOL",
-     "arguments": [
-      "UUID",
-      "UUID"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "pg_catalog"
-  },
-  {
-   "postgresFunctionName": "uuid_lt",
-   "mappedFunctionName": "$less",
-   "signatures": [
-    {
-     "resultType": "BOOL",
-     "arguments": [
-      "UUID",
-      "UUID"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "pg_catalog"
-  },
-  {
-   "postgresFunctionName": "uuid_ne",
-   "mappedFunctionName": "$not_equal",
-   "signatures": [
-    {
-     "resultType": "BOOL",
-     "arguments": [
-      "UUID",
-      "UUID"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "0"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "pg_catalog"
-  },
-  {
-   "postgresFunctionName": "zstd_compress",
-   "mappedFunctionName": "zstd_compress",
-   "signatures": [
-    {
-     "resultType": "BYTES",
-     "arguments": [
-      "BYTES",
-      "optional INT64 level"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "50068"
-    },
-    {
-     "resultType": "BYTES",
-     "arguments": [
-      "STRING",
-      "optional INT64 level"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "50069"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "spanner"
-  },
-  {
-   "postgresFunctionName": "zstd_decompress_to_bytes",
-   "mappedFunctionName": "zstd_decompress_to_bytes",
-   "signatures": [
-    {
-     "resultType": "BYTES",
-     "arguments": [
-      "BYTES",
-      "optional INT64 size_limit"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "50070"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "spanner"
-  },
-  {
-   "postgresFunctionName": "zstd_decompress_to_string",
-   "mappedFunctionName": "zstd_decompress_to_string",
-   "signatures": [
-    {
-     "resultType": "STRING",
-     "arguments": [
-      "BYTES",
-      "optional INT64 size_limit"
-     ],
-     "hasMappedFunction": true,
-     "explicitMappedFunctionName": "",
-     "postgresOid": "50071"
-    }
-   ],
-   "mode": "SCALAR",
-   "postgresNamespace": "spanner"
   }
  ]
 }

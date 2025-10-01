@@ -5,6 +5,7 @@
 
 #include <cstdint>
 
+#include "absl/log/log.h"
 #include "third_party/spanner_pg/interface/memory_reservation_manager.h"
 #include "third_party/spanner_pg/src/spangres/memory_cc.h"
 
@@ -24,13 +25,23 @@ thread_local postgres_translator::interfaces::MemoryReservationManager*
 extern "C" void* reserved_alloc(size_t size) {
   using postgres_translator::thread_memory_reservation;
 
-  if (thread_memory_reservation &&
-      thread_memory_reservation->TryAdditionalReserve(size)) {
-    return malloc(size);
-  } else {
-    // Reservation denied or not available. Don't allocate.
-    return nullptr;
+  // TODO - b/434879771: Remove logs and refactor the following code
+  // once the bug is fixed.
+  if (thread_memory_reservation) {
+    if (thread_memory_reservation->TryAdditionalReserve(size)) {
+      LOG(INFO) << "reserved_alloc: " << size
+                << " TryAdditionalReserve(size) returns true";
+      return malloc(size);
+    } else {
+      LOG(INFO) << "reserved_alloc: " << size
+                << " TryAdditionalReserve(size) returns false";
+      return nullptr;
+    }
   }
+  LOG(INFO) << "reserved_alloc: " << size
+            << " thread_memory_reservation is null. ";
+  // Reservation denied or not available. Don't allocate.
+  return nullptr;
 }
 
 // Same as alloc, except for shrinking reallocs, just do the realloc. We will

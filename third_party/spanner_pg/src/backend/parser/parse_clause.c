@@ -3258,6 +3258,16 @@ transformOnConflictArbiter(ParseState *pstate,
 		 */
 		if (infer->conname)
 		{
+			// SPANGRES BEGIN
+			/*
+			 * Spangres does not yet support ON CONFLICT with constraints.
+			 */
+			ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("ON CONFLICT DO UPDATE with constraint name is not supported"),
+				 errhint("Use inference specification instead of constraint name.")));
+			// SPANGRES END
+
 			Oid			relid = pstate->p_target_relation_oid;
 			RangeTblEntry *rte = pstate->p_target_nsitem->p_rte;
 			Bitmapset  *conattnos;

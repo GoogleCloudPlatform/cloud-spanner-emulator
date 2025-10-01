@@ -39,6 +39,7 @@
 #include "zetasql/base/logging.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "third_party/spanner_pg/errors/error_catalog.h"
 #include "third_party/spanner_pg/errors/errors.h"
 #include "third_party/spanner_pg/interface/ereport.h"
@@ -87,7 +88,10 @@ absl::Status ConvertPostgresError(
     ABSL_LOG(WARNING) << "PG error is not defined in the error catalog, sqlstate: ["
                  << unpack_sql_state(exc.error_data().sqlerrcode)
                  << "] error message: [" << exc.error_data().message
-                 << "] message id: [" << exc.error_data().message_id << "].";
+                 << "] message id: [" << exc.error_data().message_id
+                 << "] filename: [" << exc.error_data().filename
+                 << "] lineno: [" << exc.error_data().lineno << "] funcname: ["
+                 << exc.error_data().funcname << "]";
   }
 
   // TODO: We should throw a Spangres internal error instead of

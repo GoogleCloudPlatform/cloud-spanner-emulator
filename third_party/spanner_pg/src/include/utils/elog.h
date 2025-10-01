@@ -152,7 +152,7 @@
   do {                                                                       \
     spangres_errstart();                                                     \
     spangres_evaluate(__VA_ARGS__);										\
-    spangres_ereport(elevel, NULL);                                          \
+    spangres_ereport(elevel, __FILE__, __LINE__, PG_FUNCNAME_MACRO, NULL);   \
     if (__builtin_constant_p(elevel) && (elevel) >= ERROR) pg_unreachable(); \
   } while (0)
 #else							/* !HAVE__BUILTIN_CONSTANT_P */
@@ -160,7 +160,7 @@
   do {                                       \
     spangres_errstart();                     \
     spangres_evaluate(__VA_ARGS__);			 \
-    spangres_ereport(elevel, NULL);          \
+    spangres_ereport(elevel, __FILE__, __LINE__, PG_FUNCNAME_MACRO, NULL);  \
     if ((elevel) >= ERROR) pg_unreachable(); \
   } while (0)
 #endif							/* HAVE__BUILTIN_CONSTANT_P */
@@ -178,7 +178,7 @@ extern void errfinish(const char *filename, int lineno, const char *funcname);
 
 extern void spangres_errstart(void);
 extern void spangres_evaluate(int ignored,...);
-extern void spangres_ereport(int elevel, const char* msg,...);
+extern void spangres_ereport(int elevel, const char *filename, int lineno, const char *funcname, const char* msg,...);
 
 extern int	errcode(int sqlerrcode);
 
@@ -255,21 +255,21 @@ extern int	getinternalerrposition(void);
 #define elog(elevel, ...)                                                    \
   do {                                                                       \
     spangres_errstart();                                                     \
-    spangres_ereport(elevel, __VA_ARGS__);                                   \
+    spangres_ereport(elevel, __FILE__, __LINE__, PG_FUNCNAME_MACRO, __VA_ARGS__);  \
     if (__builtin_constant_p(elevel) && (elevel) >= ERROR) pg_unreachable(); \
   } while (0)
 #else							/* !HAVE__BUILTIN_CONSTANT_P */
 #define elog(elevel, ...)                   \
   do {                                      \
     spangres_errstart();                    \
-    spangres_ereport(elevel, _VA_ARGS__);   \
+    spangres_ereport(elevel, __FILE__, __LINE__, PG_FUNCNAME_MACRO, __VA_ARGS__);  \
     if (elevel_ >= ERROR) pg_unreachable(); \
   } while (0)
 #endif							/* HAVE__BUILTIN_CONSTANT_P */
 #else							/* !HAVE__VA_ARGS */
 #define elog                                           \
   spangres_errstart();                                 \
-  spangres_ereport(elevel, "Unknown internal error."); \
+  spangres_ereport(elevel, __FILE__, __LINE__, PG_FUNCNAME_MACRO, "Unknown internal error."); \
   spangres_evaluate
 #endif							/* HAVE__VA_ARGS */
 

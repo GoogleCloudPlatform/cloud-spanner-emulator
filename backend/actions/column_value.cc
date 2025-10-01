@@ -50,9 +50,9 @@ absl::Status ColumnValueValidator::ValidateColumnValueType(
   }
 
   // Check that we are not attempting to write null values to non-nullable
-  // columns. Writing null to non-nullable generated or default columns is
-  // temporarily fine, since the violation may be fixed later by an operation
-  // to update the column.
+  // columns. Writing null to non-nullable evaluated columns is temporarily
+  // fine, since the violation may be fixed later by an operation to update the
+  // column.
   if (value.is_null() && !column->is_nullable() && !column->is_generated()) {
     return error::NullValueForNotNullColumn(table->Name(), column->FullName());
   }

@@ -291,6 +291,17 @@ class GCloudReadWriteTest(emulator.TestCase):
         'update',
         'test-database',
         '--instance=test-instance',
+        '--ddl=ALTER DATABASE `test-database` SET OPTIONS ( read_lease_regions'
+        " = 'us-east1' )",
+    )
+    # Perform an update to set options.
+    self.RunGCloud(
+        'spanner',
+        'databases',
+        'ddl',
+        'update',
+        'test-database',
+        '--instance=test-instance',
         '--ddl=ALTER DATABASE `test-database` SET OPTIONS ('
         " version_retention_period = '7d' )",
     )

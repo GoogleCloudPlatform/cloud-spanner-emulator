@@ -47,6 +47,7 @@
 #include "zetasql/public/procedure.h"
 #include "zetasql/public/table_valued_function.h"
 #include "zetasql/public/types/type.h"
+#include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"

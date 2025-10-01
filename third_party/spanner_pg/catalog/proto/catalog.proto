@@ -55,12 +55,16 @@ message FunctionSignatureProto {
   repeated FunctionArgumentProto arguments = 2;
   uint32 oid = 3;
   repeated FunctionNamePathProto postgresql_name_paths = 4;
+  repeated string enable_in_catalog = 5;
+  bool enable_in_emulator = 6;
+  bool deprecated = 7;
 }
 
 message FunctionProto {
   FunctionNamePathProto mapped_name_path = 1;
   repeated FunctionNamePathProto postgresql_name_paths = 2;
   repeated FunctionSignatureProto signatures = 3;
+  repeated string enable_in_catalog = 4;
 }
 
 message CatalogProto {

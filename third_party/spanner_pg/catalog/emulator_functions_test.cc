@@ -4481,6 +4481,14 @@ TYPED_TEST(EvalMapFloatingPointToIntTest, ZerosEquality) {
   this->VerifyEquality({0.0, -0.0});
 }
 
+TYPED_TEST(EvalMapFloatingPointToIntTest, NullInput) {
+  auto arg = zetasql::Value::MakeNull<TypeParam>();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value res,
+                       this->evaluator_(absl::MakeConstSpan({arg})));
+  EXPECT_TRUE(res.type()->IsInt64());
+  EXPECT_TRUE(res.is_null());
+}
+
 // Verifies that outputs follow PostgreSQL FLOAT8 order rules for inputs.
 TYPED_TEST(EvalMapFloatingPointToIntTest, FixedOrder) {
   this->VerifyGivenOrder({-std::numeric_limits<TypeParam>::infinity(),
@@ -4912,18 +4920,13 @@ TEST(EvalMinSignatureTest, CustomMinSignatures) {
   const zetasql::Function* function = functions[kPGMinFunctionName].get();
   const std::vector<zetasql::FunctionSignature>& signatures =
       function->signatures();
-  EXPECT_THAT(signatures.size(), 3);
+  ASSERT_THAT(signatures.size(), 2);
   EXPECT_TRUE(signatures[0].result_type().type()->IsDouble());
   EXPECT_THAT(signatures[0].arguments().size(), 1);
   EXPECT_TRUE(signatures[0].arguments().front().type()->IsDouble());
   EXPECT_TRUE(signatures[1].result_type().type()->IsFloat());
   EXPECT_THAT(signatures[1].arguments().size(), 1);
   EXPECT_TRUE(signatures[1].arguments().front().type()->IsFloat());
-  EXPECT_TRUE(signatures[2].result_type().type() ==
-              spangres::datatypes::GetPgOidType());
-  EXPECT_THAT(signatures[2].arguments().size(), 1);
-  EXPECT_TRUE(signatures[2].arguments().front().type() ==
-              spangres::datatypes::GetPgOidType());
 }
 
 struct EvalAggregatorTestCase {
@@ -4980,7 +4983,7 @@ TEST_P(EvalMinMaxTest, TestMin) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(EvalMinTests, EvalMinMaxTest,
+INSTANTIATE_TEST_SUITE_P(EvalPgMinTests, EvalMinMaxTest,
                          ::testing::ValuesIn<EvalAggregatorTestCase>({
                              {"OneDoubleNullArg",
                               kPGMinFunctionName,
@@ -5115,14 +5118,80 @@ INSTANTIATE_TEST_SUITE_P(EvalMinTests, EvalMinMaxTest,
                               absl::StatusCode::kOk},
                          }));
 
-INSTANTIATE_TEST_SUITE_P(EvalMinFailureTests, EvalMinMaxTest,
+INSTANTIATE_TEST_SUITE_P(EvalMinTests, EvalMinMaxTest,
                          ::testing::ValuesIn<EvalAggregatorTestCase>({
-                             {"OneInvalidArg",
+                             {"OneOidNullArg",
+                              kZetaSQLMinFunctionName,
+                              {&kNullPGOidValue},
+                              kNullPGOidValue,
+                              absl::StatusCode::kOk},
+                             {"EmptyOidArgs",
+                              kZetaSQLMinFunctionName,
+                              {},
+                              kNullPGOidValue,
+                              absl::StatusCode::kOk},
+                             {"OneOidArg",
+                              kZetaSQLMinFunctionName,
+                              {&kPGOidValue},
+                              kPGOidValue,
+                              absl::StatusCode::kOk},
+                             {"OneOidArgOneNullArg",
+                              kZetaSQLMinFunctionName,
+                              {&kPGOidValue, &kNullPGOidValue},
+                              kPGOidValue,
+                              absl::StatusCode::kOk},
+
+                             {"OneNumericNullArg",
+                              kZetaSQLMinFunctionName,
+                              {&kNullPGNumericValue},
+                              kNullPGNumericValue,
+                              absl::StatusCode::kOk},
+                             {"EmptyNumericArgs",
+                              kZetaSQLMinFunctionName,
+                              {},
+                              kNullPGNumericValue,
+                              absl::StatusCode::kOk},
+                             {"OneNumericArg",
+                              kZetaSQLMinFunctionName,
+                              {&kNullPGNumericValue},
+                              kNullPGNumericValue,
+                              absl::StatusCode::kOk},
+                             {"OneNumericArgOneNullArg",
+                              kZetaSQLMinFunctionName,
+                              {&kPGNumericValue, &kNullPGNumericValue},
+                              kPGNumericValue,
+                              absl::StatusCode::kOk},
+                             {"MinNumericArg",
+                              kZetaSQLMinFunctionName,
+                              {&kPGNumericValue, &kPGNumericMaxValue,
+                               &kPGNumericMinValue},
+                              kPGNumericMinValue,
+                              absl::StatusCode::kOk},
+                             {"OneNumericNanArg",
+                              kZetaSQLMinFunctionName,
+                              {&kPGNumericNaNValue},
+                              kPGNumericNaNValue,
+                              absl::StatusCode::kOk},
+                             {"OneNumericNullArgOneNanArg",
+                              kZetaSQLMinFunctionName,
+                              {&kNullPGNumericValue, &kPGNumericNaNValue},
+                              kPGNumericNaNValue,
+                              absl::StatusCode::kOk},
+                             {"OneNumericArgOneNanArg",
+                              kZetaSQLMinFunctionName,
+                              {&kPGNumericValue, &kPGNumericNaNValue},
+                              kPGNumericValue,
+                              absl::StatusCode::kOk},
+                         }));
+
+INSTANTIATE_TEST_SUITE_P(EvalPgMinFailureTests, EvalMinMaxTest,
+                         ::testing::ValuesIn<EvalAggregatorTestCase>({
+                             {"OneInt64InvalidArg",
                               kPGMinFunctionName,
                               {&kInt64Value},
                               kNullDoubleValue,  // ignored
                               absl::StatusCode::kInvalidArgument},
-                             {"OneValidArgOneInvalidArg",
+                             {"OneValidArgOneInt64InvalidArg",
                               kPGMinFunctionName,
                               {&kDoubleValue, &kInt64Value},
                               kNullDoubleValue,  // ignored
@@ -5137,69 +5206,34 @@ INSTANTIATE_TEST_SUITE_P(EvalMinFailureTests, EvalMinMaxTest,
                               {&kFloatValue, &kInt64Value},
                               kNullFloatValue,  // ignored
                               absl::StatusCode::kInvalidArgument},
-                         }));
 
-
-TEST(EvalMaxSignatureTest, CustomMaxSignatures) {
-  SpannerPGFunctions spanner_pg_functions =
-      GetSpannerPGFunctions("TestCatalog");
-  std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
-      functions;
-  for (auto& function : spanner_pg_functions) {
-    functions[function->Name()] = std::move(function);
-  }
-  const zetasql::Function* function = functions[kPGMaxFunctionName].get();
-  const std::vector<zetasql::FunctionSignature>& signatures =
-      function->signatures();
-  EXPECT_THAT(signatures.size(), 1);
-  EXPECT_TRUE(signatures[0].result_type().type() ==
-              spangres::datatypes::GetPgOidType());
-  EXPECT_THAT(signatures[0].arguments().size(), 1);
-  EXPECT_TRUE(signatures[0].arguments().front().type() ==
-              spangres::datatypes::GetPgOidType());
-}
-
-INSTANTIATE_TEST_SUITE_P(EvalMaxTest, EvalMinMaxTest,
-                         ::testing::ValuesIn<EvalAggregatorTestCase>({
-                             {"OneOidNullArg",
-                              kPGMaxFunctionName,
-                              {&kNullPGOidValue},
-                              kNullPGOidValue,
-                              absl::StatusCode::kOk},
-                             {"EmptyOidArgs",
-                              kPGMaxFunctionName,
-                              {},
-                              kNullPGOidValue,
-                              absl::StatusCode::kOk},
-                             {"OneOidArg",
-                              kPGMaxFunctionName,
-                              {&kPGOidValue},
-                              kPGOidValue,
-                              absl::StatusCode::kOk},
-                             {"OneOidArgOneNullArg",
-                              kPGMaxFunctionName,
-                              {&kPGOidValue, &kNullPGOidValue},
-                              kPGOidValue,
-                             absl::StatusCode::kOk},
-                         }));
-
-INSTANTIATE_TEST_SUITE_P(EvalMaxFailureTests, EvalMinMaxTest,
-                         ::testing::ValuesIn<EvalAggregatorTestCase>({
-                             {"OneInvalidArg",
-                              kPGMinFunctionName,
+                             {"OneInvalidDoubleArg",
+                              kZetaSQLMinFunctionName,
                               {&kDoubleValue},
                               kNullPGOidValue,  // ignored
                               absl::StatusCode::kInvalidArgument},
-                             {"OneValidArgOneInvalidArg",
-                              kPGMinFunctionName,
+                             {"OneValidArgOneInvalidDoubleArg",
+                              kZetaSQLMinFunctionName,
                               {&kPGOidValue, &kDoubleValue},
                               kNullPGOidValue,  // ignored
                               absl::StatusCode::kInvalidArgument},
                          }));
 
-using EvalNumericMinMaxTest = ::testing::TestWithParam<EvalAggregatorTestCase>;
+INSTANTIATE_TEST_SUITE_P(EvalMinFailureTests, EvalMinMaxTest,
+                         ::testing::ValuesIn<EvalAggregatorTestCase>({
+                             {"OneInvalidDoubleArg",
+                              kZetaSQLMinFunctionName,
+                              {&kDoubleValue},
+                              kNullPGOidValue,  // ignored
+                              absl::StatusCode::kInvalidArgument},
+                             {"OneValidArgOneInvalidDoubleArg",
+                              kZetaSQLMinFunctionName,
+                              {&kPGOidValue, &kDoubleValue},
+                              kNullPGOidValue,  // ignored
+                              absl::StatusCode::kInvalidArgument},
+                         }));
 
-TEST_P(EvalNumericMinMaxTest, TestNumericMinMax) {
+TEST(EvalMaxSignatureTest, ExtendedTypeMaxSignatures) {
   SpannerPGFunctions spanner_pg_functions =
       GetSpannerPGFunctions("TestCatalog");
   std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
@@ -5207,135 +5241,104 @@ TEST_P(EvalNumericMinMaxTest, TestNumericMinMax) {
   for (auto& function : spanner_pg_functions) {
     functions[function->Name()] = std::move(function);
   }
-
-  static const zetasql::Type* gsql_pg_numeric =
-      spangres::datatypes::GetPgNumericType();
-  zetasql::FunctionSignature signature(gsql_pg_numeric, {gsql_pg_numeric},
-                                         nullptr);
-
-  bool stop_acc = false;
-  const EvalAggregatorTestCase& test_case = GetParam();
-
   const zetasql::Function* function =
-      functions[test_case.function_name].get();
-  auto callback = function->GetAggregateFunctionEvaluatorFactory();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<zetasql::AggregateFunctionEvaluator> evaluator,
-      callback(signature));
-
-  // We have to make a copy here because GetParam() returns a const value but
-  // the accumulate interface doesn't want a const span.
-  std::vector<const zetasql::Value*> args = test_case.args;
-  if (test_case.expected_status_code == absl::StatusCode::kOk) {
-    int i = 0;
-    while (!stop_acc) {
-      ZETASQL_EXPECT_OK(
-          evaluator->Accumulate(absl::MakeSpan(args).subspan(i), &stop_acc));
-      ++i;
-    }
-
-    EXPECT_THAT(evaluator->GetFinalResult(),
-                IsOkAndHolds(EqPG(test_case.expected_value)));
-  } else {
-    absl::Status status = absl::OkStatus();
-    int i = 0;
-    while (!stop_acc && status.ok()) {
-      status =
-          evaluator->Accumulate(absl::MakeSpan(args).subspan(i), &stop_acc);
-      ++i;
-    }
-    EXPECT_THAT(status,
-                zetasql_base::testing::StatusIs(test_case.expected_status_code));
-  }
+      functions[kZetaSQLMaxFunctionName].get();
+  const std::vector<zetasql::FunctionSignature>& signatures =
+      function->signatures();
+  ASSERT_THAT(signatures.size(), 2);
+  EXPECT_TRUE(signatures[0].result_type().type() ==
+              spangres::datatypes::GetPgOidType());
+  EXPECT_THAT(signatures[0].arguments().size(), 1);
+  EXPECT_TRUE(signatures[0].arguments().front().type() ==
+              spangres::datatypes::GetPgOidType());
+  EXPECT_TRUE(signatures[1].result_type().type() ==
+              spangres::datatypes::GetPgNumericType());
+  EXPECT_THAT(signatures[1].arguments().size(), 1);
+  EXPECT_TRUE(signatures[1].arguments().front().type() ==
+              spangres::datatypes::GetPgNumericType());
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    EvalNumericMinMaxTests, EvalNumericMinMaxTest,
-    ::testing::ValuesIn<EvalAggregatorTestCase>({
-        // pg.numeric_max test cases.
-        {"OneNullArg",
-         kPGNumericMaxFunctionName,
-         {&kNullPGNumericValue},
-         kNullPGNumericValue,
-         absl::StatusCode::kOk},
-        {"EmptyArgs",
-         kPGNumericMaxFunctionName,
-         {},
-         kNullPGNumericValue,
-         absl::StatusCode::kOk},
-        {"OneNumericArg",
-         kPGNumericMaxFunctionName,
-         {&kNullPGNumericValue},
-         kNullPGNumericValue,
-         absl::StatusCode::kOk},
-        {"OneNumericArgOneNullArg",
-         kPGNumericMaxFunctionName,
-         {&kPGNumericValue, &kNullPGNumericValue},
-         kPGNumericValue,
-         absl::StatusCode::kOk},
-        {"MaxNumericArg",
-         kPGNumericMaxFunctionName,
-         {&kPGNumericValue, &kPGNumericMaxValue, &kPGNumericMinValue},
-         kPGNumericMaxValue,
-         absl::StatusCode::kOk},
-        {"OneNanArg",
-         kPGNumericMaxFunctionName,
-         {&kPGNumericNaNValue},
-         kPGNumericNaNValue,
-         absl::StatusCode::kOk},
-        {"OneNullArgOneNanArg",
-         kPGNumericMaxFunctionName,
-         {&kNullPGNumericValue, &kPGNumericNaNValue},
-         kPGNumericNaNValue,
-         absl::StatusCode::kOk},
-        {"OneNumericArgOneNanArg",
-         kPGNumericMaxFunctionName,
-         {&kPGNumericValue, &kPGNumericNaNValue},
-         kPGNumericNaNValue,
-         absl::StatusCode::kOk},
+INSTANTIATE_TEST_SUITE_P(EvalMaxTest, EvalMinMaxTest,
+                         ::testing::ValuesIn<EvalAggregatorTestCase>({
+                             {"OneOidNullArg",
+                              kZetaSQLMaxFunctionName,
+                              {&kNullPGOidValue},
+                              kNullPGOidValue,
+                              absl::StatusCode::kOk},
+                             {"EmptyOidArgs",
+                              kZetaSQLMaxFunctionName,
+                              {},
+                              kNullPGOidValue,
+                              absl::StatusCode::kOk},
+                             {"OneOidArg",
+                              kZetaSQLMaxFunctionName,
+                              {&kPGOidValue},
+                              kPGOidValue,
+                              absl::StatusCode::kOk},
+                             {"OneOidArgOneNullArg",
+                              kZetaSQLMaxFunctionName,
+                              {&kPGOidValue, &kNullPGOidValue},
+                              kPGOidValue,
+                              absl::StatusCode::kOk},
+                         }));
 
-        // pg.numeric_min test cases.
-        {"OneNullArg",
-         kPGNumericMinFunctionName,
-         {&kNullPGNumericValue},
-         kNullPGNumericValue,
-         absl::StatusCode::kOk},
-        {"EmptyArgs",
-         kPGNumericMinFunctionName,
-         {},
-         kNullPGNumericValue,
-         absl::StatusCode::kOk},
-        {"OneNumericArg",
-         kPGNumericMinFunctionName,
-         {&kNullPGNumericValue},
-         kNullPGNumericValue,
-         absl::StatusCode::kOk},
-        {"OneNumericArgOneNullArg",
-         kPGNumericMinFunctionName,
-         {&kPGNumericValue, &kNullPGNumericValue},
-         kPGNumericValue,
-         absl::StatusCode::kOk},
-        {"MinNumericArg",
-         kPGNumericMinFunctionName,
-         {&kPGNumericValue, &kPGNumericMaxValue, &kPGNumericMinValue},
-         kPGNumericMinValue,
-         absl::StatusCode::kOk},
-        {"OneNanArg",
-         kPGNumericMinFunctionName,
-         {&kPGNumericNaNValue},
-         kPGNumericNaNValue,
-         absl::StatusCode::kOk},
-        {"OneNullArgOneNanArg",
-         kPGNumericMinFunctionName,
-         {&kNullPGNumericValue, &kPGNumericNaNValue},
-         kPGNumericNaNValue,
-         absl::StatusCode::kOk},
-        {"OneNumericArgOneNanArg",
-         kPGNumericMinFunctionName,
-         {&kPGNumericValue, &kPGNumericNaNValue},
-         kPGNumericValue,
-         absl::StatusCode::kOk},
-    }));
+INSTANTIATE_TEST_SUITE_P(EvalMaxFailureTests, EvalMinMaxTest,
+                         ::testing::ValuesIn<EvalAggregatorTestCase>({
+                             // NUMERIC
+                             {"OneNumericNullArg",
+                              kZetaSQLMaxFunctionName,
+                              {&kNullPGNumericValue},
+                              kNullPGNumericValue,
+                              absl::StatusCode::kOk},
+                             {"EmptyNumericArgs",
+                              kZetaSQLMaxFunctionName,
+                              {},
+                              kNullPGNumericValue,
+                              absl::StatusCode::kOk},
+                             {"OneNumericArg",
+                              kZetaSQLMaxFunctionName,
+                              {&kNullPGNumericValue},
+                              kNullPGNumericValue,
+                              absl::StatusCode::kOk},
+                             {"OneNumericArgOneNullArg",
+                              kZetaSQLMaxFunctionName,
+                              {&kPGNumericValue, &kNullPGNumericValue},
+                              kPGNumericValue,
+                              absl::StatusCode::kOk},
+                             {"MaxNumericArg",
+                              kZetaSQLMaxFunctionName,
+                              {&kPGNumericValue, &kPGNumericMaxValue,
+                               &kPGNumericMinValue},
+                              kPGNumericMaxValue,
+                              absl::StatusCode::kOk},
+                             {"OneNumericNanArg",
+                              kZetaSQLMaxFunctionName,
+                              {&kPGNumericNaNValue},
+                              kPGNumericNaNValue,
+                              absl::StatusCode::kOk},
+                             {"OneNumericNullArgOneNanArg",
+                              kZetaSQLMaxFunctionName,
+                              {&kNullPGNumericValue, &kPGNumericNaNValue},
+                              kPGNumericNaNValue,
+                              absl::StatusCode::kOk},
+                             {"OneNumericArgOneNanArg",
+                              kZetaSQLMaxFunctionName,
+                              {&kPGNumericValue, &kPGNumericNaNValue},
+                              kPGNumericNaNValue,
+                              absl::StatusCode::kOk},
+
+                             // OID
+                             {"OneNumericInvalidArg",
+                              kZetaSQLMaxFunctionName,
+                              {&kDoubleValue},
+                              kNullPGOidValue,  // ignored
+                              absl::StatusCode::kInvalidArgument},
+                             {"OneValidArgOneInvalidDoubleArg",
+                              kZetaSQLMaxFunctionName,
+                              {&kPGOidValue, &kDoubleValue},
+                              kNullPGOidValue,  // ignored
+                              absl::StatusCode::kInvalidArgument},
+                         }));
 
 using EvalSumAvgTest = ::testing::TestWithParam<EvalAggregatorTestCase>;
 

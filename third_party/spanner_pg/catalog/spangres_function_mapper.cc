@@ -32,6 +32,7 @@
 #include "third_party/spanner_pg/catalog/spangres_function_mapper.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -40,7 +41,10 @@
 #include "zetasql/public/function.pb.h"
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/types/type.h"
-#include "absl/container/flat_hash_map.h"
+#include "absl/container/btree_map.h"
+#include "absl/flags/commandlineflag.h"
+#include "absl/flags/flag.h"
+#include "absl/flags/reflection.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_join.h"
@@ -50,12 +54,29 @@
 #include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/src/backend/catalog/pg_type_d.h"
 #include "third_party/spanner_pg/src/include/postgres_ext.h"
+#include "google/protobuf/repeated_ptr_field.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
 namespace postgres_translator {
 
 namespace {
+
+// Returns `true` if all flags are enabled. Returns `false`, otherwise.
+absl::StatusOr<bool> IsEnabledInCatalog(
+    const google::protobuf::RepeatedPtrField<std::string> flags) {
+  for (const auto& flag_name : flags) {
+    const absl::CommandLineFlag* flag = absl::FindCommandLineFlag(flag_name);
+    ZETASQL_RET_CHECK(flag != nullptr) << "Flag " << flag_name << " not found";
+    std::optional<bool> is_enabled = flag->TryGet<bool>();
+    ZETASQL_RET_CHECK(is_enabled.has_value())
+        << "Could not get boolean value of flag " << flag_name;
+    if (!is_enabled.value()) {
+      return false;
+    }
+  }
+  return true;
+}
 
 absl::Status CheckAllSignaturesHaveNamespacedPaths(
     const FunctionProto& function) {
@@ -134,6 +155,20 @@ zetasql::SignatureArgumentKind SignatureArgumentKindFrom(uint32_t oid) {
   }
 }
 
+zetasql::FunctionSignature FunctionSignatureFrom(
+    zetasql::FunctionArgumentType gsql_return_type,
+    zetasql::FunctionArgumentTypeList gsql_arguments, bool is_deprecated) {
+  if (is_deprecated) {
+    zetasql::FunctionSignatureOptions options;
+    options.set_is_deprecated(true);
+    return zetasql::FunctionSignature(gsql_return_type, gsql_arguments,
+                                        /*context_id=*/0, options);
+  } else {
+    return zetasql::FunctionSignature(gsql_return_type, gsql_arguments,
+                                        /*context_ptr=*/nullptr);
+  }
+}
+
 }  // namespace
 
 const zetasql::Type* SpangresFunctionMapper::FindTypeByOid(
@@ -161,14 +196,14 @@ SpangresFunctionMapper::FunctionArgumentTypeFrom(
   zetasql::SignatureArgumentKind kind = SignatureArgumentKindFrom(oid);
   ZETASQL_RETURN_IF_ERROR(CheckTypeAndKindMapping(oid, type, kind));
 
+  zetasql::FunctionArgumentTypeOptions options;
+
   zetasql::FunctionEnums::NamedArgumentKind named_kind =
       arg.named_argument_kind();
-  std::string name = arg.name();
-
-  zetasql::FunctionArgumentTypeOptions options;
   options.set_cardinality(arg.cardinality());
-  if (named_kind == zetasql::FunctionEnums::NAMED_ONLY ||
-      named_kind == zetasql::FunctionEnums::POSITIONAL_OR_NAMED) {
+
+  if (arg.has_name()) {
+    std::string name = arg.name();
     options.set_argument_name(name, named_kind);
   }
 
@@ -186,22 +221,52 @@ SpangresFunctionMapper::ToPostgresFunctionArguments(
   ZETASQL_RETURN_IF_ERROR(CheckAllSignaturesHaveNamespacedPaths(function));
   ZETASQL_RETURN_IF_ERROR(CheckAllNamedArgumentsHaveName(function));
 
-  std::vector<PostgresFunctionArguments> result;
+  // Checks if the function is enabled in the catalog. If not, returns an empty
+  // vector.
+  ZETASQL_ASSIGN_OR_RETURN(bool is_enabled_in_catalog,
+                   IsEnabledInCatalog(function.enable_in_catalog()));
+  if (!is_enabled_in_catalog) {
+    return std::vector<PostgresFunctionArguments>();
+  }
+
+  // Filters out signatures that are disabled in the catalog.
+  std::vector<const FunctionSignatureProto*> enabled_catalog_signatures;
+  for (const auto& signature : function.signatures()) {
+    ZETASQL_ASSIGN_OR_RETURN(bool is_enabled_in_catalog,
+                     IsEnabledInCatalog(signature.enable_in_catalog()));
+    if (is_enabled_in_catalog) {
+      enabled_catalog_signatures.push_back(&signature);
+    }
+  }
+
+  bool is_emulator_catalog = true;
+  std::vector<const FunctionSignatureProto*> enabled_emulator_signatures;
+  for (const auto* signature : enabled_catalog_signatures) {
+    // If we are building the emulator function catalog, only adds signatures
+    // that are enabled for it.
+    if (is_emulator_catalog && !signature->enable_in_emulator()) {
+      continue;
+    }
+
+    enabled_emulator_signatures.push_back(signature);
+  }
+
   std::string mapped_function_name =
       absl::StrJoin(function.mapped_name_path().name_path(), ".");
 
   // Group signatures by postgresql name path
-  absl::flat_hash_map<std::vector<std::string>,
-                      std::vector<const FunctionSignatureProto*>>
+  absl::btree_map<std::vector<std::string>,
+                  std::vector<const FunctionSignatureProto*>>
       signatures_by_pg_name_path;
-  for (const auto& signature : function.signatures()) {
-    for (const auto& pg_name_path : signature.postgresql_name_paths()) {
+  for (const auto* signature : enabled_emulator_signatures) {
+    for (const auto& pg_name_path : signature->postgresql_name_paths()) {
       std::vector<std::string> name_path(pg_name_path.name_path().begin(),
                                          pg_name_path.name_path().end());
-      signatures_by_pg_name_path[name_path].push_back(&signature);
+      signatures_by_pg_name_path[name_path].push_back(signature);
     }
   }
 
+  std::vector<PostgresFunctionArguments> result;
   // Creates one PostgresFunctionArguments per pg_name_path
   for (const auto& [pg_name_path, signatures] : signatures_by_pg_name_path) {
     std::vector<PostgresFunctionSignatureArguments> pg_signatures;
@@ -216,9 +281,9 @@ SpangresFunctionMapper::ToPostgresFunctionArguments(
         gsql_arguments.push_back(gsql_arg_type);
       }
 
-      zetasql::FunctionSignature gsql_signature(gsql_return_type,
-                                                  gsql_arguments,
-                                                  /*context_ptr=*/nullptr);
+      zetasql::FunctionSignature gsql_signature = FunctionSignatureFrom(
+          gsql_return_type, gsql_arguments, signature->deprecated());
+
       Oid signature_oid =
           signature->has_oid() ? signature->oid() : InvalidOid;  // NOLINT
       pg_signatures.push_back(PostgresFunctionSignatureArguments(

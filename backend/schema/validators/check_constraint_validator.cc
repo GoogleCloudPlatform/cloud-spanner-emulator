@@ -108,7 +108,8 @@ absl::Status ValidateCheckConstraintSignatureChange(
       dependent_table, temp_new_schema, type_factory, name_and_types,
       "check constraints", &unused_dependent_column_names,
       /*dependent_sequences=*/nullptr,
-      /*allow_volatile_expression=*/false, &unused_udf_dependencies);
+      /*allow_volatile_expression=*/false, &unused_udf_dependencies,
+      /*is_pending_commit_timestamp=*/nullptr);
   if (!status.ok()) {
     return error::DependentCheckConstraintBecomesInvalid(
         modify_action, dependency_name, dependent_check_constraint->Name(),

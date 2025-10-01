@@ -68,172 +68,182 @@ namespace postgres_translator {
   inline constexpr char kZetaSQLSubtractFunctionName[] = "$subtract";
   inline constexpr char kZetaSQLUminusFunctionName[] = "$unary_minus";
 
-// PG casting functions that override the ZetaSQL/Spanner casting functions.
-inline constexpr char kPGCastToDateFunctionName[] = "pg.cast_to_date";
-inline constexpr char kPGCastToTimestampFunctionName[] = "pg.cast_to_timestamp";
+  inline constexpr char kZetaSQLMinFunctionName[] = "min";
+  inline constexpr char kZetaSQLMaxFunctionName[] = "max";
 
-// Functions to capture NULL/NaN ordering semantics of PG.
-inline constexpr char kPGMapDoubleToIntFunctionName[] = "pg.map_double_to_int";
-inline constexpr char kPGMapFloatToIntFunctionName[] = "pg.map_float_to_int";
-inline constexpr char kPGLeastFunctionName[] = "pg.least";
-inline constexpr char kPGGreatestFunctionName[] = "pg.greatest";
+  // PG casting functions that override the ZetaSQL/Spanner casting functions.
+  inline constexpr char kPGCastToDateFunctionName[] = "pg.cast_to_date";
+  inline constexpr char kPGCastToTimestampFunctionName[] =
+      "pg.cast_to_timestamp";
 
-// Aggregate functions.
-inline constexpr char kPGMinFunctionName[] = "pg.min";
-inline constexpr char kPGMaxFunctionName[] = "pg.max";
-inline constexpr char kPGNumericMaxFunctionName[] = "pg.numeric_max";
-inline constexpr char kPGNumericMinFunctionName[] = "pg.numeric_min";
-inline constexpr char kPGSumFunctionName[] = "pg.sum";
-inline constexpr char kPGAvgFunctionName[] = "pg.avg";
+  // Functions to capture NULL/NaN ordering semantics of PG.
+  inline constexpr char kPGMapDoubleToIntFunctionName[] =
+      "pg.map_double_to_int";
+  inline constexpr char kPGMapFloatToIntFunctionName[] = "pg.map_float_to_int";
+  inline constexpr char kPGLeastFunctionName[] = "pg.least";
+  inline constexpr char kPGGreatestFunctionName[] = "pg.greatest";
 
-// PG array functions.
-inline constexpr char kPGArrayLengthFunctionName[] = "pg.array_length";
-inline constexpr char kPGArrayUpperFunctionName[] = "pg.array_upper";
+  // Aggregate functions.
+  inline constexpr char kPGMinFunctionName[] = "pg.min";
+  inline constexpr char kPGMaxFunctionName[] = "pg.max";
+  inline constexpr char kPGSumFunctionName[] = "pg.sum";
+  inline constexpr char kPGAvgFunctionName[] = "pg.avg";
 
-// PG comparison functions.
-inline constexpr char kPGTextregexneFunctionName[] = "pg.textregexne";
+  // PG array functions.
+  inline constexpr char kPGArrayLengthFunctionName[] = "pg.array_length";
+  inline constexpr char kPGArrayUpperFunctionName[] = "pg.array_upper";
 
-// PG datetime functions.
-inline constexpr char kPGDateMiFunctionName[] = "pg.date_mi";
-inline constexpr char kPGDateMiiFunctionName[] = "pg.date_mii";
-inline constexpr char kPGDatePliFunctionName[] = "pg.date_pli";
-inline constexpr char kPGTimestamptzAddFunctionName[] = "pg.timestamptz_add";
-inline constexpr char kPGTimestamptzSubtractFunctionName[] =
-    "pg.timestamptz_subtract";
-inline constexpr char kPGTimestamptzBinFunctionName[] = "pg.date_bin";
-inline constexpr char kPGTimestamptzTruncFunctionName[] = "pg.date_trunc";
-inline constexpr char kPGExtractFunctionName[] = "pg.extract";
+  // PG comparison functions.
+  inline constexpr char kPGTextregexneFunctionName[] = "pg.textregexne";
 
-// PG formatting functions.
-inline constexpr char kPGToDateFunctionName[] = "pg.to_date";
-inline constexpr char kPGToNumberFunctionName[] = "pg.to_number";
-inline constexpr char kPGToTimestampFunctionName[] = "pg.to_timestamp";
-inline constexpr char kPGToCharFunctionName[] = "pg.to_char";
+  // PG datetime functions.
+  inline constexpr char kPGDateMiFunctionName[] = "pg.date_mi";
+  inline constexpr char kPGDateMiiFunctionName[] = "pg.date_mii";
+  inline constexpr char kPGDatePliFunctionName[] = "pg.date_pli";
+  inline constexpr char kPGTimestamptzAddFunctionName[] = "pg.timestamptz_add";
+  inline constexpr char kPGTimestamptzSubtractFunctionName[] =
+      "pg.timestamptz_subtract";
+  inline constexpr char kPGTimestamptzBinFunctionName[] = "pg.date_bin";
+  inline constexpr char kPGTimestamptzTruncFunctionName[] = "pg.date_trunc";
+  inline constexpr char kPGExtractFunctionName[] = "pg.extract";
 
-// PG string functions.
-inline constexpr char kPGQuoteIdentFunctionName[] = "pg.quote_ident";
-inline constexpr char kPGSubstringFunctionName[] = "pg.substring";
-inline constexpr char kPGRegexpMatchFunctionName[] = "pg.regexp_match";
-inline constexpr char kPGRegexpSplitToArrayFunctionName[] =
-    "pg.regexp_split_to_array";
+  // PG formatting functions.
+  inline constexpr char kPGToDateFunctionName[] = "pg.to_date";
+  inline constexpr char kPGToNumberFunctionName[] = "pg.to_number";
+  inline constexpr char kPGToTimestampFunctionName[] = "pg.to_timestamp";
+  inline constexpr char kPGToCharFunctionName[] = "pg.to_char";
 
-// PG JSONB functions.
-inline constexpr char kPGToJsonbFunctionName[] = "pg.to_jsonb";
-inline constexpr char kPGCastFromJsonbFunctionName[] = "pg.cast_from_jsonb";
-inline constexpr char kPGJsonbSubscriptTextFunctionName[] =
-    "pg.jsonb_subscript_text";
-inline constexpr char kPGJsonbArrayElementsFunctionName[] =
-    "pg.jsonb_array_elements";
-inline constexpr char kPGJsonbBuildArrayFunctionName[] = "pg.jsonb_build_array";
-inline constexpr char kPGJsonbBuildObjectFunctionName[] =
-    "pg.jsonb_build_object";
-inline constexpr char kPGJsonbDeleteFunctionName[] = "pg.jsonb_delete";
-inline constexpr char kPGJsonbDeletePathFunctionName[] = "pg.jsonb_delete_path";
-inline constexpr char kPGJsonbConcatFunctionName[] = "pg.jsonb_concat";
-inline constexpr char kPGJsonbInsertFunctionName[] = "pg.jsonb_insert";
-inline constexpr char kPGJsonbStripNullsFunctionName[] = "pg.jsonb_strip_nulls";
-inline constexpr char kPGJsonbSetFunctionName[] = "pg.jsonb_set";
-inline constexpr char kPGJsonbSetLaxFunctionName[] = "pg.jsonb_set_lax";
-inline constexpr char kPGJsonbContainsFunctionName[] = "pg.jsonb_contains";
-inline constexpr char kPGJsonbContainedFunctionName[] = "pg.jsonb_contained";
-inline constexpr char kPGJsonbExistsFunctionName[] = "pg.jsonb_exists";
-inline constexpr char kPGJsonbExistsAnyFunctionName[] = "pg.jsonb_exists_any";
-inline constexpr char kPGJsonbExistsAllFunctionName[] = "pg.jsonb_exists_all";
+  // PG string functions.
+  inline constexpr char kPGQuoteIdentFunctionName[] = "pg.quote_ident";
+  inline constexpr char kPGSubstringFunctionName[] = "pg.substring";
+  inline constexpr char kPGRegexpMatchFunctionName[] = "pg.regexp_match";
+  inline constexpr char kPGRegexpSplitToArrayFunctionName[] =
+      "pg.regexp_split_to_array";
 
-// PG float functions.
-inline constexpr char kPGFloatAddFunctionName[] = "pg.float_add";
-inline constexpr char kPGFloatSubtractFunctionName[] = "pg.float_subtract";
-inline constexpr char kPGFloatMultiplyFunctionName[] = "pg.float_multiply";
-inline constexpr char kPGFloatDivideFunctionName[] = "pg.float_divide";
+  // PG JSONB functions.
+  inline constexpr char kPGToJsonbFunctionName[] = "pg.to_jsonb";
+  inline constexpr char kPGCastFromJsonbFunctionName[] = "pg.cast_from_jsonb";
+  inline constexpr char kPGJsonbSubscriptTextFunctionName[] =
+      "pg.jsonb_subscript_text";
+  inline constexpr char kPGJsonbArrayElementsFunctionName[] =
+      "pg.jsonb_array_elements";
+  inline constexpr char kPGJsonbBuildArrayFunctionName[] =
+      "pg.jsonb_build_array";
+  inline constexpr char kPGJsonbBuildObjectFunctionName[] =
+      "pg.jsonb_build_object";
+  inline constexpr char kPGJsonbDeleteFunctionName[] = "pg.jsonb_delete";
+  inline constexpr char kPGJsonbDeletePathFunctionName[] =
+      "pg.jsonb_delete_path";
+  inline constexpr char kPGJsonbConcatFunctionName[] = "pg.jsonb_concat";
+  inline constexpr char kPGJsonbInsertFunctionName[] = "pg.jsonb_insert";
+  inline constexpr char kPGJsonbStripNullsFunctionName[] =
+      "pg.jsonb_strip_nulls";
+  inline constexpr char kPGJsonbSetFunctionName[] = "pg.jsonb_set";
+  inline constexpr char kPGJsonbSetLaxFunctionName[] = "pg.jsonb_set_lax";
+  inline constexpr char kPGJsonbContainsFunctionName[] = "pg.jsonb_contains";
+  inline constexpr char kPGJsonbContainedFunctionName[] = "pg.jsonb_contained";
+  inline constexpr char kPGJsonbExistsFunctionName[] = "pg.jsonb_exists";
+  inline constexpr char kPGJsonbExistsAnyFunctionName[] = "pg.jsonb_exists_any";
+  inline constexpr char kPGJsonbExistsAllFunctionName[] = "pg.jsonb_exists_all";
 
-// PG NUMERIC functions.
-inline constexpr char kPGCastToNumericFunctionName[] = "pg.cast_to_numeric";
-inline constexpr char kPGCastNumericToDoubleFunctionName[] =
-    "pg.cast_to_double";
-inline constexpr char kPGCastNumericToFloatFunctionName[] = "pg.cast_to_float";
-inline constexpr char kPGCastToStringFunctionName[] = "pg.cast_to_string";
-inline constexpr char kPGCastNumericToInt64FunctionName[] = "pg.cast_to_int64";
+  // PG float functions.
+  inline constexpr char kPGFloatAddFunctionName[] = "pg.float_add";
+  inline constexpr char kPGFloatSubtractFunctionName[] = "pg.float_subtract";
+  inline constexpr char kPGFloatMultiplyFunctionName[] = "pg.float_multiply";
+  inline constexpr char kPGFloatDivideFunctionName[] = "pg.float_divide";
 
-// PG OID functions.
-inline constexpr char kPGCastToOidFunctionName[] = "pg.cast_to_oid";
-inline constexpr char kPGCastFromOidFunctionName[] = "pg.cast_from_oid";
+  // PG NUMERIC functions.
+  inline constexpr char kPGCastToNumericFunctionName[] = "pg.cast_to_numeric";
+  inline constexpr char kPGCastNumericToDoubleFunctionName[] =
+      "pg.cast_to_double";
+  inline constexpr char kPGCastNumericToFloatFunctionName[] =
+      "pg.cast_to_float";
+  inline constexpr char kPGCastToStringFunctionName[] = "pg.cast_to_string";
+  inline constexpr char kPGCastNumericToInt64FunctionName[] =
+      "pg.cast_to_int64";
 
-// PG Interval functions.
-inline constexpr char kPGIntervalUnaryMinusFunctionName[] =
-    "pg.interval_unary_minus";
-inline constexpr char kPGIntervalAddFunctionName[] = "pg.interval_add";
-inline constexpr char kPGIntervalSubtractFunctionName[] =
-    "pg.interval_subtract";
-inline constexpr char kPGIntervalMultiplyFunctionName[] =
-    "pg.interval_multiply";
-inline constexpr char kPGIntervalDivideFunctionName[] = "pg.interval_divide";
-inline constexpr char kPGIntervalJustifyHoursFunctionName[] =
-    "pg.justify_hours";
-inline constexpr char kPGIntervalJustifyDaysFunctionName[] = "pg.justify_days";
-inline constexpr char kPGIntervalJustifyIntervalFunctionName[] =
-    "pg.justify_interval";
-inline constexpr char kPGIntervalMakeIntervalFunctionName[] =
-    "pg.make_interval";
-inline constexpr char kPGTimestamptzSubtractTimestamptzFunctionName[] =
-    "pg.timestamptz_subtract_timestamptz";
-inline constexpr char kPGCastToIntervalFunctionName[] = "pg.cast_to_interval";
-inline constexpr char kPGIntervalExtractFunctionName[] = "pg.extract_interval";
+  // PG OID functions.
+  inline constexpr char kPGCastToOidFunctionName[] = "pg.cast_to_oid";
+  inline constexpr char kPGCastFromOidFunctionName[] = "pg.cast_from_oid";
 
-using SpannerPGFunctions = std::vector<std::unique_ptr<zetasql::Function>>;
-using SpannerPGTVFs =
-    std::vector<std::unique_ptr<zetasql::TableValuedFunction>>;
+  // PG Interval functions.
+  inline constexpr char kPGIntervalUnaryMinusFunctionName[] =
+      "pg.interval_unary_minus";
+  inline constexpr char kPGIntervalAddFunctionName[] = "pg.interval_add";
+  inline constexpr char kPGIntervalSubtractFunctionName[] =
+      "pg.interval_subtract";
+  inline constexpr char kPGIntervalMultiplyFunctionName[] =
+      "pg.interval_multiply";
+  inline constexpr char kPGIntervalDivideFunctionName[] = "pg.interval_divide";
+  inline constexpr char kPGIntervalJustifyHoursFunctionName[] =
+      "pg.justify_hours";
+  inline constexpr char kPGIntervalJustifyDaysFunctionName[] =
+      "pg.justify_days";
+  inline constexpr char kPGIntervalJustifyIntervalFunctionName[] =
+      "pg.justify_interval";
+  inline constexpr char kPGIntervalMakeIntervalFunctionName[] =
+      "pg.make_interval";
+  inline constexpr char kPGTimestamptzSubtractTimestamptzFunctionName[] =
+      "pg.timestamptz_subtract_timestamptz";
+  inline constexpr char kPGCastToIntervalFunctionName[] = "pg.cast_to_interval";
+  inline constexpr char kPGIntervalExtractFunctionName[] =
+      "pg.extract_interval";
 
-// Returns Spanner-specific implementations of PG functions.
-SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name);
+  using SpannerPGFunctions = std::vector<std::unique_ptr<zetasql::Function>>;
+  using SpannerPGTVFs =
+      std::vector<std::unique_ptr<zetasql::TableValuedFunction>>;
 
-// Returns Spanner-specific implementations of PG TVFs.
-SpannerPGTVFs GetSpannerPGTVFs(const std::string& catalog_name);
+  // Returns Spanner-specific implementations of PG functions.
+  SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name);
 
-// Evaluators exported for supporting type coercion.
-absl::StatusOr<zetasql::Value> EvalCastNumericToInt64(
-    absl::Span<const zetasql::Value> args);
+  // Returns Spanner-specific implementations of PG TVFs.
+  SpannerPGTVFs GetSpannerPGTVFs(const std::string& catalog_name);
 
-absl::StatusOr<zetasql::Value> EvalCastNumericToDouble(
-    absl::Span<const zetasql::Value> args);
+  // Evaluators exported for supporting type coercion.
+  absl::StatusOr<zetasql::Value> EvalCastNumericToInt64(
+      absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalCastNumericToFloat(
-    absl::Span<const zetasql::Value> args);
+  absl::StatusOr<zetasql::Value> EvalCastNumericToDouble(
+      absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalCastNumericToString(
-    absl::Span<const zetasql::Value> args);
+  absl::StatusOr<zetasql::Value> EvalCastNumericToFloat(
+      absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalCastToNumeric(
-    absl::Span<const zetasql::Value> args);
+  absl::StatusOr<zetasql::Value> EvalCastNumericToString(
+      absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalToJsonb(
-    absl::Span<const zetasql::Value> args);
+  absl::StatusOr<zetasql::Value> EvalCastToNumeric(
+      absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalCastToOid(
-    absl::Span<const zetasql::Value> args);
+  absl::StatusOr<zetasql::Value> EvalToJsonb(
+      absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalCastOidToInt64(
-    absl::Span<const zetasql::Value> args);
+  absl::StatusOr<zetasql::Value> EvalCastToOid(
+      absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalCastOidToString(
-    absl::Span<const zetasql::Value> args);
+  absl::StatusOr<zetasql::Value> EvalCastOidToInt64(
+      absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalCastIntervalToString(
-    absl::Span<const zetasql::Value> args);
+  absl::StatusOr<zetasql::Value> EvalCastOidToString(
+      absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalCastStringToInterval(
-    absl::Span<const zetasql::Value> args);
+  absl::StatusOr<zetasql::Value> EvalCastIntervalToString(
+      absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalToChar(
-    absl::Span<const zetasql::Value> args);
+  absl::StatusOr<zetasql::Value> EvalCastStringToInterval(
+      absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalExtract(
-    absl::Span<const zetasql::Value> args);
+  absl::StatusOr<zetasql::Value> EvalToChar(
+      absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalCastToTimestamp(
-    absl::Span<const zetasql::Value> args);
+  absl::StatusOr<zetasql::Value> EvalExtract(
+      absl::Span<const zetasql::Value> args);
 
-absl::StatusOr<zetasql::Value> EvalCastToString(
-    absl::Span<const zetasql::Value> args);
+  absl::StatusOr<zetasql::Value> EvalCastToTimestamp(
+      absl::Span<const zetasql::Value> args);
+
+  absl::StatusOr<zetasql::Value> EvalCastToString(
+      absl::Span<const zetasql::Value> args);
 }  // namespace postgres_translator
 
 #endif  // CATALOG_EMULATOR_FUNCTIONS_H_

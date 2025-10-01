@@ -733,8 +733,8 @@ void spangres_evaluate(int ignored, ...) {
 // Hand control to the Spangres error-handling code. Normally the error message
 // and code will already be stored in thread-local buffers via errmsg and
 // errcode functions which were evaluated by spangres_evaluate().
-extern void spangres_ereport(int elevel, const char* msg,...)
-{
+extern void spangres_ereport(int elevel, const char* filename, int lineno,
+                             const char* funcname, const char* msg, ...) {
   // spangres_ereport() calls things that may themselves try to report errors.
 	// If they do, keep track so we can bail rather than entering an infinite loop
 	// when we encouter a double-fault.
@@ -789,6 +789,27 @@ extern void spangres_ereport(int elevel, const char* msg,...)
 
 		edata->message = message_buf;
 	}
+
+	// The following code to copy filename, lineno, and funcname is from the
+	// existing err_finish() function.
+	/* Save the last few bits of error state into the stack entry */
+	if (filename)
+	{
+		const char *slash;
+
+		/* keep only base name, useful especially for vpath builds */
+		slash = strrchr(filename, '/');
+		if (slash)
+			filename = slash + 1;
+		/* Some Windows compilers use backslashes in __FILE__ strings */
+		slash = strrchr(filename, '\\');
+		if (slash)
+			filename = slash + 1;
+	}
+
+	edata->filename = filename;
+	edata->lineno = lineno;
+	edata->funcname = funcname;
 
 	edata->elevel = elevel;
 
@@ -3209,7 +3230,9 @@ log_line_prefix(StringInfo buf, ErrorData *edata)
 char *
 unpack_sql_state(int sql_state)
 {
-	static char buf[12];
+	/* SPANGRES BEGIN */
+	static __thread char buf[12];
+	/* SPANGRES END */
 	int			i;
 
 	for (i = 0; i < 5; i++)

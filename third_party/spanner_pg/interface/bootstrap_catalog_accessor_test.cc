@@ -111,6 +111,10 @@ INSTANTIATE_TEST_SUITE_P(
     R"pb(
       oid: 50000
       nspname: "spanner"
+    )pb",
+    R"pb(
+      oid: 50077
+      nspname: "spanner_sys"
     )pb"));
 
 TEST_P(PgProcDataTest, GetPgProcDataFromBootstrapOidSuccess) {

@@ -259,6 +259,31 @@ TEST(SearchQueryParserTest, ParsingError) {
 
 TEST(SearchQueryParserTest, EmptyQuery) { TestParseSearchQuery("", ""); }
 
+TEST(SearchQueryParserTest, TrimSeparators) {
+  TestParseSearchQuery("term!", "term");
+  TestParseSearchQuery("term!@", "term");
+  TestParseSearchQuery("cloud spanner!@", "(a cloud spanner)");
+  TestParseSearchQuery("term!!!", "term");
+  TestParseSearchQuery("!", "");
+  TestParseSearchQuery("! ", "");
+  TestParseSearchQuery("!term", "term");
+  TestParseSearchQuery("@!term", "term");
+  TestParseSearchQuery("@!cloud spanner", "(a cloud spanner)");
+  TestParseSearchQuery("!!!term", "term");
+  TestParseSearchQuery("@!term!@", "term");
+  TestParseSearchQuery(" @!cloud spanner!@ ", "(a cloud spanner)");
+  TestParseSearchQuery("\\!term", "term");
+  TestParseSearchQuery("\\'term", "term");
+  TestParseSearchQuery("\\\"term", "term");
+  TestParseSearchQuery("term\\!", "term");
+  TestParseSearchQuery("term\\'", "term");
+  TestParseSearchQuery("term\\\"", "term");
+  TestParseSearchQuery("term\\'!", "term");
+  TestParseSearchQuery("@\\!term", "term");
+  TestParseSearchQuery("\\!\\@term", "term");
+  TestParseSearchQuery("term\\!@", "term");
+}
+
 TEST(SearchQueryParserTest, CaseSensitive) {
   TestParseSearchQuery("CLOUD or EMULATOR", "(a cloud or emulator)");
   TestParseSearchQuery("CLOUD oR EMULATOR", "(a cloud or emulator)");

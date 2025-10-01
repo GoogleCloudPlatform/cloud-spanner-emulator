@@ -36,7 +36,7 @@ cc_library(
         "index_backfill.h",
     ],
     deps = [
-        "//backend/actions:generated_column",
+        "//backend/actions:evaluated_column",
         "//backend/common:ids",
         "//backend/common:indexing",
         "//backend/common:rows",

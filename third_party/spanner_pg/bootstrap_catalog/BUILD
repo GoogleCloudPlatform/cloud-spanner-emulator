@@ -129,6 +129,16 @@ cc_library(
     ],
 )
 
+filegroup(
+    name = "spanner_pg_fmgr_datfiles",
+    srcs = [
+        "spanner_pg_data/pg_proc.dat",
+    ],
+    visibility = [
+        "//:__subpackages__",
+    ],
+)
+
 genrule(
     name = "generate_bootstrap_catalog_srcs",
     srcs = [

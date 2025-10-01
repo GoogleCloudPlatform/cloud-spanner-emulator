@@ -31,7 +31,7 @@
 #include "backend/access/write.h"
 #include "backend/actions/action.h"
 #include "backend/actions/context.h"
-#include "backend/actions/generated_column.h"
+#include "backend/actions/evaluated_column.h"
 #include "backend/actions/ops.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
@@ -60,11 +60,11 @@ class ActionRegistry {
   // Executes the list of effectors that apply to the given operation.
   absl::Status ExecuteEffectors(const ActionContext* ctx, const WriteOp& op);
 
-  // Executes the generated key effector that applies to the given mutation op.
-  absl::Status ExecuteGeneratedKeyEffectors(
+  // Executes the evaluated key effector that applies to the given mutation op.
+  absl::Status ExecuteEvaluatedKeyEffectors(
       const MutationOp& op,
-      std::vector<std::vector<zetasql::Value>>* generated_values,
-      std::vector<const Column*>* columns_with_generated_values);
+      std::vector<std::vector<zetasql::Value>>* evaluated_values,
+      std::vector<const Column*>* columns_with_evaluated_values);
 
   // Executes the list of modifiers that apply to the given operation.
   absl::Status ExecuteModifiers(const ActionContext* ctx, const WriteOp& op);
@@ -89,8 +89,8 @@ class ActionRegistry {
       table_effectors_;
 
   // List of effectors for primary key columns per table.
-  absl::node_hash_map<std::string, std::unique_ptr<GeneratedColumnEffector>>
-      table_generated_key_effectors_;
+  absl::node_hash_map<std::string, std::unique_ptr<EvaluatedColumnEffector>>
+      table_evaluated_key_effectors_;
 
   // List of modifiers per table.
   absl::node_hash_map<const Table*, std::vector<std::unique_ptr<Modifier>>>

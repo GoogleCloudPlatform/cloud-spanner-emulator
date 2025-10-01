@@ -185,18 +185,32 @@ absl::StatusOr<Oid> CatalogAdapter::GetOidFromNamespaceName(
                    " is tracked by the catalog adapter"));
 }
 
-absl::StatusOr<Oid> CatalogAdapter::GenerateAndStoreUDFProcOid(
-    FormData_pg_proc* pg_proc, const zetasql::Function* udf) {
-  ZETASQL_RET_CHECK_NE(pg_proc, nullptr);
-  ZETASQL_RET_CHECK_NE(udf, nullptr);
-  // We're about to generate a new oid. Make sure there isn't one already.
-  if (pg_proc->oid != InvalidOid) {
-    return absl::InternalError("pg_proc already has an oid assigned");
+bool CatalogAdapter::IsUDFProcStored(Oid oid) {
+  return oid_to_udf_proc_map_.contains(oid);
+}
+
+absl::StatusOr<Oid> CatalogAdapter::GetOrGenerateUDFProcOid(
+    const zetasql::Function* udf) {
+  std::string name = udf->Name();
+  if (udf_to_oid_map_.contains(name)) {
+    return udf_to_oid_map_[name];
   }
-  ZETASQL_ASSIGN_OR_RETURN(pg_proc->oid, GenerateOid());
+  ZETASQL_ASSIGN_OR_RETURN(Oid new_oid, GenerateOid());
+  udf_to_oid_map_[name] = new_oid;
+  oid_to_udf_map_[new_oid] = udf;
+  return new_oid;
+}
+
+absl::Status CatalogAdapter::StoreUDFProc(FormData_pg_proc* pg_proc) {
+  ZETASQL_RET_CHECK_NE(pg_proc, nullptr);
+  if (pg_proc->oid == InvalidOid) {
+    return absl::InternalError(absl::StrCat("pg_proc \"", pg_proc->proname.data,
+                                            "\" is not assigned an oid"));
+  }
+  ZETASQL_RET_CHECK(oid_to_udf_map_.contains(pg_proc->oid));
+  ZETASQL_RET_CHECK(udf_to_oid_map_.contains(oid_to_udf_map_[pg_proc->oid]->Name()));
   oid_to_udf_proc_map_[pg_proc->oid] = pg_proc;
-  oid_to_udf_map_[pg_proc->oid] = udf;
-  return pg_proc->oid;
+  return absl::OkStatus();
 }
 
 absl::StatusOr<Oid> CatalogAdapter::GenerateAndStoreTVFProcOid(

@@ -216,10 +216,6 @@ Oid GetOrGenerateOidFromNamespaceOidAndRelationNameC(
 
 // Looks up a set of functions by name from both bootstrap (for built in
 // functions) and the user catalog (for user-defined functions).
-void GetProcsByName(const char* name, const FormData_pg_proc*** outlist,
-                    size_t* outcount);
-// Looks up a set of user-defined functions by schema and function name from
-// just the user catalog.
 void GetProcsBySchemaAndFuncNames(const char* schema_name,
                                   const char* func_name,
                                   const FormData_pg_proc*** outlist,

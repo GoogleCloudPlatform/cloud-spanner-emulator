@@ -31,9 +31,9 @@ absl::Status BackfillColumnValue(const Column* old_column,
                                  const Column* new_column,
                                  const SchemaValidationContext* context);
 
-// Backfills the 'generated_column'.
-absl::Status BackfillGeneratedColumnValue(
-    const Column* generated_column, const SchemaValidationContext* context);
+// Backfills the 'evaluated_column'.
+absl::Status BackfillEvaluatedColumnValue(
+    const Column* evaluated_column, const SchemaValidationContext* context);
 
 }  // namespace backend
 }  // namespace emulator

@@ -286,7 +286,8 @@ class SchemaUpdaterImpl {
       const zetasql::Type* column_type, const Table* table,
       const ddl::CreateTable* ddl_create_table,
       absl::flat_hash_set<const SchemaNode*>* dependent_sequences,
-      absl::flat_hash_set<const SchemaNode*>* udf_dependencies);
+      absl::flat_hash_set<const SchemaNode*>* udf_dependencies,
+      bool* is_pending_commit_timestamp);
 
   absl::Status AnalyzeCheckConstraint(
       absl::string_view expression, const Table* table,
@@ -1467,9 +1468,11 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
     }
     ZETASQL_RET_CHECK(new_column_def.has_column_default() && !expression.empty());
     absl::flat_hash_set<const SchemaNode*> udf_dependencies;
+    bool is_pending_commit_timestamp = false;
     absl::Status s = AnalyzeColumnDefaultValue(
         expression, column->Name(), column->GetType(), table,
-        /*ddl_create_table=*/nullptr, &dependent_sequences, &udf_dependencies);
+        /*ddl_create_table=*/nullptr, &dependent_sequences, &udf_dependencies,
+        &is_pending_commit_timestamp);
     if (!s.ok()) {
       return error::ColumnDefaultValueParseError(table->Name(), column->Name(),
                                                  s.message());
@@ -1559,7 +1562,8 @@ absl::Status SchemaUpdaterImpl::AnalyzeGeneratedColumn(
       expression, column_type, table, latest_schema_, type_factory_,
       name_and_types, "stored generated columns", dependent_column_names,
       /*dependent_sequences=*/nullptr,
-      /*allow_volatile_expression=*/false, udf_dependencies);
+      /*allow_volatile_expression=*/false, udf_dependencies,
+      /*is_pending_commit_timestamp=*/nullptr);
 }
 
 absl::Status SchemaUpdaterImpl::AnalyzeColumnDefaultValue(
@@ -1567,7 +1571,8 @@ absl::Status SchemaUpdaterImpl::AnalyzeColumnDefaultValue(
     const zetasql::Type* column_type, const Table* table,
     const ddl::CreateTable* ddl_create_table,
     absl::flat_hash_set<const SchemaNode*>* dependent_sequences,
-    absl::flat_hash_set<const SchemaNode*>* udf_dependencies) {
+    absl::flat_hash_set<const SchemaNode*>* udf_dependencies,
+    bool* is_pending_commit_timestamp) {
   std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
   ZETASQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
                                                   &name_and_types));
@@ -1581,8 +1586,8 @@ absl::Status SchemaUpdaterImpl::AnalyzeColumnDefaultValue(
   ZETASQL_RETURN_IF_ERROR(AnalyzeColumnExpression(
       expression, column_type, table, latest_schema_, type_factory_,
       name_and_types, "column default", &dependent_column_names,
-      dependent_sequences, /*allow_volatile_expression=*/true,
-      udf_dependencies));
+      dependent_sequences, /*allow_volatile_expression=*/true, udf_dependencies,
+      is_pending_commit_timestamp));
   if (!dependent_column_names.empty()) {
     return error::DefaultExpressionWithColumnDependency(column_name);
   }
@@ -1604,7 +1609,8 @@ absl::Status SchemaUpdaterImpl::AnalyzeCheckConstraint(
       type_factory_, name_and_types, "check constraints",
       dependent_column_names,
       /*dependent_sequences=*/nullptr,
-      /*allow_volatile_expression=*/false, udf_dependencies));
+      /*allow_volatile_expression=*/false, udf_dependencies,
+      /*is_pending_commit_timestamp=*/nullptr));
 
   for (const std::string& column_name : *dependent_column_names) {
     builder->add_dependent_column(table->FindColumn(column_name));
@@ -1685,19 +1691,22 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
 
   absl::flat_hash_set<const SchemaNode*> udf_dependencies;
   absl::flat_hash_set<const SchemaNode*> dependent_sequences;
+  std::string default_value_expression;
+  bool is_pending_commit_timestamp = false;
   if (ddl_column.has_column_default()) {
-    std::string expression = ddl_column.column_default().expression();
+    default_value_expression = ddl_column.column_default().expression();
     if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
-      ZETASQL_ASSIGN_OR_RETURN(expression,
+      ZETASQL_ASSIGN_OR_RETURN(default_value_expression,
                        TranslatePGExpression(ddl_column.column_default(), table,
                                              ddl_create_table, *modifier));
     }
     has_default_value = true;
-    modifier->set_expression(expression);
+    modifier->set_expression(default_value_expression);
 
     absl::Status s = AnalyzeColumnDefaultValue(
-        expression, ddl_column.column_name(), column_type, table,
-        ddl_create_table, &dependent_sequences, &udf_dependencies);
+        default_value_expression, ddl_column.column_name(), column_type, table,
+        ddl_create_table, &dependent_sequences, &udf_dependencies,
+        &is_pending_commit_timestamp);
 
     if (!s.ok()) {
       return error::ColumnDefaultValueParseError(
@@ -1899,7 +1908,7 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
   if (column->is_generated() || column->has_default_value()) {
     statement_context_->AddAction(
         [column](const SchemaValidationContext* context) {
-          return BackfillGeneratedColumnValue(column, context);
+          return BackfillEvaluatedColumnValue(column, context);
         });
     std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
     builder.set_postgresql_oid(oid);
@@ -4667,6 +4676,7 @@ absl::Status SchemaUpdaterImpl::ValidateAlterDatabaseOptions(
   for (const ddl::SetOption& option : set_options) {
     absl::string_view option_name =
         absl::StripPrefix(option.option_name(), "spanner.internal.cloud_");
+    option_name = absl::StripPrefix(option_name, "spanner.internal.");
     if (option_name == ddl::kWitnessLocationOptionName) {
       if (option.has_string_value()) {
         continue;
@@ -4678,6 +4688,11 @@ absl::Status SchemaUpdaterImpl::ValidateAlterDatabaseOptions(
         continue;
       } else if (option.has_null_value()) {
         return error::NullValueAlterDatabaseOption();
+      }
+    } else if (option_name == ddl::kReadLeaseRegionsOptionName ||
+               option_name == "read_lease_labels") {
+      if (option.has_string_value()) {
+        continue;
       }
     } else if (option_name == ddl::kDefaultSequenceKindOptionName) {
       if (option.has_string_value() || option.has_null_value()) {

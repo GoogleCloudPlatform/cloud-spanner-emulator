@@ -94,20 +94,39 @@ index 69d12b63..a23bdcaf 100644
   COMPILE_LINK_ENVVAR = @COMPILE_LINK_ENVVAR@
   UCLN_NO_AUTO_CLEANUP = @UCLN_NO_AUTO_CLEANUP@
 diff --git a/bazel/zetasql_deps_step_1.bzl b/bazel/zetasql_deps_step_1.bzl
-index 55a58ce4..7e502bad 100644
+index f99531b9..fb669aa0 100644
 --- a/bazel/zetasql_deps_step_1.bzl
 +++ b/bazel/zetasql_deps_step_1.bzl
-@@ -22,25 +22,11 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
- # but depend on them being something different. So we have to override them both
- # by defining the repo first.
- load("@com_google_zetasql//bazel:zetasql_bazel_version.bzl", "zetasql_bazel_version")
--load("@toolchains_llvm//toolchain:deps.bzl", "bazel_toolchain_dependencies")
--load("@toolchains_llvm//toolchain:rules.bzl", "llvm_toolchain")
- 
- def zetasql_deps_step_1(add_bazel_version = True):
+@@ -27,17 +27,6 @@ def zetasql_deps_step_1(add_bazel_version = True):
      if add_bazel_version:
          zetasql_bazel_version()
  
+-    # Step 1 loads the toolchains_llvm helper repo.
+-    # Step 2 uses the llvm_toolchain rule to load the toolchain repo for a specific arch.
+-    # Step 3 loads the toolchain itself from that repo.
+-    http_archive(
+-        name = "toolchains_llvm",
+-        canonical_id = "1.0.0",
+-        sha256 = "e91c4361f99011a54814e1afbe5c436e0d329871146a3cd58c23a2b4afb50737",
+-        strip_prefix = "toolchains_llvm-1.0.0",
+-        url = "https://github.com/bazel-contrib/toolchains_llvm/releases/download/1.0.0/toolchains_llvm-1.0.0.tar.gz",
+-    )
+-
+     http_archive(
+         name = "io_bazel_rules_go",
+         integrity = "sha256-M6zErg9wUC20uJPJ/B3Xqb+ZjCPn/yxFF3QdQEmpdvg=",
+diff --git a/bazel/zetasql_deps_step_2.bzl b/bazel/zetasql_deps_step_2.bzl
+index cf7f9b7e..04263e0e 100644
+--- a/bazel/zetasql_deps_step_2.bzl
++++ b/bazel/zetasql_deps_step_2.bzl
+@@ -26,22 +26,8 @@ load("@rules_m4//m4:m4.bzl", "m4_register_toolchains")
+ load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies")
+ load("@rules_proto//proto:setup.bzl", "rules_proto_setup")
+ load("@rules_proto//proto:toolchains.bzl", "rules_proto_toolchains")
+-load("@toolchains_llvm//toolchain:deps.bzl", "bazel_toolchain_dependencies")
+-load("@toolchains_llvm//toolchain:rules.bzl", "llvm_toolchain")
+ 
+ def _load_deps_from_step_1():
 -    bazel_toolchain_dependencies()
 -    llvm_toolchain(
 -        name = "llvm_toolchain",
@@ -120,30 +139,10 @@ index 55a58ce4..7e502bad 100644
 -            "darwin-x86_64": "15.0.7",
 -        },
 -    )
- 
-     http_archive(
-         name = "io_bazel_rules_go",
-diff --git a/bazel/zetasql_deps_step_2.bzl b/bazel/zetasql_deps_step_2.bzl
-index 0298cb41..1dd07902 100644
---- a/bazel/zetasql_deps_step_2.bzl
-+++ b/bazel/zetasql_deps_step_2.bzl
-@@ -19,7 +19,6 @@
- load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies", "go_repository")
- load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
- load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
--load("@llvm_toolchain//:toolchains.bzl", "llvm_register_toolchains")
- load("@rules_bison//bison:bison.bzl", "bison_register_toolchains")
- load("@rules_flex//flex:flex.bzl", "flex_register_toolchains")
- load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
-@@ -29,7 +28,6 @@ load("@rules_proto//proto:setup.bzl", "rules_proto_setup")
- load("@rules_proto//proto:toolchains.bzl", "rules_proto_toolchains")
- 
- def _load_deps_from_step_1():
--    llvm_register_toolchains()
      rules_foreign_cc_dependencies()
  
  def textmapper_dependencies():
-@@ -485,7 +483,6 @@ alias(
+@@ -510,7 +496,6 @@ alias(
          flex_register_toolchains(version = "2.6.4")
          bison_register_toolchains(version = "3.3.2")
          go_rules_dependencies()
@@ -151,15 +150,28 @@ index 0298cb41..1dd07902 100644
          gazelle_dependencies()
          textmapper_dependencies()
  
+diff --git a/bazel/zetasql_deps_step_3.bzl b/bazel/zetasql_deps_step_3.bzl
+index cd0f5587..b9919424 100644
+--- a/bazel/zetasql_deps_step_3.bzl
++++ b/bazel/zetasql_deps_step_3.bzl
+@@ -20,7 +20,6 @@ load("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_deps")
+ load("@com_google_googleapis//:repository_rules.bzl", "switched_rules_by_language")
+ load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
+ load("@google_bazel_common//:workspace_defs.bzl", "google_common_workspace_rules")
+-load("@llvm_toolchain//:toolchains.bzl", "llvm_register_toolchains")
+ 
+ def zetasql_deps_step_3():
+     protobuf_deps()
+@@ -31,4 +30,3 @@ def zetasql_deps_step_3():
+         cc = True,
+     )
+     google_common_workspace_rules()
+-    llvm_register_toolchains()
 diff --git a/zetasql/analyzer/BUILD b/zetasql/analyzer/BUILD
-index cdbff9ca..1caa87a4 100644
+index e057a93d..b26784a8 100644
 --- a/zetasql/analyzer/BUILD
 +++ b/zetasql/analyzer/BUILD
-@@ -15,11 +15,10 @@
- #
- 
- load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
--load("@rules_cc//cc:cc_test.bzl", "cc_test")
+@@ -21,7 +21,7 @@ load("@rules_cc//cc:cc_test.bzl", "cc_test")
  load(":builddefs.bzl", "gen_analyzer_test")
  
  package(
@@ -169,7 +181,7 @@ index cdbff9ca..1caa87a4 100644
  
  filegroup(
 diff --git a/zetasql/analyzer/expr_resolver_helper.cc b/zetasql/analyzer/expr_resolver_helper.cc
-index a5affc85..d59fb817 100644
+index b0fd5438..5e4265cd 100644
 --- a/zetasql/analyzer/expr_resolver_helper.cc
 +++ b/zetasql/analyzer/expr_resolver_helper.cc
 @@ -458,7 +458,8 @@ ExprResolutionInfo::ExprResolutionInfo(
@@ -183,10 +195,10 @@ index a5affc85..d59fb817 100644
             .use_post_grouping_columns = use_post_grouping_columns_in,
             .clause_name = clause_name_in,
 diff --git a/zetasql/analyzer/name_scope.cc b/zetasql/analyzer/name_scope.cc
-index e5b09f39..a7b7c22d 100644
+index 0931909e..38fd61f8 100644
 --- a/zetasql/analyzer/name_scope.cc
 +++ b/zetasql/analyzer/name_scope.cc
-@@ -1710,7 +1710,7 @@ NameList::AddRangeVariableInWrappingNameList(
+@@ -1882,7 +1882,7 @@ NameList::AddRangeVariableInWrappingNameList(
    // variables, including for value tables, so we use `flatten_to_table`
    // which drops range variables.
    ZETASQL_RETURN_IF_ERROR(range_variable_name_list->MergeFrom(
@@ -196,10 +208,10 @@ index e5b09f39..a7b7c22d 100644
    auto wrapper_name_list = std::make_shared<NameList>();
    ZETASQL_RETURN_IF_ERROR(
 diff --git a/zetasql/analyzer/resolver_expr.cc b/zetasql/analyzer/resolver_expr.cc
-index 89b79ad8..6112c59d 100644
+index cd73c57b..6ebed2c4 100644
 --- a/zetasql/analyzer/resolver_expr.cc
 +++ b/zetasql/analyzer/resolver_expr.cc
-@@ -3123,7 +3123,7 @@ class SystemVariableConstant final : public Constant {
+@@ -3131,7 +3131,7 @@ class SystemVariableConstant final : public Constant {
                           const Type* type)
        : Constant(name_path), type_(type) {}
  
@@ -209,10 +221,10 @@ index 89b79ad8..6112c59d 100644
    std::string ConstantValueDebugString() const override { return "<N/A>"; }
  
 diff --git a/zetasql/base/BUILD b/zetasql/base/BUILD
-index 11e7e2ab..8173e4df 100644
+index 264d00fb..0b522806 100644
 --- a/zetasql/base/BUILD
 +++ b/zetasql/base/BUILD
-@@ -17,7 +17,7 @@ load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+@@ -19,7 +19,7 @@ load("@rules_cc//cc:cc_test.bzl", "cc_test")
  
  licenses(["notice"])
  
@@ -244,10 +256,10 @@ index 730ccdcb..46fe06b0 100644
  // characters.
  template <>
 diff --git a/zetasql/base/testing/BUILD b/zetasql/base/testing/BUILD
-index 10596497..399487dd 100644
+index 5ce04591..5a0a738f 100644
 --- a/zetasql/base/testing/BUILD
 +++ b/zetasql/base/testing/BUILD
-@@ -16,7 +16,7 @@
+@@ -19,7 +19,7 @@ load("@rules_cc//cc:cc_test.bzl", "cc_test")
  
  licenses(["notice"])
  
@@ -256,7 +268,7 @@ index 10596497..399487dd 100644
  
  # A drop in replacement for gtest_main that parsers absl flags
  cc_library(
-@@ -55,6 +55,7 @@ cc_library(
+@@ -58,6 +58,7 @@ cc_library(
          "@com_google_absl//absl/status:statusor",
          "@com_google_absl//absl/strings",
          "@com_google_googletest//:gtest",
@@ -264,7 +276,7 @@ index 10596497..399487dd 100644
      ],
  )
  
-@@ -69,6 +70,7 @@ cc_test(
+@@ -72,6 +73,7 @@ cc_test(
          "@com_google_absl//absl/status",
          "@com_google_absl//absl/status:statusor",
          "@com_google_googletest//:gtest",
@@ -273,7 +285,7 @@ index 10596497..399487dd 100644
  )
  
 diff --git a/zetasql/common/BUILD b/zetasql/common/BUILD
-index 2bdd2173..b81f7324 100644
+index 262ad738..35cd35e4 100644
 --- a/zetasql/common/BUILD
 +++ b/zetasql/common/BUILD
 @@ -13,10 +13,8 @@
@@ -302,10 +314,10 @@ index 25d5c27a..01ab943c 100644
          .include_array_ordereness = include_array_ordereness,
          .indent = 0,
 diff --git a/zetasql/parser/BUILD b/zetasql/parser/BUILD
-index da049bb2..52193760 100644
+index b1ca7a50..863b2471 100644
 --- a/zetasql/parser/BUILD
 +++ b/zetasql/parser/BUILD
-@@ -26,7 +26,7 @@ load("//bazel:textmapper.bzl", "tm_syntax")
+@@ -28,7 +28,7 @@ load("//bazel:textmapper.bzl", "tm_syntax")
  load(":builddefs.bzl", "gen_parser_test")
  
  package(
@@ -314,19 +326,6 @@ index da049bb2..52193760 100644
  )
  
  genrule(
-diff --git a/zetasql/parser/macros/BUILD b/zetasql/parser/macros/BUILD
-index c1dd4af9..493c5dc9 100644
---- a/zetasql/parser/macros/BUILD
-+++ b/zetasql/parser/macros/BUILD
-@@ -14,8 +14,6 @@
- # limitations under the License.
- #
- 
--load("@rules_cc//cc:cc_library.bzl", "cc_library")
--
- cc_library(
-     name = "quoting",
-     srcs = ["quoting.cc"],
 diff --git a/zetasql/public/coercer.cc b/zetasql/public/coercer.cc
 index 930ac280..5761c002 100644
 --- a/zetasql/public/coercer.cc
@@ -354,10 +353,10 @@ index 946183b0..177a5dfd 100644
    // Returns whether or not this Constant is a specific constant interface or
    // implementation.
 diff --git a/zetasql/public/function_signature.h b/zetasql/public/function_signature.h
-index 8f9acc5b..7f7fc1f8 100644
+index 91796b86..a7fe0cc1 100644
 --- a/zetasql/public/function_signature.h
 +++ b/zetasql/public/function_signature.h
-@@ -698,7 +698,7 @@ class FunctionArgumentType {
+@@ -739,7 +739,7 @@ class FunctionArgumentType {
    // Returns NULL if kind_ is not ARG_TYPE_FIXED or ARG_TYPE_LAMBDA. If kind_ is
    // ARG_TYPE_LAMBDA, returns the type of lambda body type, which could be NULL
    // if the body type is templated.
@@ -367,10 +366,10 @@ index 8f9acc5b..7f7fc1f8 100644
    SignatureArgumentKind kind() const { return kind_; }
  
 diff --git a/zetasql/public/input_argument_type.h b/zetasql/public/input_argument_type.h
-index 0ac0b1e4..c17f038c 100644
+index 3f61a836..bd52976e 100644
 --- a/zetasql/public/input_argument_type.h
 +++ b/zetasql/public/input_argument_type.h
-@@ -81,7 +81,7 @@ class InputArgumentType {
+@@ -89,7 +89,7 @@ class InputArgumentType {
    ~InputArgumentType() {}
  
    // This may return nullptr (such as for lambda).
@@ -380,10 +379,10 @@ index 0ac0b1e4..c17f038c 100644
    const std::vector<InputArgumentType>& field_types() const {
      return field_types_;
 diff --git a/zetasql/public/property_graph.h b/zetasql/public/property_graph.h
-index ce8fb08d..d9e4d1c3 100644
+index e9354b5d..6265517d 100644
 --- a/zetasql/public/property_graph.h
 +++ b/zetasql/public/property_graph.h
-@@ -365,7 +365,7 @@ class GraphPropertyDeclaration {
+@@ -372,7 +372,7 @@ class GraphPropertyDeclaration {
      return ::zetasql::FullName(PropertyGraphNamePath(), Name());
    }
  
@@ -392,11 +391,24 @@ index ce8fb08d..d9e4d1c3 100644
  
    // Returns whether or not this GraphPropertyDeclaration is a specific
    // interface or implementation.
+diff --git a/zetasql/public/simple_catalog.cc b/zetasql/public/simple_catalog.cc
+index f909948a..5dd56444 100644
+--- a/zetasql/public/simple_catalog.cc
++++ b/zetasql/public/simple_catalog.cc
+@@ -1767,7 +1767,7 @@ SimpleTable::SimpleTable(absl::string_view name,
+ // to something named 'value' is confusing there.
+ SimpleTable::SimpleTable(absl::string_view name, const Type* row_type,
+                          const int64_t id)
+-    : SimpleTable(name, {{"value", row_type}}, id) {
++    : SimpleTable(name, {NameAndType({"value", row_type})}, id) {
+   is_value_table_ = true;
+ }
+ 
 diff --git a/zetasql/public/simple_catalog.h b/zetasql/public/simple_catalog.h
-index 023faf04..6c67b577 100644
+index c93ae868..a1dc30b5 100644
 --- a/zetasql/public/simple_catalog.h
 +++ b/zetasql/public/simple_catalog.h
-@@ -1211,7 +1211,7 @@ class SimpleConstant : public Constant {
+@@ -1257,7 +1257,7 @@ class SimpleConstant : public Constant {
        const SimpleConstantProto& simple_constant_proto,
        const TypeDeserializer& type_deserializer);
  
@@ -419,12 +431,12 @@ index fa88344f..69defd3b 100644
    }
  
 diff --git a/zetasql/public/types/BUILD b/zetasql/public/types/BUILD
-index 4322229c..2b4188f2 100644
+index 512ab4f6..4be021d8 100644
 --- a/zetasql/public/types/BUILD
 +++ b/zetasql/public/types/BUILD
-@@ -14,7 +14,7 @@
- # limitations under the License.
- #
+@@ -17,7 +17,7 @@
+ load("@rules_cc//cc:cc_library.bzl", "cc_library")
+ load("@rules_cc//cc:cc_test.bzl", "cc_test")
  
 -package(default_visibility = ["//zetasql/base:zetasql_implementation"])
 +package(default_visibility = ["//visibility:public"])
@@ -432,10 +444,10 @@ index 4322229c..2b4188f2 100644
  filegroup(
      name = "type_headers",
 diff --git a/zetasql/public/value.cc b/zetasql/public/value.cc
-index dd0de392..82a09db6 100644
+index d5b35c63..dc236d12 100644
 --- a/zetasql/public/value.cc
 +++ b/zetasql/public/value.cc
-@@ -1245,7 +1245,7 @@ std::string Value::DebugString(bool verbose) const {
+@@ -1243,7 +1243,7 @@ std::string Value::DebugString(bool verbose) const {
  
  // Format will wrap arrays and structs.
  std::string Value::Format(bool print_top_level_type) const {
@@ -444,7 +456,7 @@ index dd0de392..82a09db6 100644
        {.force_type_at_top_level = print_top_level_type, .indent = 0});
  }
  
-@@ -1513,7 +1513,7 @@ std::string Value::FormatInternal(
+@@ -1511,7 +1511,7 @@ std::string Value::FormatInternal(
      std::vector<std::string> element_strings(elements().size());
      for (int i = 0; i < elements().size(); ++i) {
        element_strings[i] =
@@ -453,7 +465,7 @@ index dd0de392..82a09db6 100644
      }
      // Sanitize any '$' characters before creating substitution template. "$$"
      // is replaced by "$" in the output from absl::Substitute.
-@@ -1555,7 +1555,7 @@ std::string Value::FormatInternal(
+@@ -1553,7 +1553,7 @@ std::string Value::FormatInternal(
      const StructType* struct_type = type()->AsStruct();
      std::vector<std::string> field_strings(struct_type->num_fields());
      for (int i = 0; i < struct_type->num_fields(); i++) {
@@ -462,7 +474,7 @@ index dd0de392..82a09db6 100644
      }
      // Sanitize any '$' characters before creating substitution template. "$$"
      // is replaced by "$" in the output from absl::Substitute.
-@@ -1601,9 +1601,9 @@ std::string Value::FormatInternal(
+@@ -1599,9 +1599,9 @@ std::string Value::FormatInternal(
      }
      std::vector<std::string> boundaries_strings;
      boundaries_strings.push_back(
@@ -475,7 +487,7 @@ index dd0de392..82a09db6 100644
      // is replaced by "$" in the output from absl::Substitute.
      std::string templ =
 diff --git a/zetasql/public/value.h b/zetasql/public/value.h
-index 6aaf5ccf..49e6145e 100644
+index 7a8fdd54..956af288 100644
 --- a/zetasql/public/value.h
 +++ b/zetasql/public/value.h
 @@ -118,7 +118,7 @@ class Value {
@@ -487,7 +499,7 @@ index 6aaf5ccf..49e6145e 100644
  
    // Returns the type kind of the value. Same as type()->type_kind() but in some
    // cases can be a bit more efficient.
-@@ -1222,7 +1222,7 @@ class Value {
+@@ -1221,7 +1221,7 @@ class Value {
  
      // Returns a pointer to Value's Type. Requires is_valid(). If TypeKind is
      // stored in the Metadata, Type pointer is obtained from static TypeFactory.
@@ -497,19 +509,10 @@ index 6aaf5ccf..49e6145e 100644
      // Returns true, if instance stores pointer to a Type and false if type's
      // kind.
 diff --git a/zetasql/public/value_inl.h b/zetasql/public/value_inl.h
-index a0418a66..adc276e6 100644
+index b9831037..8d892b1d 100644
 --- a/zetasql/public/value_inl.h
 +++ b/zetasql/public/value_inl.h
-@@ -1127,7 +1127,7 @@ class Value::Metadata::ContentLayout<4> {
-         has_type_(false),
-         value_extended_content_(value_extended_content) {}
- 
--  const Type* type() const { return type_; }
-+  const zetasql::Type* type() const { return type_; }
-   int32_t value_extended_content() const { return value_extended_content_; }
-   bool is_null() const { return is_null_; }
-   bool preserves_order() const { return preserves_order_; }
-@@ -1207,7 +1207,7 @@ class Value::Metadata::ContentLayout<8> {
+@@ -1159,7 +1159,7 @@ class Value::Metadata::Content {
    // TODO: wait for fixed clang-format
    // clang-format on
  
@@ -518,39 +521,8 @@ index a0418a66..adc276e6 100644
      return reinterpret_cast<const Type*>(type_ & kTypeMask);
    }
    int32_t value_extended_content() const { return value_extended_content_; }
-diff --git a/zetasql/reference_impl/algebrizer.cc b/zetasql/reference_impl/algebrizer.cc
-index ad8ba8b7..22b9146a 100644
---- a/zetasql/reference_impl/algebrizer.cc
-+++ b/zetasql/reference_impl/algebrizer.cc
-@@ -7630,7 +7630,7 @@ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeTvfScan(
-       ZETASQL_RET_CHECK(tvf_scan->signature()->argument(i).is_scalar());
-       ZETASQL_ASSIGN_OR_RETURN(auto expr_argument,
-                        AlgebrizeExpression(argument->expr()));
--      arguments.push_back({.value = std::move(expr_argument)});
-+      arguments.push_back(TVFOp::TVFOpArgument{.value = std::move(expr_argument)});
-       arg_infos.push_back({.kind = TvfArgKind::kScalar});
-       continue;
-     }
-@@ -7660,7 +7660,7 @@ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeTvfScan(
-         columns.push_back({relation_signature_column.name,
-                            argument_column.type(), input_variable});
-       }
--      arguments.push_back({.relation = TVFOp::TvfInputRelation{
-+      arguments.push_back(TVFOp::TVFOpArgument{.relation = TVFOp::TvfInputRelation{
-                                std::move(relation), std::move(columns)}});
-       arg_infos.push_back({.kind = TvfArgKind::kRelation});
-       continue;
-@@ -7668,7 +7668,7 @@ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeTvfScan(
- 
-     if (argument->model() != nullptr) {
-       ZETASQL_RET_CHECK(tvf_scan->signature()->argument(i).is_model());
--      arguments.push_back({.model = argument->model()->model()});
-+      arguments.push_back(TVFOp::TVFOpArgument{.model = argument->model()->model()});
-       arg_infos.push_back({.kind = TvfArgKind::kModel});
-       continue;
-     }
 diff --git a/zetasql/reference_impl/operator.h b/zetasql/reference_impl/operator.h
-index e3ed7f1f..8e6a39f6 100644
+index a432666c..6b17e767 100644
 --- a/zetasql/reference_impl/operator.h
 +++ b/zetasql/reference_impl/operator.h
 @@ -242,7 +242,7 @@ class ExprArg : public AlgebraArg {
@@ -562,38 +534,8 @@ index e3ed7f1f..8e6a39f6 100644
  
   private:
    const Type* type_;
-diff --git a/zetasql/reference_impl/relational_op.cc b/zetasql/reference_impl/relational_op.cc
-index b4c78be3..f12fc760 100644
---- a/zetasql/reference_impl/relational_op.cc
-+++ b/zetasql/reference_impl/relational_op.cc
-@@ -774,11 +774,11 @@ absl::StatusOr<std::unique_ptr<TupleIterator>> TVFOp::CreateIterator(
-       }
-       ZETASQL_RET_CHECK_EQ(columns.size(), tuple_indexes.size());
-       input_arguments.push_back(
--          {.relation = {std::make_unique<InputRelationIterator>(
-+          TableValuedFunction::TvfEvaluatorArg{.relation = {std::make_unique<InputRelationIterator>(
-                std::move(columns), std::move(tuple_indexes), context,
-                std::move(tuple_iterator))}});
-     } else if (argument.model) {
--      input_arguments.push_back({.model = argument.model});
-+      input_arguments.push_back(TableValuedFunction::TvfEvaluatorArg{.model = argument.model});
-     } else {
-       ZETASQL_RET_CHECK_FAIL() << "Unexpected TVFOpArgument";
-     }
-diff --git a/zetasql/resolved_ast/BUILD b/zetasql/resolved_ast/BUILD
-index a5e15879..4c320713 100644
---- a/zetasql/resolved_ast/BUILD
-+++ b/zetasql/resolved_ast/BUILD
-@@ -18,7 +18,6 @@ load("@com_github_grpc_grpc//bazel:python_rules.bzl", "py_proto_library")
- load("@com_google_protobuf//:protobuf.bzl", "py_proto_library")
- load("@com_google_protobuf//bazel:java_proto_library.bzl", "java_proto_library")
- load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
--load("@rules_cc//cc:cc_test.bzl", "cc_test")
- 
- # Placeholder: load py_binary
- load("//zetasql/resolved_ast:build_rules.bzl", "gen_resolved_ast_files")
 diff --git a/zetasql/resolved_ast/resolved_column.h b/zetasql/resolved_ast/resolved_column.h
-index cf9f80e6..aa4b9d2f 100644
+index d5e484b8..dc9c7eca 100644
 --- a/zetasql/resolved_ast/resolved_column.h
 +++ b/zetasql/resolved_ast/resolved_column.h
 @@ -121,7 +121,7 @@ class ResolvedColumn {
@@ -606,10 +548,10 @@ index cf9f80e6..aa4b9d2f 100644
    const AnnotationMap* /*absl_nullable*/ type_annotation_map() const {
      return annotated_type_.annotation_map;
 diff --git a/zetasql/testing/test_value.h b/zetasql/testing/test_value.h
-index 118b257a..c1596a92 100644
+index 6d59d274..cc8d1398 100644
 --- a/zetasql/testing/test_value.h
 +++ b/zetasql/testing/test_value.h
-@@ -113,7 +113,7 @@ class ValueConstructor {
+@@ -110,7 +110,7 @@ class ValueConstructor {
        : v_(v) {}
  
    const Value& get() const { return v_; }

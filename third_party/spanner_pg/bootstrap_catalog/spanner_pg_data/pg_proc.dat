@@ -1,360 +1,461 @@
+# This file contains the Spanner counterpart of PostgreSQL pg_proc.dat.
+# The PG Perl script Gen_fmgrtab.pl, which generates fmgroids.h, fmgrprotos.h,
+# and fmgrtab.c, has been modified to also pick up entries from this file.
+#
+# The Gen_fmgrtab.pl autogeneration script validates `prosrc` field according to
+# the language specified in `prolang` field, which is one of the languages in
+# PG `pg_language.dat`, namely `internal`, `c`, and `sql`. If the `prolang`
+# field is set to `internal`, the entry must have a valid C implementation in
+# PG. Most of the entries in this file cannot use any of the existing language
+# implementations. So we introduce a new language `spanner_internal`, defined in
+# Spanner `pg_language.dat`, to instruct the autogeneration code to skip the
+# validation.
+
 [
 { oid => '50005', proname => 'pending_commit_timestamp',
-  pronamespace => 'spanner', prorettype => 'timestamptz', proargtypes => '',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
+  prorettype => 'timestamptz', proargtypes => '',
   prosrc => 'pending_commit_timestamp' },
 
 { oid => '50006', proname => 'bit_reverse', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'int8', proargtypes => 'int8 bool',
   prosrc => 'bit_reverse' },
 
-{ oid => '50007', proname => 'get_internal_sequence_state', pronamespace => 'spanner',
+{ oid => '50007', proname => 'get_internal_sequence_state',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
   prorettype => 'int8', proargtypes => 'text',
   prosrc => 'get_internal_sequence_state' },
 
 { oid => '50008', proname => 'generate_uuid', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'text', proargtypes => '',
   prosrc => 'generate_uuid' },
 
-{ oid => '50009', proname => 'timestamp_from_unix_micros', pronamespace => 'spanner',
+{ oid => '50009', proname => 'timestamp_from_unix_micros',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
   prorettype => 'timestamptz', proargtypes => 'int8',
   prosrc => 'timestamp_from_unix_micros' },
 
-{ oid => '50010', proname => 'timestamp_from_unix_micros', pronamespace => 'spanner',
+{ oid => '50010', proname => 'timestamp_from_unix_micros',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
   prorettype => 'timestamptz', proargtypes => 'timestamptz',
   prosrc => 'timestamp_from_unix_micros' },
 
-{ oid => '50011', proname => 'timestamp_from_unix_millis', pronamespace => 'spanner',
+{ oid => '50011', proname => 'timestamp_from_unix_millis',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
   prorettype => 'timestamptz', proargtypes => 'int8',
   prosrc => 'timestamp_from_unix_millis' },
 
-{ oid => '50012', proname => 'timestamp_from_unix_millis', pronamespace => 'spanner',
+{ oid => '50012', proname => 'timestamp_from_unix_millis',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
   prorettype => 'timestamptz', proargtypes => 'timestamptz',
   prosrc => 'timestamp_from_unix_millis' },
 
 { oid => '50013', proname => 'timestamptz_add', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'timestamptz', proargtypes => 'timestamptz text',
   prosrc => 'timestamptz_add' },
 
 { oid => '50014', proname => 'timestamptz_subtract', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'timestamptz', proargtypes => 'timestamptz text',
   prosrc => 'timestamptz_subtract' },
 
 { oid => '50015', proname => 'date_bin', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'timestamptz', proargtypes => 'text timestamptz timestamptz',
   prosrc => 'timestamptz_bin' },
 
 { oid => '50067', proname => 'date', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'date', proargtypes => 'timestamptz text',
   prosrc => 'date' },
 
 { oid => '50056', proname => 'get_table_column_identity_state',
-  pronamespace => 'spanner', prorettype => 'int8', proargtypes => 'text',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
+  prorettype => 'int8', proargtypes => 'text',
   prosrc => 'get_table_column_identity_state' },
 
-#############################
+# Language validator for SpannerINTERNALlanguageId
+{ oid => '50079', descr => '(spanner_internal)',
+  proname => 'fmgr_spanner_internal_validator', provolatile => 's',
+  prorettype => 'void', proargtypes => 'oid',
+  prosrc => 'fmgr_spanner_internal_validator' },
+
+# tablesample method handlers
+{ oid => '50074', descr => 'SPANNER.RESERVOIR tablesample method handler',
+  proname => 'reservoir', pronamespace => 'spanner', provolatile => 'v',
+  prorettype => 'tsm_handler', proargtypes => 'internal',
+  prosrc => 'tsm_spanner_reservoir_handler' },
+
+
 # FTS TOKENIZATION FUNCTIONS
-#############################
+
 # TOKENIZE_FULLTEXT
 { oid => '50016', proname => 'tokenize_fulltext', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => 'text text text text',
   proargnames => '{value,language_tag,content_type,token_category}',
   prosrc => 'spangres_fts_func' },
 
 { oid => '50017', proname => 'tokenize_fulltext', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => '_text text text text',
   proargnames => '{value,language_tag,content_type,token_category}',
   prosrc => 'spangres_fts_func' },
 
 # TOKENIZE_SUBSTRING
 { oid => '50018', proname => 'tokenize_substring', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => 'text int8 int8 text _text bool text bool',
   proargnames => '{value,ngram_size_max,ngram_size_min,content_type,relative_search_types,short_tokens_only_for_anchors,language_tag,remove_diacritics}',
   prosrc => 'spangres_fts_func' },
 
 { oid => '50019', proname => 'tokenize_substring', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => '_text int8 int8 text _text bool text bool',
   proargnames => '{value,ngram_size_max,ngram_size_min,content_type,relative_search_types,short_tokens_only_for_anchors,language_tag,remove_diacritics}',
   prosrc => 'spangres_fts_func' },
 
 # TOKEN
 { oid => '50020', proname => 'token', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => 'text',
   prosrc => 'spangres_fts_func' },
 
 { oid => '50021', proname => 'token', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => '_text',
   prosrc => 'spangres_fts_func' },
 
 { oid => '50022', proname => 'token', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => 'bytea',
   prosrc => 'spangres_fts_func' },
 
 { oid => '50023', proname => 'token', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => '_bytea',
   prosrc => 'spangres_fts_func' },
 
 # TOKENIZE_NUMBER
 { oid => 50024, proname => 'tokenize_number', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => 'float8 text text float8 float8 float8 int8 int8',
   proargnames => '{value,comparison_type,algorithm,min,max,granularity,tree_base,ieee_precision}',
   prosrc => 'spangres_fts_func' },
 
 { oid => 50025, proname => 'tokenize_number', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => '_float8 text text float8 float8 float8 int8 int8',
   proargnames => '{value,comparison_type,algorithm,min,max,granularity,tree_base,ieee_precision}',
   prosrc => 'spangres_fts_func' },
 
 { oid => 50026, proname => 'tokenize_number', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => 'int8 text text int8 int8 int8 int8 int8',
   proargnames => '{value,comparison_type,algorithm,min,max,granularity,tree_base,ieee_precision}',
   prosrc => 'spangres_fts_func' },
 
 { oid => 50027, proname => 'tokenize_number', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => '_int8 text text int8 int8 int8 int8 int8',
   proargnames => '{value,comparison_type,algorithm,min,max,granularity,tree_base,ieee_precision}',
   prosrc => 'spangres_fts_func' },
 
 { oid => 50028, proname => 'tokenize_number', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => 'float4 text text float8 float8 float8 int8 int8',
   proargnames => '{value,comparison_type,algorithm,min,max,granularity,tree_base,ieee_precision}',
   prosrc => 'spangres_fts_func' },
 
 { oid => 50029, proname => 'tokenize_number', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => '_float4 text text float8 float8 float8 int8 int8',
   proargnames => '{value,comparison_type,algorithm,min,max,granularity,tree_base,ieee_precision}',
   prosrc => 'spangres_fts_func' },
 
 # TOKENIZE_BOOL
 { oid => 50030, proname => 'tokenize_bool', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => 'bool', proargnames => '{value}',
   prosrc => 'spangres_fts_func' },
 
 # TOKENIZE_NGRAMS
 { oid => 50031, proname => 'tokenize_ngrams', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => 'text int8 int8 bool',
   proargnames => '{value,ngram_size_max,ngram_size_min,remove_diacritics}',
   prosrc => 'spangres_fts_func' },
 
 { oid => 50057, proname => 'tokenize_ngrams', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => '_text int8 int8 bool',
   proargnames => '{value,ngram_size_max,ngram_size_min,remove_diacritics}',
   prosrc => 'spangres_fts_func' },
 
 # TOKENLIST_CONCAT
 { oid => 50032, proname => 'tokenlist_concat', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => '_tokenlist',
   proargnames => '{tokens}',
   prosrc => 'spangres_fts_func' },
 
 # TOKENIZE_JSONB
 { oid => 50060, proname => 'tokenize_jsonb', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'tokenlist', proargtypes => 'jsonb',
   proargnames => '{value}',
   prosrc => 'spangres_fts_func' },
 
-#############################
+
 # FTS SEARCH FUNCTIONS
-#############################
+
 
 # SEARCH
 { oid => 50033, proname => 'search', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'bool', proargtypes => 'tokenlist text bool text text jsonb',
   proargnames => '{tokens,query,enhance_query,language_tag,dialect,enhance_query_options}',
   prosrc => 'spangres_fts_func' },
 
 # SEARCH_SUBSTRING
 { oid => 50034, proname => 'search_substring', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'bool', proargtypes => 'tokenlist text text text',
   proargnames => '{tokens,query,relative_search_type,language_tag}',
   prosrc => 'spangres_fts_func' },
 
 # SCORE
 { oid => 50058, proname => 'score', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => 'tokenlist text bool text text jsonb jsonb',
   proargnames => '{tokens,query,enhance_query,language_tag,dialect,enhance_query_options,options}',
   prosrc => 'spangres_fts_func' },
 
 # SNIPPET
 { oid => 50059, proname => 'snippet', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'jsonb', proargtypes => 'text text bool text int8 int8 text jsonb',
   proargnames => '{value,query,enhance_query,language_tag,max_snippet_width,max_snippets,content_type,enhance_query_options}',
   prosrc => 'spangres_fts_func' },
 
 # SEARCH_NGRAMS
 { oid => 50035, proname => 'search_ngrams', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'bool', proargtypes => 'tokenlist text int8 float8 text',
   proargnames => '{tokens,ngrams_query,min_ngrams,min_ngrams_percent,language_tag}',
   prosrc => 'spangres_fts_func' },
 
 # SCORE_NGRAMS
 { oid => 50036, proname => 'score_ngrams', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => 'tokenlist text text text',
   proargnames => '{tokens,ngrams_query,algorithm,language_tag}',
   prosrc => 'spangres_fts_func' },
 
-#############################
+
 # FTS DEBUG FUNCTIONS
-#############################
+
 
 # DEBUG_TOKENLIST
 { oid => 50003, proname => 'debug_tokenlist', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'text', proargtypes => 'tokenlist',
   prosrc => 'spangres_fts_func' },
 
-#############################
+
 # FTS MISC FUNCTIONS
-#############################
+
 
 # SOUNDEX
 { oid => 50037, proname => 'soundex', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'text', proargtypes => 'text',
   prosrc => 'spangres_fts_func' },
 
-#############################
+
 # VECTOR FUNCTIONS
-#############################
+
 
 { oid => '50038', proname => 'cosine_distance', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => '_float8 _float8',
   prosrc => 'cosine_distance' },
 
 { oid => '50039', proname => 'euclidean_distance', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => '_float8 _float8',
   prosrc => 'euclidean_distance' },
 
 { oid => '50043', proname => 'cosine_distance', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => '_float4 _float4',
   prosrc => 'cosine_distance' },
 
 { oid => '50044', proname => 'euclidean_distance', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => '_float4 _float4',
   prosrc => 'euclidean_distance' },
 
 { oid => '50045', proname => 'dot_product', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => '_int8 _int8',
   prosrc => 'dot_product' },
 
 { oid => '50046', proname => 'dot_product', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => '_float8 _float8',
   prosrc => 'dot_product' },
 
 { oid => '50047', proname => 'dot_product', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => '_float4 _float4',
   prosrc => 'dot_product' },
 
-{ oid => '50061', proname => 'approx_cosine_distance', pronamespace => 'spanner',
+{ oid => '50061', proname => 'approx_cosine_distance',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => '_float8 _float8 jsonb',
   proargnames => '{,,options}', prosrc => 'approx_cosine_distance' },
 
-{ oid => '50062', proname => 'approx_cosine_distance', pronamespace => 'spanner',
+{ oid => '50062', proname => 'approx_cosine_distance',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => '_float4 _float4 jsonb',
   proargnames => '{,,options}', prosrc => 'approx_cosine_distance' },
 
-{ oid => '50063', proname => 'approx_euclidean_distance', pronamespace => 'spanner',
+{ oid => '50063', proname => 'approx_euclidean_distance',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => '_float8 _float8 jsonb',
   proargnames => '{,,options}', prosrc => 'approx_euclidean_distance' },
 
-{ oid => '50064', proname => 'approx_euclidean_distance', pronamespace => 'spanner',
+{ oid => '50064', proname => 'approx_euclidean_distance',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => '_float4 _float4 jsonb',
   proargnames => '{,,options}', prosrc => 'approx_euclidean_distance' },
 
 { oid => '50065', proname => 'approx_dot_product', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => '_float8 _float8 jsonb',
   proargnames => '{,,options}', prosrc => 'approx_dot_product' },
 
 { oid => '50066', proname => 'approx_dot_product', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'float8', proargtypes => '_float4 _float4 jsonb',
   proargnames => '{,,options}', prosrc => 'approx_dot_product' },
 
-#############################
+
 # ML FUNCTIONS
-#############################
+
 
 { oid => '50040', proname => 'ml_predict_row', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'jsonb', proargtypes => 'jsonb jsonb',
   proargnames => '{model_endpoint,args}',
   prosrc => 'ml_predict_row' },
 
 { oid => '50041', proname => 'ml_predict_row', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'jsonb', proargtypes => 'text jsonb',
   proargnames => '{model_endpoint,args}',
   prosrc => 'ml_predict_row' },
 
-#############################
+
 # JSONB FUNCTIONS
-#############################
+
 
 { oid => '50042', proname => 'jsonb_query_array', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => '_jsonb', proargtypes => 'jsonb',
   prosrc => 'jsonb_query_array' },
 
 { oid => '50049', proname => 'int64_array', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => '_int8', proargtypes => 'jsonb',
   prosrc => 'int64_array' },
 
 { oid => '50050', proname => 'float32_array', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => '_float4', proargtypes => 'jsonb',
   prosrc => 'float32_array' },
 
 { oid => '50051', proname => 'float64_array', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => '_float8', proargtypes => 'jsonb',
   prosrc => 'float64_array' },
 
 { oid => '50052', proname => 'bool_array', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => '_bool', proargtypes => 'jsonb',
   prosrc => 'bool_array' },
 
 { oid => '50053', proname => 'string_array', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => '_text', proargtypes => 'jsonb',
   prosrc => 'string_array' },
 
-#############################
+
 # QUERY CANCELLATION PROCEDURES
-#############################
+
 
 { oid => '50048', proname => 'cancel_query', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prokind => 'p', prorettype => 'void',
   proargtypes => 'text',
   prosrc => 'cancel_query' },
 
-#############################
+
 # HASHING FUNCTIONS
-#############################
+
 
 { oid => '50054', proname => 'farm_fingerprint', pronamespace => 'spanner',
-  prorettype => 'int8', proargtypes => 'text',
+  prolang => 'spanner_internal', prorettype => 'int8', proargtypes => 'text',
   prosrc => 'farm_fingerprint' },
 
 { oid => '50055', proname => 'farm_fingerprint', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'int8', proargtypes => 'bytea',
   prosrc => 'farm_fingerprint' },
 
-]
 
-#############################
+
 # COMPRESSION FUNCTIONS
-#############################
+
 
 { oid => '50068', proname => 'zstd_compress', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'bytea', proargtypes => 'bytea int8',
   proargnames => '{,level}',
   prosrc => 'zstd_compress' },
 
 { oid => '50069', proname => 'zstd_compress', pronamespace => 'spanner',
+  prolang => 'spanner_internal',
   prorettype => 'bytea', proargtypes => 'text int8',
   proargnames => '{,level}',
   prosrc => 'zstd_compress' },
 
 { oid => '50070', proname => 'zstd_decompress_to_bytes',
-  pronamespace => 'spanner',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
   prorettype => 'bytea', proargtypes => 'bytea int8',
   proargnames => '{,size_limit}',
   prosrc => 'zstd_decompress_to_bytes' },
 
 { oid => '50071', proname => 'zstd_decompress_to_string',
-  pronamespace => 'spanner',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
   prorettype => 'text', proargtypes => 'bytea int8',
   proargnames => '{,size_limit}',
   prosrc => 'zstd_decompress_to_string' },
+
+{ oid => '50075', proname => 'split_substr',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
+  prorettype => 'text', proargtypes => 'text text int8 int8',
+  proargnames => '{value,delimiter,start_split,count}',
+  prosrc => 'split_substr' },
+
+{ oid => '50076', proname => 'split_substr',
+  pronamespace => 'spanner', prolang => 'spanner_internal',
+  prorettype => 'text', proargtypes => 'text text int8',
+  proargnames => '{value,delimiter,start_split}',
+   prosrc => 'split_substr' },
 
 ]
