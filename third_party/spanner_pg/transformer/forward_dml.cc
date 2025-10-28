@@ -516,6 +516,10 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
     // Use the columns from the target list.
     int i = 0;
     for (TargetEntry* entry : StructList<TargetEntry*>(query.targetList)) {
+      if (IsSetReturningFunction(entry->expr)) {
+        return absl::InvalidArgumentError(
+            "Set-returning functions are not allowed in INSERT statements");
+      }
       // Adjust from 1-based to 0-based indexing.
       int column_index = entry->resno - 1;
       auto it = unwritable_table_columns.find(column_index);

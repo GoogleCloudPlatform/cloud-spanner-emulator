@@ -49,6 +49,7 @@ std::string DebugString(const InsertOp& op) {
     absl::StrAppend(&result, op.values[i].DebugString());
   }
   absl::StrAppend(&result, " }\n ");
+  absl::StrAppend(&result, "Origin is DML: ", op.origin_is_dml, "\n");
 
   return result;
 }
@@ -73,6 +74,7 @@ std::string DebugString(const UpdateOp& op) {
     absl::StrAppend(&result, op.values[i].DebugString());
   }
   absl::StrAppend(&result, " }\n ");
+  absl::StrAppend(&result, "Origin is DML: ", op.origin_is_dml, "\n");
 
   return result;
 }

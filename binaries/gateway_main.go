@@ -63,6 +63,8 @@ var (
 	overrideChangeStreamPartitionTokenAliveSeconds = flag.Int("override_change_stream_partition_token_alive_seconds", -1,
 		"If set to X seconds, and X is greater than 0, then override the default partition token alive"+
 			"time from 20-40 seconds(default for Emulator only, not for production Spanner) to X-2X seconds.")
+	printNotices = flag.Bool("notices", false,
+		"If true, the emulator will print all third-party notices to stdout.")
 )
 
 // resolveGRPCBinary figures out the full path to the grpc binary from the --grpc_binary flag.
@@ -99,6 +101,31 @@ func resolveGRPCBinary() string {
 
 func main() {
 	flag.Parse()
+
+	if *printNotices {
+		// Get the location of this executable's directory.
+		gwPath, err := os.Executable()
+		if err != nil {
+			log.Fatal(err)
+		}
+		gwDir := filepath.Dir(gwPath)
+
+		// The notices file could be in the same dir as the binary (release package)
+		// or in the parent dir ('bazel run').
+		noticesFile := filepath.Join(gwDir, "THIRD_PARTY_NOTICES.txt")
+		bytes, err := os.ReadFile(noticesFile)
+		if err != nil {
+			noticesFile = filepath.Join(filepath.Dir(gwDir), "THIRD_PARTY_NOTICES.txt")
+			bytes, err = os.ReadFile(noticesFile)
+		}
+
+		if err != nil {
+			log.Fatalf("Could not read notices file: %v", err)
+		}
+		fmt.Print(string(bytes))
+		os.Exit(0)
+	}
+
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	instanceDbs := *overrideMaxDatabasesPerInstance

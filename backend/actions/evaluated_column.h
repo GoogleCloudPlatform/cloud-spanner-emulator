@@ -78,7 +78,7 @@ class EvaluatedColumnEffector : public Effector {
 
   absl::Status Effect(const ActionContext* ctx, const Key& key,
                       zetasql::ParameterValueMap* column_values,
-                      bool skip_default_values) const;
+                      bool is_update_op, bool apply_on_update) const;
 
   const Table* table_;
 

@@ -29,44 +29,27 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#ifndef CATALOG_BUILTIN_SPANNER_FUNCTIONS_H_
-#define CATALOG_BUILTIN_SPANNER_FUNCTIONS_H_
+#include "third_party/spanner_pg/codegen/postgresql_catalog_reader.h"
 
-#include <vector>
-
-#include "absl/flags/declare.h"
-#include "third_party/spanner_pg/catalog/builtin_function.h"
+#include "absl/flags/flag.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/types/span.h"
+#include "third_party/spanner_pg/codegen/emulator_postgresql_catalog_embed.h"
+#include "third_party/spanner_pg/codegen/postgresql_catalog.pb.h"
+#include "google/protobuf/text_format.h"
 
 namespace postgres_translator {
-namespace spangres {
 
-// In addition to adding any potential new functions for pg.numeric, existing
-// functions are also augmented with appropriate signatures for pg.numeric.
-void AddPgNumericFunctions(std::vector<PostgresFunctionArguments>& functions);
-void AddPgJsonbFunctions(std::vector<PostgresFunctionArguments>& functions);
-void AddPgOidFunctions(std::vector<PostgresFunctionArguments>& functions);
-void AddFloatFunctions(std::vector<PostgresFunctionArguments>& functions);
-void AddFullTextSearchFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
+absl::StatusOr<const CatalogProto> GetCatalogProto() {
+  CatalogProto result;
 
-void AddIntervalFunctions(std::vector<PostgresFunctionArguments>& functions);
+    if (!google::protobuf::TextFormat::ParseFromString(kPostgreSQLCatalogEmbed,
+                                             &result)) {
+      return absl::InternalError("Could not parse embedded catalog proto data");
+    }
 
-void AddPgFormattingFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
+  return result;
+}
 
-void AddPgStringFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-void AddSpannerFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-void AddPgLeastGreatestFunctions(
-    absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions);
-
-// Maps some Postgres' functions to custom Spanner functions for matching
-// Postgres' order semantics (e.g. PG.MIN).
-void RemapFunctionsForSpanner(
-    std::vector<PostgresFunctionArguments>& functions);
-
-}  // namespace spangres
 }  // namespace postgres_translator
-
-#endif  // CATALOG_BUILTIN_SPANNER_FUNCTIONS_H_

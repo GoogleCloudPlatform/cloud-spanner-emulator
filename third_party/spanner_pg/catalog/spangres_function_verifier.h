@@ -29,22 +29,25 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "third_party/spanner_pg/catalog/builtin_function.h"
+#ifndef CATALOG_SPANGRES_FUNCTION_VERIFIER_H_
+#define CATALOG_SPANGRES_FUNCTION_VERIFIER_H_
+
+#include <vector>
+
+#include "absl/status/status.h"
+#include "third_party/spanner_pg/codegen/postgresql_catalog.pb.h"
 
 namespace postgres_translator {
 
-void AddDatetimeConversionFunctions(
-    std::vector<PostgresFunctionArguments>& functions) {
-  const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
-  const zetasql::Type* gsql_date = zetasql::types::DateType();
-  // TODO: b/446758553 - Automate registration of date function
-  functions.push_back(
-      {"make_date",
-       "date",
-       {{{gsql_date, {gsql_int64, gsql_int64, gsql_int64},
-          /*context_ptr=*/nullptr}}}});
-}
-
+// This function performs validation and returns an error if the verification
+// fails. The validations performed are:
+//
+// * Each function must have at least 1 signature
+// * All signatures of each function must have a namespaced postgresql name path
+// * All named arguments of a signature must have a name
+//
+absl::Status ValidateCatalogFunctions(
+    const std::vector<FunctionProto>& functions);
 }  // namespace postgres_translator
+
+#endif  // CATALOG_SPANGRES_FUNCTION_VERIFIER_H_

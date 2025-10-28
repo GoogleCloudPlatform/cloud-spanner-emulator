@@ -19,7 +19,10 @@
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
+
+#include "backend/datamodel/value.h"
 
 namespace google {
 namespace spanner {
@@ -28,9 +31,9 @@ namespace backend {
 
 void Mutation::AddWriteOp(MutationOpType type, const std::string& table,
                           std::vector<std::string> columns,
-                          std::vector<ValueList> values) {
-  ops_.emplace_back(
-      MutationOp(type, table, std::move(columns), std::move(values)));
+                          std::vector<ValueList> values, bool origin_is_dml) {
+  ops_.emplace_back(MutationOp(type, table, std::move(columns),
+                               std::move(values), origin_is_dml));
 }
 
 void Mutation::AddDeleteOp(const std::string& table, const KeySet& key_set) {

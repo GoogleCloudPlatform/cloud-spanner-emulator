@@ -139,6 +139,18 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "tokenizer_test",
+    srcs = ["tokenizer_test.cc"],
+    deps = [
+        ":tokenizer",
+        "//tests/common:proto_matchers",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
 cc_library(
     name = "exact_match_tokenizer",
     srcs = ["exact_match_tokenizer.cc"],
@@ -300,6 +312,7 @@ cc_library(
     deps = [
         ":tokenizer",
         "//common:errors",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -321,6 +334,7 @@ cc_test(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:value",

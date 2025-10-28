@@ -1,43 +1,46 @@
-CREATE VIEW comedies SQL SECURITY INVOKER AS SELECT * FROM films WHERE kind = 'Comedy' WITH LOCAL CHECK OPTION;
---
-ERROR: <CHECK OPTION> clause is not supported in <CREATE VIEW> statement.
-==
+
+# TODO:  Re-enable and re-capture once the change to the default SECURITY INVOKER syntax has up-integrated
+# CREATE VIEW comedies SQL SECURITY INVOKER AS SELECT * FROM films WHERE kind = 'Comedy' WITH LOCAL CHECK OPTION;
+# --
+# ERROR: <CHECK OPTION> clause is not supported in <CREATE VIEW> statement.
+# ==
 
 CREATE VIEW comedies (column_1) SQL SECURITY INVOKER AS SELECT * FROM films WHERE kind = 'Comedy';
 --
 ERROR: Setting column names in <CREATE VIEW> statement is not supported.
 ==
 
-CREATE VIEW comedies with (option=value) SQL SECURITY INVOKER AS SELECT * FROM films WHERE kind = 'Comedy';
---
-ERROR: <WITH> clause is not supported in <CREATE VIEW> statement.
-==
+# TODO:  Re-enable and re-capture once the change to the default SECURITY INVOKER syntax has up-integrated
+# CREATE VIEW comedies with (option=value) SQL SECURITY INVOKER AS SELECT * FROM films WHERE kind = 'Comedy';
+# --
+# ERROR: <WITH> clause is not supported in <CREATE VIEW> statement.
+# ==
 
 CREATE TEMP VIEW comedies SQL SECURITY INVOKER AS SELECT * FROM films WHERE kind = 'Comedy' WITH LOCAL CHECK OPTION;
 --
 ERROR: TEMP/TEMPORARY or UNLOGGED objects are not supported in <CREATE VIEW> statement.
 ==
 
-CREATE TABLE users (
-  id bigint PRIMARY KEY,
-  name varchar NOT NULL,
-  val bigint NOT NULL
-);
-CREATE VIEW comedies SECURITY INVOKER AS SELECT name FROM users WHERE val > 18;
---
-CREATE VIEW comedies SQL SECURITY INVOKER AS SELECT name FROM users WHERE (val > '18'::bigint);
-==
-
-CREATE TABLE users (
-  id bigint PRIMARY KEY,
-  name varchar NOT NULL,
-  val bigint NOT NULL
-);
-CREATE OR REPLACE VIEW comedies SECURITY INVOKER AS SELECT name FROM users WHERE val > 18;
---
-CREATE VIEW comedies SQL SECURITY INVOKER AS SELECT name FROM users WHERE (val > '18'::bigint);
-==
-
+# TODO:  Re-enable and re-capture once the change to the default SECURITY INVOKER syntax has up-integrated
+# CREATE TABLE users (
+#   id bigint PRIMARY KEY,
+#   name varchar NOT NULL,
+#   val bigint NOT NULL
+# );
+# CREATE VIEW comedies SECURITY INVOKER AS SELECT name FROM users WHERE val > 18;
+# --
+# CREATE VIEW comedies SQL SECURITY INVOKER AS SELECT name FROM users WHERE (val > '18'::bigint);
+# ==
+# TODO:  Re-enable and re-capture once the change to the default SECURITY INVOKER syntax has up-integrated
+# CREATE TABLE users (
+#   id bigint PRIMARY KEY,
+#   name varchar NOT NULL,
+#   val bigint NOT NULL
+# );
+# CREATE OR REPLACE VIEW comedies SECURITY INVOKER AS SELECT name FROM users WHERE val > 18;
+# --
+# CREATE VIEW comedies SQL SECURITY INVOKER AS SELECT name FROM users WHERE (val > '18'::bigint);
+# ==
 # TODO: When named schema is supported, re-enable this test.
 # CREATE SCHEMA user_schema;
 # CREATE SCHEMA user_schema2;
@@ -50,27 +53,26 @@ CREATE VIEW comedies SQL SECURITY INVOKER AS SELECT name FROM users WHERE (val >
 # --
 # CREATE OR REPLACE VIEW "users_schema.comedies" SQL SECURITY INVOKER AS SELECT name FROM users_schema2.users WHERE val > 18
 # ==
-
-CREATE TABLE users (
-  id bigint PRIMARY KEY,
-  name varchar NOT NULL,
-  val bigint NOT NULL
-);
-CREATE VIEW public.comedies SECURITY INVOKER AS SELECT name FROM users WHERE val > 18;
---
-CREATE VIEW comedies SQL SECURITY INVOKER AS SELECT name FROM users WHERE (val > '18'::bigint);
-==
-
-CREATE TABLE users (
-  id bigint PRIMARY KEY,
-  name varchar NOT NULL,
-  val bigint NOT NULL
-);
-CREATE OR REPLACE VIEW "UpperCase" SECURITY INVOKER AS SELECT name FROM users WHERE val > 18;
---
-CREATE VIEW "UpperCase" SQL SECURITY INVOKER AS SELECT name FROM users WHERE (val > '18'::bigint);
-==
-
+# TODO:  Re-enable and re-capture once the change to the default SECURITY INVOKER syntax has up-integrated
+# CREATE TABLE users (
+#   id bigint PRIMARY KEY,
+#   name varchar NOT NULL,
+#   val bigint NOT NULL
+# );
+# CREATE VIEW public.comedies SECURITY INVOKER AS SELECT name FROM users WHERE val > 18;
+# --
+# CREATE VIEW comedies SQL SECURITY INVOKER AS SELECT name FROM users WHERE (val > '18'::bigint);
+# ==
+# TODO:  Re-enable and re-capture once the change to the default SECURITY INVOKER syntax has up-integrated
+# CREATE TABLE users (
+#   id bigint PRIMARY KEY,
+#   name varchar NOT NULL,
+#   val bigint NOT NULL
+# );
+# CREATE OR REPLACE VIEW "UpperCase" SECURITY INVOKER AS SELECT name FROM users WHERE val > 18;
+# --
+# CREATE VIEW "UpperCase" SQL SECURITY INVOKER AS SELECT name FROM users WHERE (val > '18'::bigint);
+# ==
 # TODO: When the definer rights view is supported, re-enable it.
 # CREATE TABLE films (
 #   id bigint PRIMARY KEY,
@@ -81,7 +83,6 @@ CREATE VIEW "UpperCase" SQL SECURITY INVOKER AS SELECT name FROM users WHERE (va
 # --
 # CREATE VIEW comedies SQL SECURITY DEFINER AS SELECT name FROM films WHERE category = 10
 # ==
-
 # TODO: When the definer rights view is supported, re-enable it.
 # CREATE TABLE films (
 #   id bigint PRIMARY KEY,

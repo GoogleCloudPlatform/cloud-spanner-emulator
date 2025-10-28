@@ -3527,6 +3527,23 @@
    "postgresNamespace": "pg_catalog"
   },
   {
+   "postgresFunctionName": "jsonb_object_keys",
+   "mappedFunctionName": "pg.jsonb_object_keys",
+   "signatures": [
+    {
+     "resultType": "ARRAY\u003cSTRING\u003e",
+     "arguments": [
+      "PG.JSONB"
+     ],
+     "hasMappedFunction": true,
+     "explicitMappedFunctionName": "",
+     "postgresOid": "0"
+    }
+   ],
+   "mode": "SCALAR",
+   "postgresNamespace": "pg_catalog"
+  },
+  {
    "postgresFunctionName": "jsonb_query_array",
    "mappedFunctionName": "json_query_array",
    "signatures": [
@@ -3918,7 +3935,7 @@
       "INTERVAL"
      ],
      "hasMappedFunction": true,
-     "explicitMappedFunctionName": "max",
+     "explicitMappedFunctionName": "",
      "postgresOid": "0"
     },
     {
@@ -3927,7 +3944,7 @@
       "PG.NUMERIC"
      ],
      "hasMappedFunction": true,
-     "explicitMappedFunctionName": "pg.numeric_max",
+     "explicitMappedFunctionName": "",
      "postgresOid": "0"
     },
     {
@@ -3936,7 +3953,7 @@
       "PG.OID"
      ],
      "hasMappedFunction": true,
-     "explicitMappedFunctionName": "pg.max",
+     "explicitMappedFunctionName": "",
      "postgresOid": "0"
     },
     {
@@ -4007,7 +4024,7 @@
       "INTERVAL"
      ],
      "hasMappedFunction": true,
-     "explicitMappedFunctionName": "min",
+     "explicitMappedFunctionName": "",
      "postgresOid": "0"
     },
     {
@@ -4016,7 +4033,7 @@
       "PG.NUMERIC"
      ],
      "hasMappedFunction": true,
-     "explicitMappedFunctionName": "pg.numeric_min",
+     "explicitMappedFunctionName": "",
      "postgresOid": "0"
     },
     {
@@ -4025,7 +4042,7 @@
       "PG.OID"
      ],
      "hasMappedFunction": true,
-     "explicitMappedFunctionName": "pg.min",
+     "explicitMappedFunctionName": "",
      "postgresOid": "0"
     },
     {

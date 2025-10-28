@@ -127,6 +127,17 @@ Oid GetOidFromNamespaceNameC(const char* unqualified_namespace_name) {
   abort();
 }
 
+Oid GetOrGenerateOidFromNamespaceNameC(const char* unqualified_namespace_name) {
+  abort();
+}
+
+void GetProcsBySchemaAndFuncNames(const char* schema_name,
+                                  const char* func_name,
+                                  const FormData_pg_proc*** outlist,
+                                  size_t* outcount) {
+  abort();
+}
+
 void GetProcsByName(const char* name, const FormData_pg_proc*** outlist,
                     size_t* outcount) {
   abort();

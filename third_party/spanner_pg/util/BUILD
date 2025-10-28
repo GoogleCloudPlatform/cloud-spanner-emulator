@@ -77,6 +77,7 @@ cc_test(
     srcs = [
         "pg_list_iterators_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":pg_list_iterators",
         "//third_party/spanner_pg/postgres_includes:placeholder_progname",
@@ -120,6 +121,7 @@ cc_test(
         "oid_to_string_test.cc",
         "oids.inc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":oid_to_string",
         "//third_party/spanner_pg/postgres_includes",
@@ -135,6 +137,7 @@ cc_test(
     srcs = [
         "nodetag_to_string_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":nodetag_to_string",
         "//third_party/spanner_pg/postgres_includes",
@@ -166,6 +169,7 @@ cc_library(
 cc_test(
     name = "postgres_test",
     srcs = ["postgres_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         "postgres",
         "//third_party/spanner_pg/bootstrap_catalog",
@@ -193,6 +197,7 @@ cc_library(
 cc_test(
     name = "datetime_conversion_test",
     srcs = ["datetime_conversion_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":datetime_conversion",
         "@com_google_absl//absl/time",
@@ -220,6 +225,7 @@ cc_library(
 cc_test(
     name = "interval_helpers_test",
     srcs = ["interval_helpers_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":interval_helpers",
         "@com_google_googletest//:gtest",
@@ -244,6 +250,7 @@ cc_library(
 cc_test(
     name = "uuid_conversion_test",
     srcs = ["uuid_conversion_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":uuid_conversion",
         ":valid_memory_context_fixture",
@@ -286,6 +293,7 @@ cc_test(
     srcs = [
         "unittest_utils_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":unittest_utils",
         ":valid_memory_context_fixture",
@@ -318,6 +326,7 @@ cc_library(
 cc_test(
     name = "integral_helpers_test",
     srcs = ["integral_helpers_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":integral_helpers",
         "@com_google_googletest//:gtest",

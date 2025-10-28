@@ -285,9 +285,21 @@ ForwardTransformer::BuildGsqlResolvedLiteralFromCast(
   // Only unsupported literals should execute the PostgreSQL casting logic here.
   // All other types can execute the storage engine casting logic during
   // query execution.
-  ZETASQL_RET_CHECK_EQ(catalog_adapter_->GetEngineSystemCatalog()->GetType(
-                   input_literal.consttype),
-               nullptr);
+  return InternalBuildGsqlResolvedLiteralFromCast(
+      cast_function, input_literal, typmod, explicit_cast, output_type,
+      cast_format, /*force_casting=*/false);
+}
+
+absl::StatusOr<std::unique_ptr<zetasql::ResolvedLiteral>>
+ForwardTransformer::InternalBuildGsqlResolvedLiteralFromCast(
+    Oid cast_function, const Const& input_literal, const Const* typmod,
+    const Const* explicit_cast, Oid output_type, CoercionForm cast_format,
+    const bool force_casting) {
+  if (!force_casting) {
+    ZETASQL_RET_CHECK_EQ(catalog_adapter_->GetEngineSystemCatalog()->GetType(
+                     input_literal.consttype),
+                 nullptr);
+  }
 
   // Requirement: the output type is supported.
   ZETASQL_RETURN_IF_ERROR(BuildGsqlType(output_type).status());

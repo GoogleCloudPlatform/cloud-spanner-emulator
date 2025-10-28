@@ -50,6 +50,7 @@ cc_library(
         "@com_github_googleapis_google_cloud_cpp//:common",
         "@com_github_googleapis_google_cloud_cpp//:spanner",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

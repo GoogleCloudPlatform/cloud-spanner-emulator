@@ -17,11 +17,14 @@
 #include "tests/conformance/common/database_test_base.h"
 
 #include <chrono>  // NOLINT(build/c++11)
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "absl/flags/declare.h"
+#include "absl/flags/flag.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"

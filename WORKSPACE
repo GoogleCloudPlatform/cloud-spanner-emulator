@@ -39,6 +39,13 @@ http_archive(
 )
 
 http_archive(
+    name = "rules_python",
+    sha256 = "9d04041ac92a0985e344235f5d946f71ac543f1b1565f2cdbc9a2aaee8adf55b",
+    strip_prefix = "rules_python-0.26.0",
+    url = "https://github.com/bazelbuild/rules_python/archive/0.26.0.tar.gz",
+)
+
+http_archive(
     name = "rules_proto",
     sha256 = "6fb6767d1bef535310547e03247f7518b03487740c11b6c6adb7952033fe1295",
     strip_prefix = "rules_proto-6.0.2",
@@ -432,6 +439,22 @@ http_archive(
     urls = [
         "https://files.pythonhosted.org/packages/4d/d0/cda2fc582f09510c84cd6b7d7b9e22a02d4e45dbad2b2ef1c6edd7847e00/portpicker-1.6.0.tar.gz",
     ],
+)
+
+http_archive(
+    name = "markupsafe",
+    build_file = "//build/bazel:markupsafe.BUILD",
+    sha256 = "722695808f4b6457b320fdc131280796bdceb04ab50fe1795cd540799ebe1698",
+    strip_prefix = "markupsafe-3.0.3/src/markupsafe/",
+    urls = ["https://files.pythonhosted.org/packages/7e/99/7690b6d4034fffd95959cbe0c02de8deb3098cc577c67bb6a24fe5d7caa7/markupsafe-3.0.3.tar.gz"],
+)
+
+http_archive(
+    name = "jinja2",
+    build_file = "//build/bazel:jinja2.BUILD",
+    sha256 = "0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d",
+    strip_prefix = "jinja2-3.1.6/src/jinja2",
+    urls = ["https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz"],
 )
 
 ################################################################################

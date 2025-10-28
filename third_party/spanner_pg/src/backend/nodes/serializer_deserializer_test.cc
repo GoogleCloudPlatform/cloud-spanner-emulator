@@ -892,8 +892,6 @@ TEST_F(SerializationDeserializationTest, CreateSearchIndexStmt) {
       makeNode(CreateSearchIndexStmt);
 
   create_search_index_stmt->search_index_name = pstrdup("search_index_name");
-  create_search_index_stmt->search_index_name_rangevar =
-      makeRangeVar(pstrdup("schema_name"), pstrdup("search_index_name"), 1);
   create_search_index_stmt->table_name =
       makeRangeVar(pstrdup("schema_name"), pstrdup("table_name"), 1);
   create_search_index_stmt->token_columns = list_make1(PlaceHolderNode());

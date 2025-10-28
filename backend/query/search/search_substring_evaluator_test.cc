@@ -26,6 +26,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "backend/query/search/plain_full_text_tokenizer.h"
 #include "backend/query/search/tokenizer.h"
 
@@ -162,6 +163,42 @@ INSTANTIATE_TEST_SUITE_P(
         {{"google", "cloud", "spanner", "emulator"}, "oo ou", true},
         {{"google", "cloud", "spanner", "emulator"}, "oo, uo", false},
     }));
+
+struct SubstringLengthTestCase {
+  std::vector<std::string> list_of_tokens;
+  std::string query;
+  int ngram_min_size;
+  bool expected_result;
+};
+
+using SubstringLengthTest = ::testing::TestWithParam<SubstringLengthTestCase>;
+
+TEST_P(SubstringLengthTest, TestSubstringLength) {
+  const SubstringLengthTestCase& test_case = GetParam();
+  std::vector<std::string> tokens;
+  tokens.reserve(test_case.list_of_tokens.size() + 1);
+  tokens.push_back(
+      absl::StrCat("substring-4-", test_case.ngram_min_size, "-0-0"));
+  tokens.insert(tokens.end(), test_case.list_of_tokens.begin(),
+                test_case.list_of_tokens.end());
+
+  std::vector<zetasql::Value> args;
+  args.push_back(TokenListFromStrings(tokens));
+  args.push_back(zetasql::Value::String(test_case.query));
+
+  absl::StatusOr<zetasql::Value> result =
+      SearchSubstringEvaluator::Evaluate(args);
+  ZETASQL_EXPECT_OK(result.status());
+  EXPECT_EQ(result.value().bool_value(), test_case.expected_result);
+};
+
+INSTANTIATE_TEST_SUITE_P(SubstringLengthTest, SubstringLengthTest,
+                         testing::ValuesIn<SubstringLengthTestCase>({
+                             {{"google"}, "oo", 3, false},
+                             {{"google", "oo"}, "oo", 3, true},
+                             {{"sample", "product", "5"}, "5", 3, true},
+                             {{"sample", "product"}, "5", 3, false},
+                         }));
 
 TEST_F(BasicSubstringEvaluatorTest, RelativeSearchTypeNotMatch) {
   std::vector<std::string> tokens;

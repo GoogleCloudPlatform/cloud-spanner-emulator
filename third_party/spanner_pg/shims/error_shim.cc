@@ -237,6 +237,23 @@ absl::StatusOr<char*> CheckedPgDeparseQuery(Query* query, bool prettyPrint) {
   return ErrorCheckedPgCall(deparse_query, query, prettyPrint);
 }
 
+absl::StatusOr<char*> CheckedPgDeparseFunctionBody(Query* query,
+                                                   char** argNames, int numArgs,
+                                                   char* funcName,
+                                                   bool prettyPrint) {
+  if (CurrentMemoryContext == nullptr) {
+    return absl::Status(absl::StatusCode::kInternal,
+                        "Thread-local MemoryContext required by deparser. Use "
+                        "MemoryContextManager::Init");
+  }
+  // Set the stack base here so PostgreSQL stack depth is being checked properly
+  // to avoid overflow.
+  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+
+  return ErrorCheckedPgCall(deparse_function_body, query, argNames, numArgs,
+                            funcName, prettyPrint);
+}
+
 absl::StatusOr<char*> CheckedPgDeparseExprInQuery(Node* expr, Query* query) {
   if (CurrentMemoryContext == nullptr) {
     return absl::Status(absl::StatusCode::kInternal,

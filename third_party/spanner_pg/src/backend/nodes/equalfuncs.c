@@ -1700,6 +1700,7 @@ _equalViewStmt(const ViewStmt *a, const ViewStmt *b)
 	COMPARE_NODE_FIELD(options);
 	COMPARE_SCALAR_FIELD(withCheckOption);
 	COMPARE_SCALAR_FIELD(is_definer);
+	COMPARE_SCALAR_FIELD(view_security_type);
 	COMPARE_STRING_FIELD(query_string);
 
 	return true;
@@ -2486,7 +2487,6 @@ _equalCreateSearchIndexStmt(const CreateSearchIndexStmt *a,
 							const CreateSearchIndexStmt *b)
 {
 	COMPARE_STRING_FIELD(search_index_name);
-	COMPARE_NODE_FIELD(search_index_name_rangevar);
 	COMPARE_NODE_FIELD(table_name);
 	COMPARE_NODE_FIELD(token_columns);
 	COMPARE_NODE_FIELD(storing);

@@ -62,6 +62,7 @@ cc_test(
     srcs = [
         "timestamptz_to_char_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -78,6 +79,7 @@ cc_test(
     srcs = [
         "date_in_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -95,6 +97,7 @@ cc_test(
     srcs = [
         "timestamptz_in_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -112,6 +115,7 @@ cc_test(
     srcs = [
         "to_date_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -129,6 +133,7 @@ cc_test(
     srcs = [
         "date_mii_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -143,6 +148,7 @@ cc_test(
     srcs = [
         "date_pli_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -157,6 +163,7 @@ cc_test(
     srcs = [
         "regexp_split_to_array_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -170,6 +177,7 @@ cc_test(
     srcs = [
         "regexp_match_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -187,6 +195,7 @@ cc_test(
     srcs = [
         "textregexeq_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -200,6 +209,7 @@ cc_test(
     srcs = [
         "textregexne_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -213,6 +223,7 @@ cc_test(
     srcs = [
         "textregexsubstr_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -227,6 +238,7 @@ cc_test(
     srcs = [
         "textregexreplace_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -241,6 +253,7 @@ cc_test(
     srcs = [
         "to_timestamp_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -258,6 +271,7 @@ cc_test(
     srcs = [
         "int8_to_char_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -271,6 +285,7 @@ cc_test(
     srcs = [
         "float8_to_char_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -285,6 +300,7 @@ cc_test(
     srcs = [
         "float4_to_char_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -299,6 +315,7 @@ cc_test(
     srcs = [
         "numeric_to_char_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -312,6 +329,7 @@ cc_test(
     srcs = [
         "numeric_to_number_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -326,6 +344,7 @@ cc_test(
     srcs = [
         "abs_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/datatypes/common:numeric_core",
@@ -342,6 +361,7 @@ cc_test(
     srcs = [
         "add_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/datatypes/common:numeric_core",
@@ -359,6 +379,7 @@ cc_test(
     srcs = [
         "ceil_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/datatypes/common:numeric_core",
@@ -375,6 +396,7 @@ cc_test(
     srcs = [
         "divide_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/datatypes/common:numeric_core",
@@ -391,6 +413,7 @@ cc_test(
     srcs = [
         "divide_truncate_towards_zero_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/datatypes/common:numeric_core",
@@ -407,6 +430,7 @@ cc_test(
     srcs = [
         "floor_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/datatypes/common:numeric_core",
@@ -423,6 +447,7 @@ cc_test(
     srcs = [
         "jsonb_array_element_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/catalog:spangres_type",
@@ -440,6 +465,7 @@ cc_test(
     srcs = [
         "jsonb_object_field_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
@@ -455,6 +481,7 @@ cc_test(
     srcs = [
         "jsonb_typeof_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/datatypes/common:numeric_core",
@@ -471,6 +498,7 @@ cc_test(
     srcs = [
         "mod_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/datatypes/common:numeric_core",
@@ -487,6 +515,7 @@ cc_test(
     srcs = [
         "multiply_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/datatypes/common:numeric_core",
@@ -503,6 +532,7 @@ cc_test(
     srcs = [
         "subtract_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/datatypes/common:numeric_core",
@@ -519,6 +549,7 @@ cc_test(
     srcs = [
         "trunc_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/datatypes/common:numeric_core",
@@ -536,6 +567,7 @@ cc_test(
     srcs = [
         "unary_minus_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/datatypes/common:numeric_core",
@@ -552,6 +584,7 @@ cc_test(
     srcs = [
         "interval_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",

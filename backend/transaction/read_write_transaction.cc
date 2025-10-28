@@ -106,15 +106,16 @@ absl::StatusOr<std::vector<WriteOp>> FlattenDeleteOp(
 absl::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
     MutationOpType type, const Table* table,
     const std::vector<const Column*>& columns, const Key& key,
-    const ValueList& row, const TransactionStore* transaction_store) {
+    const ValueList& row, bool origin_is_dml,
+    const TransactionStore* transaction_store) {
   std::vector<WriteOp> write_ops;
   switch (type) {
     case MutationOpType::kInsert: {
-      write_ops.push_back(InsertOp{table, key, columns, row});
+      write_ops.push_back(InsertOp{table, key, columns, row, origin_is_dml});
       break;
     }
     case MutationOpType::kUpdate: {
-      write_ops.push_back(UpdateOp{table, key, columns, row});
+      write_ops.push_back(UpdateOp{table, key, columns, row, origin_is_dml});
       break;
     }
     case MutationOpType::kInsertOrUpdate: {
@@ -123,9 +124,9 @@ absl::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
                                     /*columns= */ {});
       if (maybe_row.ok()) {
         // Row exists and therefore we should only update.
-        write_ops.push_back(UpdateOp{table, key, columns, row});
+        write_ops.push_back(UpdateOp{table, key, columns, row, origin_is_dml});
       } else if (maybe_row.status().code() == absl::StatusCode::kNotFound) {
-        write_ops.push_back(InsertOp{table, key, columns, row});
+        write_ops.push_back(InsertOp{table, key, columns, row, origin_is_dml});
       } else {
         return maybe_row.status();
       }
@@ -133,7 +134,7 @@ absl::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
     }
     case MutationOpType::kReplace: {
       write_ops.push_back(DeleteOp{table, key});
-      write_ops.push_back(InsertOp{table, key, columns, row});
+      write_ops.push_back(InsertOp{table, key, columns, row, origin_is_dml});
       break;
     }
     case MutationOpType::kDelete: {
@@ -421,6 +422,7 @@ ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
   ResolvedMutationOp resolved_mutation_op;
   resolved_mutation_op.table = table;
   resolved_mutation_op.type = mutation_op.type;
+  resolved_mutation_op.origin_is_dml = mutation_op.origin_is_dml;
 
   // Vector of evaluated values for each row of operation.
   std::vector<std::vector<zetasql::Value>> evaluated_values(
@@ -550,7 +552,9 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
               FlattenNonDeleteOpRow(
                   resolved_mutation_op.type, resolved_mutation_op.table,
                   resolved_mutation_op.columns, resolved_mutation_op.keys[i],
-                  resolved_mutation_op.rows[i], transaction_store_.get()));
+                  resolved_mutation_op.rows[i],
+                  resolved_mutation_op.origin_is_dml,
+                  transaction_store_.get()));
 
           if (has_delete_cascade_foreign_key) {
             ZETASQL_RETURN_IF_ERROR(fk_restrictions.ValidateReferencedMods(

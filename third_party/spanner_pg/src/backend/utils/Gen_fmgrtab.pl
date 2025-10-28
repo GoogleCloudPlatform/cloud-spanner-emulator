@@ -43,6 +43,7 @@ die "--include-path must be specified.\n" unless $include_path;
 # but the Makefile dependencies look more sensible this way.
 # We currently only need pg_proc, but retain the possibility of reading
 # more than one data file.
+
 my %catalogs;
 my %catalog_data;
 foreach my $datfile (@ARGV)

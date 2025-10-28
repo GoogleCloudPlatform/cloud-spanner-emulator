@@ -1,0 +1,79 @@
+{{ GENERATED_CODE_HEADER }}
+# This file contains the Spanner counterpart of PostgreSQL pg_proc.dat.
+# The PG Perl script Gen_fmgrtab.pl, which generates fmgroids.h, fmgrprotos.h,
+# and fmgrtab.c, has been modified to also pick up entries from this file.
+#
+# The Gen_fmgrtab.pl autogeneration script validates `prosrc` field according to
+# the language specified in `prolang` field, which is one of the languages in
+# PG `pg_language.dat`, namely `internal`, `c`, and `sql`. If the `prolang`
+# field is set to `internal`, the entry must have a valid C implementation in
+# PG. Most of the entries in this file cannot use any of the existing language
+# implementations. So we introduce a new language `spanner_internal`, defined in
+# Spanner `spangres_data/pg_language.dat`, to instruct the autogeneration code
+# to skip the validation.
+
+[
+# Manual entries
+# These entries are not present in the function registry, so they need to be
+# manually added to the file instead.
+{
+  oid => '50005',
+  proname => 'pending_commit_timestamp',
+  pronamespace => 'spanner',
+  prolang => 'spanner_internal',
+  prorettype => 'timestamptz',
+  proargtypes => '',
+  prosrc => 'pending_commit_timestamp'
+},
+
+# Language validator for SpannerINTERNALlanguageId
+{
+  oid => '50079',
+  descr => '(spanner_internal)',
+  proname => 'fmgr_spanner_internal_validator',
+  provolatile => 's',
+  prorettype => 'void',
+  proargtypes => 'oid',
+  prosrc => 'fmgr_spanner_internal_validator'
+},
+
+# tablesample method handlers
+{
+  oid => '50074',
+  descr => 'SPANNER.RESERVOIR tablesample method handler',
+  proname => 'reservoir',
+  pronamespace => 'spanner',
+  provolatile => 'v',
+  prorettype => 'tsm_handler',
+  proargtypes => 'internal',
+  prosrc => 'tsm_spanner_reservoir_handler'
+},
+
+# Procedures
+{
+  oid => '50048',
+  proname => 'cancel_query',
+  pronamespace => 'spanner',
+  prolang => 'spanner_internal',
+  prokind => 'p',
+  prorettype => 'void',
+  proargtypes => 'text',
+  prosrc => 'cancel_query'
+},
+
+# Automated entries
+{%- for entry in pg_proc_entries %}
+{
+  oid => '{{ entry.oid }}',
+  proname => '{{ entry.proname }}',
+  pronamespace => '{{ entry.pronamespace }}',
+  prolang => '{{ entry.prolang }}',
+  prorettype => '{{ entry.prorettype }}',
+  proargtypes => '{{ entry.proargtypes | join(' ') }}',
+{%- if entry.proargnames %}
+  proargnames => '{{ '{' + (entry.proargnames | join(',')) + '}' }}',
+{%- endif %}
+  prosrc => '{{ entry.prosrc }}',
+},
+{% endfor %}
+]

@@ -29,8 +29,10 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
+#include <string>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 

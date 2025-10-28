@@ -2089,9 +2089,9 @@ typedef enum AlterTableType
 	AT_SetOnDeleteCascade,	/* SET INTERELAVE IN PARENT ON DELETE to CASCADE */
 	AT_SetOnDeleteNoAction,	/* SET INTERLEAVE IN PARENT ON DELETE to NO ACTION */
 	AT_SetInterleaveIn,	/* SET INTERLEAVE IN */
-	AT_AddIndexIncludeColumn,	/* ALTER INDEX ADD INCLUDE COLUMN -- add an non-key 
+	AT_AddIndexIncludeColumn,	/* ALTER INDEX ADD INCLUDE COLUMN -- add an non-key
 															column into the index */
-	AT_DropIndexIncludeColumn,	/* ALTER INDEX DROP INCLUDE COLUMN -- drop an 
+	AT_DropIndexIncludeColumn,	/* ALTER INDEX DROP INCLUDE COLUMN -- drop an
 															non-key column from the index*/
 	AT_SetLocalityGroup,				/* SET LOCALITY GROUP */
 	AT_AddSynonym,				/* add synonym */
@@ -3493,6 +3493,13 @@ typedef enum ViewCheckOption
 	CASCADED_CHECK_OPTION
 } ViewCheckOption;
 
+typedef enum ViewSecurityType
+{
+	INVOKER_SECURITY,
+	DEFINER_SECURITY,
+	UNSPECIFIED_SECURITY
+} ViewSecurityType;
+
 typedef struct ViewStmt
 {
 	NodeTag		type;
@@ -3503,7 +3510,8 @@ typedef struct ViewStmt
 	List	   *options;		/* options from WITH clause */
 	ViewCheckOption withCheckOption;	/* WITH CHECK OPTION */
   // SPANGRES BEGIN
-  bool is_definer;    /* is security type DEFINER or INVOKER */
+  bool is_definer;     /* DEPRECATED:  is the view a definer view? */
+  ViewSecurityType view_security_type;    /* DEFINER or INVOKER rights? */
   char* query_string;  // sql string of the query field, it is set in gram.y by
                        // using token location information and extracted from
                        // the whole <CREATE VIEW> string.
@@ -4049,7 +4057,6 @@ typedef struct ChangeStreamTrackedTable {
 typedef struct CreateSearchIndexStmt {
   NodeTag type;
   char *search_index_name; /* Name of the search index */
-  RangeVar *search_index_name_rangevar; /* Name of the search index */
   RangeVar *table_name;    /* Name of the table to create search index */
   List *token_columns;     /* Columns to index: a list of IndexElem */
   List *storing; /* Optional additional columns to index: a list of IndexElem */

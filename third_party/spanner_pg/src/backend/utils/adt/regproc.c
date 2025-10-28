@@ -143,7 +143,6 @@ regprocout(PG_FUNCTION_ARGS)
 {
 	RegProcedure proid = PG_GETARG_OID(0);
 	char	   *result;
-	HeapTuple	proctup;
 
 	if (proid == InvalidOid)
 	{
@@ -151,48 +150,13 @@ regprocout(PG_FUNCTION_ARGS)
 		PG_RETURN_CSTRING(result);
 	}
 
-	proctup = SearchSysCache1(PROCOID, ObjectIdGetDatum(proid));
+	// SPANGRES BEGIN
+	// Remove the catalog look-up as it is not supported.
 
-	if (HeapTupleIsValid(proctup))
-	{
-		Form_pg_proc procform = (Form_pg_proc) GETSTRUCT(proctup);
-		char	   *proname = NameStr(procform->proname);
-
-		/*
-		 * In bootstrap mode, skip the fancy namespace stuff and just return
-		 * the proc name.  (This path is only needed for debugging output
-		 * anyway.)
-		 */
-		if (IsBootstrapProcessingMode())
-			result = pstrdup(proname);
-		else
-		{
-			char	   *nspname;
-			FuncCandidateList clist;
-
-			/*
-			 * Would this proc be found (uniquely!) by regprocin? If not,
-			 * qualify it.
-			 */
-			clist = FuncnameGetCandidates(list_make1(makeString(proname)),
-										  -1, NIL, false, false, false, false);
-			if (clist != NULL && clist->next == NULL &&
-				clist->oid == proid)
-				nspname = NULL;
-			else
-				nspname = get_namespace_name(procform->pronamespace);
-
-			result = quote_qualified_identifier(nspname, proname);
-		}
-
-		ReleaseSysCache(proctup);
-	}
-	else
-	{
-		/* If OID doesn't match any pg_proc entry, return it numerically */
-		result = (char *) palloc(NAMEDATALEN);
-		snprintf(result, NAMEDATALEN, "%u", proid);
-	}
+	/* If OID doesn't match any pg_proc entry, return it numerically */
+	result = (char *) palloc(NAMEDATALEN);
+	snprintf(result, NAMEDATALEN, "%u", proid);
+	// SPANGRES END
 
 	PG_RETURN_CSTRING(result);
 }
@@ -350,54 +314,12 @@ char *
 format_procedure_extended(Oid procedure_oid, bits16 flags)
 {
 	char	   *result;
-	HeapTuple	proctup;
 
-	proctup = SearchSysCache1(PROCOID, ObjectIdGetDatum(procedure_oid));
+	// SPANGRES BEGIN
+	// Remove the catalog look-up as it is not supported.
 
-	if (HeapTupleIsValid(proctup))
-	{
-		Form_pg_proc procform = (Form_pg_proc) GETSTRUCT(proctup);
-		char	   *proname = NameStr(procform->proname);
-		int			nargs = procform->pronargs;
-		int			i;
-		char	   *nspname;
-		StringInfoData buf;
-
-		/* XXX no support here for bootstrap mode */
-		Assert(!IsBootstrapProcessingMode());
-
-		initStringInfo(&buf);
-
-		/*
-		 * Would this proc be found (given the right args) by regprocedurein?
-		 * If not, or if caller requests it, we need to qualify it.
-		 */
-		if ((flags & FORMAT_PROC_FORCE_QUALIFY) == 0 &&
-			FunctionIsVisible(procedure_oid))
-			nspname = NULL;
-		else
-			nspname = get_namespace_name(procform->pronamespace);
-
-		appendStringInfo(&buf, "%s(",
-						 quote_qualified_identifier(nspname, proname));
-		for (i = 0; i < nargs; i++)
-		{
-			Oid			thisargtype = procform->proargtypes.values[i];
-
-			if (i > 0)
-				appendStringInfoChar(&buf, ',');
-			appendStringInfoString(&buf,
-								   (flags & FORMAT_PROC_FORCE_QUALIFY) != 0 ?
-								   format_type_be_qualified(thisargtype) :
-								   format_type_be(thisargtype));
-		}
-		appendStringInfoChar(&buf, ')');
-
-		result = buf.data;
-
-		ReleaseSysCache(proctup);
-	}
-	else if ((flags & FORMAT_PROC_INVALID_AS_NULL) != 0)
+	if ((flags & FORMAT_PROC_INVALID_AS_NULL) != 0)
+	// SPANGRES END
 	{
 		/* If object is undefined, return NULL as wanted by caller */
 		result = NULL;
@@ -1011,7 +933,6 @@ regclassout(PG_FUNCTION_ARGS)
 {
 	Oid			classid = PG_GETARG_OID(0);
 	char	   *result;
-	HeapTuple	classtup;
 
 	if (classid == InvalidOid)
 	{
@@ -1019,43 +940,13 @@ regclassout(PG_FUNCTION_ARGS)
 		PG_RETURN_CSTRING(result);
 	}
 
-	classtup = SearchSysCache1(RELOID, ObjectIdGetDatum(classid));
+	// SPANGRES BEGIN
+	// Remove the catalog look-up as it is not supported.
+	// SPANGRES END
 
-	if (HeapTupleIsValid(classtup))
-	{
-		Form_pg_class classform = (Form_pg_class) GETSTRUCT(classtup);
-		char	   *classname = NameStr(classform->relname);
-
-		/*
-		 * In bootstrap mode, skip the fancy namespace stuff and just return
-		 * the class name.  (This path is only needed for debugging output
-		 * anyway.)
-		 */
-		if (IsBootstrapProcessingMode())
-			result = pstrdup(classname);
-		else
-		{
-			char	   *nspname;
-
-			/*
-			 * Would this class be found by regclassin? If not, qualify it.
-			 */
-			if (RelationIsVisible(classid))
-				nspname = NULL;
-			else
-				nspname = get_namespace_name(classform->relnamespace);
-
-			result = quote_qualified_identifier(nspname, classname);
-		}
-
-		ReleaseSysCache(classtup);
-	}
-	else
-	{
-		/* If OID doesn't match any pg_class entry, return it numerically */
-		result = (char *) palloc(NAMEDATALEN);
-		snprintf(result, NAMEDATALEN, "%u", classid);
-	}
+	/* If OID doesn't match any pg_class entry, return it numerically */
+	result = (char *) palloc(NAMEDATALEN);
+	snprintf(result, NAMEDATALEN, "%u", classid);
 
 	PG_RETURN_CSTRING(result);
 }

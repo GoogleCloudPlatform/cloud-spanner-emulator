@@ -57,6 +57,30 @@ char* deparse_query(Query* query, bool prettyPrint) {
   return buf.data;
 }
 
+char* deparse_function_body(Query* query, char** argNames, int numArgs,
+                            char* funcName, bool prettyPrint) {
+  List* parentNamespace = nullptr;
+  if (argNames != nullptr) {
+    deparse_namespace* dpns =
+        (deparse_namespace*)palloc0(sizeof(deparse_namespace));
+    dpns->argnames = argNames;
+    dpns->numargs = numArgs;
+    dpns->funcname = funcName;
+    parentNamespace = list_make1(dpns);
+  }
+  StringInfoData buf;
+  int prettyFlags = 0;
+  if (prettyPrint) {
+    prettyFlags = POSTGRES_PRETTYFLAG_PAREN | POSTGRES_PRETTYFLAG_INDENT |
+                  POSTGRES_PRETTYFLAG_SCHEMA;
+  }
+  initStringInfo(&buf);
+  get_query_def(query, &buf, parentNamespace, /*resultDesc=*/nullptr,
+                /*colNamesVisible=*/false, prettyFlags,
+                /*wrapColumn=*/0, /*startIndent=*/0);
+  return buf.data;
+}
+
 char* deparse_expression_in_query(Node* expr, Query* query) {
   deparse_namespace dpns;
   set_deparse_for_query(&dpns, query, NIL);

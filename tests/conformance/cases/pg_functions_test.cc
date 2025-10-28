@@ -1853,6 +1853,38 @@ TEST_F(PGFunctionsTest, ToJsonB) {
       IsOkAndHoldsRows({JsonB(std::string("-15" + std::string(1500, '0')))}));
 }
 
+TEST_F(PGFunctionsTest, JsonBContainmentAndExistenceFunctions) {
+  // Containment functions.
+  EXPECT_THAT(Query(R"(
+    select jsonb_contains('[1,2]'::jsonb, '2'::jsonb),
+           '{"k1": "v1", "k2": "v2"}'::jsonb @> '{"k2": "v2"}'::jsonb,
+           jsonb_contained('2'::jsonb, '[1,2.0]'::jsonb),
+           '{"k1": [3]}'::jsonb <@ '{"k1": [1,2,3]}'::jsonb)"),
+              IsOkAndHoldsRows({{true, true, true, true}}));
+
+  EXPECT_THAT(Query(R"(
+    select jsonb_contains('[1,2]'::jsonb, '3'::jsonb),
+           '{"k1": "v1", "k2": "v2"}'::jsonb @> '{"k1": "v2"}'::jsonb,
+           jsonb_contained('3'::jsonb, '[1,2.0]'::jsonb),
+           '{"k1": [0]}'::jsonb <@ '{"k1": [1,2,3]}'::jsonb)"),
+              IsOkAndHoldsRows({{false, false, false, false}}));
+
+  // Existence functions.
+  EXPECT_THAT(Query(R"(
+    select '["1", "2"]'::jsonb ? '2',
+           '{"k1": "v1", "k2": "v2"}'::jsonb ? 'k2',
+           '{"k1": "v1", "k2": "v2"}'::jsonb ?& array['k1', 'k2'],
+           '{"k1": "v1", "k2": "v2"}'::jsonb ?| array['k2', 'k3'])"),
+              IsOkAndHoldsRows({{true, true, true, true}}));
+
+  EXPECT_THAT(Query(R"(
+    select '["1", "2"]'::jsonb ? '3',
+           '{"k1": "v1", "k2": "v2"}'::jsonb ? 'k3',
+           '{"k1": "v1", "k2": "v2"}'::jsonb ?& array['k1', 'k3'],
+           '{"k1": "v1", "k2": "v2"}'::jsonb ?| array['k0', 'k3'])"),
+              IsOkAndHoldsRows({{false, false, false, false}}));
+}
+
 TEST_F(PGFunctionsTest, ExtendedTypeCastTest) {
   // Cast <TYPE> to PG.NUMERIC.
   EXPECT_THAT(Query(R"(SELECT CAST(1.1 AS numeric))"),

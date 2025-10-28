@@ -75,6 +75,7 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::FEATURE_ORDER_BY_COLLATE,
       zetasql::FEATURE_SELECT_STAR_EXCEPT_REPLACE,
       zetasql::FEATURE_SAFE_FUNCTION_CALL,
+      zetasql::FEATURE_JSON_KEYS_FUNCTION,
       zetasql::FEATURE_JSON_TYPE,
       zetasql::FEATURE_JSON_ARRAY_FUNCTIONS,
       zetasql::FEATURE_JSON_CONSTRUCTOR_FUNCTIONS,

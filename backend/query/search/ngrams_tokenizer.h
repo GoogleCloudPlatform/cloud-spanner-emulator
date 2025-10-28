@@ -18,13 +18,10 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_SEARCH_NGRAMS_TOKENIZER_H_
 
 #include <cstdint>
-#include <string>
-#include <vector>
 
 #include "zetasql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 
 namespace google {
@@ -47,9 +44,6 @@ class NgramsTokenizer {
   static constexpr int64_t kDefaultNgramSizeMin = 1;
 
   static absl::Status ValidateNgramSize(int ngram_size_min, int ngram_size_max);
-  static absl::Status TokenizeNgrams(absl::string_view str, int ngram_size_min,
-                                     int ngram_size_max,
-                                     std::vector<std::string>& token_list);
 };
 
 }  // namespace search

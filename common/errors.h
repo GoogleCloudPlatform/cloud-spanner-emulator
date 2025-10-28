@@ -1062,8 +1062,7 @@ absl::Status ForUpdateUnsupportedInSearchQueries();
 absl::Status ForUpdateCannotCombineWithLockScannedRanges();
 
 // Repeatable read related errors
-absl::Status RepeatableReadOnlySupportedInReadWriteTransactions();
-absl::Status ReadLockModeInRepeatableReadMustBeUnspecified();
+absl::Status RepeatableReadNotSupportedInPDMLTransactions();
 
 absl::Status ApproxDistanceFunctionOptionsRequired(
     absl::string_view function_string);

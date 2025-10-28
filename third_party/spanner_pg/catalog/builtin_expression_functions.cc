@@ -29,46 +29,43 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
+#include "third_party/spanner_pg/catalog/builtin_expression_functions.h"
+
 #include <string>
 
 #include "absl/container/flat_hash_map.h"
 #include "third_party/spanner_pg/catalog/function_identifier.h"
-#include "third_party/spanner_pg/postgres_includes/all.h"
-
-// Mappings for "Expression Functions"
-//
-// Standard PostgreSQL functions are implemented as a generic FuncExpr, with a
-// typed argument list, function name, etc. Those functions should be added to
-// the system catalog in builtin_xxx_functions.cc files matching their ZetaSQL
-// counterpart's categorization.
-//
-// Another class of function-like expressions is treated differently in
-// PostgreSQL. These are represented by some other sybtype of Expr such as
-// NullTest, CoalesceExpr, etc. The mapping for this class of "expression
-// functions", which typically use generic arguments, is handled here.
+#include "third_party/spanner_pg/postgres_includes/all.h"  // NOLINT(misc-include-cleaner)
 
 namespace postgres_translator {
 
-void AddExprFunctions(
+namespace {
+
+void AddArrayFunctions(
     absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions) {
-  functions.insert({PostgresExprIdentifier::Expr(T_CoalesceExpr), "coalesce"});
-  functions.insert(
-      {PostgresExprIdentifier::CaseExpr(/*case_has_testexpr=*/false),
-       "$case_no_value"});
-  functions.insert(
-      {PostgresExprIdentifier::CaseExpr(/*case_has_testexpr=*/true),
-       "$case_with_value"});
-  functions.insert({PostgresExprIdentifier::Expr(T_NullIfExpr), "nullif"});
-  functions.insert({PostgresExprIdentifier::ScalarArrayOpExpr(
-                        /*array_op_arg_is_array=*/false,
-                        /*use_or=*/true,
-                        /*comparator_type=*/"="),
-                    "$in"});
   functions.insert({PostgresExprIdentifier::ScalarArrayOpExpr(
                         /*array_op_arg_is_array=*/true,
                         /*use_or=*/true,
                         /*comparator_type=*/"="),
                     "$in_array"});
+
+  // We use safe_array_at_ordinal to match two PostgreSQL behaviors: 1-based
+  // indexing (ordinal), and NULL return values for out-of-bounds accesses
+  // (safe).
+  functions.insert(
+      {PostgresExprIdentifier::SubscriptingRef(/*is_array_slice=*/false),
+       "$safe_array_at_ordinal"});
+
+  functions.insert(
+      {PostgresExprIdentifier::SubscriptingRef(/*is_array_slice=*/true),
+       "pg.array_slice"});
+
+  // IMPORTANT NOTE: This mapping only applies when the array contains non-Const
+  // element expressions (matches ZetaSQL behavior). Arrays of all Const
+  // elements are transformed to ResolvedLiterals.
+  // make_array is the general-form array constructor, used in cases where the
+  // array constant has non-const element expressions (Var, Expr, etc.).
+  functions.insert({PostgresExprIdentifier::Expr(T_ArrayExpr), "$make_array"});
 
   // We do not have a mapping for pg.array_all_not_equal because this is
   // equivalent to `NOT IN` and implemented as such.
@@ -99,64 +96,64 @@ void AddExprFunctions(
                     "pg.array_all_less_equal"});
 }
 
-void AddBoolExprFunctions(
+void AddBoolFunctions(
     absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions) {
   functions.insert({PostgresExprIdentifier::BoolExpr(AND_EXPR), "$and"});
+  functions.insert(
+      {PostgresExprIdentifier::BooleanTest(IS_FALSE), "$is_false"});
+  functions.insert({PostgresExprIdentifier::BooleanTest(IS_TRUE), "$is_true"});
   functions.insert({PostgresExprIdentifier::BoolExpr(NOT_EXPR), "$not"});
   functions.insert({PostgresExprIdentifier::BoolExpr(OR_EXPR), "$or"});
 }
 
-void AddNullTestFunctions(
+void AddComparisonFunctions(
     absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions) {
-  functions.insert({PostgresExprIdentifier::NullTest(IS_NULL), "$is_null"});
+  functions.insert(
+      {PostgresExprIdentifier::CaseExpr(/*case_has_testexpr=*/false),
+       "$case_no_value"});
+  functions.insert(
+      {PostgresExprIdentifier::CaseExpr(/*case_has_testexpr=*/true),
+       "$case_with_value"});
+  functions.insert({PostgresExprIdentifier::ScalarArrayOpExpr(
+                        /*array_op_arg_is_array=*/false,
+                        /*use_or=*/true,
+                        /*comparator_type=*/"="),
+                    "$in"});
 }
 
 void AddLeastGreatestFunctions(
     absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions) {
   functions.insert(
-      {PostgresExprIdentifier::MinMaxExpr(IS_GREATEST), "greatest"});
-  functions.insert({PostgresExprIdentifier::MinMaxExpr(IS_LEAST), "least"});
+      {PostgresExprIdentifier::MinMaxExpr(IS_GREATEST), "pg.greatest"});
+  functions.insert({PostgresExprIdentifier::MinMaxExpr(IS_LEAST), "pg.least"});
 }
 
-void AddBooleanTestFunctions(
+void AddNullTestFunctions(
     absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions) {
-  functions.insert({PostgresExprIdentifier::BooleanTest(IS_TRUE), "$is_true"});
-  functions.insert(
-      {PostgresExprIdentifier::BooleanTest(IS_FALSE), "$is_false"});
+  functions.insert({PostgresExprIdentifier::NullTest(IS_NULL), "$is_null"});
+  functions.insert({PostgresExprIdentifier::Expr(T_CoalesceExpr), "coalesce"});
+  functions.insert({PostgresExprIdentifier::Expr(T_NullIfExpr), "nullif"});
 }
 
-void AddSQLValueFunctions(
+void AddTimeFunctions(
     absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions) {
-  functions.insert(
-      {PostgresExprIdentifier::SQLValueFunction(SVFOP_CURRENT_TIMESTAMP),
-       "current_timestamp"});
   functions.insert(
       {PostgresExprIdentifier::SQLValueFunction(SVFOP_CURRENT_DATE),
        "current_date"});
-}
-
-void AddArrayAtFunctions(
-    absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions) {
-  // We use safe_array_at_ordinal to match two PostgreSQL behaviors: 1-based
-  // indexing (ordinal), and NULL return values for out-of-bounds accesses
-  // (safe).
   functions.insert(
-      {PostgresExprIdentifier::SubscriptingRef(/*is_array_slice=*/false),
-       "$safe_array_at_ordinal"});
+      {PostgresExprIdentifier::SQLValueFunction(SVFOP_CURRENT_TIMESTAMP),
+       "current_timestamp"});
 }
+}  // namespace
 
-void AddArraySliceFunctions(
+void AddExpressionFunctions(
     absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions) {
-  functions.insert(
-      {PostgresExprIdentifier::SubscriptingRef(/*is_array_slice=*/true),
-       "pg.array_slice"});
-}
-
-void AddMakeArrayFunctions(
-    absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions) {
-  // make_array is the general-form array constructior, used in cases where the
-  // array constant has non-const element exressions (Var, Expr, etc.).
-  functions.insert({PostgresExprIdentifier::Expr(T_ArrayExpr), "$make_array"});
+  AddArrayFunctions(functions);
+  AddBoolFunctions(functions);
+  AddComparisonFunctions(functions);
+  AddLeastGreatestFunctions(functions);
+  AddNullTestFunctions(functions);
+  AddTimeFunctions(functions);
 }
 
 }  // namespace postgres_translator

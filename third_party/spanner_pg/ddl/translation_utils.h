@@ -110,6 +110,9 @@ struct PostgreSQLConstants {
       "disable_automatic_uid_column";
   static constexpr absl::string_view kSearchIndexSortOrderOptionName =
       "sort_order_sharding";
+  static constexpr absl::string_view kSpangresTableTypeOptionName = "type";
+  static constexpr absl::string_view kFullTextDictionaryTableType =
+      "fulltext_dictionary";
 
   // TODO: use kDatabaseOptimizerVersionName,
   // kInternalDatabaseVersionRetentionPeriodName,
@@ -143,6 +146,8 @@ struct PostgreSQLConstants {
       "exclude_ttl_deletes";
   static constexpr absl::string_view kChangeStreamAllowTxnExclusionOptionName =
       "allow_txn_exclusion";
+  static constexpr absl::string_view kChangeStreamPartitionModeOptionName =
+      "partition_mode";
   static constexpr char kInternalLocalityGroupStorageOptionName[] = "inflash";
   static constexpr char kInternalLocalityGroupSpillTimeSpanOptionName[] =
     "age_based_spill_policy";

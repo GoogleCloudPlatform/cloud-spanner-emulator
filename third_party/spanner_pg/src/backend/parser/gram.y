@@ -295,6 +295,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 
 // SPANGRES BEGIN
 	AlterSearchIndexCmd  *altersearchindexcmd;
+	ViewSecurityType     view_security_type;
 // SPANGRES END
 }
 
@@ -905,7 +906,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 // from ON UPDATE column constraints (the latter being added for Spangres).
 %token		ON_LA
 
-%type <boolean> opt_is_definer_right
+%type <view_security_type> opt_sql_security
 /* END SPANGRES ADDED GRAMMAR TYPES */
 
 %%
@@ -3765,7 +3766,7 @@ OptTtl: TTL ConstInterval Sconst opt_interval ON ColId
 					t->typmods = $4;
 					n->interval = (Node *)makeStringConstCast($3, @3, t, yyscanner);
 					$$ = n;
-					   
+
 				}
 | /* EMPTY */ {$$ = NULL;}
 
@@ -11572,12 +11573,11 @@ AlterLocalityGroupStmt:
  *
  *****************************************************************************/
 CreateSearchIndexStmt:
-						CREATE SEARCH INDEX qualified_name ON qualified_name '(' index_params ')'
+						CREATE SEARCH INDEX name ON qualified_name '(' index_params ')'
 						opt_include opt_partition_by_clause opt_sort_clause OptInterleaveIndex where_clause opt_definition
 						{
 								CreateSearchIndexStmt *n = makeNode(CreateSearchIndexStmt);
-								n->search_index_name = $4->relname;
-								n->search_index_name_rangevar = $4;
+								n->search_index_name = $4;
 								n->table_name = $6;
 								n->token_columns = $8;
 								n->storing = $10;
@@ -11967,12 +11967,12 @@ opt_transaction_chain:
 		;
 
 /* BEGIN SPANGRES ADDED GRAMMAR RULES */
-opt_is_definer_right:
-			SECURITY DEFINER { $$ = true;}
-			| SQL_P SECURITY DEFINER { $$ = true;}
-			| SECURITY INVOKER { $$ = false;}
-			| SQL_P SECURITY INVOKER { $$ = false;}
-			| /* EMPTY */ { $$ = true; }
+opt_sql_security:
+			SECURITY DEFINER { $$ = DEFINER_SECURITY; }
+			| SQL_P SECURITY DEFINER { $$ = DEFINER_SECURITY; }
+			| SECURITY INVOKER { $$ = INVOKER_SECURITY; }
+			| SQL_P SECURITY INVOKER { $$ = INVOKER_SECURITY; }
+			| /* EMPTY */ { $$ = UNSPECIFIED_SECURITY; }
 /* END SPANGRES ADDED GRAMMAR RULES */
 
 /*****************************************************************************
@@ -11982,7 +11982,7 @@ opt_is_definer_right:
  *			AS <query> [ WITH [ CASCADED | LOCAL ] CHECK OPTION ]
  *
  *****************************************************************************/
-ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions opt_is_definer_right
+ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions opt_sql_security
 				AS SelectStmt opt_check_option
 				{
 					ViewStmt   *n = makeNode(ViewStmt);
@@ -11994,15 +11994,18 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions opt_
 					n->replace = false;
 					n->options = $6;
 					n->withCheckOption = $10;
-					n->is_definer = $7;
+					n->view_security_type = $7;
+					n->is_definer = (
+						n->view_security_type == DEFINER_SECURITY ||
+						n->view_security_type == UNSPECIFIED_SECURITY);
 					// Spangres extract raw string for the SelectStmt
 					int query_start_location = @9;
 					int query_end_location = @10 == -1 ? pg_yyget_extra(yyscanner)->current_yylloc : @10;
-					n->query_string = pnstrdup(pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf + query_start_location, 
+					n->query_string = pnstrdup(pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf + query_start_location,
 															query_end_location - query_start_location);
 					$$ = (Node *) n;
 				}
-		| CREATE OR REPLACE OptTemp VIEW qualified_name opt_column_list opt_reloptions opt_is_definer_right
+		| CREATE OR REPLACE OptTemp VIEW qualified_name opt_column_list opt_reloptions opt_sql_security
 				AS SelectStmt opt_check_option
 				{
 					ViewStmt   *n = makeNode(ViewStmt);
@@ -12014,15 +12017,18 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions opt_
 					n->replace = true;
 					n->options = $8;
 					n->withCheckOption = $12;
-					n->is_definer = $9;
+					n->view_security_type = $9;
+					n->is_definer = (
+						n->view_security_type == DEFINER_SECURITY ||
+						n->view_security_type == UNSPECIFIED_SECURITY);
 					// Spangres extract raw string for the SelectStmt
 					int query_start_location = @11;
 					int query_end_location = @12 == -1 ? pg_yyget_extra(yyscanner)->current_yylloc : @12;
-					n->query_string = pnstrdup(pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf + query_start_location, 
+					n->query_string = pnstrdup(pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf + query_start_location,
 															query_end_location - query_start_location);
 					$$ = (Node *) n;
 				}
-		| CREATE OptTemp RECURSIVE VIEW qualified_name '(' columnList ')' opt_reloptions opt_is_definer_right
+		| CREATE OptTemp RECURSIVE VIEW qualified_name '(' columnList ')' opt_reloptions opt_sql_security
 				AS SelectStmt opt_check_option
 				{
 					ViewStmt   *n = makeNode(ViewStmt);
@@ -12039,15 +12045,18 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions opt_
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("WITH CHECK OPTION not supported on recursive views"),
 								 parser_errposition(@13)));
-					n->is_definer = $10;
+					n->view_security_type = $10;
+					n->is_definer = (
+						n->view_security_type == DEFINER_SECURITY ||
+						n->view_security_type == UNSPECIFIED_SECURITY);
 					// Spangres extract raw string for the SelectStmt
 					int query_start_location = @12;
 					int query_end_location = @13 == -1 ? pg_yyget_extra(yyscanner)->current_yylloc : @13;
-					n->query_string = pnstrdup(pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf + query_start_location, 
+					n->query_string = pnstrdup(pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf + query_start_location,
 															query_end_location - query_start_location);
 					$$ = (Node *) n;
 				}
-		| CREATE OR REPLACE OptTemp RECURSIVE VIEW qualified_name '(' columnList ')' opt_reloptions opt_is_definer_right
+		| CREATE OR REPLACE OptTemp RECURSIVE VIEW qualified_name '(' columnList ')' opt_reloptions opt_sql_security
 				AS SelectStmt opt_check_option
 				{
 					ViewStmt   *n = makeNode(ViewStmt);
@@ -12064,11 +12073,14 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions opt_
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("WITH CHECK OPTION not supported on recursive views"),
 								 parser_errposition(@15)));
-					n->is_definer = $12;
+					n->view_security_type = $12;
+					n->is_definer = (
+						n->view_security_type == DEFINER_SECURITY ||
+						n->view_security_type == UNSPECIFIED_SECURITY);
 					// Spangres extract raw string for the SelectStmt
 					int query_start_location = @14;
 					int query_end_location = @15 == -1 ? pg_yyget_extra(yyscanner)->current_yylloc : @15;
-					n->query_string = pnstrdup(pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf + query_start_location, 
+					n->query_string = pnstrdup(pg_yyget_extra(yyscanner)->core_yy_extra.scanbuf + query_start_location,
 															query_end_location - query_start_location);
 					$$ = (Node *) n;
 				}

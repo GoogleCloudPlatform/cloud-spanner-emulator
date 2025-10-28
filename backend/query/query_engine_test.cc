@@ -1833,6 +1833,47 @@ TEST_P(QueryEngineTest, TestJsonbArrayElements) {
   EXPECT_EQ(ToString(result), "array(ARRAY<PG.JSONB>) : [4.5, 5, 6],");
 }
 
+TEST_P(QueryEngineTest, TestJsonbContainmentAndExistenceFunctions) {
+  if (GetParam() != POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  MockRowWriter writer;
+  // Containment functions.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result1,
+      query_engine().ExecuteSql(Query{R"sql(
+        SELECT '[1,2]'::jsonb @> '2'::jsonb AND
+               '[1,2]'::jsonb <@ '[1,2]'::jsonb
+               AS result_true,
+               '{"k1": 1, "k2": 2}'::jsonb @> '1'::jsonb OR
+               '"k1"'::jsonb <@ '{"k1": 1}'::jsonb
+               AS result_false)sql"},
+                                QueryContext{schema(), reader(), &writer}));
+  EXPECT_NE(result1.rows, nullptr);
+  EXPECT_EQ(ToString(result1),
+            "result_true,result_false(BOOL,BOOL) : true,false,");
+
+  // Existence functions.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result2,
+      query_engine().ExecuteSql(Query{R"sql(
+        SELECT '[1,"2"]'::jsonb ? '2' AND
+               '{"k1": "v1", "k2": "v2"}'::jsonb ? 'k2' AND
+               '{"k1": "v1", "k2": "v2"}'::jsonb ?& array['k1', 'k2'] AND
+               '{"k1": "v1", "k2": "v2"}'::jsonb ?| array['k2', 'k3']
+               AS result_true,
+               '[1,"2"]'::jsonb ? '3' OR
+               '{"k1": "v1", "k2": "v2"}'::jsonb ? 'k3' OR
+               '{"k1": "v1", "k2": "v2"}'::jsonb ?& array['k1', 'k3'] OR
+               '{"k1": "v1", "k2": "v2"}'::jsonb ?| array['k0', 'k3']
+               AS result_false)sql"},
+                                QueryContext{schema(), reader(), &writer}));
+  EXPECT_NE(result2.rows, nullptr);
+  EXPECT_EQ(ToString(result2),
+            "result_true,result_false(BOOL,BOOL) : true,false,");
+}
+
 INSTANTIATE_TEST_SUITE_P(
     ParameterizedSelectProto, ParameterizedSelectProto,
     testing::ValuesIn<TestQuery>(
@@ -2600,6 +2641,12 @@ TEST_P(QueryEngineTest, JsonConverterFunctionsForGsql) {
       {"STRIP_NULLS: Removal leading to empty structures",
        "SELECT JSON_STRIP_NULLS(JSON '{\"a\": {\"b\": null}, \"c\": [null, "
        "null]}')"},
+
+      // --- SAFE_TO_JSON ---
+      {"1", "SELECT SAFE_TO_JSON(1) AS one"},
+
+      // --- JSON_KEYS ---
+      {"json_keys", R"(SELECT JSON_KEYS(JSON '{"a":1, "b":2}'))"},
   };
 
   for (const auto& test_case : test_cases) {
@@ -3883,19 +3930,18 @@ class DefaultValuesTest : public QueryEngineTest {
   std::unique_ptr<ActionManager> action_manager_;
 };
 
-TEST_F(DefaultValuesTest, ExecuteInsertsDefaultValues) {
+TEST_F(DefaultValuesTest, ExecuteSkipsNonKeyDefaultValues) {
   MockRowWriter writer;
   EXPECT_CALL(
       writer,
-      Write(Property(
-          &Mutation::ops,
-          UnorderedElementsAre(AllOf(
-              Field(&MutationOp::type, MutationOpType::kInsert),
-              Field(&MutationOp::table, "players"),
-              Field(&MutationOp::columns,
-                    std::vector<std::string>{"player_id", "account_balance"}),
-              Field(&MutationOp::rows,
-                    UnorderedElementsAre(ValueList{Int64(2), Numeric(0)})))))))
+      Write(Property(&Mutation::ops,
+                     UnorderedElementsAre(AllOf(
+                         Field(&MutationOp::type, MutationOpType::kInsert),
+                         Field(&MutationOp::table, "players"),
+                         Field(&MutationOp::columns,
+                               std::vector<std::string>{"player_id"}),
+                         Field(&MutationOp::rows,
+                               UnorderedElementsAre(ValueList{Int64(2)})))))))
       .Times(1)
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_THAT(
@@ -3936,73 +3982,27 @@ TEST_F(DefaultValuesTest, InsertOrUpdateDefaultValues) {
 
 TEST_F(DefaultValuesTest, InsertOrIgnoreDefaultValues) {
   // The insert statement inserts 2 new rows and the existing row with primary
-  // key (player_id:1) is ignored. The default column gets the default value
-  // 0.0.
+  // key (player_id:1) is ignored. The default column is excluded.
   std::string sql =
       "INSERT OR IGNORE INTO players (player_id) "
       "VALUES(10), (1), (3)";
   MockRowWriter writer;
   EXPECT_CALL(
       writer,
-      Write(Property(
-          &Mutation::ops,
-          UnorderedElementsAre(AllOf(
-              Field(&MutationOp::type, MutationOpType::kInsert),
-              Field(&MutationOp::table, "players"),
-              Field(&MutationOp::columns,
-                    std::vector<std::string>{"player_id", "account_balance"}),
-              Field(
-                  &MutationOp::rows,
-                  UnorderedElementsAre(ValueList{Int64(10), Numeric(0.0)},
-                                       ValueList{Int64(3), Numeric(0.0)})))))))
+      Write(Property(&Mutation::ops,
+                     UnorderedElementsAre(AllOf(
+                         Field(&MutationOp::type, MutationOpType::kInsert),
+                         Field(&MutationOp::table, "players"),
+                         Field(&MutationOp::columns,
+                               std::vector<std::string>{"player_id"}),
+                         Field(&MutationOp::rows,
+                               UnorderedElementsAre(ValueList{Int64(10)},
+                                                    ValueList{Int64(3)})))))))
       .Times(1)
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{sql}, QueryContext{schema(), reader(), &writer}),
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
-}
-
-TEST_F(DefaultValuesTest, ExecuteInsertsDefaultValuesWithUDF) {
-  MockRowWriter writer;
-  EXPECT_CALL(
-      writer,
-      Write(Property(
-          &Mutation::ops,
-          UnorderedElementsAre(
-              AllOf(Field(&MutationOp::type, MutationOpType::kInsert),
-                    Field(&MutationOp::table, "test_table"),
-                    Field(&MutationOp::columns,
-                          std::vector<std::string>{"int64_col", "string_col"}),
-                    Field(&MutationOp::rows,
-                          UnorderedElementsAre(
-                              ValueList{Int64(42), String("one")},
-                              ValueList{Int64(42), String("two")})))))))
-      .Times(1)
-      .WillOnce(Return(absl::OkStatus()));
-
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const Schema> schema,
-      test::CreateSchemaFromDDL(
-          {R"(CREATE FUNCTION udf_default_value() RETURNS INT64 SQL SECURITY
-              INVOKER AS (42))",
-           R"(CREATE TABLE test_table (
-                int64_col INT64 DEFAULT(udf_default_value()),
-                string_col STRING(MAX),
-              ) PRIMARY KEY (string_col))"},
-          type_factory(),
-          /*proto_descriptor_bytes=*/""));
-
-  test::TestRowReader reader{
-      {{"test_table",
-        {{"int64_col", "string_col"},
-         {zetasql::types::Int64Type(), zetasql::types::StringType()},
-         {}}}}};
-
-  EXPECT_THAT(
-      query_engine().ExecuteSql(
-          Query{"INSERT INTO test_table (string_col) VALUES ('one'), ('two')"},
-          QueryContext{schema.get(), &reader, &writer}),
-      IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
 }
 
 class DefaultKeyTest

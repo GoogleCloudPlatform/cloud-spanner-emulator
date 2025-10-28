@@ -15,6 +15,7 @@
 //
 
 #include <cstdint>
+#include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
@@ -23,7 +24,11 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "google/cloud/spanner/numeric.h"
+#include "google/cloud/spanner/timestamp.h"
+#include "common/feature_flags.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -47,6 +52,11 @@ class ColumnDefaultValueReadWriteTest
     dialect_ = GetParam();
     DatabaseTest::SetUp();
   }
+
+ private:
+  test::ScopedEmulatorFeatureFlagsSetter feature_flags_setter_ =
+      test::ScopedEmulatorFeatureFlagsSetter(
+          {.enable_user_defined_functions = true});
 };
 
 MATCHER_P(WhenLowercased, matcher, "") {
@@ -407,6 +417,25 @@ TEST_P(ColumnDefaultValueReadWriteTest, DMLsInsertWithUserInput) {
       CommitDml({SqlStatement("INSERT INTO t (k, d2) SELECT k,  d2 FROM t2")}));
   EXPECT_THAT(Query("SELECT k, d1, g1, d2 FROM t ORDER BY k ASC"),
               IsOkAndHoldsRows({{5, 1, 2, 5}, {6, 1, 2, 6}}));
+}
+
+TEST_P(ColumnDefaultValueReadWriteTest, DefaultValueWithUDF) {
+  // TODO: b/430093041: add tests for PostgreSQL
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+  ZETASQL_ASSERT_OK(Insert("udf_table", {"string_col"}, {"abc"}));
+  ZETASQL_ASSERT_OK(InsertOrUpdate("udf_table", {"string_col"}, {"def"}));
+  EXPECT_THAT(ReadAll("udf_table", {"int64_col", "string_col"}),
+              IsOkAndHoldsRows({{42, "abc"}, {42, "def"}}));
+
+  ZETASQL_ASSERT_OK(CommitDml(
+      {SqlStatement("INSERT INTO udf_table (string_col) VALUES ('ghi')")}));
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(
+      "INSERT OR UPDATE INTO udf_table (string_col) VALUES ('jkl')")}));
+  EXPECT_THAT(
+      ReadAll("udf_table", {"int64_col", "string_col"}),
+      IsOkAndHoldsRows({{42, "abc"}, {42, "def"}, {42, "ghi"}, {42, "jkl"}}));
 }
 
 class DefaultPrimaryKeyReadWriteTest

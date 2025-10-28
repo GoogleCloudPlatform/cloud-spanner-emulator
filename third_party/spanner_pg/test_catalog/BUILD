@@ -74,6 +74,7 @@ cc_library(
 cc_test(
     name = "test_catalog_test",
     srcs = ["test_catalog_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":emulator_catalog",
         ":spanner_test_catalog",
@@ -102,6 +103,7 @@ cc_library(
 cc_test(
     name = "spanner_test_catalog_test",
     srcs = ["spanner_test_catalog_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":emulator_catalog",
         ":spanner_test_catalog",

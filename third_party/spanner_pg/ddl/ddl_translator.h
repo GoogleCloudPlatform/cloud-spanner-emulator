@@ -117,6 +117,9 @@ struct TranslationOptions {
   // enable_change_streams_if_not_exists allows the IF NOT EXISTS clause for
   // CREATE CHANGE STREAM, as well as IF EXISTS for DROP CHANGE STREAM.
   bool enable_change_streams_if_not_exists = false;
+  // enable_change_streams_partition_mode_option allows the partition_mode
+  // option for CREATE CHANGE STREAM.
+  bool enable_change_streams_partition_mode_option = false;
   // This enables support for search index in Spangres.
   bool enable_search_index = true;
   // enable_locality_groups allows create/drop/alter locality groups.
@@ -141,6 +144,7 @@ struct TranslationOptions {
   // enable_hidden_column allows translation of the <HIDDEN> constraint.
   bool enable_hidden_column = true;
   bool enable_serial_types = false;
+  bool enable_fulltext_dictionary_tables = false;
 };
 
 // Interface for translating PostgreSQL DDL parse tree (AST) to Spanner schema

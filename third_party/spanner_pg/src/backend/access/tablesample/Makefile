@@ -14,6 +14,7 @@ include $(top_builddir)/src/Makefile.global
 
 OBJS = \
 	bernoulli.o \
+	spanner_reservoir.o \  # copybara:strip(tablesample)
 	system.o \
 	tablesample.o
 

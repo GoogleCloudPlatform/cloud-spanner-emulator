@@ -45,6 +45,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/iterator.h"
+#include "common/constants.h"
 #include "common/errors.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
@@ -271,18 +272,22 @@ absl::Status EvaluatedColumnEffector::Effect(const ActionContext* ctx,
     }
   }
 
-  return Effect(ctx, op.key, &column_values, /*skip_default_values=*/false);
+  return Effect(ctx, op.key, &column_values, /*is_update_op=*/false,
+                /*apply_on_update=*/false);
 }
 
 absl::Status EvaluatedColumnEffector::Effect(const ActionContext* ctx,
                                              const UpdateOp& op) const {
+  bool apply_on_update = false;
   for (const Column* column : op.columns) {
     // If any non-key generated columns appear then this is a generated column
     // effect and we do not need to process it again. The non-key requirement is
     // needed because user-generated updates are expected to include key values,
     // including generated ones.
-    if (column->is_generated() && !IsKeyColumn(column)) {
-      return absl::OkStatus();
+    if (!IsKeyColumn(column)) {
+      if (column->is_generated()) {
+        return absl::OkStatus();
+      }
     }
   }
 
@@ -300,13 +305,14 @@ absl::Status EvaluatedColumnEffector::Effect(const ActionContext* ctx,
   for (int i = 0; i < op.columns.size(); ++i) {
     column_values[op.columns[i]->Name()] = op.values[i];
   }
-  return Effect(ctx, op.key, &column_values, /*skip_default_values=*/true);
+  return Effect(ctx, op.key, &column_values, /*is_update_op=*/true,
+                apply_on_update);
 }
 
 absl::Status EvaluatedColumnEffector::Effect(
     const ActionContext* ctx, const Key& key,
-    zetasql::ParameterValueMap* column_values,
-    bool skip_default_values) const {
+    zetasql::ParameterValueMap* column_values, bool is_update_op,
+    bool apply_on_update) const {
   ZETASQL_RET_CHECK(for_keys_ == false);
   std::vector<zetasql::Value> evaluated_values;
   evaluated_values.reserve(evaluated_columns_.size());
@@ -317,20 +323,22 @@ absl::Status EvaluatedColumnEffector::Effect(
   // Evaluate evaluated columns in topological order.
   for (int i = 0; i < evaluated_columns_.size(); ++i) {
     const Column* evaluated_column = evaluated_columns_[i];
-    // Default values should only be populated for inserts where no value is
-    // supplied by the user. For updates, skip_default_values is set to true
-    // and all default value computations are skipped (the column will thus
-    // either be set to a new user-provided value or left at its current value).
-    if (evaluated_column->has_default_value() &&
-        (skip_default_values || column_values->find(evaluated_column->Name()) !=
-                                    column_values->end())) {
-      continue;
-    }
     // Keys are handled by a separate effector initialized with for_keys_=true.
     // Skipping these columns here is not simply an optimization; if we include
     // them then we may find ourselves in an infinite loop repeatedly generating
     // effects for generated PKs.
     if (IsKeyColumn(evaluated_column)) {
+      continue;
+    }
+
+    // User provided values override computed values for DEFAULT.
+    if (evaluated_column->has_default_value() &&
+        column_values->find(evaluated_column->Name()) != column_values->end()) {
+      continue;
+    }
+
+    // DEFAULT values only apply to inserts.
+    if (evaluated_column->has_default_value() && is_update_op) {
       continue;
     }
 

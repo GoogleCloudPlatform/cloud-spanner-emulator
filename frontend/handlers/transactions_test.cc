@@ -398,7 +398,7 @@ TEST_P(TransactionApiTest,
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 }
 
-TEST_P(TransactionApiTest, CanOnlyCreateSerializableReadOnlyTransaction) {
+TEST_P(TransactionApiTest, CanCreateReadOnlyTransactionWithAllIsolationLevels) {
   // Can create a SERIALIZABLE transaction.
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options {
@@ -412,7 +412,7 @@ TEST_P(TransactionApiTest, CanOnlyCreateSerializableReadOnlyTransaction) {
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
-  // Can't create a REPEATABLE_READ transaction.
+  // Can create a REPEATABLE_READ transaction.
   begin_request = PARSE_TEXT_PROTO(R"pb(
     options {
       read_only {}
@@ -422,9 +422,7 @@ TEST_P(TransactionApiTest, CanOnlyCreateSerializableReadOnlyTransaction) {
   begin_request.set_session(
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
-  EXPECT_THAT(BeginTransaction(begin_request, &transaction_response),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       ::testing::HasSubstr("only allowed on read-write")));
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 }
 
 TEST_P(TransactionApiTest, CanOnlyCreateSerializablePartitionedDmlTransaction) {
@@ -453,12 +451,12 @@ TEST_P(TransactionApiTest, CanOnlyCreateSerializablePartitionedDmlTransaction) {
 
   EXPECT_THAT(BeginTransaction(begin_request, &transaction_response),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       ::testing::HasSubstr("only allowed on read-write")));
+                       ::testing::HasSubstr("not allowed on partitioned DML")));
 }
 
 TEST_P(TransactionApiTest,
        CanCreateReadWriteSerializableTransactionWithReadLockMode) {
-  // Can create a SERIALIZABLE transaction.
+  // Can create a SERIALIZABLE transaction with pessimistic locking.
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options {
       read_write { read_lock_mode: PESSIMISTIC }
@@ -470,11 +468,23 @@ TEST_P(TransactionApiTest,
 
   spanner_api::Transaction transaction_response;
   ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+
+  // Can create a SERIALIZABLE transaction with optimistic locking.
+  begin_request = PARSE_TEXT_PROTO(R"pb(
+    options {
+      read_write { read_lock_mode: OPTIMISTIC }
+      isolation_level: SERIALIZABLE
+    }
+  )pb");
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
+
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 }
 
 TEST_P(TransactionApiTest,
-       CannotCreateReadWriteRepeatableReadTransactionWithReadLockMode) {
-  // Can't create a REPEATABLE_READ transaction with read lock mode.
+       CreateReadWriteRepeatableReadTransactionWithReadLockMode) {
+  // Create a REPEATABLE_READ transaction with pessimistic read lock mode.
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options {
       read_write { read_lock_mode: PESSIMISTIC }
@@ -485,9 +495,19 @@ TEST_P(TransactionApiTest,
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  EXPECT_THAT(BeginTransaction(begin_request, &transaction_response),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       ::testing::HasSubstr("Read lock mode must not be set")));
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+
+  // Create a REPEATABLE_READ transaction with optimistic read lock mode.
+  begin_request = PARSE_TEXT_PROTO(R"pb(
+    options {
+      read_write { read_lock_mode: OPTIMISTIC }
+      isolation_level: REPEATABLE_READ
+    }
+  )pb");
+  begin_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
+
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 }
 
 TEST_P(TransactionApiTest,

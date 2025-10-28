@@ -61,6 +61,10 @@ absl::StatusOr<char*> CheckedPgNodeToString(const void* obj);
 absl::StatusOr<char*> CheckedPgPrettyFormatNodeDump(const char* dump);
 absl::StatusOr<char*> CheckedPgDeparseQuery(Query* query,
                                             bool prettyPrint = false);
+absl::StatusOr<char*> CheckedPgDeparseFunctionBody(Query* query,
+                                                   char** argNames, int numArgs,
+                                                   char* funcName,
+                                                   bool prettyPrint = false);
 absl::StatusOr<char*> CheckedPgDeparseExprInQuery(Node* expr, Query* query);
 absl::StatusOr<bool> CheckedPgEqual(const void* a, const void* b);
 absl::StatusOr<Datum> CheckedPgStringTypeDatum(Type tp, char* string,

@@ -175,6 +175,7 @@ cc_library(
 cc_test(
     name = "expr_test",
     srcs = ["expr_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":forward_transformer",
         ":transformer_test",
@@ -205,6 +206,7 @@ cc_test(
 cc_test(
     name = "spangres_expr_test",
     srcs = ["spangres_expr_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":transformer_test",
         "//third_party/spanner_pg/catalog:catalog_adapter",
@@ -220,6 +222,7 @@ cc_test(
 cc_test(
     name = "function_test",
     srcs = ["function_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":forward_transformer",
         ":transformer_test",
@@ -283,6 +286,7 @@ cc_test(
 cc_test(
     name = "type_test",
     srcs = ["type_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":forward_transformer",
         ":transformer",
@@ -302,6 +306,7 @@ cc_test(
 cc_test(
     name = "unsupported_query_test",
     srcs = ["unsupported_query_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":forward_transformer",
         "//third_party/spanner_pg/catalog:catalog_adapter_holder",

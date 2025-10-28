@@ -81,6 +81,56 @@ using ::postgres_translator::internal::PostgresCastToNode;
 using ::google::spanner::emulator::backend::ddl::Function;
 
 namespace {
+enum class ChangeStreamOption {
+  kValueCaptureType,
+  kRetentionPeriod,
+  kExcludeInsert,
+  kExcludeUpdate,
+  kExcludeDelete,
+  kExcludeTtlDeletes,
+  kAllowTxnExclusion,
+  kPartitionMode,
+};
+
+absl::optional<ChangeStreamOption> GetChangeStreamOption(
+    absl::string_view option_name) {
+  if (option_name ==
+      internal::PostgreSQLConstants::kChangeStreamValueCaptureTypeOptionName) {
+    return ChangeStreamOption::kValueCaptureType;
+  }
+  if (option_name ==
+      internal::PostgreSQLConstants::kChangeStreamRetentionPeriodOptionName) {
+    return ChangeStreamOption::kRetentionPeriod;
+  }
+  if (option_name ==
+      internal::PostgreSQLConstants::kChangeStreamExcludeInsertOptionName) {
+    return ChangeStreamOption::kExcludeInsert;
+  }
+  if (option_name ==
+      internal::PostgreSQLConstants::kChangeStreamExcludeUpdateOptionName) {
+    return ChangeStreamOption::kExcludeUpdate;
+  }
+  if (option_name ==
+      internal::PostgreSQLConstants::kChangeStreamExcludeDeleteOptionName) {
+    return ChangeStreamOption::kExcludeDelete;
+  }
+  if (option_name ==
+      internal::PostgreSQLConstants::kChangeStreamExcludeTtlDeletesOptionName) {
+    return ChangeStreamOption::kExcludeTtlDeletes;
+  }
+  if (option_name ==
+      internal::PostgreSQLConstants::kChangeStreamAllowTxnExclusionOptionName) {
+    return ChangeStreamOption::kAllowTxnExclusion;
+  }
+  if (option_name ==
+      internal::PostgreSQLConstants::kChangeStreamPartitionModeOptionName) {
+    return ChangeStreamOption::kPartitionMode;
+  }
+  return absl::nullopt;
+}
+}  // namespace
+
+namespace {
 absl::Status GetFunctionDeterminism(
     char* const option_val,
     absl::optional<Function::Determinism>* determinism) {
@@ -1957,6 +2007,27 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
     }
   }
 
+  if (create_statement.options != nullptr) {
+    for (int i = 0; i < list_length(create_statement.options); ++i) {
+      DefElem* elem = ::postgres_translator::internal::PostgresCastNode(
+          DefElem, create_statement.options->elements[i].ptr_value);
+      std::string name = absl::AsciiStrToLower(elem->defname);
+
+      if (name == PGConstants::kSpangresTableTypeOptionName) {
+        ZETASQL_ASSIGN_OR_RETURN(const String* arg_value,
+                         (DowncastNode<String, T_String>(elem->arg)));
+        const std::string type_option_value = arg_value->sval;
+        if (type_option_value == PGConstants::kFullTextDictionaryTableType) {
+          google::spanner::emulator::backend::ddl::SetOption* const fulltext_dictionary_table_option =
+              out.add_set_options();
+          fulltext_dictionary_table_option->set_option_name(
+              "fulltext_dictionary_table");
+          fulltext_dictionary_table_option->set_bool_value(true);
+        }
+      }
+    }
+  }
+
   // Post processing phase: add all the constraints (PRIMARY KEY, FOREIGN KEY,
   // NULL, NOT NULL).
   for (int i = 0; i < out.column_size(); i++) {
@@ -2891,39 +2962,44 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterChangeStream(
       ZETASQL_RET_CHECK_NE(option_name->sval, nullptr);
       ZETASQL_RET_CHECK_NE(*option_name->sval, '\0');
       std::string option_string = option_name->sval;
-      if (option_string == internal::PostgreSQLConstants::
-          kChangeStreamValueCaptureTypeOptionName) {
-        google::spanner::emulator::backend::ddl::SetOption* option_out =
-            out.mutable_set_options()->mutable_options()->Add();
-        option_out->set_option_name(internal::PostgreSQLConstants::
-                                    kChangeStreamValueCaptureTypeOptionName);
-        option_out->set_string_value("OLD_AND_NEW_VALUES");
-      } else if (option_string == internal::PostgreSQLConstants::
-                 kChangeStreamRetentionPeriodOptionName) {
-        google::spanner::emulator::backend::ddl::SetOption* option_out =
-            out.mutable_set_options()->mutable_options()->Add();
-        option_out->set_option_name(internal::PostgreSQLConstants::
-                                    kChangeStreamRetentionPeriodOptionName);
-        option_out->set_string_value("24h");
-      } else if (option_string == internal::PostgreSQLConstants::
-                                      kChangeStreamExcludeInsertOptionName ||
-                 option_string == internal::PostgreSQLConstants::
-                                      kChangeStreamExcludeUpdateOptionName ||
-                 option_string == internal::PostgreSQLConstants::
-                                      kChangeStreamExcludeDeleteOptionName ||
-                 option_string ==
-                     internal::PostgreSQLConstants::
-                         kChangeStreamExcludeTtlDeletesOptionName ||
-                 option_string ==
-                     internal::PostgreSQLConstants::
-                         kChangeStreamAllowTxnExclusionOptionName) {
-        google::spanner::emulator::backend::ddl::SetOption* option_out =
-            out.mutable_set_options()->mutable_options()->Add();
-        option_out->set_option_name(option_string);
-        option_out->set_bool_value(false);
-      } else {
+      absl::optional<ChangeStreamOption> option_kind =
+          GetChangeStreamOption(option_string);
+
+      if (!option_kind.has_value()) {
         return absl::InvalidArgumentError(
             "Invalid change stream option in <ALTER CHANGE STREAM> statement.");
+      }
+
+      switch (option_kind.value()) {
+        case ChangeStreamOption::kValueCaptureType: {
+          google::spanner::emulator::backend::ddl::SetOption* option_out =
+              out.mutable_set_options()->mutable_options()->Add();
+          option_out->set_option_name(option_string);
+          option_out->set_string_value("OLD_AND_NEW_VALUES");
+          break;
+        }
+        case ChangeStreamOption::kRetentionPeriod: {
+          google::spanner::emulator::backend::ddl::SetOption* option_out =
+              out.mutable_set_options()->mutable_options()->Add();
+          option_out->set_option_name(option_string);
+          option_out->set_string_value("24h");
+          break;
+        }
+        case ChangeStreamOption::kExcludeInsert:
+        case ChangeStreamOption::kExcludeUpdate:
+        case ChangeStreamOption::kExcludeDelete:
+        case ChangeStreamOption::kExcludeTtlDeletes:
+        case ChangeStreamOption::kAllowTxnExclusion: {
+          google::spanner::emulator::backend::ddl::SetOption* option_out =
+              out.mutable_set_options()->mutable_options()->Add();
+          option_out->set_option_name(option_string);
+          option_out->set_bool_value(false);
+          break;
+        }
+        default:
+          return absl::InvalidArgumentError(
+              "Invalid change stream option in <ALTER CHANGE STREAM> "
+              "statement.");
       }
     }
   }
@@ -2981,86 +3057,104 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamOptions(
           "Failed to parse change stream option correctly in <$0> statement.",
           parent_statement));
     }
-    if (seen_options.contains(def_elem->defname)) {
+    const absl::string_view defname = def_elem->defname;
+    if (seen_options.contains(defname)) {
       return absl::InvalidArgumentError(absl::Substitute(
           "Contains duplicate change stream option '$0' in <$1> statement.",
-          def_elem->defname, parent_statement));
+          defname, parent_statement));
     }
-    seen_options.insert(def_elem->defname);
-    if (def_elem->defname ==
-        internal::PostgreSQLConstants::
-        kChangeStreamValueCaptureTypeOptionName ||
-        def_elem->defname == internal::PostgreSQLConstants::
-        kChangeStreamRetentionPeriodOptionName) {
-      if (def_elem->arg->type != T_String) {
-        return absl::InvalidArgumentError(absl::Substitute(
-            "Failed to provide valid option value for '$0' in <$1> statement.",
-            def_elem->defname, parent_statement));
-      }
-      ZETASQL_ASSIGN_OR_RETURN(const String* arg_value,
-                       (DowncastNode<String, T_String>(def_elem->arg)));
-      std::string value = arg_value->sval;
-      google::spanner::emulator::backend::ddl::SetOption* option_out = options_out->Add();
-      option_out->set_option_name(def_elem->defname);
-      if (absl::AsciiStrToLower(value) == "null") {
-        option_out->set_null_value(true);
-      } else {
-        option_out->set_string_value(value);
-      }
-    } else if (def_elem->defname == internal::PostgreSQLConstants::
-                                        kChangeStreamExcludeInsertOptionName ||
-               def_elem->defname == internal::PostgreSQLConstants::
-                                        kChangeStreamExcludeUpdateOptionName ||
-               def_elem->defname == internal::PostgreSQLConstants::
-                                        kChangeStreamExcludeDeleteOptionName ||
-               def_elem->defname ==
-                   internal::PostgreSQLConstants::
-                       kChangeStreamExcludeTtlDeletesOptionName ||
-               def_elem->defname ==
-                   internal::PostgreSQLConstants::
-                       kChangeStreamAllowTxnExclusionOptionName) {
-      if (def_elem->defname == internal::PostgreSQLConstants::
-                                   kChangeStreamExcludeTtlDeletesOptionName &&
-          !options.enable_change_streams_ttl_deletes_filter_option) {
-        return UnsupportedTranslationError(
-            "Option exclude_ttl_deletes is not supported yet.");
-      } else if (def_elem->defname ==
-                     internal::PostgreSQLConstants::
-                         kChangeStreamAllowTxnExclusionOptionName &&
-                 !options.enable_change_streams_allow_txn_exclusion_option) {
-        return UnsupportedTranslationError(
-            "Option allow_txn_exclusion is not supported yet.");
-      } else if (!options.enable_change_streams_mod_type_filter_options) {
-        return UnsupportedTranslationError(
-            "Options exclude_insert, exclude_update, and exclude_delete are "
-            "not supported yet.");
-      }
-      if (def_elem->arg->type != T_String) {
-        return absl::InvalidArgumentError(absl::Substitute(
-            "Failed to provide valid option value for '$0' in <$1> statement.",
-            def_elem->defname, parent_statement));
-      }
-      ZETASQL_ASSIGN_OR_RETURN(const String* arg_value,
-                       (DowncastNode<String, T_String>(def_elem->arg)));
-      std::string value = arg_value->sval;
-      google::spanner::emulator::backend::ddl::SetOption* option_out = options_out->Add();
-      option_out->set_option_name(def_elem->defname);
-      if (absl::AsciiStrToLower(value) == "null") {
-        option_out->set_null_value(true);
-      } else if (value == PGConstants::kPgTrueLiteral) {
-        option_out->set_bool_value(true);
-      } else if (value == PGConstants::kPgFalseLiteral) {
-        option_out->set_bool_value(false);
-      } else {
-        return UnsupportedTranslationError(
-            absl::Substitute("Unsupported option value in change stream option "
-                             "'$0' in <$1> statement.",
-                             def_elem->defname, parent_statement));
-      }
-    } else {
+    seen_options.insert(std::string(defname));
+
+    absl::optional<ChangeStreamOption> option_kind =
+        GetChangeStreamOption(defname);
+    if (!option_kind.has_value()) {
       return absl::InvalidArgumentError(absl::Substitute(
-          "Invalid change stream option '$0' in <$1> statement.",
-          def_elem->defname, parent_statement));
+          "Invalid change stream option '$0' in <$1> statement.", defname,
+          parent_statement));
+    }
+
+    switch (option_kind.value()) {
+      // String-valued options.
+      case ChangeStreamOption::kValueCaptureType:
+      case ChangeStreamOption::kRetentionPeriod:
+      case ChangeStreamOption::kPartitionMode: {
+        if (option_kind == ChangeStreamOption::kPartitionMode &&
+            !options.enable_change_streams_partition_mode_option) {
+          return UnsupportedTranslationError(
+              "Option partition_mode is not supported yet.");
+        }
+        if (def_elem->arg->type != T_String) {
+          return absl::InvalidArgumentError(absl::Substitute(
+              "Failed to provide valid option value for '$0' in <$1> "
+              "statement.",
+              defname, parent_statement));
+        }
+        ZETASQL_ASSIGN_OR_RETURN(const String* arg_value,
+                         (DowncastNode<String, T_String>(def_elem->arg)));
+        std::string value = arg_value->sval;
+        google::spanner::emulator::backend::ddl::SetOption* option_out = options_out->Add();
+        option_out->set_option_name(defname);
+        if (absl::AsciiStrToLower(value) == "null") {
+          option_out->set_null_value(true);
+        } else {
+          option_out->set_string_value(value);
+        }
+        break;
+      }
+      // Boolean-valued options.
+      case ChangeStreamOption::kExcludeInsert:
+      case ChangeStreamOption::kExcludeUpdate:
+      case ChangeStreamOption::kExcludeDelete:
+      case ChangeStreamOption::kExcludeTtlDeletes:
+      case ChangeStreamOption::kAllowTxnExclusion: {
+        if (option_kind == ChangeStreamOption::kExcludeTtlDeletes &&
+            !options.enable_change_streams_ttl_deletes_filter_option) {
+          return UnsupportedTranslationError(
+              "Option exclude_ttl_deletes is not supported yet.");
+        }
+        if (option_kind == ChangeStreamOption::kAllowTxnExclusion &&
+            !options.enable_change_streams_allow_txn_exclusion_option) {
+          return UnsupportedTranslationError(
+              "Option allow_txn_exclusion is not supported yet.");
+        }
+        if ((option_kind == ChangeStreamOption::kExcludeInsert ||
+             option_kind == ChangeStreamOption::kExcludeUpdate ||
+             option_kind == ChangeStreamOption::kExcludeDelete) &&
+            !options.enable_change_streams_mod_type_filter_options) {
+          return UnsupportedTranslationError(
+              "Options exclude_insert, exclude_update, and exclude_delete are "
+              "not supported yet.");
+        }
+
+        if (def_elem->arg->type != T_String) {
+          return absl::InvalidArgumentError(absl::Substitute(
+              "Failed to provide valid option value for '$0' in <$1> "
+              "statement.",
+              defname, parent_statement));
+        }
+        ZETASQL_ASSIGN_OR_RETURN(const String* arg_value,
+                         (DowncastNode<String, T_String>(def_elem->arg)));
+        std::string value = arg_value->sval;
+        google::spanner::emulator::backend::ddl::SetOption* option_out = options_out->Add();
+        option_out->set_option_name(defname);
+        if (absl::AsciiStrToLower(value) == "null") {
+          option_out->set_null_value(true);
+        } else if (value == PGConstants::kPgTrueLiteral) {
+          option_out->set_bool_value(true);
+        } else if (value == PGConstants::kPgFalseLiteral) {
+          option_out->set_bool_value(false);
+        } else {
+          return UnsupportedTranslationError(absl::Substitute(
+              "Unsupported option value in change stream option "
+              "'$0' in <$1> statement.",
+              defname, parent_statement));
+        }
+        break;
+      }
+      default:
+        return absl::InvalidArgumentError(absl::Substitute(
+            "Invalid change stream option '$0' in <$1> statement.", defname,
+            parent_statement));
     }
   }
   return absl::OkStatus();

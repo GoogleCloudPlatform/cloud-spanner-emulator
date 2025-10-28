@@ -117,6 +117,7 @@ cc_library(
 cc_test(
     name = "ddl_test",
     srcs = ["ddl_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":ddl_test_helper",
         ":ddl_translator",
@@ -158,6 +159,7 @@ cc_library(
 cc_test(
     name = "translation_utils_test",
     srcs = ["translation_utils_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":translation_utils",
         "//third_party/spanner_pg/postgres_includes",
@@ -206,6 +208,7 @@ cc_library(
         "//third_party/spanner_pg/shims:error_shim",
         "//third_party/spanner_pg/util:pg_list_iterators",
         "//third_party/spanner_pg/util:postgres",
+        "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

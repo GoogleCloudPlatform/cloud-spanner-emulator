@@ -55,14 +55,5 @@ TEST(PostgresUtilsTest, ArrayUnnestProcOid) {
   EXPECT_EQ(proc_proto->prorettype(), ANYELEMENTOID);
 }
 
-TEST(PostgresUtilsTest, IsAnnFunction) {
-  // Verify that provided OID maps to the expected function.
-  FuncExpr func_expr;
-  func_expr.funcid = 50062;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-    const bool is_ann_function, IsAnnFunction(&func_expr));
-  EXPECT_TRUE(is_ann_function);
-}
-
 }  // namespace
 }  // namespace postgres_translator::internal

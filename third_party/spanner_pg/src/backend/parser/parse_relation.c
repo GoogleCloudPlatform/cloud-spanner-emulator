@@ -1488,7 +1488,7 @@ ParseNamespaceItem* addRangeTableEntryByOid(ParseState* pstate,
     ereport(ERROR,
             (errcode(ERRCODE_UNDEFINED_TABLE),
              errmsg("Error occurred during RangeTblEntry construction of "
-                    "a relation with oid: \"u\"", relation_oid)));
+                    "a relation with oid: \"%u\"", relation_oid)));
   }
 
   // Build a ParseNamespaceItem, but don't add it to the pstate's namespace

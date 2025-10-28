@@ -262,6 +262,16 @@ class TranslateParsedQueryParams {
     return common_params_.TransferMemoryReservationManager();
   }
 
+  // The number of input arguments of the function. Only used if this object
+  // was constructed for a `CREATE FUNCTION` statement.
+  int num_input_arguments;
+  // The names of the input arguments of the function. Only used if this object
+  // was constructed for a `CREATE FUNCTION` statement.
+  char** input_argument_names;
+  // The name of the function. Only used if this object was constructed for a
+  // `CREATE FUNCTION` statement.
+  List* function_name;
+
  private:
   TranslatorCommonParams common_params_;
   absl::variant<ParserOutput, const std::string*> parser_output_;

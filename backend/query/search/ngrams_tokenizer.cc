@@ -58,26 +58,6 @@ absl::Status NgramsTokenizer::ValidateNgramSize(int ngram_size_min,
   return absl::OkStatus();
 }
 
-absl::Status NgramsTokenizer::TokenizeNgrams(
-    absl::string_view str, int ngram_size_min, int ngram_size_max,
-    std::vector<std::string>& token_list) {
-  std::string lower_str;
-  absl::Status status;
-  zetasql::functions::LowerUtf8(str, &lower_str, &status);
-  ZETASQL_RETURN_IF_ERROR(status);
-
-  for (int n = ngram_size_min; n <= ngram_size_max; ++n) {
-    if (n > lower_str.size()) {
-      break;
-    }
-    for (int i = 0; i <= lower_str.size() - n; ++i) {
-      token_list.push_back(lower_str.substr(i, n));
-    }
-  }
-
-  return absl::OkStatus();
-}
-
 absl::StatusOr<zetasql::Value> NgramsTokenizer::Tokenize(
     absl::Span<const zetasql::Value> args) {
   // argument indexes
@@ -103,15 +83,24 @@ absl::StatusOr<zetasql::Value> NgramsTokenizer::Tokenize(
   token_list.push_back(tokenize_signature);
 
   if (!text.is_null()) {
+    auto tokenize_single_value =
+        [&](const zetasql::Value& value) -> absl::Status {
+      std::string lower_str;
+      absl::Status status;
+      zetasql::functions::LowerUtf8(value.string_value(), &lower_str,
+                                      &status);
+      ZETASQL_RETURN_IF_ERROR(status);
+      return TokenizeNgrams(lower_str, ngram_size_min, ngram_size_max,
+                            token_list);
+    };
+
     if (text.type()->IsArray()) {
       for (auto& value : text.elements()) {
-        ZETASQL_RETURN_IF_ERROR(TokenizeNgrams(value.string_value(), ngram_size_min,
-                                       ngram_size_max, token_list));
+        ZETASQL_RETURN_IF_ERROR(tokenize_single_value(value));
         token_list.push_back(kGapString);
       }
     } else {
-      ZETASQL_RETURN_IF_ERROR(TokenizeNgrams(text.string_value(), ngram_size_min,
-                                     ngram_size_max, token_list));
+      ZETASQL_RETURN_IF_ERROR(tokenize_single_value(text));
     }
   }
 

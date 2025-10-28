@@ -22,6 +22,7 @@
 
 #include "zetasql/public/functions/string.h"
 #include "zetasql/public/value.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
@@ -90,7 +91,7 @@ absl::Status SearchSubstringEvaluator::BuildTokenList(
       return error::TokenListNotMatchSearch("SEARCH_SUBSTRING",
                                             "TOKENIZE_SUBSTRING");
     } else {
-      token_list.push_back(tokens[i]);
+      ZETASQL_RETURN_IF_ERROR(TokenizeSubstring(tokens[i], token_list));
     }
   }
 
@@ -149,10 +150,12 @@ zetasql::Value SearchSubstringEvaluator::SearchSubstring(
     absl::Span<const std::string> substrings,
     RelativeSearchType relative_search_type) {
   // substring search requires matching on every token in the search query
+  absl::flat_hash_set<std::string> token_set(tokens.begin(), tokens.end());
   for (auto& ss : substrings) {
-    // Any substring with length shorter than ngram_min_size will return false.
+    // Any substring with length shorter than ngram_min_size will return false
+    // unless the substring is found as an entire token.
     // If there is any substring is not found, return false.
-    bool found = ss.length() >= ngram_min_size &&
+    bool found = (token_set.contains(ss) || ss.length() >= ngram_min_size) &&
                  MatchesSubstring(tokens, ss, relative_search_type);
     if (!found) {
       return zetasql::Value::Bool(false);

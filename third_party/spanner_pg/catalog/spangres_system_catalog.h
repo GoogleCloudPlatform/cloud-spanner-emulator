@@ -42,7 +42,6 @@
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/catalog/function.h"
-#include "third_party/spanner_pg/catalog/proto/catalog.pb.h"
 #include "third_party/spanner_pg/interface/engine_builtin_function_catalog.h"
 
 namespace postgres_translator {
