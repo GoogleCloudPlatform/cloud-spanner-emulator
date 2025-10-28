@@ -29,30 +29,44 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include "zetasql/public/types/type.h"
-#include "third_party/spanner_pg/catalog/builtin_function.h"
+#include <algorithm>
+#include <iostream>
+#include <string>
+#include <utility>
+#include <vector>
 
-namespace postgres_translator {
+#include "absl/flags/parse.h"
+#include "absl/container/flat_hash_map.h"
+#include "third_party/spanner_pg/bootstrap_catalog/proc_changelist.h"
+#include "third_party/spanner_pg/postgres_includes/all.h"
 
-// Includes all string functions that are supported in both ZetaSQL and
-// PostgreSQL. Any functions that are not supported in a specific storage engine
-// like Spanner must be excluded by that storage engine's EngineSystemCatalog.
-// See SpangresSystemCatalog::AddFunctions() for an example.
-void AddStringFunctions(std::vector<PostgresFunctionArguments>& functions) {
-  const zetasql::Type* gsql_bytes = zetasql::types::BytesType();
-  const zetasql::Type* gsql_string = zetasql::types::StringType();
-  zetasql::FunctionArgumentTypeOptions repeated(
-      zetasql::FunctionArgumentType::REPEATED);
-  // TODO: b/446760044 - Automate registration of textcat
-  functions.push_back(
-      {"textcat",
-       "concat",
-       {{{gsql_string, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}}}});
-  // TODO: b/446760044 - Automate registration of byteacat
-  functions.push_back(
-      {"byteacat",
-       "concat",
-       {{{gsql_bytes, {gsql_bytes, gsql_bytes}, /*context_ptr=*/nullptr}}}});
+using ::postgres_translator::TEST_GetProcAndDefaultArgsToUpdate;
+using ::spanner::OverrideSpannerFlagsInUnittest;
+
+int main(int argc, char* argv[]) {
+  InitGoogle(argv[0], &argc, &argv, true);
+  OverrideSpannerFlagsInUnittest();
+
+  const absl::flat_hash_map<Oid, std::vector<std::string>>&
+      procs_and_default_args = TEST_GetProcAndDefaultArgsToUpdate();
+
+  std::vector<std::pair<Oid, std::vector<std::string>>>
+      sorted_procs_and_default_args(procs_and_default_args.begin(),
+                                    procs_and_default_args.end());
+  std::sort(sorted_procs_and_default_args.begin(),
+            sorted_procs_and_default_args.end(),
+            [](const std::pair<Oid, std::vector<std::string>>& proc1,
+               const std::pair<Oid, std::vector<std::string>>& proc2) {
+              return proc1.first < proc2.first;
+            });
+
+  for (const auto& [proc, default_args] : sorted_procs_and_default_args) {
+    std::cout << "[\n";
+    std::cout << "\tproc: " << proc << "\n";
+    for (const auto& default_arg : default_args) {
+      std::cout << "\tdefault_arg: \"" << default_arg << "\"\n";
+    }
+    std::cout << "],\n";
+  }
+  std::cout << "\n";
 }
-
-}  // namespace postgres_translator

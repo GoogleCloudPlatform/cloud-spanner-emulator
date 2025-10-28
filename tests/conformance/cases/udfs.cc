@@ -18,6 +18,10 @@
 #include <memory>
 #include <string>
 
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "google/cloud/spanner/value.h"
 #include "common/feature_flags.h"
@@ -31,7 +35,9 @@ namespace test {
 
 namespace {
 
-class UDFsTest : public DatabaseTest {
+class UDFsTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
   absl::Status SetUpDatabase() override {
     feature_flags_setter_ = std::make_unique<ScopedEmulatorFeatureFlagsSetter>(
         EmulatorFeatureFlags::Flags{
@@ -51,8 +57,22 @@ class UDFsTest : public DatabaseTest {
   std::unique_ptr<ScopedEmulatorFeatureFlagsSetter> feature_flags_setter_;
 };
 
-// TODO Implement conformance tests once Cloud Spanner supports
-// UDFs.
+INSTANTIATE_TEST_SUITE_P(
+    UDFsTest, UDFsTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<UDFsTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(UDFsTest, SimpleUdf) {
+  ZETASQL_ASSERT_OK(UpdateSchema({
+      R"SQL(
+      CREATE FUNCTION inc(x INT64) RETURNS INT64 SQL SECURITY INVOKER
+      AS (x + 1)
+    )SQL"}));
+  EXPECT_THAT(Query("SELECT inc(1)"), IsOkAndHoldsUnorderedRows({{2}}));
+}
 
 }  // namespace
 }  // namespace test

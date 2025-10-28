@@ -12881,7 +12881,7 @@ generate_relation_name(Oid relid, List *namespaces)
 	if (table_name == NULL) {
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("There is no table name with oid %s in the catalog adapter",
+				 errmsg("There is no table name with oid %u in the catalog adapter",
 								relid)));
 	}
 	// TODO : `quote_qualified_identifier` uses

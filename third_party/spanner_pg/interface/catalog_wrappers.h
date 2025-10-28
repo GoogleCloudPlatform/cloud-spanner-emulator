@@ -226,13 +226,6 @@ void GetProcsBySchemaAndFuncNames(const char* schema_name,
 // Returns NULL on lookup failure.
 const FormData_pg_proc* GetProcByOid(Oid oid);
 
-Oid GetNamespaceForFuncname(const char* unqualified_namespace_name);
-
-void GetProcsCandidates(const char* schema_name, const char* func_name,
-                        const FormData_pg_proc*** outlist, size_t* outcount);
-
-bool IsInNamespace(const FormData_pg_proc* procform, Oid namespace_oid);
-
 // Flags accessed in shims
 bool ShouldCoerceUnknownLiterals();
 

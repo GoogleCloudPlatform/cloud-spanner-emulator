@@ -2798,7 +2798,7 @@ getTypeOutputInfo(Oid type, Oid *typOutput, bool *typIsVarlena)
 	if (type_data == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("type id %s is unsupported", type)));
+				 errmsg("type id %u is unsupported", type)));
 	if (!type_data->typisdefined)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),

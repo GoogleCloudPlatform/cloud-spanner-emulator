@@ -1051,8 +1051,7 @@ FuncnameGetCandidates(List *names, int nargs, List *argnames,
 
 	if (schemaname) {
 		// SPANGRES BEGIN
-		// TODO: Replace with GetOrGenerateOidFromNamespaceNameC
-		namespaceId = GetNamespaceForFuncname(schemaname);
+		namespaceId = GetOrGenerateOidFromNamespaceNameC(schemaname);
 		// SPANGRES END
 		if (!OidIsValid(namespaceId))
 			return NULL;
@@ -1071,8 +1070,8 @@ FuncnameGetCandidates(List *names, int nargs, List *argnames,
 	/* Search bootstrap and user catalogs by proc name only */
 	const FormData_pg_proc** proc_list;
 	size_t proc_count;
-	// TODO: Replace with GetProcsBySchemaAndFuncNames
-	GetProcsCandidates(schemaname, funcname, &proc_list, &proc_count);
+	GetProcsBySchemaAndFuncNames(
+			schemaname, funcname, &proc_list, &proc_count);
 
 	for (int proc_index = 0; proc_index < proc_count; ++proc_index) {
 		const FormData_pg_proc* procform = proc_list[proc_index];
@@ -1089,9 +1088,6 @@ FuncnameGetCandidates(List *names, int nargs, List *argnames,
 		 * to pg_catalog.
 		 * TODO: Add support for search path.
 		 */
-		// TODO: Remove this check
-		if (!IsInNamespace(procform, namespaceId))
-			continue;
 		// SPANGRES END
 
 		/*

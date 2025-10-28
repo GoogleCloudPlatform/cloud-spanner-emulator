@@ -172,6 +172,38 @@ INSTANTIATE_TEST_SUITE_P(
          {"bar foo", "BaR", 5, 3, GetExpectedResult({{4, 1}}, "bar")},
          {"bar foobar foo", "foobar", 5, 3, GetExpectedResult({}, "")}}));
 
+struct SnippetContentTypeTestCase {
+  std::string content_type;
+};
+
+using SnippetContentTypeTest =
+    ::testing::TestWithParam<SnippetContentTypeTestCase>;
+
+TEST_P(SnippetContentTypeTest, TestContentType) {
+  const SnippetContentTypeTestCase& test_case = GetParam();
+  std::vector<zetasql::Value> args{
+      zetasql::Value::String("foo"),
+      zetasql::Value::String("foo"),
+      zetasql::Value::Bool(false),
+      zetasql::Value::String("AUTO"),
+      zetasql::Value::Int64(160),
+      zetasql::Value::Int64(3),
+      zetasql::Value::String(test_case.content_type)};
+
+  absl::StatusOr<std::optional<std::string>> result =
+      SnippetEvaluator::Evaluate(args);
+  ZETASQL_EXPECT_OK(result.status());
+  std::optional<std::string> snippets = result.value();
+  EXPECT_TRUE(snippets.has_value());
+  EXPECT_EQ(GetExpectedResult({{4, 1}}, "foo"), snippets.value());
+}
+
+INSTANTIATE_TEST_SUITE_P(SnippetContentTypeTest, SnippetContentTypeTest,
+                         testing::ValuesIn<SnippetContentTypeTestCase>({
+                             {"text/html"},
+                             {"text/plain"},
+                         }));
+
 }  // namespace
 
 }  // namespace search

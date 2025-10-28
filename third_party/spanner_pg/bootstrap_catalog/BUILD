@@ -98,6 +98,7 @@ cc_library(
 cc_test(
     name = "bootstrap_catalog_test",
     srcs = ["bootstrap_catalog_test.cc"],
+    tags = ["spanner.spanner_pg"],
     deps = [
         ":bootstrap_catalog",
         "//third_party/spanner_pg/postgres_includes",
@@ -132,7 +133,7 @@ cc_library(
 filegroup(
     name = "spanner_pg_fmgr_datfiles",
     srcs = [
-        "spanner_pg_data/pg_proc.dat",
+        "//third_party/spanner_pg/codegen:pg_proc.dat",
     ],
     visibility = [
         "//:__subpackages__",
@@ -143,6 +144,7 @@ genrule(
     name = "generate_bootstrap_catalog_srcs",
     srcs = [
         ":spanner_pg_datfiles",
+        "//third_party/spanner_pg/codegen:pg_proc.dat",
         "//third_party/spanner_pg/src/include:all_headers",
         "//third_party/spanner_pg/src/include:catalog_headers",
         "//third_party/spanner_pg/src/include:catalog_datfiles",
@@ -162,10 +164,18 @@ genrule(
     # included first.  Otherwise gen_catalog_info.pl will not link
     # B back to A.
     cmd = """\
+        set -e # Exit on error
+
+        INCLUDE_PATH=third_party/spanner_pg/src/include
+        ENGINE_CATALOG_PATH=third_party/spanner_pg/bootstrap_catalog/spanner_pg_data
+
+        # Copies generated files into the engine catalog path
+        cp $(location //third_party/spanner_pg/codegen:pg_proc.dat) $$ENGINE_CATALOG_PATH
+
         $(location gen_catalog_info.pl) \
             -output /tmp \
-            --include-path=third_party/spanner_pg/src/include \
-            --engine-catalog-path=third_party/spanner_pg/bootstrap_catalog/spanner_pg_data \
+            --include-path=$$INCLUDE_PATH \
+            --engine-catalog-path=$$ENGINE_CATALOG_PATH \
             third_party/spanner_pg/src/include/catalog/pg_proc.h \
             third_party/spanner_pg/src/include/catalog/pg_type.h \
             third_party/spanner_pg/src/include/catalog/pg_attribute.h \

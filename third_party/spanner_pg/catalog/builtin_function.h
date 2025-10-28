@@ -33,6 +33,7 @@
 #define CATALOG_BUILTIN_FUNCTION_H_
 
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
@@ -53,6 +54,14 @@
 // EngineSystemCatalog::AddFunction on each function in the collection.
 
 namespace postgres_translator {
+// Helper struct used to group functions by their respective name paths.
+struct NamePathKey {
+  std::vector<std::string> mapped_name_path;
+  std::vector<std::string> postgresql_name_path;
+};
+
+bool operator<(const NamePathKey& lhs, const NamePathKey& rhs);
+
 // Helper class used by AddFunction to create a
 // PostgresExtendedFunctionSignature.
 // If has_postgres_proc_oid is true, AddFunction will verify the existence of
@@ -147,83 +156,6 @@ class PostgresFunctionArguments {
   zetasql::Function::Mode mode_;
   std::string postgres_namespace_;
 };
-
-// Helper functions to add common PostgreSQL functions that are storage engine
-// independent. There are many functions to add so they have been split into
-// multiple builtin_<category>_functions.cc files. Each function below is
-// annotated with its category to easily find the function definition.
-
-// Time.
-void AddDatetimeConversionFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
-
-// Miscellaneous.
-void AddAggregateFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Miscellaneous.
-void AddLogicFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// String.
-void AddStringFunctions(std::vector<PostgresFunctionArguments>& functions);
-
-// Miscellaneous.
-void AddMiscellaneousFunctions(
-    std::vector<PostgresFunctionArguments>& functions);
-
-// Expr.
-// Add mappings between PG Expr types that are uniquely identified by their
-// NodeTag.
-void AddExprFunctions(
-    absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions);
-
-// Expr.
-// Add mappings between PG BoolExprs that are identified by the T_BoolExpr
-// NodeTag and the BoolExprType.
-void AddBoolExprFunctions(
-    absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions);
-
-// Expr.
-// Add mappings between PG NullTest that are identified by the T_NullTest
-// NodeTag and the NullTestType.
-void AddNullTestFunctions(
-    absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions);
-
-// Expr.
-// Add mappings between PG MinMaxExpr that are identified by the T_MinMaxExpr
-// NodeTag and the MinMaxOp.
-void AddLeastGreatestFunctions(
-    absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions);
-
-// Expr.
-// Add mappings between PG BooleanTests that are identified by the T_BooleanTest
-// NodeTag and the BooleanTestType.
-void AddBooleanTestFunctions(
-    absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions);
-
-// Expr.
-// Add mappings between PG SQLValueFunctions that are identified by the
-// T_SQLValueFunction NodeTag and the SQLValueFunctionOp.
-void AddSQLValueFunctions(
-    absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions);
-
-// Expr.
-// Add mapping between PG SubscriptingRef and safe_array_at_ordinal function
-// call.
-void AddArrayAtFunctions(
-    absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions);
-
-// Expr.
-// Add mapping between PG SubscriptingRef and pg.array_slice function call.
-void AddArraySliceFunctions(
-    absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions);
-
-// Expr.
-// Add mapping between PG ArrayExpr and make_array function call.
-// IMPORTANT NOTE: This mapping only applies when the array contains non-Const
-// element expressions (matches ZetaSQL behavior). Arrays of all Const
-// elements are transformed to ResolvedLiterals.
-void AddMakeArrayFunctions(
-    absl::flat_hash_map<PostgresExprIdentifier, std::string>& functions);
 
 }  // namespace postgres_translator
 

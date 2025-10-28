@@ -47,11 +47,13 @@ struct MutationOp {
   MutationOp() {}
 
   MutationOp(MutationOpType type, const std::string& table,
-             std::vector<std::string>&& columns, std::vector<ValueList>&& rows)
+             std::vector<std::string>&& columns, std::vector<ValueList>&& rows,
+             bool origin_is_dml)
       : type(type),
         table(table),
         columns(std::move(columns)),
-        rows(std::move(rows)) {}
+        rows(std::move(rows)),
+        origin_is_dml(origin_is_dml) {}
 
   MutationOp(MutationOpType type, const std::string& table,
              const KeySet& key_set)
@@ -71,6 +73,9 @@ struct MutationOp {
 
   // Mutation data for kDelete.
   KeySet key_set;
+
+  // Whether the mutation was built from a DML statement or not.
+  bool origin_is_dml = false;
 };
 
 // Streams a debug string representation of MutationOp to out.
@@ -87,7 +92,7 @@ class Mutation {
   // this Mutation.
   void AddWriteOp(MutationOpType type, const std::string& table,
                   std::vector<std::string> columns,
-                  std::vector<ValueList> values);
+                  std::vector<ValueList> values, bool origin_is_dml = false);
 
   // Adds a Delete MutationOp to this Mutation.
   void AddDeleteOp(const std::string& table, const KeySet& key_set);

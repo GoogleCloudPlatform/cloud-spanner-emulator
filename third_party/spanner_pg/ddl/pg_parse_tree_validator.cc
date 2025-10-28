@@ -34,9 +34,11 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include <array>
 #include <cstdint>
 #include <string>
 
+#include "absl/algorithm/container.h"
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
@@ -76,6 +78,19 @@ using internal::FieldTypeChecker;
 
 // Returns true if PG list is empty or nullptr
 bool IsListEmpty(const List* list) { return list_length(list) == 0; }
+
+// Returns true if column is NOT NULL
+bool IsColumnNotNull(const ColumnDef* column) {
+  if (column->is_not_null) {
+    return true;
+  }
+  for (Constraint* constraint : StructList<Constraint*>(column->constraints)) {
+    if (constraint->contype == CONSTR_NOTNULL) {
+      return true;
+    }
+  }
+  return false;
+}
 
 // Returns the first and only element of the single-item list cast to
 // <NodeType*>. Checks that element's type is equal to NodeTypeTag.
@@ -148,6 +163,17 @@ absl::Status ValidateAlterColumnType(const AlterTableStmt& node,
   }
   return absl::OkStatus();
 }
+
+bool IsTextTypeByName(const TypeName& type) {
+  const String* type_name_node = static_cast<String*>(llast(type.names));
+  return strcmp(type_name_node->sval, "text") == 0 ||
+         strcmp(type_name_node->sval, "varchar") == 0;
+}
+
+bool IsTextArrayTypeByName(const TypeName& type) {
+  return !IsListEmpty(type.arrayBounds) && IsTextTypeByName(type);
+}
+
 }  // namespace
 
 absl::Status ValidateParseTreeNode(const Ttl& node) {
@@ -1397,6 +1423,114 @@ absl::Status ValidateParseTreeNode(const TableRenameOp& node) {
   return absl::OkStatus();
 }
 
+absl::Status ValidateFullTextDictionaryTable(
+    const CreateStmt& create_statement, const TranslationOptions& options) {
+  ZETASQL_RET_CHECK(options.enable_fulltext_dictionary_tables);
+  constexpr char kKeyColumnName[4] = "key";
+  constexpr char kValueColumnName[6] = "value";
+  const std::string table_name = create_statement.relation->relname;
+  const List* primary_key_columns = nullptr;
+  const ColumnDef* key_column = nullptr;
+  const ColumnDef* value_column = nullptr;
+
+  // Find the key, value, and primary key columns.
+  for (const Node* node : StructList<Node*>(create_statement.tableElts)) {
+    ZETASQL_RET_CHECK_NE(node, nullptr);
+    if (node->type == T_ColumnDef) {
+      ZETASQL_ASSIGN_OR_RETURN(const ColumnDef* column,
+                       (DowncastNode<ColumnDef, T_ColumnDef>(node)));
+      if (strcmp(column->colname, kKeyColumnName) == 0) {
+        key_column = column;
+      } else if (strcmp(column->colname, kValueColumnName) == 0) {
+        value_column = column;
+      }
+    } else if (node->type == T_Constraint) {
+      ZETASQL_ASSIGN_OR_RETURN(const Constraint* constraint,
+                       (DowncastNode<Constraint, T_Constraint>(node)));
+      if (constraint->contype == CONSTR_PRIMARY) {
+        primary_key_columns = constraint->keys;
+      }
+    }
+  }
+
+  if (primary_key_columns == nullptr || primary_key_columns->length != 1) {
+    return UnsupportedTranslationError(absl::Substitute(
+        "Fulltext dictionary table '$0' must have exactly one primary key "
+        "column, which is the '$1' column.",
+        table_name, kKeyColumnName));
+  }
+
+  const String* primary_key =
+      *(StructList<String*>(primary_key_columns).begin());
+  ZETASQL_RET_CHECK_NE(primary_key, nullptr);
+
+  // Validate the full-text dictionary table key column.
+  if (key_column == nullptr || !IsColumnNotNull(key_column) ||
+      strcmp(primary_key->sval, kKeyColumnName) != 0 ||
+      !IsTextTypeByName(*key_column->typeName)) {
+    return UnsupportedTranslationError(absl::Substitute(
+        "Custom dictionary table '$0' specified with the "
+        "type = 'fulltext_dictionary' option must have an explicit '$1' column "
+        "of type TEXT NOT NULL, which is the only primary key of the "
+        "table.",
+        table_name, kKeyColumnName));
+  }
+
+  // Validate the full-text dictionary table value column.
+  if (value_column == nullptr || !IsColumnNotNull(value_column) ||
+      !IsTextArrayTypeByName(*value_column->typeName)) {
+    return UnsupportedTranslationError(absl::Substitute(
+        "Custom dictionary table '$0' specified with the "
+        "type = 'fulltext_dictionary' option must have an explicit '$1' "
+        "column of type TEXT[] NOT NULL.",
+        table_name, kValueColumnName));
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status ValidateTableOptions(const CreateStmt& create_statement,
+                                  const TranslationOptions& options) {
+  constexpr std::array<absl::string_view, 1> valid_table_options = {
+      PGConstants::kSpangresTableTypeOptionName};
+
+  std::vector<absl::string_view> valid_table_types = {};
+  if (options.enable_fulltext_dictionary_tables) {
+    valid_table_types.push_back("fulltext_dictionary");
+  }
+
+  for (int i = 0; i < list_length(create_statement.options); ++i) {
+    DefElem* elem = ::postgres_translator::internal::PostgresCastNode(
+        DefElem, create_statement.options->elements[i].ptr_value);
+    absl::string_view option_name = elem->defname;
+    ZETASQL_RET_CHECK(!option_name.empty());
+    if (!absl::c_contains(valid_table_options, option_name)) {
+      return UnsupportedTranslationError(
+          absl::StrCat("Option '", option_name,
+                       "' is not supported in <CREATE TABLE> statement."));
+    }
+
+    if (option_name == PGConstants::kSpangresTableTypeOptionName) {
+      ZETASQL_ASSIGN_OR_RETURN(const String* arg_value,
+                       (DowncastNode<String, T_String>(elem->arg)));
+      const std::string type_option_value = arg_value->sval;
+      if (!absl::c_contains(valid_table_types, type_option_value)) {
+        return UnsupportedTranslationError(
+            absl::StrCat("Table type '", type_option_value,
+                         "' is not a valid value for the 'type' option in"
+                         " the <CREATE TABLE> statement."));
+      }
+
+      if (type_option_value == PGConstants::kFullTextDictionaryTableType) {
+        ZETASQL_RETURN_IF_ERROR(
+            ValidateFullTextDictionaryTable(create_statement, options));
+      }
+    }
+  }
+
+  return absl::OkStatus();
+}
+
 absl::Status ValidateParseTreeNode(const CreateStmt& node,
                                    const TranslationOptions& options) {
   // Make sure that if CreateStmt structure changes we update the translator.
@@ -1426,6 +1560,11 @@ absl::Status ValidateParseTreeNode(const CreateStmt& node,
   // If there's a TTL here make sure it's correct.
   if (node.ttl != nullptr) {
     ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.ttl));
+  }
+
+  // `options` defines storage parameters provided via WITH clause.
+  if (!IsListEmpty(node.options)) {
+    ZETASQL_RETURN_IF_ERROR(ValidateTableOptions(node, options));
   }
 
   // `tableElts` contains column definitions for the new table.
@@ -1462,13 +1601,6 @@ absl::Status ValidateParseTreeNode(const CreateStmt& node,
   }
 
   // `constraints` contains list of table constraints. Validated separately.
-
-  // `options` defines storage parameters provided via WITH clause, which is not
-  // supported.
-  if (!IsListEmpty(node.options)) {
-    return UnsupportedTranslationError(
-        "<WITH> clause is not supported in <CREATE TABLE> statement.");
-  }
 
   // `oncommit` defines what to do with temporary tables on commit. Not
   // supported.

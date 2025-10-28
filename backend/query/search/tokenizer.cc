@@ -23,9 +23,11 @@
 #include "zetasql/public/simple_token_list.h"
 #include "zetasql/public/token_list_util.h"
 #include "zetasql/public/value.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "common/errors.h"
@@ -128,6 +130,32 @@ absl::StatusOr<RelativeSearchType> ParseRelativeSearchType(
   }
 
   return error::InvalidRelativeSearchType(relative_search_type);
+}
+
+absl::Status TokenizeSubstring(absl::string_view str,
+                               std::vector<std::string>& token_list) {
+  std::vector<std::string> tokens =
+      absl::StrSplit(str, absl::ByAnyChar(kDelimiter), absl::SkipWhitespace());
+
+  token_list.reserve(token_list.size() + tokens.size());
+  token_list.insert(token_list.end(), tokens.begin(), tokens.end());
+
+  return absl::OkStatus();
+}
+
+absl::Status TokenizeNgrams(absl::string_view str, int ngram_size_min,
+                            int ngram_size_max,
+                            std::vector<std::string>& token_list) {
+  for (int n = ngram_size_min; n <= ngram_size_max; ++n) {
+    if (n > str.size()) {
+      break;
+    }
+    for (int i = 0; i <= str.size() - n; ++i) {
+      token_list.push_back(std::string(str.substr(i, n)));
+    }
+  }
+
+  return absl::OkStatus();
 }
 
 }  // namespace search

@@ -4496,18 +4496,11 @@ absl::Status NotVectorIndexes(absl::string_view index_string) {
           index_string));
 }
 
-absl::Status RepeatableReadOnlySupportedInReadWriteTransactions() {
+absl::Status RepeatableReadNotSupportedInPDMLTransactions() {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
-      "REPEATABLE_READ isolation level is only allowed on read-write "
+      "REPEATABLE_READ isolation level is not allowed on partitioned DML "
       "transactions.");
-}
-
-absl::Status ReadLockModeInRepeatableReadMustBeUnspecified() {
-  return absl::Status(
-      absl::StatusCode::kInvalidArgument,
-      "Read lock mode must not be set on read-write transactions using the "
-      "REPEATABLE_READ isolation level.");
 }
 
 absl::Status RenameTableNotSupportedInPostgreSQL() {

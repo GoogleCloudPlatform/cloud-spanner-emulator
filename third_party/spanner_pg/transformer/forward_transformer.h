@@ -901,6 +901,12 @@ class ForwardTransformer {
   BuildGsqlFunctionArgumentList(const PgProcData& proc_data, List* args,
                                 ExprTransformerInfo* expr_transformer_info);
 
+  // Construct a list of arguments for a function call. This supports named
+  // arguments, but not default arguments. Primarily used for UDFs.
+  absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
+  BuildGsqlFunctionArgumentList(const FormData_pg_proc* pg_proc, List* args,
+                                ExprTransformerInfo* expr_transformer_info);
+
   // Construct a list of order by items for an aggregate function call. For
   // example, `y DESC` in `ARRAY_AGG(x ORDER BY y DESC)`.
   absl::StatusOr<
@@ -1043,6 +1049,19 @@ class ForwardTransformer {
       VarIndexScope* scope, bool is_ignore_mode);
 
  private:
+  // Folds the cast function and return a resolved literal.
+  // - If `force_casting` is true, cast function is always folded to return a
+  //   resolved literal.
+  // - If `force_casting` is false, cast function is only folded if the input
+  //   literal is *not* supported. Supported literals can be casted by the
+  //   storage engine during query execution and should not use this function
+  //   because it will return an error.
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedLiteral>>
+  InternalBuildGsqlResolvedLiteralFromCast(
+      Oid cast_function, const Const& input_literal, const Const* typmod,
+      const Const* explicit_cast, Oid output_type, CoercionForm cast_format,
+      bool force_casting);
+
   absl::StatusOr<int> GetEndLocationForStartLocation(int start_location);
 
   // Returns if the `func_expr` is a cast function.

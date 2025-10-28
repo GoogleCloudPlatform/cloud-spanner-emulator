@@ -217,6 +217,7 @@ cc_library(
 cc_test(
     name = "parser_without_serialization_test",
     srcs = ["parser_without_serialization_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":implementations_without_serialization",
         ":parser_interface",
@@ -265,6 +266,7 @@ cc_library(
 cc_test(
     name = "stub_spangres_translator_test",
     srcs = ["stub_spangres_translator_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":interfaces_with_stub_implementations",
         ":parser_without_serialization_only",  # buildcleaner: keep
@@ -279,6 +281,7 @@ cc_test(
 cc_test(
     name = "stub_builtin_function_catalog_test",
     srcs = ["stub_builtin_function_catalog_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":interfaces_with_stub_implementations",
         "@com_google_absl//absl/status",
@@ -355,6 +358,7 @@ cc_test(
     srcs = [
         "stub_datetime_evaluators_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":pg_evaluators",
         ":pg_evaluators_stubs",  # buildcleaner: keep
@@ -369,6 +373,7 @@ cc_test(
     srcs = [
         "stub_formatting_evaluators_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":pg_evaluators",
         ":pg_evaluators_stubs",  # buildcleaner: keep
@@ -382,6 +387,7 @@ cc_test(
     srcs = [
         "stub_jsonb_evaluators_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":pg_evaluators",
         ":pg_evaluators_stubs",  # buildcleaner: keep
@@ -396,6 +402,7 @@ cc_test(
     srcs = [
         "stub_mathematical_evaluators_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":pg_evaluators",
         ":pg_evaluators_stubs",  # buildcleaner: keep
@@ -410,6 +417,7 @@ cc_test(
     srcs = [
         "stub_pg_timezone_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":pg_evaluators",
         ":pg_evaluators_stubs",  # buildcleaner: keep
@@ -423,6 +431,7 @@ cc_test(
     srcs = [
         "stub_regexp_evaluators_test.cc",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":pg_evaluators",
         ":pg_evaluators_stubs",  # buildcleaner: keep

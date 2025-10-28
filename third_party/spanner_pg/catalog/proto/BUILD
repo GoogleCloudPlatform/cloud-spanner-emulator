@@ -29,8 +29,6 @@
 # MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #------------------------------------------------------------------------------
 
-load("@rules_cc//cc:defs.bzl", "cc_binary")
-
 # Catalog protobuf definitions
 
 package(
@@ -40,34 +38,3 @@ package(
 )
 
 licenses(["notice"])
-
-proto_library(
-    name = "catalog_proto",
-    srcs = ["catalog.proto"],
-    deps = [
-        "@com_google_zetasql//zetasql/public:function_proto",
-    ],
-)
-
-cc_proto_library(
-    name = "catalog_cc_proto",
-    deps = [":catalog_proto"],
-)
-
-filegroup(
-    name = "functions_txtpb",
-    srcs = ["functions.txtpb"],
-)
-
-genrule(
-    name = "gen_functions_embed",
-    srcs = ["functions.txtpb"],
-    outs = ["functions_embed.h"],
-    cmd = "echo 'namespace postgres_translator { constexpr char kFunctionsEmbed[] = R\"(' > $@ && cat $(location functions.txtpb) >> $@ && echo ')\"; }' >> $@",
-)
-
-cc_library(
-    name = "functions_embed",
-    hdrs = ["functions_embed.h"],
-    deps = [":gen_functions_embed"],
-)

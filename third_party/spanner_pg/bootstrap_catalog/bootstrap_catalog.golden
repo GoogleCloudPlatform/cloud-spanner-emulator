@@ -88733,7 +88733,7 @@
   50001
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -88741,7 +88741,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 0,
- "prosrc": "spangres_fts_func"
+ "prosrc": "debug_tokenlist"
 }
 
 {
@@ -88756,7 +88756,7 @@
  "pronargs": 0,
  "prorettype": 1184,
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -88783,7 +88783,7 @@
   16
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -88809,7 +88809,7 @@
   25
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -88832,7 +88832,7 @@
  "pronargs": 0,
  "prorettype": 25,
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -88858,7 +88858,7 @@
   20
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -88884,7 +88884,7 @@
   1184
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -88910,7 +88910,7 @@
   20
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -88936,7 +88936,7 @@
   1184
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -88963,7 +88963,7 @@
   25
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -88990,7 +88990,7 @@
   25
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89018,7 +89018,7 @@
   1184
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89026,7 +89026,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 0,
- "prosrc": "timestamptz_bin"
+ "prosrc": "date_bin"
 }
 
 {
@@ -89047,7 +89047,7 @@
   25
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89055,7 +89055,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 3,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenize_fulltext",
  "proargnames": [
   "value",
   "language_tag",
@@ -89083,7 +89083,7 @@
   25
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89091,7 +89091,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 3,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenize_fulltext",
  "proargnames": [
   "value",
   "language_tag",
@@ -89123,7 +89123,7 @@
   16
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89131,7 +89131,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 7,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenize_substring",
  "proargnames": [
   "value",
   "ngram_size_max",
@@ -89167,7 +89167,7 @@
   16
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89175,7 +89175,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 7,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenize_substring",
  "proargnames": [
   "value",
   "ngram_size_max",
@@ -89204,7 +89204,7 @@
   25
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89212,7 +89212,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 0,
- "prosrc": "spangres_fts_func"
+ "prosrc": "token"
 }
 
 {
@@ -89230,7 +89230,7 @@
   1009
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89238,7 +89238,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 0,
- "prosrc": "spangres_fts_func"
+ "prosrc": "token"
 }
 
 {
@@ -89256,7 +89256,7 @@
   17
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89264,7 +89264,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 0,
- "prosrc": "spangres_fts_func"
+ "prosrc": "token"
 }
 
 {
@@ -89282,7 +89282,7 @@
   1001
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89290,7 +89290,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 0,
- "prosrc": "spangres_fts_func"
+ "prosrc": "token"
 }
 
 {
@@ -89315,7 +89315,7 @@
   20
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89323,7 +89323,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 7,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenize_number",
  "proargnames": [
   "value",
   "comparison_type",
@@ -89359,7 +89359,7 @@
   20
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89367,7 +89367,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 7,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenize_number",
  "proargnames": [
   "value",
   "comparison_type",
@@ -89403,7 +89403,7 @@
   20
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89411,7 +89411,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 7,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenize_number",
  "proargnames": [
   "value",
   "comparison_type",
@@ -89447,7 +89447,7 @@
   20
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89455,7 +89455,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 7,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenize_number",
  "proargnames": [
   "value",
   "comparison_type",
@@ -89491,7 +89491,7 @@
   20
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89499,7 +89499,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 7,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenize_number",
  "proargnames": [
   "value",
   "comparison_type",
@@ -89535,7 +89535,7 @@
   20
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89543,7 +89543,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 7,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenize_number",
  "proargnames": [
   "value",
   "comparison_type",
@@ -89572,7 +89572,7 @@
   16
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89580,7 +89580,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 0,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenize_bool",
  "proargnames": [
   "value"
  ]
@@ -89604,7 +89604,7 @@
   16
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89612,7 +89612,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 3,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenize_ngrams",
  "proargnames": [
   "value",
   "ngram_size_max",
@@ -89637,7 +89637,7 @@
   50002
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89645,7 +89645,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 0,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenlist_concat",
  "proargnames": [
   "tokens"
  ]
@@ -89671,7 +89671,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89679,7 +89679,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 4,
- "prosrc": "spangres_fts_func",
+ "prosrc": "search",
  "proargnames": [
   "tokens",
   "query",
@@ -89709,7 +89709,7 @@
   25
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89717,7 +89717,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 2,
- "prosrc": "spangres_fts_func",
+ "prosrc": "search_substring",
  "proargnames": [
   "tokens",
   "query",
@@ -89746,7 +89746,7 @@
   25
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89754,7 +89754,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 3,
- "prosrc": "spangres_fts_func",
+ "prosrc": "search_ngrams",
  "proargnames": [
   "tokens",
   "ngrams_query",
@@ -89783,7 +89783,7 @@
   25
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89791,7 +89791,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 2,
- "prosrc": "spangres_fts_func",
+ "prosrc": "score_ngrams",
  "proargnames": [
   "tokens",
   "ngrams_query",
@@ -89816,7 +89816,7 @@
   25
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89824,7 +89824,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 0,
- "prosrc": "spangres_fts_func"
+ "prosrc": "soundex"
 }
 
 {
@@ -89843,7 +89843,7 @@
   1022
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89870,7 +89870,7 @@
   1022
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89897,7 +89897,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89928,7 +89928,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89958,7 +89958,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -89985,7 +89985,7 @@
   1021
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90012,7 +90012,7 @@
   1021
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90039,7 +90039,7 @@
   1016
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90066,7 +90066,7 @@
   1022
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90093,7 +90093,7 @@
   1021
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90119,7 +90119,7 @@
   25
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90145,7 +90145,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90171,7 +90171,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90197,7 +90197,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90223,7 +90223,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90249,7 +90249,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90275,7 +90275,7 @@
   25
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90301,7 +90301,7 @@
   17
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90327,7 +90327,7 @@
   25
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90356,7 +90356,7 @@
   16
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90364,7 +90364,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 3,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenize_ngrams",
  "proargnames": [
   "value",
   "ngram_size_max",
@@ -90395,7 +90395,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90403,7 +90403,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 5,
- "prosrc": "spangres_fts_func",
+ "prosrc": "score",
  "proargnames": [
   "tokens",
   "query",
@@ -90438,7 +90438,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90446,7 +90446,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 6,
- "prosrc": "spangres_fts_func",
+ "prosrc": "snippet",
  "proargnames": [
   "value",
   "query",
@@ -90475,7 +90475,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90483,7 +90483,7 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 0,
- "prosrc": "spangres_fts_func",
+ "prosrc": "tokenize_jsonb",
  "proargnames": [
   "value"
  ]
@@ -90506,7 +90506,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90539,7 +90539,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90572,7 +90572,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90605,7 +90605,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90638,7 +90638,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90671,7 +90671,7 @@
   3802
  ],
  "proowner": 10,
- "prolang": 12,
+ "prolang": 50078,
  "procost": 1,
  "prosupport": 0,
  "prosecdef": false,
@@ -90703,6 +90703,161 @@
   25
  ],
  "proowner": 10,
+ "prolang": 50078,
+ "procost": 1,
+ "prosupport": 0,
+ "prosecdef": false,
+ "proleakproof": false,
+ "proisstrict": true,
+ "proparallel": "s",
+ "pronargdefaults": 1,
+ "prosrc": "date",
+ "proargdefaults": "'America/Los_Angeles'::text"
+}
+
+{
+ "oid": 50068,
+ "proname": "zstd_compress",
+ "pronamespace": 50000,
+ "prorows": 0,
+ "provariadic": 0,
+ "prokind": "f",
+ "proretset": false,
+ "provolatile": "i",
+ "pronargs": 2,
+ "prorettype": 17,
+ "proargtypes": [
+  17,
+  20
+ ],
+ "proowner": 10,
+ "prolang": 50078,
+ "procost": 1,
+ "prosupport": 0,
+ "prosecdef": false,
+ "proleakproof": false,
+ "proisstrict": true,
+ "proparallel": "s",
+ "pronargdefaults": 1,
+ "prosrc": "zstd_compress",
+ "proargnames": [
+  "",
+  "level"
+ ],
+ "proargdefaults": "3::bigint"
+}
+
+{
+ "oid": 50069,
+ "proname": "zstd_compress",
+ "pronamespace": 50000,
+ "prorows": 0,
+ "provariadic": 0,
+ "prokind": "f",
+ "proretset": false,
+ "provolatile": "i",
+ "pronargs": 2,
+ "prorettype": 17,
+ "proargtypes": [
+  25,
+  20
+ ],
+ "proowner": 10,
+ "prolang": 50078,
+ "procost": 1,
+ "prosupport": 0,
+ "prosecdef": false,
+ "proleakproof": false,
+ "proisstrict": true,
+ "proparallel": "s",
+ "pronargdefaults": 1,
+ "prosrc": "zstd_compress",
+ "proargnames": [
+  "",
+  "level"
+ ],
+ "proargdefaults": "3::bigint"
+}
+
+{
+ "oid": 50070,
+ "proname": "zstd_decompress_to_bytes",
+ "pronamespace": 50000,
+ "prorows": 0,
+ "provariadic": 0,
+ "prokind": "f",
+ "proretset": false,
+ "provolatile": "i",
+ "pronargs": 2,
+ "prorettype": 17,
+ "proargtypes": [
+  17,
+  20
+ ],
+ "proowner": 10,
+ "prolang": 50078,
+ "procost": 1,
+ "prosupport": 0,
+ "prosecdef": false,
+ "proleakproof": false,
+ "proisstrict": true,
+ "proparallel": "s",
+ "pronargdefaults": 1,
+ "prosrc": "zstd_decompress_to_bytes",
+ "proargnames": [
+  "",
+  "size_limit"
+ ],
+ "proargdefaults": "1073741824::bigint"
+}
+
+{
+ "oid": 50071,
+ "proname": "zstd_decompress_to_string",
+ "pronamespace": 50000,
+ "prorows": 0,
+ "provariadic": 0,
+ "prokind": "f",
+ "proretset": false,
+ "provolatile": "i",
+ "pronargs": 2,
+ "prorettype": 25,
+ "proargtypes": [
+  17,
+  20
+ ],
+ "proowner": 10,
+ "prolang": 50078,
+ "procost": 1,
+ "prosupport": 0,
+ "prosecdef": false,
+ "proleakproof": false,
+ "proisstrict": true,
+ "proparallel": "s",
+ "pronargdefaults": 1,
+ "prosrc": "zstd_decompress_to_string",
+ "proargnames": [
+  "",
+  "size_limit"
+ ],
+ "proargdefaults": "1073741824::bigint"
+}
+
+{
+ "oid": 50074,
+ "proname": "reservoir",
+ "pronamespace": 50000,
+ "prorows": 0,
+ "provariadic": 0,
+ "prokind": "f",
+ "proretset": false,
+ "provolatile": "v",
+ "pronargs": 1,
+ "prorettype": 3310,
+ "proargtypes": [
+  2281
+ ],
+ "proowner": 10,
  "prolang": 12,
  "procost": 1,
  "prosupport": 0,
@@ -90711,6 +90866,89 @@
  "proisstrict": true,
  "proparallel": "s",
  "pronargdefaults": 0,
- "prosrc": "date"
+ "prosrc": "tsm_spanner_reservoir_handler"
+}
+
+{
+ "oid": 50075,
+ "proname": "split_substr",
+ "pronamespace": 50000,
+ "prorows": 0,
+ "provariadic": 0,
+ "prokind": "f",
+ "proretset": false,
+ "provolatile": "i",
+ "pronargs": 4,
+ "prorettype": 25,
+ "proargtypes": [
+  25,
+  25,
+  20,
+  20
+ ],
+ "proowner": 10,
+ "prolang": 50078,
+ "procost": 1,
+ "prosupport": 0,
+ "prosecdef": false,
+ "proleakproof": false,
+ "proisstrict": true,
+ "proparallel": "s",
+ "pronargdefaults": 0,
+ "prosrc": "split_substr"
+}
+
+{
+ "oid": 50076,
+ "proname": "split_substr",
+ "pronamespace": 50000,
+ "prorows": 0,
+ "provariadic": 0,
+ "prokind": "f",
+ "proretset": false,
+ "provolatile": "i",
+ "pronargs": 3,
+ "prorettype": 25,
+ "proargtypes": [
+  25,
+  25,
+  20
+ ],
+ "proowner": 10,
+ "prolang": 50078,
+ "procost": 1,
+ "prosupport": 0,
+ "prosecdef": false,
+ "proleakproof": false,
+ "proisstrict": true,
+ "proparallel": "s",
+ "pronargdefaults": 0,
+ "prosrc": "split_substr"
+}
+
+{
+ "oid": 50079,
+ "proname": "fmgr_spanner_internal_validator",
+ "pronamespace": 11,
+ "prorows": 0,
+ "provariadic": 0,
+ "prokind": "f",
+ "proretset": false,
+ "provolatile": "s",
+ "pronargs": 1,
+ "prorettype": 2278,
+ "proargtypes": [
+  26
+ ],
+ "proowner": 10,
+ "prolang": 12,
+ "procost": 1,
+ "prosupport": 0,
+ "prosecdef": false,
+ "proleakproof": false,
+ "proisstrict": true,
+ "proparallel": "s",
+ "pronargdefaults": 0,
+ "prosrc": "fmgr_spanner_internal_validator"
 }
 

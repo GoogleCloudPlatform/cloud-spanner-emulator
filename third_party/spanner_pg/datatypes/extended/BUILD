@@ -233,6 +233,7 @@ cc_library(
 cc_test(
     name = "conversion_finder_test",
     srcs = ["conversion_finder_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":conversion_finder",
         ":pg_jsonb_type",
@@ -251,6 +252,7 @@ cc_test(
 cc_test(
     name = "pg_numeric_conversion_functions_test",
     srcs = ["pg_numeric_conversion_functions_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":conversion_finder",
         ":pg_numeric_type",
@@ -268,6 +270,7 @@ cc_test(
 cc_test(
     name = "pg_oid_conversion_functions_test",
     srcs = ["pg_oid_conversion_functions_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":conversion_finder",
         ":pg_oid_type",
@@ -306,6 +309,7 @@ cc_library(
 cc_test(
     name = "pg_jsonb_conversion_functions_test",
     srcs = ["pg_jsonb_conversion_functions_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":conversion_finder",
         ":pg_jsonb_type",

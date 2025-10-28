@@ -70,7 +70,8 @@ void ereport_helper(const absl::Status& status, int desired_error_code,
   constexpr int ERROR = PG_ERROR;
   if (status.code() == absl::StatusCode::kUnimplemented) {
     ereport(ERROR, (errcode(desired_error_code),
-                    errmsg("%s: %s", error_message.c_str(), status.message())));
+                    errmsg("%s: %s", error_message.c_str(),
+                           status.ToString().c_str())));
   } else {
     // Other error codes get converted to a generic internal error
     // (cloud unsafe).
@@ -487,8 +488,9 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromUDF(
   }
   proc->oid = proc_oid;
   ZETASQL_RETURN_IF_ERROR(adapter->StoreUDFProc(proc));
-  ZETASQL_RET_CHECK(udf->Name().size() < NAMEDATALEN);
-  memcpy(NameStr(proc->proname), udf->Name().c_str(), udf->Name().size() + 1);
+  const std::string udf_name = udf->FullName(/*include_group=*/false);
+  ZETASQL_RET_CHECK(udf_name.size() < NAMEDATALEN);
+  memcpy(NameStr(proc->proname), udf_name.c_str(), udf_name.size() + 1);
 
   // Treat UDFs at the root namespace as being in the pg_catalog namespace.
   std::string udf_namespace;
@@ -1447,23 +1449,4 @@ extern "C" int GetFunctionArgInfo(Oid proc_oid, Oid **p_argtypes,
   postgres_translator::ereport_helper(proc_proto.status(),
                                       ERRCODE_INTERNAL_ERROR, "Proc not found");
   return 0;  // Unreachable.
-}
-
-// TODO: Remove this wrapper
-extern "C" Oid GetNamespaceForFuncname(const char* unqualified_namespace_name) {
-  return GetOrGenerateOidFromNamespaceNameC(unqualified_namespace_name);
-}
-
-// TODO: Remove this wrapper
-extern "C" void GetProcsCandidates(const char* schema_name,
-                                   const char* func_name,
-                                   const FormData_pg_proc*** outlist,
-                                   size_t* outcount) {
-  GetProcsBySchemaAndFuncNames(schema_name, func_name, outlist, outcount);
-}
-
-// TODO: Remove this wrapper
-extern "C" bool IsInNamespace(const FormData_pg_proc* procform,
-                              Oid namespace_oid) {
-  return true;
 }

@@ -222,6 +222,9 @@ absl::Status ColumnValidator::Validate(const Column* column,
   if (column->name_.length() > limits::kMaxSchemaIdentifierLength) {
     return error::InvalidSchemaName("Column", column->Name());
   }
+  if (column->Name()[0] == '_') {
+    return error::InvalidSchemaName("Column", column->Name());
+  }
 
   if (column->source_column_) {
     ZETASQL_RET_CHECK(column->type_->Equals(column->source_column_->type_));

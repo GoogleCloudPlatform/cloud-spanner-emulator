@@ -191,7 +191,7 @@ bool CatalogAdapter::IsUDFProcStored(Oid oid) {
 
 absl::StatusOr<Oid> CatalogAdapter::GetOrGenerateUDFProcOid(
     const zetasql::Function* udf) {
-  std::string name = udf->Name();
+  std::string name = udf->FullName(/*include_group=*/false);
   if (udf_to_oid_map_.contains(name)) {
     return udf_to_oid_map_[name];
   }
@@ -208,7 +208,8 @@ absl::Status CatalogAdapter::StoreUDFProc(FormData_pg_proc* pg_proc) {
                                             "\" is not assigned an oid"));
   }
   ZETASQL_RET_CHECK(oid_to_udf_map_.contains(pg_proc->oid));
-  ZETASQL_RET_CHECK(udf_to_oid_map_.contains(oid_to_udf_map_[pg_proc->oid]->Name()));
+  ZETASQL_RET_CHECK(udf_to_oid_map_.contains(
+      oid_to_udf_map_[pg_proc->oid]->FullName(/*include_group=*/false)));
   oid_to_udf_proc_map_[pg_proc->oid] = pg_proc;
   return absl::OkStatus();
 }

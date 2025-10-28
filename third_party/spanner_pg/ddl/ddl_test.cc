@@ -517,6 +517,27 @@ TEST_F(DdlTest, DisableDropChangeStreamIfExists) {
                                    "<DROP CHANGE STREAM> statement."));
 }
 
+TEST_F(DdlTest, DisableChangeStreamPartitionModeOption) {
+  const std::string input =
+      "CREATE CHANGE STREAM ChangeStream FOR table1 WITH (partition_mode = "
+      "'MUTABLE_KEY_RANGE')";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(
+          parsed_statements,
+          {.enable_change_streams = true,
+           .enable_change_streams_partition_mode_option = false});
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "Option partition_mode is not supported yet."));
+}
+
 TEST_F(DdlTest, CreateDatabaseForEmulator) {
   const std::string input = "CREATE DATABASE test_db";
 

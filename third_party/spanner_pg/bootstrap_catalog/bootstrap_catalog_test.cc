@@ -604,20 +604,6 @@ TEST(BootstrapCatalog, SpannerGetInternalSequenceStateProc) {
   EXPECT_STREQ(NameStr(procs[0]->proname), "get_internal_sequence_state");
 }
 
-TEST(BootstrapCatalog, SpannerTokenizeJSONBProc) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      Oid namespace_oid,
-      PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
-
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      absl::Span<const FormData_pg_proc* const> procs,
-      PgBootstrapCatalog::Default()->GetProcsByName("tokenize_jsonb"));
-
-  ASSERT_EQ(procs.size(), 1);
-  EXPECT_EQ(procs[0]->pronamespace, namespace_oid);
-  EXPECT_STREQ(NameStr(procs[0]->proname), "tokenize_jsonb");
-}
-
 TEST(BootstrapCatalog, SpannerGetTableColumnIdentityStateProc) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       Oid namespace_oid,

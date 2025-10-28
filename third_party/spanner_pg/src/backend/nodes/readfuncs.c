@@ -2079,6 +2079,7 @@ _readViewStmt(void)
 	READ_NODE_FIELD(options);
 	READ_ENUM_FIELD(withCheckOption, ViewCheckOption);
 	READ_BOOL_FIELD(is_definer);
+	READ_ENUM_FIELD(view_security_type, ViewSecurityType);
 	READ_STRING_FIELD(query_string);
 
 	READ_DONE();
@@ -2206,7 +2207,6 @@ _readCreateSearchIndexStmt(void)
 {
   READ_LOCALS(CreateSearchIndexStmt);
 	READ_STRING_FIELD(search_index_name);
-	READ_NODE_FIELD(search_index_name_rangevar);
 	READ_NODE_FIELD(table_name);
 	READ_NODE_FIELD(token_columns);
 	READ_NODE_FIELD(storing);

@@ -98,9 +98,23 @@ class SearchTest
             .status());
 
     // Insert a row with NULL summary
-    return Insert("albums",
-                  {"albumid", "userid", "releasetimestamp", "uid", "name"},
-                  {15, 1, 12, 0, ""})
+    ZETASQL_RETURN_IF_ERROR(
+        Insert("albums",
+               {"albumid", "userid", "releasetimestamp", "uid", "name"},
+               {15, 1, 12, 0, ""})
+            .status());
+    // Insert a row meant to test TOKENIZE_SUBSTRING with SEARCH_NGRAMS.
+    ZETASQL_RETURN_IF_ERROR(Insert("AccountIds", {"AccountId"}, {1}).status());
+    ZETASQL_RETURN_IF_ERROR(Insert("AccountSearchTerms", {"AccountId", "SearchPhrase"},
+                           {1, "name individual@email.com"})
+                        .status());
+
+    // Data for fuzzy search test.
+    return MultiInsert("Test", {"Id", "SearchField"},
+                       {{"id1", "oh hello there"},
+                        {"id2", "oh hallo ther"},
+                        {"id3", "oh hello there"},
+                        {"id4", "something else entirely"}})
         .status();
   }
 
@@ -788,6 +802,25 @@ TEST_P(SearchTest, FuzzySearchNgramsOnDiffLargerThanMinNgramsReturnsEmpty) {
   EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({}));
 }
 
+TEST_P(SearchTest, SearchNgramsWithTokenizeSubstringOnEmail) {
+  std::string query = R"sql(
+    SELECT AccountId
+    FROM AccountSearchTerms@{force_index=AccountSearchFiltersIndex}
+    WHERE SEARCH_NGRAMS(SearchPhraseSubstringTokens, 'email')
+    ORDER BY AccountId ASC
+  )sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{1}}));
+}
+
+TEST_P(SearchTest, FuzzySearchNgramsWithTokenizeSubstring) {
+  std::string query = R"sql(
+    SELECT Id FROM Test@{force_index=SearchTokenIndex}
+    WHERE SEARCH_NGRAMS(Search_Tokens, "hello there")
+    ORDER BY Id ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
+              IsOkAndHoldsRows({{"id1"}, {"id2"}, {"id3"}}));
+}
+
 TEST_P(SearchTest, SearchEmptyNgramsAlwaysReturnEmpty) {
   std::string query = R"sql(
           SELECT albumid
@@ -1159,6 +1192,21 @@ TEST_P(SearchTest, ProjectTokenlistFailFunctionCall) {
       SELECT TOKEN("name1") AS col1
       FROM albums)sql";
   EXPECT_THAT(Query(GetSqlQueryString(query)),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_P(SearchTest, TokenFunctionFailsWithNamedArgumentInDDL) {
+  std::string ddl = IsGoogleStandardSql() ? R"sql(
+              CREATE TABLE BadTokenTable (
+                ID INT64 NOT NULL, Data STRING(MAX),
+                Tokens TOKENLIST AS (TOKEN(value=>Data)) HIDDEN
+              ) PRIMARY KEY(ID))sql"
+                                          : R"sql(
+              CREATE TABLE BadTokenTable (
+                id bigint NOT NULL, data varchar,
+                tokens spanner.tokenlist GENERATED ALWAYS AS (spanner.token(value=>data)) STORED HIDDEN
+              ) PRIMARY KEY(id))sql";
+  EXPECT_THAT(UpdateSchema({ddl}),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 

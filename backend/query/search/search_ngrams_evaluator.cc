@@ -68,10 +68,13 @@ absl::Status SearchNgramsEvaluator::BuildTokenLists(
   ZETASQL_ASSIGN_OR_RETURN(auto tokens, StringsFromTokenList(tokenlist));
   int64_t ngram_max_size = -1;
   int64_t ngram_min_size = -1;
+  bool is_substring_tokenizer = false;
+  std::vector<std::string> tokenlist_substring;
   for (int i = 0; i < tokens.size(); ++i) {
     if (IsTokenizerSignature(tokens[i])) {
+      is_substring_tokenizer = absl::StartsWith(tokens[i], kSubstringTokenizer);
       // There will be multiple signatures when tokenlist is concatenated.
-      if (!absl::StartsWith(tokens[i], kSubstringTokenizer) &&
+      if (!is_substring_tokenizer &&
           !absl::StartsWith(tokens[i], kNgramsTokenizer)) {
         return error::TokenListNotMatchSearch(
             "SEARCH_NGRAMS", "TOKENIZE_SUBSTRING or TOKENIZE_NGRAMS");
@@ -91,10 +94,13 @@ absl::Status SearchNgramsEvaluator::BuildTokenLists(
       std::vector<std::string> substrings = absl::StrSplit(
           query, absl::ByAnyChar(kDelimiter), absl::SkipWhitespace());
       for (const auto& substring : substrings) {
+        // Query n-grams are generated with length `ngram_max_size` of the
+        // original tokenlist provided to SEARCH_NGRAMS.
         std::vector<zetasql::Value> args{
             zetasql::Value::String(substring),
             zetasql::Value::Int64(ngram_max_size),
-            zetasql::Value::Int64(ngram_min_size),
+            zetasql::Value::Int64(std::min(
+                static_cast<int64_t>(substring.size()), ngram_max_size)),
             zetasql::Value::Bool(false)};
         ZETASQL_ASSIGN_OR_RETURN(auto result, NgramsTokenizer::Tokenize(args));
         ZETASQL_ASSIGN_OR_RETURN(auto ngrams, StringsFromTokenList(result));
@@ -107,8 +113,16 @@ absl::Status SearchNgramsEvaluator::BuildTokenLists(
     } else if (i == 0) {
       return error::TokenListNotMatchSearch(
           "SEARCH_NGRAMS", "TOKENIZE_SUBSTRING or TOKENIZE_NGRAMS");
+    } else if (is_substring_tokenizer) {
+      ZETASQL_RETURN_IF_ERROR(TokenizeSubstring(tokens[i], tokenlist_substring));
     } else {
       tokenlist_ngrams.push_back(tokens[i]);
+    }
+  }
+  if (is_substring_tokenizer) {
+    for (const auto& token : tokenlist_substring) {
+      ZETASQL_RETURN_IF_ERROR(TokenizeNgrams(token, ngram_min_size, ngram_max_size,
+                                     tokenlist_ngrams));
     }
   }
   return absl::OkStatus();
@@ -165,7 +179,11 @@ absl::StatusOr<zetasql::Value> SearchNgramsEvaluator::Evaluate(
   }
 
   int64_t matching_ngrams = NumMatchingNgrams(tokenlist_ngrams, query_ngrams);
-
+  // If the number of query ngrams is less than the minimum ngrams, then we
+  // ignore the minimum ngrams and match if all the ngrams in query match.
+  if (query_ngrams.size() < min_ngrams) {
+    min_ngrams = std::max(1, static_cast<int>(query_ngrams.size()));
+  }
   bool matches = false;
   if (matching_ngrams >= min_ngrams) {
     matches = true;

@@ -17,7 +17,6 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_SEARCH_PLAIN_SUBSTRING_TOKENIZER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_SEARCH_PLAIN_SUBSTRING_TOKENIZER_H_
 
-#include <string>
 
 #include "zetasql/public/value.h"
 #include "absl/status/status.h"
@@ -44,8 +43,6 @@ class SubstringTokenizer {
   static absl::Status ValidateNgramSize(int ngram_size_min, int ngram_size_max);
   static absl::StatusOr<int> ParseRelativeSearchTypes(
       absl::Span<const zetasql::Value> args);
-  static absl::Status TokenizeSubstring(absl::string_view str,
-                                        std::vector<std::string>& token_list);
 };
 
 }  // namespace search

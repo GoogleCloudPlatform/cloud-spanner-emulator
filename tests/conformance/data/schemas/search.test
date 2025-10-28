@@ -52,6 +52,34 @@ ORDER BY releasetimestamp
 OPTIONS (
   sort_order_sharding = true,
   disable_automatic_uid_column=true);
+
+CREATE TABLE AccountIds (
+  AccountId INT64 NOT NULL,
+) PRIMARY KEY(AccountId);
+
+CREATE TABLE AccountSearchTerms (
+  AccountId INT64 NOT NULL,
+  SearchPhrase STRING(MAX) NOT NULL,
+  SearchPhraseSubstringTokens TOKENLIST AS (TOKENIZE_SUBSTRING(SearchPhrase, ngram_size_min=>3, ngram_size_max=>3, relative_search_types=>["all"])) HIDDEN
+) PRIMARY KEY (AccountId),
+INTERLEAVE IN PARENT AccountIds
+ON DELETE
+NO ACTION;
+CREATE SEARCH INDEX AccountSearchFiltersIndex ON AccountSearchTerms(SearchPhraseSubstringTokens);
+
+CREATE TABLE Test (
+  Id STRING(40),
+  SearchField STRING(255),
+  Search_Tokens TOKENLIST AS (
+    TOKENIZE_SUBSTRING(
+      SearchField,
+      ngram_size_min=>2,
+      ngram_size_max=>3,
+      relative_search_types=>["word_prefix", "phrase"]
+    )
+  ) HIDDEN
+) PRIMARY KEY (Id);
+CREATE SEARCH INDEX SearchTokenIndex ON Test(Search_Tokens);
 ===
 @Dialect=POSTGRESQL
 CREATE TABLE albums (
@@ -102,3 +130,34 @@ ORDER BY releasetimestamp
 WITH (
   sort_order_sharding = true,
   disable_automatic_uid_column=true);
+
+CREATE TABLE AccountIds (
+  AccountId bigint NOT NULL,
+  PRIMARY KEY(AccountId)
+);
+
+CREATE TABLE AccountSearchTerms (
+    AccountId bigint NOT NULL,
+    SearchPhrase varchar NOT NULL,
+    SearchPhraseSubstringTokens spanner.tokenlist GENERATED ALWAYS AS (spanner.tokenize_substring(SearchPhrase,
+        ngram_size_min=>3::bigint,
+        ngram_size_max=>3::bigint,
+        relative_search_types=>'{all}'::text[])) STORED HIDDEN,
+    PRIMARY KEY (AccountId)
+) INTERLEAVE IN PARENT AccountIds ON DELETE NO ACTION;
+CREATE SEARCH INDEX AccountSearchFiltersIndex ON AccountSearchTerms(SearchPhraseSubstringTokens);
+
+CREATE TABLE Test (
+  Id varchar,
+  SearchField varchar,
+  Search_Tokens spanner.tokenlist GENERATED ALWAYS AS (
+    spanner.tokenize_substring(
+      SearchField,
+      ngram_size_min=>2::bigint,
+      ngram_size_max=>3::bigint,
+      relative_search_types=>'{word_prefix, phrase}'::text[]
+    )
+  ) STORED HIDDEN,
+  PRIMARY KEY(Id)
+);
+CREATE SEARCH INDEX SearchTokenIndex ON Test(Search_Tokens);

@@ -629,6 +629,58 @@ TEST_P(DmlTest, JsonType) {
   }
 }
 
+TEST_P(DmlTest, ReturningCommitTimestamp) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_dml_returning = true;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  std::string returning =
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "RETURNING"
+                                                                : "THEN RETURN";
+
+  // Commit timestamp columns can be returned as long as the value is not
+  // PENDING_COMMIT_TIMESTAMP.
+  std::vector<ValueRow> result;
+  ZETASQL_EXPECT_OK(CommitDmlReturning(
+      {SqlStatement(absl::Substitute(
+          "INSERT INTO committimestamptable(id, commit_ts) VALUES "
+          "(1, '2000-01-01') $0 commit_ts;",
+          returning))},
+      result));
+
+  // They cannot be directly returned if the value is PENDING_COMMIT_TIMESTAMP.
+  std::string pct = (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
+                        ? "SPANNER.PENDING_COMMIT_TIMESTAMP()"
+                        : "PENDING_COMMIT_TIMESTAMP()";
+  EXPECT_THAT(CommitDmlReturning(
+                  {SqlStatement(absl::Substitute(
+                      "INSERT INTO committimestamptable(id, commit_ts) VALUES "
+                      "(2, $0) $1 commit_ts;",
+                      pct, returning))},
+                  result),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr(
+                           "The PENDING_COMMIT_TIMESTAMP() function may only "
+                           "be used as a value for INSERT or UPDATE")));
+
+  // They cannot be used by an expression that is returned if the value is
+  // PENDING_COMMIT_TIMESTAMP.
+  std::string cast_type =
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "varchar"
+                                                                : "string";
+  EXPECT_THAT(
+      CommitDmlReturning(
+          {SqlStatement(absl::Substitute(
+              "UPDATE committimestamptable SET commit_ts = $0 WHERE id = 1 "
+              "$1 cast(commit_ts AS $2);",
+              pct, returning, cast_type))},
+          result),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          testing::HasSubstr("The PENDING_COMMIT_TIMESTAMP() function may only "
+                             "be used as a value for INSERT or UPDATE")));
+}
+
 TEST_P(DmlTest, Returning) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_dml_returning = true;

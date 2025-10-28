@@ -145,6 +145,8 @@ namespace postgres_translator {
   inline constexpr char kPGJsonbExistsFunctionName[] = "pg.jsonb_exists";
   inline constexpr char kPGJsonbExistsAnyFunctionName[] = "pg.jsonb_exists_any";
   inline constexpr char kPGJsonbExistsAllFunctionName[] = "pg.jsonb_exists_all";
+  inline constexpr char kPGJsonbObjectKeysFunctionName[] =
+      "pg.jsonb_object_keys";
 
   // PG float functions.
   inline constexpr char kPGFloatAddFunctionName[] = "pg.float_add";

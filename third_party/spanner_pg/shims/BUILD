@@ -128,6 +128,7 @@ cc_test(
         # TSAN OOMs).
         "-fexceptions",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":error_shim",
         "//third_party/spanner_pg/function_evaluators:pg_evaluators_implementations",  # build_cleaner: keep
@@ -199,6 +200,7 @@ cc_test(
         # TSAN OOMs).
         "-fexceptions",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":error_shim",
         ":memory_context_manager",
@@ -278,6 +280,7 @@ cc_test(
         # TSAN OOMs).
         "-fexceptions",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":memory_context_manager",
         ":memory_reservation_holder",
@@ -329,6 +332,7 @@ cc_test(
         # TSAN OOMs).
         "-fexceptions",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         ":memory_context_manager",
         ":memory_reservation_holder",
@@ -355,6 +359,7 @@ cc_test(
         # TSAN OOMs).
         "-fexceptions",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/src/backend:backend_with_stub_shims",
@@ -376,6 +381,7 @@ cc_test(
         # TSAN OOMs).
         "-fexceptions",
     ],
+    tags = ["spanner.spangres"],
     deps = [
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/test_catalog",

@@ -259,11 +259,57 @@ struct ExecuteUpdateResult {
   std::unique_ptr<RowCursor> returning_row_cursor;
 };
 
+// Simple visitor to traverse an expression and check if it references
+// a pending commit timestamp value column (that is, a column set to
+// PENDING_COMMIT_TIMESTAMP() in this DML). Used to validate THEN RETURN.
+class ReturningCommitTimestampChecker : public zetasql::ResolvedASTVisitor {
+ public:
+  explicit ReturningCommitTimestampChecker(
+      const CaseInsensitiveStringSet& commit_timestamp_dml_value_columns)
+      : commit_timestamp_dml_value_columns_(
+            commit_timestamp_dml_value_columns) {}
+
+  absl::Status VisitResolvedColumnRef(
+      const zetasql::ResolvedColumnRef* node) override {
+    if (commit_timestamp_dml_value_columns_.contains(node->column().name())) {
+      return error::PendingCommitTimestampDmlValueOnly();
+    }
+    return absl::OkStatus();
+  }
+
+ private:
+  // Not owned.
+  const CaseInsensitiveStringSet& commit_timestamp_dml_value_columns_;
+};
+
 absl::StatusOr<std::unique_ptr<RowCursor>> BuildReturningRowResult(
+    const zetasql::ResolvedReturningClause* returning,
+    const CaseInsensitiveStringSet& pending_ts_columns,
     std::unique_ptr<zetasql::EvaluatorTableIterator> iterator) {
   if (iterator == nullptr) {
     return nullptr;
   }
+
+  // Pending commit timestamp values cannot be in the returning clause and
+  // cannot be referenced in a returning clause expression.
+  ZETASQL_RET_CHECK_NE(returning, nullptr);
+  ReturningCommitTimestampChecker checker(pending_ts_columns);
+  // First check computed expressions. Also collect the set of column ids for
+  // all computed columns.
+  absl::flat_hash_set<int> computed_column_ids;
+  for (const auto& resolved_named_expr : returning->expr_list()) {
+    ZETASQL_RETURN_IF_ERROR(resolved_named_expr->Accept(&checker));
+    computed_column_ids.insert(resolved_named_expr->column().column_id());
+  }
+  // Next, check for output columns that are column references (not computed).
+  for (const auto& named_column : returning->output_column_list()) {
+    const zetasql::ResolvedColumn& column = named_column->column();
+    if (!computed_column_ids.contains(column.column_id()) &&
+        pending_ts_columns.contains(column.name())) {
+      return error::PendingCommitTimestampDmlValueOnly();
+    }
+  }
+
   std::vector<std::vector<zetasql::Value>> values;
   while (iterator->NextRow()) {
     values.emplace_back();
@@ -290,17 +336,27 @@ absl::StatusOr<std::unique_ptr<RowCursor>> BuildReturningRowResult(
 // query for the INSERT statement yielded zero rows.
 absl::StatusOr<std::tuple<Mutation, int64_t, bool>> BuildInsert(
     std::unique_ptr<zetasql::EvaluatorTableModifyIterator> iterator,
-    MutationOpType op_type, const CaseInsensitiveStringSet& pending_ts_columns,
-    bool is_upsert_query, DatabaseDialect database_dialect) {
+    MutationOpType op_type,
+    const std::vector<zetasql::ResolvedColumn>& insert_columns,
+    const CaseInsensitiveStringSet& pending_ts_columns, bool is_upsert_query,
+    DatabaseDialect database_dialect) {
+  // Only include non-generated primary key columns and insert columns in the
+  // INSERT mutation.
+  CaseInsensitiveStringSet insert_column_names;
+  for (const auto& insert_column : insert_columns) {
+    insert_column_names.insert(insert_column.name());
+  }
+
   const zetasql::Table* table = iterator->table();
-  absl::flat_hash_set<int> generated_columns;
+  absl::flat_hash_set<int> excluded_column_idx;
   std::vector<std::string> column_names;
   std::optional<std::vector<int>> key_offsets = table->PrimaryKey();
   for (int i = 0; i < table->NumColumns(); ++i) {
+    bool is_key = key_offsets.has_value() &&
+                  std::find(key_offsets->begin(), key_offsets->end(), i) !=
+                      key_offsets->end();
     if (IsGenerated(table->GetColumn(i))) {
-      if (key_offsets.has_value() &&
-          std::find(key_offsets->begin(), key_offsets->end(), i) !=
-              key_offsets->end()) {
+      if (is_key) {
         // TODO: b/310194797 - GSQL reference implementation returns NULL for
         // generated keys or columns in POSTGRES dialect. GSQL AST constructed
         // from Spangres transformer does not contain nodes to compute the
@@ -311,10 +367,15 @@ absl::StatusOr<std::tuple<Mutation, int64_t, bool>> BuildInsert(
           return error::UnsupportedGeneratedKeyWithUpsertQueries();
         }
       }
-      generated_columns.insert(i);
+      excluded_column_idx.insert(i);
       continue;
     }
-    column_names.push_back(table->GetColumn(i)->Name());
+    const auto& column_name = table->GetColumn(i)->Name();
+    if (!insert_column_names.contains(column_name) && !is_key) {
+      excluded_column_idx.insert(i);
+      continue;
+    }
+    column_names.push_back(column_name);
   }
 
   // Keys of insert rows
@@ -327,8 +388,8 @@ absl::StatusOr<std::tuple<Mutation, int64_t, bool>> BuildInsert(
     Key row_key;
     for (int i = 0; i < table->NumColumns(); ++i) {
       zetasql::Value column_value = iterator->GetColumnValue(i);
-      if (pending_ts_columns.find(table->GetColumn(i)->Name()) !=
-          pending_ts_columns.end()) {
+      const auto& column_name = table->GetColumn(i)->Name();
+      if (pending_ts_columns.find(column_name) != pending_ts_columns.end()) {
         column_value =
             zetasql::Value::StringValue(kCommitTimestampIdentifier);
       }
@@ -343,7 +404,7 @@ absl::StatusOr<std::tuple<Mutation, int64_t, bool>> BuildInsert(
               key_offsets->end()) {
         row_key.AddColumn(column_value);
       }
-      if (generated_columns.contains(i)) {
+      if (excluded_column_idx.contains(i)) {
         continue;
       }
       values.back().push_back(column_value);
@@ -367,7 +428,8 @@ absl::StatusOr<std::tuple<Mutation, int64_t, bool>> BuildInsert(
   if (values.empty()) {
     return std::make_tuple(mutation, 0, has_rows);
   }
-  mutation.AddWriteOp(op_type, table->FullName(), column_names, values);
+  mutation.AddWriteOp(op_type, table->FullName(), column_names, values,
+                      /*origin_is_dml=*/true);
   return std::make_tuple(mutation, values.size(), has_rows);
 }
 
@@ -423,7 +485,8 @@ std::pair<Mutation, int64_t> BuildUpdate(
   }
 
   Mutation mutation;
-  mutation.AddWriteOp(op_type, table->FullName(), column_names, values);
+  mutation.AddWriteOp(op_type, table->FullName(), column_names, values,
+                      /*origin_is_dml=*/true);
   return std::make_pair(mutation, values.size());
 }
 
@@ -455,7 +518,7 @@ std::pair<Mutation, int64_t> BuildDelete(
 
 // Returns true if the ResolvedDMLValue is a call to PENDING_COMMIT_TIMESTAMP()
 bool IsPendingCommitTimestamp(const zetasql::ResolvedDMLValue& dml_value) {
-  if (dml_value.value()->node_kind() == zetasql::RESOLVED_FUNCTION_CALL) {
+  if (dml_value.value()->Is<zetasql::ResolvedFunctionCall>()) {
     const zetasql::ResolvedFunctionCall* fn =
         dml_value.value()->GetAs<zetasql::ResolvedFunctionCall>();
     if (fn->function()->Name() == kPendingCommitTimestampFunctionName) {
@@ -467,7 +530,12 @@ bool IsPendingCommitTimestamp(const zetasql::ResolvedDMLValue& dml_value) {
   return false;
 }
 
+bool IsDefaultValue(const zetasql::ResolvedDMLValue& dml_value) {
+  return dml_value.value()->Is<zetasql::ResolvedDMLDefault>();
+}
+
 absl::StatusOr<CaseInsensitiveStringSet> PendingCommitTimestampColumnsInInsert(
+    const zetasql::Table* table,
     const std::vector<zetasql::ResolvedColumn>& insert_columns,
     const std::vector<std::unique_ptr<const zetasql::ResolvedInsertRow>>&
         insert_rows) {
@@ -495,6 +563,7 @@ absl::StatusOr<CaseInsensitiveStringSet> PendingCommitTimestampColumnsInInsert(
 }
 
 absl::StatusOr<CaseInsensitiveStringSet> PendingCommitTimestampColumnsInUpdate(
+    const zetasql::Table* table,
     const std::vector<std::unique_ptr<const zetasql::ResolvedUpdateItem>>&
         update_item_list) {
   CaseInsensitiveStringSet pending_ts_columns;
@@ -566,11 +635,6 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedInsert(
     }
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(auto pending_ts_columns,
-                   PendingCommitTimestampColumnsInInsert(
-                       insert_statement->insert_column_list(),
-                       insert_statement->row_list()));
-
   auto prepared_insert = std::make_unique<zetasql::PreparedModify>(
       insert_statement, CommonEvaluatorOptions(type_factory, time_zone));
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
@@ -584,12 +648,24 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedInsert(
     return MaybeTransformZetaSQLDMLError(status_or.status());
   }
   auto iterator = std::move(status_or).value();
-  ZETASQL_ASSIGN_OR_RETURN(auto cursor,
-                   BuildReturningRowResult(std::move(returning_iter)));
 
-  ZETASQL_ASSIGN_OR_RETURN(const auto& mutation_and_count,
-                   BuildInsert(std::move(iterator), op_type, pending_ts_columns,
-                               is_upsert_query, database_dialect));
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto pending_ts_columns,
+      PendingCommitTimestampColumnsInInsert(
+          iterator->table(), insert_statement->insert_column_list(),
+          insert_statement->row_list()));
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto cursor,
+      BuildReturningRowResult(insert_statement->returning(), pending_ts_columns,
+                              std::move(returning_iter)));
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      const auto& mutation_and_count,
+      BuildInsert(std::move(iterator), op_type,
+                  insert_statement->insert_column_list(), pending_ts_columns,
+                  is_upsert_query, database_dialect));
+
   // Resulting mutation count can be 0 only if all insert rows already
   // existed and none were inserted due to OR_IGNORE insert mode, or if the
   // insert statement used a SELECT statement with a WHERE clause.
@@ -615,9 +691,6 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedUpdate(
     const std::string time_zone) {
   ZETASQL_ASSIGN_OR_RETURN(auto updated_columns,
                    ColumnsInUpdate(update_statement->update_item_list()));
-  ZETASQL_ASSIGN_OR_RETURN(auto pending_ts_columns,
-                   PendingCommitTimestampColumnsInUpdate(
-                       update_statement->update_item_list()));
 
   auto prepared_update = std::make_unique<zetasql::PreparedModify>(
       update_statement, CommonEvaluatorOptions(type_factory, time_zone));
@@ -631,8 +704,14 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedUpdate(
     return MaybeTransformZetaSQLDMLError(status_or.status());
   }
   auto iterator = std::move(status_or).value();
-  ZETASQL_ASSIGN_OR_RETURN(auto cursor,
-                   BuildReturningRowResult(std::move(returning_iter)));
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto pending_ts_columns,
+      PendingCommitTimestampColumnsInUpdate(
+          iterator->table(), update_statement->update_item_list()));
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto cursor,
+      BuildReturningRowResult(update_statement->returning(), pending_ts_columns,
+                              std::move(returning_iter)));
   const auto& mutation_and_count =
       BuildUpdate(std::move(iterator), MutationOpType::kUpdate,
                   pending_ts_columns, updated_columns, schema);
@@ -654,7 +733,9 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedDelete(
   ZETASQL_ASSIGN_OR_RETURN(auto iterator,
                    prepared_delete->Execute(parameters, {}, &returning_iter));
   ZETASQL_ASSIGN_OR_RETURN(auto cursor,
-                   BuildReturningRowResult(std::move(returning_iter)));
+                   BuildReturningRowResult(delete_statement->returning(),
+                                           /*pending_ts_columns=*/{},
+                                           std::move(returning_iter)));
 
   const auto& mutation_and_count = BuildDelete(std::move(iterator));
   return ExecuteUpdateResult{mutation_and_count.first,

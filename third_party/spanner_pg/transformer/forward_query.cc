@@ -52,6 +52,7 @@
 #include "zetasql/public/types/array_type.h"
 #include "zetasql/public/types/type.h"
 #include "zetasql/public/types/type_factory.h"
+#include "zetasql/public/value.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_ast_enums.pb.h"
 #include "zetasql/resolved_ast/resolved_column.h"
@@ -61,6 +62,7 @@
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
@@ -69,7 +71,6 @@
 #include "third_party/spanner_pg/catalog/engine_user_catalog.h"
 #include "third_party/spanner_pg/catalog/function.h"
 #include "third_party/spanner_pg/catalog/table_name.h"
-#include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/transformer/expr_transformer_helper.h"
 #include "third_party/spanner_pg/transformer/forward_transformer.h"
@@ -314,10 +315,13 @@ ForwardTransformer::BuildGsqlResolvedScanForTableExpression(
   if (IsA(&node, RangeTblRef)) {
     Index rtindex = PostgresConstCastNode(RangeTblRef, &node)->rtindex;
     RangeTblEntry* rte = rt_fetch(rtindex, &rtable);
+    std::unique_ptr<zetasql::ResolvedScan> current_scan;
     switch (rte->rtekind) {
       case RTE_RELATION: {
-        return BuildGsqlResolvedTableScan(*rte, transformer_info, rtindex,
-                                          output_scope);
+        ZETASQL_ASSIGN_OR_RETURN(current_scan,
+                         BuildGsqlResolvedTableScan(*rte, transformer_info,
+                                                    rtindex, output_scope));
+        break;
       }
       case RTE_SUBQUERY: {
         if (rte->lateral) {
@@ -336,19 +340,19 @@ ForwardTransformer::BuildGsqlResolvedScanForTableExpression(
 
         // Output columns are not constructed for subqueries, so there is no
         // need to collect the output_name_list.
-        ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedScan> input_scan,
+        ZETASQL_ASSIGN_OR_RETURN(current_scan,
                          BuildGsqlResolvedScanForQueryExpression(
                              *rte->subquery, /*is_top_level_query=*/false,
                              &subquery_scope, rte->alias->aliasname,
                              /*output_name_list=*/nullptr));
         ZETASQL_RETURN_IF_ERROR(
-            MapVarIndexToColumn(*input_scan, rtindex, output_scope));
+            MapVarIndexToColumn(*current_scan, rtindex, output_scope));
         // Every ResolvedOrderByScan is initially constructed with is_ordered
         // set to true. However, a subquery never preserves order, so we clear
         // is_ordered on the top level scan of the subquery, even if it is a
         // ResolvedOrderByScan.
-        input_scan->set_is_ordered(false);
-        return input_scan;
+        current_scan->set_is_ordered(false);
+        break;
       }
       // Error cases to cover the remaining enum variants. We handle each
       // individually to provide helpful error messages.
@@ -372,16 +376,19 @@ ForwardTransformer::BuildGsqlResolvedScanForTableExpression(
       }
       case RTE_CTE: {
         ZETASQL_ASSIGN_OR_RETURN(
-            std::unique_ptr<zetasql::ResolvedWithRefScan> scan,
+            current_scan,
             BuildGsqlResolvedWithRefScan(rte->ctename, rtindex, output_scope));
-        ZETASQL_RETURN_IF_ERROR(MapVarIndexToColumn(*scan, rtindex, output_scope));
-        return scan;
+        ZETASQL_RETURN_IF_ERROR(
+            MapVarIndexToColumn(*current_scan, rtindex, output_scope));
+        break;
       }
       default:
         return absl::InternalError(
             absl::StrCat("Unsupported RangeTblEntry type in the from list: ",
                          internal::RTEKindToString(rte->rtekind)));
     }
+
+    return current_scan;
   } else if (IsA(&node, JoinExpr)) {
     JoinExpr* join_expr = PostgresCastNode(JoinExpr, (void*)&node);
     std::unique_ptr<zetasql::ResolvedScan> join_scan;
@@ -778,11 +785,16 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
       ZETASQL_RET_CHECK_NE(func_expr, nullptr);
       ZETASQL_ASSIGN_OR_RETURN(const Oid array_unnest_proc_oid,
                        internal::GetArrayUnnestProcOid());
-      // Set returning functions are converted to a scalar function wrapped in
-      // an UNNEST call when converted to ZetaSQL.
+      // Most set returning functions are converted to a scalar function wrapped
+      // in an UNNEST call when converted to ZetaSQL.
       // e.g. jsonb_object_keys(jsonb) -> UNNEST(pg.jsonb_object_keys(jsonb)).
+      // The only exceptions are ones that are implemented as a TVF, for example
+      // jsonb_array_elements.
+      bool is_set_returning_rewrite =
+          IsSetReturningFunction(&func_expr->xpr) &&
+          !catalog_adapter().GetTVFFromOid(func_expr->funcid).ok();
       rhs_is_unnest_expr = (func_expr->funcid == array_unnest_proc_oid) ||
-                           IsSetReturningFunction(&func_expr->xpr);
+                           is_set_returning_rewrite;
     }
   }
   std::unique_ptr<zetasql::ResolvedScan> result;

@@ -141,6 +141,11 @@ std::vector<ConversionFoundTestCase> GetConversionFoundTestCases() {
                              ConversionSourceExpressionKind::kOther),
        zetasql::Value::String("{\"a\":    1}"),
        CreatePgJsonbValueWithMemoryContext("{\"a\": 1}").value()},
+      {StringType(), GetPgJsonbType(),
+       FindConversionOptions(/*is_explicit=*/true,
+                             ConversionSourceExpressionKind::kOther),
+       zetasql::Value::NullString(),
+       zetasql::Value::Null(GetPgJsonbType())},
       // PG.JSONB -> <TYPE> conversions
       {GetPgJsonbType(), Int64Type(),
        FindConversionOptions(/*is_explicit=*/true,

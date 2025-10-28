@@ -40,7 +40,7 @@
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
-#include "third_party/spanner_pg/catalog/proto/catalog.pb.h"
+#include "third_party/spanner_pg/codegen/postgresql_catalog.pb.h"
 
 namespace postgres_translator {
 class SpangresFunctionMapper {
@@ -48,6 +48,14 @@ class SpangresFunctionMapper {
   SpangresFunctionMapper(const EngineSystemCatalog* catalog)
       : catalog_(catalog) {}
 
+  // Maps a catalog function into one or more `PostgresFunctionArguments` that
+  // will be added to the Spangres System Catalog. Each signature is mapped to a
+  // single `PostgresFunctionArgument`.
+  // It is assumed here that the given function contains all signatures for a
+  // postgresql_name_path. If the function or any of its signatures have more
+  // than one postgresql_name_path an error will be returned. If the function
+  // postgresql_name_path differs from any signature's postgresql_name_path an
+  // error will be returned.
   absl::StatusOr<std::vector<PostgresFunctionArguments>>
   ToPostgresFunctionArguments(const FunctionProto& function) const;
 

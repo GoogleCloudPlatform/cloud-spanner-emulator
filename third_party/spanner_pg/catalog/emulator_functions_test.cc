@@ -361,6 +361,29 @@ INSTANTIATE_TEST_SUITE_P(
         },
         PGScalarFunctionTestCase{
             kPGExtractFunctionName,
+            {zetasql::values::NullString(),
+             zetasql::values::Timestamp(absl::FromCivil(
+              absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone))},
+            CreatePgNumericNullValue(),
+        },
+        PGScalarFunctionTestCase{
+            kPGExtractFunctionName,
+            {zetasql::values::String("second"),
+             zetasql::values::NullTimestamp()},
+            CreatePgNumericNullValue(),
+        },
+        PGScalarFunctionTestCase{
+            kPGExtractFunctionName,
+            {zetasql::values::String("month"), zetasql::values::NullDate()},
+            CreatePgNumericNullValue(),
+        },
+        PGScalarFunctionTestCase{
+            kPGExtractFunctionName,
+            {zetasql::values::NullString(), zetasql::values::Date(45)},
+            CreatePgNumericNullValue(),
+        },
+        PGScalarFunctionTestCase{
+            kPGExtractFunctionName,
             {zetasql::values::String("month"), zetasql::values::Date(45)},
             *CreatePgNumericValueWithMemoryContext("2"),
         },
@@ -2203,6 +2226,19 @@ TEST_F(EmulatorFunctionsTest, ArrayUpperWithPGJsonb) {
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {pg_jsonb_array, zetasql::values::Int64(1)})),
               IsOkAndHolds(zetasql::values::Int64(3)));
+}
+
+TEST_F(EmulatorFunctionsTest, PGJsonbObjectKeysFunction) {
+  const zetasql::Function* function =
+      functions_[kPGJsonbObjectKeysFunctionName].get();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+                                       function->signatures().front()));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value pg_jsonb_object,
+                       CreatePgJsonbValueWithMemoryContext("{\"a\": \"b\"}"));
+
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({pg_jsonb_object})),
+              IsOkAndHolds(zetasql::values::StringArray({"a"})));
 }
 
 TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {

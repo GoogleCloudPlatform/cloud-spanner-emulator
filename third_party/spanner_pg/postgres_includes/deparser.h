@@ -38,6 +38,10 @@
 // pretty-printing flags set if prettyPrint=true and unset otherwise
 char *deparse_query(Query *query, bool prettyPrint);
 
+// Deparses the function body of a function call.
+char* deparse_function_body(Query* query, char** argNames, int numArgs,
+                            char* funcName, bool prettyPrint);
+
 // Deparses (prints) SQL expression that is defined within the scope of
 // PostgreSQL query (e.g. an expression defining a column of SELECT statement).
 // The namespace of this query is used for reference resolution (e.g. type

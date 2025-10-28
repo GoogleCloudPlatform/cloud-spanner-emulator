@@ -120,6 +120,7 @@ cc_library(
 cc_test(
     name = "errors_test",
     srcs = ["errors_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":errors",
         "//third_party/spanner_pg/postgres_includes",
@@ -171,6 +172,7 @@ cc_test(
         "-fexceptions",
     ],
     features = ["-use_header_modules"],
+    tags = ["spanner.spangres"],
     deps = [
         ":ereport",
         "//third_party/spanner_pg/interface:ereport",

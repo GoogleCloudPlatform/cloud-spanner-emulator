@@ -66,6 +66,9 @@ struct ResolvedMutationOp {
   // Canonicalized key ranges (disjoint and closed-open) to delete for mutation
   // op of type Delete.
   std::vector<KeyRange> key_ranges;
+
+  // Whether the mutation was built from a DML statement or not.
+  bool origin_is_dml = false;
 };
 
 // Computes the PrimaryKey from the given row using the key indices provided.

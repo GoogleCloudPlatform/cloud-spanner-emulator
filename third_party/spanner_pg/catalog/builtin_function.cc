@@ -29,44 +29,15 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-edition = "2023";
+#include "third_party/spanner_pg/catalog/builtin_function.h"
 
-package postgres_translator;
+#include <tuple>
 
-import "zetasql/public/function.proto";
+namespace postgres_translator {
 
-message ArgumentTypeProto {
-  uint32 oid = 1;
+bool operator<(const NamePathKey& lhs, const NamePathKey& rhs) {
+  return std::tie(lhs.mapped_name_path, lhs.postgresql_name_path) <
+         std::tie(rhs.mapped_name_path, rhs.postgresql_name_path);
 }
 
-message FunctionNamePathProto {
-  repeated string name_path = 1;
-}
-
-message FunctionArgumentProto {
-  ArgumentTypeProto type = 1;
-  zetasql.FunctionEnums.ArgumentCardinality cardinality = 2;
-  zetasql.FunctionEnums.NamedArgumentKind named_argument_kind = 3;
-  string name = 4;
-}
-
-message FunctionSignatureProto {
-  ArgumentTypeProto return_type = 1;
-  repeated FunctionArgumentProto arguments = 2;
-  uint32 oid = 3;
-  repeated FunctionNamePathProto postgresql_name_paths = 4;
-  repeated string enable_in_catalog = 5;
-  bool enable_in_emulator = 6;
-  bool deprecated = 7;
-}
-
-message FunctionProto {
-  FunctionNamePathProto mapped_name_path = 1;
-  repeated FunctionNamePathProto postgresql_name_paths = 2;
-  repeated FunctionSignatureProto signatures = 3;
-  repeated string enable_in_catalog = 4;
-}
-
-message CatalogProto {
-  repeated FunctionProto functions = 1;
-}
+}  // namespace postgres_translator

@@ -277,6 +277,9 @@ const zetasql::Function* GetStringToPgJsonbConversion() {
               [](const absl::Span<const zetasql::Value> args)
                   -> absl::StatusOr<zetasql::Value> {
                 ZETASQL_RET_CHECK_EQ(args.size(), 1);
+                if (args[0].is_null()) {
+                  return zetasql::Value::Null(GetPgJsonbType());
+                }
                 return datatypes::CreatePgJsonbValueWithMemoryContext(
                     args[0].string_value());
               }));

@@ -44,23 +44,16 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
-#include "absl/flags/flag.h"
-#include "absl/status/status.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
-#include "third_party/spanner_pg/src/backend/catalog/pg_type_d.h"
+#include "google/protobuf/text_format.h"
 
 namespace postgres_translator {
 
 namespace {
 
 using ::testing::Eq;
-using ::testing::HasSubstr;
-using ::testing::IsEmpty;
-using ::testing::UnorderedElementsAre;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
 
 const zetasql::Type* gsql_bool = zetasql::TypeFactory().get_bool();
 const zetasql::Type* gsql_double = zetasql::TypeFactory().get_double();
@@ -202,91 +195,88 @@ class TestSpangresFunctionMapper : public testing::Test {
 };
 
 TEST_F(TestSpangresFunctionMapper, MapsMetaTypes) {
-  FunctionProto function;
-  FunctionNamePathProto mapped_name_path;
-  (*mapped_name_path.add_name_path()) = "test";
-  (*function.mutable_mapped_name_path()) = mapped_name_path;
+  FunctionProto fn;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        mapped_name_path: { name_path: "test" }
+        postgresql_name_paths: { name_path: "pg" name_path: "test" }
+        signatures: {
+          return_type: { oid: 16 }
+          arguments: {
+            type: { oid: 2276 }
+            cardinality: REQUIRED
+            named_argument_kind: POSITIONAL_ONLY
+          }
+          arguments: {
+            type: { oid: 2277 }
+            cardinality: REQUIRED
+            named_argument_kind: POSITIONAL_ONLY
+          }
+          arguments: {
+            type: { oid: 2283 }
+            cardinality: REQUIRED
+            named_argument_kind: POSITIONAL_ONLY
+          }
+          postgresql_name_paths: { name_path: "pg" name_path: "test" }
+        }
+      )pb",
+      &fn));
 
-  FunctionSignatureProto* sig1 = function.add_signatures();
-  FunctionNamePathProto sig1_pg_name_path;
-  (*sig1_pg_name_path.add_name_path()) = "pg";
-  (*sig1_pg_name_path.add_name_path()) = "test";
-  (*sig1->add_postgresql_name_paths()) = sig1_pg_name_path;
-  sig1->mutable_return_type()->set_oid(BOOLOID);
-  sig1->set_enable_in_emulator(true);
-  FunctionArgumentProto* sig1_arg1 = sig1->add_arguments();
-  sig1_arg1->mutable_type()->set_oid(ANYOID);
-  sig1_arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);
-  sig1_arg1->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
-  FunctionArgumentProto* sig1_arg2 = sig1->add_arguments();
-  sig1_arg2->mutable_type()->set_oid(ANYARRAYOID);
-  sig1_arg2->set_cardinality(zetasql::FunctionEnums::REQUIRED);
-  sig1_arg2->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
-  FunctionArgumentProto* sig1_arg3 = sig1->add_arguments();
-  sig1_arg3->mutable_type()->set_oid(ANYELEMENTOID);
-  sig1_arg3->set_cardinality(zetasql::FunctionEnums::REQUIRED);
-  sig1_arg3->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
-
-  ZETASQL_ASSERT_OK(mapper_->ToPostgresFunctionArguments(function));
+  ZETASQL_ASSERT_OK(mapper_->ToPostgresFunctionArguments(fn));
 }
 
-TEST_F(TestSpangresFunctionMapper, MapsSamePgNamePathToSingleFunction) {
-  FunctionProto function;
-  FunctionNamePathProto mapped_name_path;
-  (*mapped_name_path.add_name_path()) = "regexp_contains";
-  (*function.mutable_mapped_name_path()) = mapped_name_path;
-
-  FunctionSignatureProto* sig1 = function.add_signatures();
-  FunctionNamePathProto sig1_pg_name_path;
-  (*sig1_pg_name_path.add_name_path()) = "pg";
-  (*sig1_pg_name_path.add_name_path()) = "textregexeq";
-  (*sig1->add_postgresql_name_paths()) = sig1_pg_name_path;
-  sig1->mutable_return_type()->set_oid(BOOLOID);
-  sig1->set_enable_in_emulator(true);
-  FunctionArgumentProto* sig1_arg1 = sig1->add_arguments();
-  sig1_arg1->mutable_type()->set_oid(TEXTOID);
-  sig1_arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);
-  sig1_arg1->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
-  sig1_arg1->set_name("required_arg1");
-  FunctionArgumentProto* sig1_arg2 = sig1->add_arguments();
-  sig1_arg2->mutable_type()->set_oid(TEXTOID);
-  sig1_arg2->set_cardinality(zetasql::FunctionEnums::REQUIRED);
-  sig1_arg2->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
-  sig1_arg2->set_name("required_arg2");
-
-  FunctionSignatureProto* sig2 = function.add_signatures();
-  FunctionNamePathProto sig2_pg_name_path;
-  (*sig2_pg_name_path.add_name_path()) = "pg";
-  (*sig2_pg_name_path.add_name_path()) = "textregexeq";
-  (*sig2->add_postgresql_name_paths()) = sig2_pg_name_path;
-  sig2->mutable_return_type()->set_oid(BOOLOID);
-  sig2->set_enable_in_emulator(true);
-  sig2->set_deprecated(true);
-  FunctionArgumentProto* sig2_arg1 = sig2->add_arguments();
-  sig2_arg1->mutable_type()->set_oid(ANYOID);
-  sig2_arg1->set_cardinality(zetasql::FunctionEnums::REPEATED);
-  sig2_arg1->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
-
-  FunctionSignatureProto* sig3 = function.add_signatures();
-  FunctionNamePathProto sig3_pg_name_path;
-  (*sig3_pg_name_path.add_name_path()) = "pg";
-  (*sig3_pg_name_path.add_name_path()) = "textregexeq";
-  (*sig3->add_postgresql_name_paths()) = sig3_pg_name_path;
-  sig3->mutable_return_type()->set_oid(BOOLOID);
-  sig3->set_enable_in_emulator(true);
-  FunctionArgumentProto* sig3_arg1 = sig3->add_arguments();
-  sig3_arg1->mutable_type()->set_oid(TEXTOID);
-  sig3_arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);
-  sig3_arg1->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
-  FunctionArgumentProto* sig3_arg2 = sig3->add_arguments();
-  sig3_arg2->mutable_type()->set_oid(TEXTOID);
-  sig3_arg2->set_cardinality(zetasql::FunctionEnums::OPTIONAL);
-  sig3_arg2->set_named_argument_kind(
-      zetasql::FunctionEnums::POSITIONAL_OR_NAMED);
-  sig3_arg2->set_name("optional_arg");
+TEST_F(TestSpangresFunctionMapper, MapsFunctionWithMultipleSignatures) {
+  FunctionProto fn;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        mapped_name_path: { name_path: "regexp_contains" }
+        postgresql_name_paths: { name_path: "pg" name_path: "textregexeq" }
+        signatures: {
+          return_type: { oid: 16 }
+          arguments: {
+            type: { oid: 25 }
+            cardinality: REQUIRED
+            named_argument_kind: POSITIONAL_ONLY
+            name: "required_arg1"
+          }
+          arguments: {
+            type: { oid: 25 }
+            cardinality: REQUIRED
+            named_argument_kind: POSITIONAL_ONLY
+            name: "required_arg2"
+          }
+          postgresql_name_paths: { name_path: "pg" name_path: "textregexeq" }
+        }
+        signatures: {
+          return_type: { oid: 16 }
+          arguments: {
+            type: { oid: 2276 }
+            cardinality: REPEATED
+            named_argument_kind: POSITIONAL_ONLY
+          }
+          postgresql_name_paths: { name_path: "pg" name_path: "textregexeq" }
+          deprecated: true
+        }
+        signatures: {
+          return_type: { oid: 16 }
+          arguments: {
+            type: { oid: 25 }
+            cardinality: REQUIRED
+            named_argument_kind: POSITIONAL_ONLY
+          }
+          arguments: {
+            type: { oid: 25 }
+            cardinality: OPTIONAL
+            named_argument_kind: POSITIONAL_OR_NAMED
+            name: "optional_arg"
+          }
+          postgresql_name_paths: { name_path: "pg" name_path: "textregexeq" }
+        }
+      )pb",
+      &fn));
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PostgresFunctionArguments> result,
-                       mapper_->ToPostgresFunctionArguments(function));
+                       mapper_->ToPostgresFunctionArguments(fn));
   ASSERT_THAT(result.size(), Eq(1));
 
   EXPECT_THAT(
@@ -330,108 +320,48 @@ TEST_F(TestSpangresFunctionMapper, MapsSamePgNamePathToSingleFunction) {
           zetasql::Function::SCALAR, "pg_catalog")));
 }
 
-TEST_F(TestSpangresFunctionMapper,
-       MapsDistinctSignaturePgNamePathsToMultipleFunctions) {
-  FunctionProto function;
-  FunctionNamePathProto mapped_name_path;
-  (*mapped_name_path.add_name_path()) = "$add";
-  (*function.mutable_mapped_name_path()) = mapped_name_path;
-
-  FunctionSignatureProto* sig1 = function.add_signatures();
-  FunctionNamePathProto sig1_pg_name_path;
-  (*sig1_pg_name_path.add_name_path()) = "pg";
-  (*sig1_pg_name_path.add_name_path()) = "float8pl";
-  (*sig1->add_postgresql_name_paths()) = sig1_pg_name_path;
-  sig1->mutable_return_type()->set_oid(FLOAT8OID);
-  sig1->set_enable_in_emulator(true);
-  FunctionArgumentProto* sig1_arg1 = sig1->add_arguments();
-  sig1_arg1->mutable_type()->set_oid(FLOAT8OID);
-  sig1_arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);
-  sig1_arg1->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
-  FunctionArgumentProto* sig1_arg2 = sig1->add_arguments();
-  sig1_arg2->mutable_type()->set_oid(FLOAT8OID);
-  sig1_arg2->set_cardinality(zetasql::FunctionEnums::REQUIRED);
-  sig1_arg2->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
-
-  FunctionSignatureProto* sig2 = function.add_signatures();
-  FunctionNamePathProto sig2_pg_name_path;
-  (*sig2_pg_name_path.add_name_path()) = "pg";
-  (*sig2_pg_name_path.add_name_path()) = "int8pl";
-  (*sig2->add_postgresql_name_paths()) = sig2_pg_name_path;
-  sig2->mutable_return_type()->set_oid(INT8OID);
-  sig2->set_enable_in_emulator(true);
-  FunctionArgumentProto* sig2_arg1 = sig2->add_arguments();
-  sig2_arg1->mutable_type()->set_oid(INT8OID);
-  sig2_arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);
-  sig2_arg1->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
-  FunctionArgumentProto* sig2_arg2 = sig2->add_arguments();
-  sig2_arg2->mutable_type()->set_oid(INT8OID);
-  sig2_arg2->set_cardinality(zetasql::FunctionEnums::REQUIRED);
-  sig2_arg2->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
-
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PostgresFunctionArguments> result,
-                       mapper_->ToPostgresFunctionArguments(function));
-  ASSERT_THAT(result.size(), Eq(2));
-  EXPECT_THAT(result,
-              UnorderedElementsAre(
-                  PostgresFunctionArgumentsEq(PostgresFunctionArguments(
-                      "float8pl", "$add",
-                      {
-                          PostgresFunctionSignatureArguments(
-                              zetasql::FunctionSignature(
-                                  gsql_double, {gsql_double, gsql_double},
-                                  /*context_ptr=*/nullptr)),
-                      },
-                      zetasql::Function::SCALAR, "pg_catalog")),
-                  PostgresFunctionArgumentsEq(PostgresFunctionArguments(
-                      "int8pl", "$add",
-                      {
-                          PostgresFunctionSignatureArguments(
-                              zetasql::FunctionSignature(
-                                  gsql_int64, {gsql_int64, gsql_int64},
-                                  /*context_ptr=*/nullptr)),
-                      },
-                      zetasql::Function::SCALAR, "pg_catalog"))));
-}
-
 TEST_F(TestSpangresFunctionMapper, MapsSpannerNamespacedFunction) {
-  FunctionProto function;
-  FunctionNamePathProto mapped_name_path;
-  (*mapped_name_path.add_name_path()) = "bit_reverse";
-  (*function.mutable_mapped_name_path()) = mapped_name_path;
-
-  FunctionSignatureProto* sig1 = function.add_signatures();
-  FunctionNamePathProto sig1_pg_name_path;
-  (*sig1_pg_name_path.add_name_path()) = "spanner";
-  (*sig1_pg_name_path.add_name_path()) = "bit_reverse";
-  (*sig1->add_postgresql_name_paths()) = sig1_pg_name_path;
-  sig1->set_oid(50001);
-  sig1->mutable_return_type()->set_oid(INT8OID);
-  sig1->set_enable_in_emulator(true);
-  FunctionArgumentProto* sig1_arg1 = sig1->add_arguments();
-  sig1_arg1->mutable_type()->set_oid(INT8OID);
-  sig1_arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);
-  sig1_arg1->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
-  FunctionArgumentProto* sig1_arg2 = sig1->add_arguments();
-  sig1_arg2->mutable_type()->set_oid(BOOLOID);
-  sig1_arg2->set_cardinality(zetasql::FunctionEnums::REQUIRED);
-  sig1_arg2->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
-
-  FunctionSignatureProto* sig2 = function.add_signatures();
-  FunctionNamePathProto sig2_pg_name_path;
-  (*sig2_pg_name_path.add_name_path()) = "spanner";
-  (*sig2_pg_name_path.add_name_path()) = "bit_reverse";
-  (*sig2->add_postgresql_name_paths()) = sig2_pg_name_path;
-  sig2->set_oid(50002);
-  sig2->mutable_return_type()->set_oid(INT8OID);
-  sig2->set_enable_in_emulator(true);
-  FunctionArgumentProto* sig2_arg1 = sig2->add_arguments();
-  sig2_arg1->mutable_type()->set_oid(INT8OID);
-  sig2_arg1->set_cardinality(zetasql::FunctionEnums::REQUIRED);
-  sig2_arg1->set_named_argument_kind(zetasql::FunctionEnums::POSITIONAL_ONLY);
+  FunctionProto fn;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        mapped_name_path: { name_path: "bit_reverse" }
+        postgresql_name_paths: { name_path: "spanner" name_path: "bit_reverse" }
+        signatures: {
+          return_type: { oid: 20 }
+          arguments: {
+            type: { oid: 20 }
+            cardinality: REQUIRED
+            named_argument_kind: POSITIONAL_ONLY
+          }
+          arguments: {
+            type: { oid: 16 }
+            cardinality: REQUIRED
+            named_argument_kind: POSITIONAL_ONLY
+          }
+          oid: 50001
+          postgresql_name_paths: {
+            name_path: "spanner"
+            name_path: "bit_reverse"
+          }
+        }
+        signatures: {
+          return_type: { oid: 20 }
+          arguments: {
+            type: { oid: 20 }
+            cardinality: REQUIRED
+            named_argument_kind: POSITIONAL_ONLY
+          }
+          oid: 50002
+          postgresql_name_paths: {
+            name_path: "spanner"
+            name_path: "bit_reverse"
+          }
+        }
+      )pb",
+      &fn));
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PostgresFunctionArguments> result,
-                       mapper_->ToPostgresFunctionArguments(function));
+                       mapper_->ToPostgresFunctionArguments(fn));
   ASSERT_THAT(result.size(), Eq(1));
   EXPECT_THAT(result[0],
               PostgresFunctionArgumentsEq(PostgresFunctionArguments(
@@ -452,129 +382,6 @@ TEST_F(TestSpangresFunctionMapper, MapsSpannerNamespacedFunction) {
                   zetasql::Function::SCALAR, "spanner")));
 }
 
-TEST_F(TestSpangresFunctionMapper,
-       ExcludesFunctionsDisabledInEmulatorWhenUsingEmulatorCatalog) {
-
-  FunctionProto function;
-  FunctionNamePathProto mapped_name_path;
-  (*mapped_name_path.add_name_path()) = "bit_reverse";
-  (*function.mutable_mapped_name_path()) = mapped_name_path;
-
-  FunctionSignatureProto* sig1 = function.add_signatures();
-  FunctionNamePathProto sig1_pg_name_path;
-  (*sig1_pg_name_path.add_name_path()) = "spanner";
-  (*sig1_pg_name_path.add_name_path()) = "bit_reverse";
-  (*sig1->add_postgresql_name_paths()) = sig1_pg_name_path;
-  sig1->mutable_return_type()->set_oid(FLOAT8OID);
-  sig1->set_enable_in_emulator(false);
-
-  FunctionSignatureProto* sig2 = function.add_signatures();
-  FunctionNamePathProto sig2_pg_name_path;
-  (*sig2_pg_name_path.add_name_path()) = "spanner";
-  (*sig2_pg_name_path.add_name_path()) = "bit_reverse";
-  (*sig2->add_postgresql_name_paths()) = sig2_pg_name_path;
-  sig2->mutable_return_type()->set_oid(INT8OID);
-  sig2->set_enable_in_emulator(true);
-
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PostgresFunctionArguments> result,
-                       mapper_->ToPostgresFunctionArguments(function));
-  ASSERT_THAT(result.size(), Eq(1));
-  EXPECT_THAT(
-      result[0],
-      PostgresFunctionArgumentsEq(PostgresFunctionArguments(
-          "bit_reverse", "bit_reverse",
-          {
-              PostgresFunctionSignatureArguments(zetasql::FunctionSignature(
-                  gsql_int64, {}, /*context_ptr=*/nullptr)),
-          },
-          zetasql::Function::SCALAR, "spanner")));
-}
-
-TEST_F(TestSpangresFunctionMapper, ReturnsErrorWhenFunctionHasNoSignatures) {
-  FunctionProto function;
-  FunctionNamePathProto mapped_name_path;
-  (*mapped_name_path.add_name_path()) = "error";
-  (*function.mutable_mapped_name_path()) = mapped_name_path;
-
-  ASSERT_THAT(mapper_->ToPostgresFunctionArguments(function),
-              StatusIs(absl::StatusCode::kInternal,
-                       HasSubstr("must have at least one signature")));
-}
-
-TEST_F(TestSpangresFunctionMapper,
-       ReturnsErrorWhenFunctionSignatureNamePathIsNotNamespaced) {
-  FunctionProto function;
-  FunctionNamePathProto mapped_name_path;
-  (*mapped_name_path.add_name_path()) = "error";
-  (*function.mutable_mapped_name_path()) = mapped_name_path;
-
-  FunctionSignatureProto* sig = function.add_signatures();
-  FunctionNamePathProto sig_pg_name_path;
-  (*sig_pg_name_path.add_name_path()) = "error";
-  (*sig->add_postgresql_name_paths()) = sig_pg_name_path;
-  sig->set_enable_in_emulator(true);
-
-  ASSERT_THAT(
-      mapper_->ToPostgresFunctionArguments(function),
-      StatusIs(
-          absl::StatusCode::kInternal,
-          HasSubstr(
-              "postgresql_name_path must have 2 parts (namespace and name)")));
-}
-
-TEST_F(TestSpangresFunctionMapper,
-       ReturnsErrorWhenFunctionSignatureNamePathHasNestedNamespaces) {
-  FunctionProto function;
-  FunctionNamePathProto mapped_name_path;
-  (*mapped_name_path.add_name_path()) = "error";
-  (*function.mutable_mapped_name_path()) = mapped_name_path;
-
-  FunctionSignatureProto* sig = function.add_signatures();
-  FunctionNamePathProto sig_pg_name_path;
-  (*sig_pg_name_path.add_name_path()) = "spanner";
-  (*sig_pg_name_path.add_name_path()) = "safe";
-  (*sig_pg_name_path.add_name_path()) = "error";
-  (*sig->add_postgresql_name_paths()) = sig_pg_name_path;
-  sig->set_enable_in_emulator(true);
-
-  ASSERT_THAT(
-      mapper_->ToPostgresFunctionArguments(function),
-      StatusIs(
-          absl::StatusCode::kInternal,
-          HasSubstr(
-              "postgresql_name_path must have 2 parts (namespace and name)")));
-}
-
-TEST_F(TestSpangresFunctionMapper,
-       ReturnsErrorWhenFunctionSignatureWithNamedArgumentHasNoName) {
-  FunctionProto function;
-  FunctionNamePathProto mapped_name_path;
-  (*mapped_name_path.add_name_path()) = "error";
-  (*function.mutable_mapped_name_path()) = mapped_name_path;
-
-  FunctionSignatureProto* sig = function.add_signatures();
-  FunctionNamePathProto sig_pg_name_path;
-  (*sig_pg_name_path.add_name_path()) = "spanner";
-  (*sig_pg_name_path.add_name_path()) = "error";
-  (*sig->add_postgresql_name_paths()) = sig_pg_name_path;
-  FunctionArgumentProto* sig_arg = sig->add_arguments();
-  sig_arg->mutable_type()->set_oid(TEXTOID);
-  sig_arg->set_cardinality(zetasql::FunctionEnums::REQUIRED);
-  sig_arg->set_named_argument_kind(
-      zetasql::FunctionEnums::POSITIONAL_OR_NAMED);
-  sig->set_enable_in_emulator(true);
-
-  ASSERT_THAT(
-      mapper_->ToPostgresFunctionArguments(function),
-      StatusIs(absl::StatusCode::kInternal, HasSubstr("name must be defined")));
-}
-
 }  // namespace
 
 }  // namespace postgres_translator
-
-int main(int argc, char** argv) {
-  testing::InitGoogleTest(&argc, argv);
-
-  return RUN_ALL_TESTS();
-}

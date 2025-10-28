@@ -58,6 +58,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/strings/strip.h"
 #include "absl/strings/substitute.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter_holder.h"
@@ -362,16 +363,26 @@ SpangresTranslator::TranslateParsedTree(
   if (IsA(raw_stmt->stmt, CreateFunctionStmt)) {
     CreateFunctionStmt* create_function_stmt =
         internal::PostgresCastNode(CreateFunctionStmt, raw_stmt->stmt);
+    params.function_name = create_function_stmt->funcname;
+    params.num_input_arguments = list_length(create_function_stmt->parameters);
+    params.input_argument_names = nullptr;
+    if (params.num_input_arguments > 0) {
+      params.input_argument_names = static_cast<char**>(
+          palloc0(sizeof(char*) * params.num_input_arguments));
+    }
     for (ListCell* lc = list_head(create_function_stmt->parameters);
          lc != nullptr; lc = lnext(create_function_stmt->parameters, lc)) {
-      int i = list_cell_number(create_function_stmt->parameters, lc) + 1;
+      int i = list_cell_number(create_function_stmt->parameters, lc);
       FunctionParameter* func_param =
           internal::PostgresCastNode(FunctionParameter, lfirst(lc));
       // Note that the parameter name is 1-based, not 0-based.
-      std::string default_param_name = GetUdfParameterName(i);
-      std::string param_name =
-          func_param->name != nullptr ? func_param->name : default_param_name;
-      input_arguments.push_back(param_name);
+      std::string default_param_name = GetUdfParameterName(i + 1);
+      if (func_param->name != nullptr) {
+        params.input_argument_names[i] = func_param->name;
+        input_arguments.push_back(func_param->name);
+      } else {
+        input_arguments.push_back(default_param_name);
+      }
     }
   }
 
@@ -777,17 +788,19 @@ absl::StatusOr<interfaces::ExpressionTranslateResult>
 SpangresTranslator::TranslateParsedFunctionBody(
     interfaces::TranslateParsedQueryParams params) {
   // Deparse the query to standardize the formatting of the string
-  static auto query_deparser = [](std::string* deparsed_query,
+  auto query_deparser = [&params](std::string* deparsed_query,
                                   Query* query) -> absl::Status {
     ZETASQL_RET_CHECK_NE(query, nullptr) << "Query should not be null";
-    ZETASQL_RET_CHECK_NE(list_head(query->targetList), nullptr)
-        << "Query target list should not be null";
+    ZETASQL_RET_CHECK_NE(params.function_name, nullptr)
+        << "Function name should not be null";
+    char* funcName = strVal(llast(params.function_name));
 
-    void* obj = list_head(query->targetList)->ptr_value;
-    Expr* expr = internal::PostgresCastNode(TargetEntry, obj)->expr;
     ZETASQL_ASSIGN_OR_RETURN(
         absl::string_view deparsed,
-        CheckedPgDeparseExprInQuery(internal::PostgresCastToNode(expr), query));
+        CheckedPgDeparseFunctionBody(query, params.input_argument_names,
+                                     params.num_input_arguments, funcName));
+    // Remove the prefixed "RETURN " from the deparsed query.
+    deparsed = absl::StripPrefix(deparsed, "RETURN ");
 
     deparsed_query->assign(deparsed);
     return absl::OkStatus();

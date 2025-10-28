@@ -283,6 +283,7 @@ cc_library(
         "//backend/query:analyzer_options",
         "//backend/schema/catalog:schema",
         "//backend/storage:iterator",
+        "//common:constants",
         "//common:errors",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",

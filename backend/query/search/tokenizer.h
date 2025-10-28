@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "zetasql/public/value.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
@@ -84,6 +85,13 @@ double GetDoubleParameterValue(absl::Span<const zetasql::Value> args,
 
 bool GetBoolParameterValue(absl::Span<const zetasql::Value> args,
                            int parameter_index, bool default_value);
+
+absl::Status TokenizeSubstring(absl::string_view str,
+                               std::vector<std::string>& token_list);
+
+absl::Status TokenizeNgrams(absl::string_view str, int ngram_size_min,
+                            int ngram_size_max,
+                            std::vector<std::string>& token_list);
 }  // namespace search
 }  // namespace query
 }  // namespace backend

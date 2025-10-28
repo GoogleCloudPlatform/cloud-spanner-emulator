@@ -717,6 +717,16 @@ ProcedureCreate(const char *procedureName,
 }
 
 
+// SPANGRES BEGIN
+/*
+ * No-op language validator for Spanner internal functions
+ */
+Datum
+fmgr_spanner_internal_validator(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_VOID();
+}
+// SPANGRES END
 
 /*
  * Validator for internal functions

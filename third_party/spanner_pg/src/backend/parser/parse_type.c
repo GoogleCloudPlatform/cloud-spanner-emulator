@@ -92,7 +92,7 @@ LookupTypeNameExtended(ParseState *pstate,
 	else if (typeName->pct_type)
 	{
 		// SPANGRES BEGIN
-		ereport(ERROR, (errmsg("%TYPE references are not supported"),
+		ereport(ERROR, (errmsg("%%TYPE references are not supported"),
 										errcode(ERRCODE_FEATURE_NOT_SUPPORTED)));
 		// SPANGRES END
 	}

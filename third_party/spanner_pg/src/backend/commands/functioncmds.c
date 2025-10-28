@@ -1231,9 +1231,8 @@ CreateFunctionQuery(ParseState *pstate, CreateFunctionStmt *stmt, Oid languageOi
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("ROWS is not applicable when function does not return a set")));
-	
+
 	// SPANGRES BEGIN
-	// TODO: disallow function names matching builtin names.
 	// TODO: default expressions cannot be removed or change type.
 	// `prosqlbody` is a list of nodes, but we only support a single statement.
 	if (IsA(prosqlbody, List))

@@ -163,6 +163,51 @@ ForwardTransformer::BuildGsqlFunctionArgumentList(
   return argument_list;
 }
 
+absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
+ForwardTransformer::BuildGsqlFunctionArgumentList(
+    const FormData_pg_proc* pg_proc, List* args,
+    ExprTransformerInfo* expr_transformer_info) {
+  std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list;
+
+  // Named arguments can be out of order but the NamedArgExpr will have the
+  // correct position. We need to build a map of the position to the argument
+  // so we can build the argument list in the correct order.
+  absl::flat_hash_map<size_t, std::unique_ptr<zetasql::ResolvedExpr>>
+      arg_index_to_expr;
+  size_t positional_index = 0;
+  for (Expr* arg : StructList<Expr*>(args)) {
+    if (arg->type == T_TargetEntry) {
+      return absl::InvalidArgumentError(
+          "TargetEntry is not supported in this context");
+    } else if (arg->type == T_NamedArgExpr) {
+      NamedArgExpr* named_arg_expr =
+          internal::PostgresCastNode(NamedArgExpr, arg);
+      ZETASQL_ASSIGN_OR_RETURN(
+          arg_index_to_expr[named_arg_expr->argnumber],
+          BuildGsqlResolvedExpr(*named_arg_expr->arg, expr_transformer_info));
+    } else {
+      ZETASQL_ASSIGN_OR_RETURN(arg_index_to_expr[positional_index++],
+                       BuildGsqlResolvedExpr(*arg, expr_transformer_info));
+    }
+  }
+
+  // Builds the argument list. Default values will be inserted if the number of
+  // arguments is less than the number of arguments in the function signature.
+  int total_arguments = pg_proc->pronargs > list_length(args)
+                            ? pg_proc->pronargs
+                            : list_length(args);
+  argument_list.reserve(total_arguments);
+  for (int i = 0; i < total_arguments; ++i) {
+    if (!arg_index_to_expr.contains(i)) {
+      // TODO: Add support for default arguments.
+      return absl::InvalidArgumentError(
+          absl::StrCat("Function argument ", i, " is missing"));
+    }
+    argument_list.push_back(std::move(arg_index_to_expr[i]));
+  }
+  return argument_list;
+}
+
 absl::StatusOr<
     std::vector<std::unique_ptr<const zetasql::ResolvedOrderByItem>>>
 ForwardTransformer::BuildGsqlAggregateOrderByList(
@@ -284,9 +329,11 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
   auto udf_catalog_entry = catalog_adapter_->GetUDFFromOid(funcid);
   if (udf_catalog_entry.ok()) {
     const zetasql::Function* udf = udf_catalog_entry.value();
+    ZETASQL_ASSIGN_OR_RETURN(auto proc_data,
+                     catalog_adapter_->GetUDFProcFromOid(funcid));
     ZETASQL_ASSIGN_OR_RETURN(
         std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list,
-        BuildGsqlFunctionArgumentList(args, expr_transformer_info));
+        BuildGsqlFunctionArgumentList(proc_data, args, expr_transformer_info));
     std::vector<zetasql::InputArgumentType> input_argument_types =
         GetInputArgumentTypes(argument_list);
     // Currently don't support overloading UDFs.

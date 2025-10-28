@@ -3,6 +3,10 @@
 # syntax is incompatible so we use lower-case names in both schemas to avoid
 # having to maintain two copies of each query.
 @Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE committimestamptable(
+  id INT64,
+  commit_ts TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+) PRIMARY KEY (id);
 CREATE TABLE users(
   id       INT64 NOT NULL,
   name     STRING(MAX),
@@ -55,6 +59,10 @@ CREATE TABLE gpktable2(
 ) PRIMARY KEY (k2_stored);
 ===
 @Dialect=POSTGRESQL
+CREATE TABLE committimestamptable(
+  id bigint PRIMARY KEY,
+  commit_ts SPANNER.COMMIT_TIMESTAMP
+);
 CREATE TABLE users(
   id       bigint NOT NULL PRIMARY KEY,
   name     varchar,

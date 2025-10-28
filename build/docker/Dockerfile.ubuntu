@@ -97,9 +97,6 @@ COPY --from=build /usr/lib/aarch64-linux-gnu*/libstdc++.so.6 /usr/lib/aarch64-li
 # Copy licenses
 COPY --from=build /licenses.txt.gz .
 
-# Copy Spangres functions catalog
-COPY --from=build /src/third_party/spanner_pg/catalog/proto/functions.txtpb ./third_party/spanner_pg/catalog/proto/functions.txtpb
-
 # Expose the default ports 9010 (gRPC) and 9020 (REST)
 EXPOSE 9010 9020
 

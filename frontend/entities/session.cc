@@ -189,19 +189,10 @@ Session::CreateSingleUseTransaction(
 absl::StatusOr<std::unique_ptr<Transaction>> Session::CreateTransaction(
     const spanner_api::TransactionOptions& options,
     const Transaction::Usage& usage, const backend::RetryState& retry_state) {
-  if (options.mode_case() != v1::TransactionOptions::kReadWrite &&
+  if (options.mode_case() == v1::TransactionOptions::kPartitionedDml &&
       options.isolation_level() ==
           spanner_api::TransactionOptions::REPEATABLE_READ) {
-    return error::RepeatableReadOnlySupportedInReadWriteTransactions();
-  }
-
-  if (options.mode_case() == v1::TransactionOptions::kReadWrite &&
-      options.isolation_level() ==
-          spanner_api::TransactionOptions::REPEATABLE_READ &&
-      options.read_write().read_lock_mode() !=
-          spanner_api::TransactionOptions::ReadWrite::
-              READ_LOCK_MODE_UNSPECIFIED) {
-    return error::ReadLockModeInRepeatableReadMustBeUnspecified();
+    return error::RepeatableReadNotSupportedInPDMLTransactions();
   }
 
   switch (options.mode_case()) {

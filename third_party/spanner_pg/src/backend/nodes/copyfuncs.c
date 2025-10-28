@@ -4068,6 +4068,7 @@ _copyViewStmt(const ViewStmt *from)
 	COPY_NODE_FIELD(options);
 	COPY_SCALAR_FIELD(withCheckOption);
 	COPY_SCALAR_FIELD(is_definer);
+	COPY_SCALAR_FIELD(view_security_type);
 	COPY_STRING_FIELD(query_string);
 
 	return newnode;
@@ -5102,7 +5103,6 @@ _copyCreateSearchIndexStmt(const CreateSearchIndexStmt *from)
 	CreateSearchIndexStmt *newnode = makeNode(CreateSearchIndexStmt);
 
 	COPY_STRING_FIELD(search_index_name);
-	COPY_NODE_FIELD(search_index_name_rangevar);
 	COPY_NODE_FIELD(table_name);
 	COPY_NODE_FIELD(token_columns);
 	COPY_NODE_FIELD(storing);

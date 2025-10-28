@@ -3112,6 +3112,37 @@ TEST_P(InformationSchemaTest, NamedSchemaReferentialConstraints) {
   }
 }
 
+TEST_P(InformationSchemaTest, CrossSchemaForeignKey) {
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK(SetSchema({R"(CREATE TABLE t (id VARCHAR(255) PRIMARY KEY))",
+                         R"(CREATE SCHEMA s)",
+                         R"(CREATE TABLE s.f (
+            id VARCHAR(255) PRIMARY KEY,
+            t_id VARCHAR(255),
+            CONSTRAINT fk_t FOREIGN KEY (t_id) REFERENCES t(id))
+        )"}));
+  } else {
+    ZETASQL_ASSERT_OK(SetSchema({R"(CREATE TABLE t (id STRING(MAX)) PRIMARY KEY(id))",
+                         R"(CREATE SCHEMA s)",
+                         R"(CREATE TABLE s.f (
+            id STRING(MAX),
+            t_id STRING(MAX),
+            CONSTRAINT fk_t FOREIGN KEY (t_id) REFERENCES t(id)
+          ) PRIMARY KEY (id))"}));
+  }
+
+  auto results = Query(R"(
+      SELECT constraint_schema, unique_constraint_schema
+      FROM information_schema.referential_constraints
+      WHERE constraint_name = 'fk_t')");
+
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(results, IsOkAndHoldsRows({{"s", "public"}}));
+  } else {
+    EXPECT_THAT(results, IsOkAndHoldsRows({{"s", ""}}));
+  }
+}
+
 TEST_P(InformationSchemaTest, DefaultKeyColumnUsage) {
   std::string schema = "";
   std::string constraint_catalog_col = "";

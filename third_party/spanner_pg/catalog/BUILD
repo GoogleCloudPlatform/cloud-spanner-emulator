@@ -46,7 +46,7 @@ cc_library(
     srcs = ["engine_system_catalog.cc"],
     hdrs = ["engine_system_catalog.h"],
     deps = [
-        ":builtin_function",
+        ":builtin_functions",
         ":function",
         ":function_identifier",
         ":type",
@@ -82,16 +82,27 @@ cc_library(
 
 cc_library(
     name = "spangres_function_mapper",
-    srcs = ["spangres_function_mapper.cc"],
-    hdrs = ["spangres_function_mapper.h"],
+    srcs = [
+        "spangres_function_filter.cc",
+        "spangres_function_grouper.cc",
+        "spangres_function_mapper.cc",
+        "spangres_function_verifier.cc",
+    ],
+    hdrs = [
+        "spangres_function_filter.h",
+        "spangres_function_grouper.h",
+        "spangres_function_mapper.h",
+        "spangres_function_verifier.h",
+    ],
     deps = [
-        ":builtin_function",
+        ":builtin_functions",
         ":engine_system_catalog",
         ":type",
-        "//third_party/spanner_pg/catalog/proto:catalog_cc_proto",
+        "//third_party/spanner_pg/codegen:postgresql_catalog_cc_proto",
         "//third_party/spanner_pg/src/backend/catalog:generated_catalog_headers",
         "//third_party/spanner_pg/src/include:client_include",
         "@com_google_absl//absl/container:btree",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/flags:commandlineflag",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:reflection",
@@ -99,6 +110,7 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_protobuf//:protobuf_lite",
+        "@com_google_zetasql//zetasql/base:no_destructor",
         "@com_google_zetasql//zetasql/base:ret_check",
         "@com_google_zetasql//zetasql/public:function",
         "@com_google_zetasql//zetasql/public:function_cc_proto",
@@ -107,17 +119,64 @@ cc_library(
 )
 
 cc_test(
-    name = "spangres_function_mapper_test",
-    srcs = ["spangres_function_mapper_test.cc"],
+    name = "spangres_function_verifier_test",
+    srcs = ["spangres_function_verifier_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
-        ":builtin_function",
-        ":engine_system_catalog",
         ":spangres_function_mapper",
-        "//third_party/spanner_pg/src/backend/catalog:generated_catalog_headers",
-        "//third_party/spanner_pg/test_catalog",
-        "@com_google_absl//absl/flags:flag",
+        "//third_party/spanner_pg/test_catalog",  # buildcleaner: keep
         "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:protobuf",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+        "@com_google_zetasql//zetasql/public:function_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "spangres_function_filter_test",
+    srcs = ["spangres_function_filter_test.cc"],
+    tags = ["spanner.spangres"],
+    deps = [
+        ":spangres_function_mapper",
+        "//third_party/spanner_pg/test_catalog",  # buildcleaner: keep
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:protobuf",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_test(
+    name = "spangres_function_grouper_test",
+    srcs = ["spangres_function_grouper_test.cc"],
+    tags = ["spanner.spangres"],
+    deps = [
+        ":builtin_functions",
+        ":spangres_function_mapper",
+        "//third_party/spanner_pg/test_catalog",  # buildcleaner: keep
+        "@com_google_absl//absl/container:btree",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:protobuf",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+cc_test(
+    name = "spangres_function_mapper_test",
+    srcs = ["spangres_function_mapper_test.cc"],
+    tags = ["spanner.spangres"],
+    deps = [
+        ":builtin_functions",
+        ":engine_system_catalog",
+        ":spangres_function_mapper",
+        "//third_party/spanner_pg/test_catalog",  # buildcleaner: keep
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:protobuf",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
         "@com_google_zetasql//zetasql/public:function",
         "@com_google_zetasql//zetasql/public:function_cc_proto",
@@ -131,27 +190,23 @@ cc_library(
     name = "spangres_system_catalog",
     srcs = ["spangres_system_catalog.cc"],
     hdrs = ["spangres_system_catalog.h"],
-    data = [
-        "//third_party/spanner_pg/catalog/proto:functions_txtpb",
-    ],
     visibility = ["//:__subpackages__"],
     deps = [
-        ":builtin_function",
-        ":builtin_spanner_functions",
+        ":builtin_functions",
         ":engine_system_catalog",
         ":function",
         ":spangres_function_mapper",
         ":spangres_type",
         ":type",
         "//third_party/spanner_pg/bootstrap_catalog",
-        "//third_party/spanner_pg/catalog/proto:catalog_cc_proto",
-        "//third_party/spanner_pg/catalog/proto:functions_embed",
+        "//third_party/spanner_pg/codegen:postgresql_catalog_reader",
         "//third_party/spanner_pg/datatypes/extended:conversion_finder",
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
         "//third_party/spanner_pg/datatypes/extended:pg_oid_type",
         "//third_party/spanner_pg/interface:emulator_builtin_function_catalog",
         "//third_party/spanner_pg/postgres_includes",
+        "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/status",
@@ -173,6 +228,7 @@ cc_library(
 cc_test(
     name = "spangres_system_catalog_test",
     srcs = ["spangres_system_catalog_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":engine_system_catalog",
         ":function",
@@ -232,6 +288,7 @@ cc_library(
 cc_test(
     name = "engine_system_catalog_test",
     srcs = ["engine_system_catalog_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":engine_system_catalog",
         ":function_identifier",
@@ -324,6 +381,7 @@ cc_library(
 cc_test(
     name = "type_test",
     srcs = ["type_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":type",
         "//third_party/spanner_pg/postgres_includes",
@@ -352,6 +410,7 @@ cc_test(
 cc_test(
     name = "spangres_type_test",
     srcs = ["spangres_type_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":spangres_type",
         ":type",
@@ -391,6 +450,7 @@ cc_library(
 cc_test(
     name = "pg_catalog_util_test",
     srcs = ["pg_catalog_util_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":pg_catalog_util",
         "@com_google_googletest//:gtest",
@@ -430,6 +490,7 @@ cc_library(
 cc_test(
     name = "catalog_adapter_test",
     srcs = ["catalog_adapter_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":catalog_adapter",
         ":spangres_user_catalog",
@@ -465,6 +526,7 @@ cc_library(
 cc_test(
     name = "catalog_adapter_holder_test",
     srcs = ["catalog_adapter_holder_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":catalog_adapter",
         ":catalog_adapter_holder",
@@ -476,46 +538,29 @@ cc_test(
 )
 
 cc_library(
-    name = "builtin_function",
+    name = "builtin_functions",
     srcs = [
-        "builtin_expr_functions.cc",
-        "builtin_miscellaneous_functions.cc",
-        "builtin_string_functions.cc",
-        "builtin_time_functions.cc",
+        "builtin_aggregate_functions.cc",
+        "builtin_expression_functions.cc",
+        "builtin_function.cc",
+        "builtin_scalar_functions.cc",
     ],
-    hdrs = ["builtin_function.h"],
+    hdrs = [
+        "builtin_aggregate_functions.h",
+        "builtin_expression_functions.h",
+        "builtin_function.h",
+        "builtin_scalar_functions.h",
+    ],
     deps = [
         ":function",
         ":function_identifier",
         ":spangres_type",
         "//third_party/spanner_pg/postgres_includes",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/public:function",
-        "@com_google_zetasql//zetasql/public:type",
-    ],
-)
-
-cc_library(
-    name = "builtin_spanner_functions",
-    srcs = [
-        "builtin_spanner_functions.cc",
-    ],
-    hdrs = ["builtin_spanner_functions.h"],
-    deps = [
-        ":builtin_function",
-        ":function_identifier",
-        ":spangres_type",
-        ":type",
-        "//third_party/spanner_pg/postgres_includes",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
         "@com_google_zetasql//zetasql/public:function",
-        "@com_google_zetasql//zetasql/public:function_cc_proto",
         "@com_google_zetasql//zetasql/public:type",
     ],
 )
@@ -545,6 +590,7 @@ cc_library(
 cc_test(
     name = "table_name_test",
     srcs = ["table_name_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":table_name",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
@@ -575,6 +621,7 @@ cc_library(
 cc_test(
     name = "spangres_user_catalog_test",
     srcs = ["spangres_user_catalog_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":spangres_system_catalog",
         ":spangres_user_catalog",
@@ -626,6 +673,7 @@ cc_library(
 cc_test(
     name = "emulator_function_evaluators_test",
     srcs = ["emulator_function_evaluators_test.cc"],
+    tags = ["spanner.spangres"],
     deps = [
         ":emulator_function_evaluators",
         "//third_party/spanner_pg/interface:pg_evaluators",
@@ -685,7 +733,6 @@ cc_library(
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
@@ -796,6 +843,7 @@ cc_test(
         "-fexceptions",
     ],
     features = ["-use_header_modules"],
+    tags = ["spanner.spangres"],
     deps = [
         ":catalog_wrappers",
         "//third_party/spanner_pg/bootstrap_catalog",

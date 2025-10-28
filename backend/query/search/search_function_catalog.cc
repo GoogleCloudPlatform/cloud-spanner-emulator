@@ -129,6 +129,12 @@ zetasql::FunctionArgumentTypeOptions GetArgumentTypeOptions(
   return result;
 }
 
+zetasql::FunctionArgumentTypeOptions GetPositionalRequiredArgumentTypeOptions(
+    absl::string_view arg_name, bool must_be_constant = true) {
+  return GetArgumentTypeOptions(arg_name, zetasql::kPositionalOnly,
+                                /*is_required=*/true, must_be_constant);
+}
+
 zetasql::FunctionArgumentTypeOptions GetRequiredArgumentTypeOptions(
     absl::string_view arg_name, bool must_be_constant = true) {
   return GetArgumentTypeOptions(arg_name, zetasql::kPositionalOrNamed,
@@ -169,21 +175,23 @@ std::unique_ptr<zetasql::Function> TokenFunction(
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{
               tokenlist_type,
-              {{string_type, GetRequiredArgumentTypeOptions("value", false)}},
+              {{string_type,
+                GetPositionalRequiredArgumentTypeOptions("value", false)}},
               nullptr},
           zetasql::FunctionSignature{
               tokenlist_type,
-              {{bytes_type, GetRequiredArgumentTypeOptions("value", false)}},
+              {{bytes_type,
+                GetPositionalRequiredArgumentTypeOptions("value", false)}},
               nullptr},
           zetasql::FunctionSignature{
               tokenlist_type,
               {{string_array_type,
-                GetRequiredArgumentTypeOptions("value", false)}},
+                GetPositionalRequiredArgumentTypeOptions("value", false)}},
               nullptr},
           zetasql::FunctionSignature{
               tokenlist_type,
               {{bytes_array_type,
-                GetRequiredArgumentTypeOptions("value", false)}},
+                GetPositionalRequiredArgumentTypeOptions("value", false)}},
               nullptr},
       },
       function_options);

@@ -59,7 +59,8 @@ static const char kHighLights[] = "highlights";
 static const char kStartPosition[] = "start_position";
 static const char kEndPosition[] = "end_position";
 
-static const char kValidContentType[] = "text/html";
+static const char kHtmlContentType[] = "text/html";
+static const char kTextContentType[] = "text/plain";
 
 }  // namespace
 
@@ -248,9 +249,12 @@ absl::StatusOr<std::optional<std::string>> SnippetEvaluator::Evaluate(
     const zetasql::Value content_type = args[kContentType];
     if (!content_type.is_null() && content_type.type()->IsString() &&
         !absl::EqualsIgnoreCase(content_type.string_value(),
-                                kValidContentType)) {
-      return error::InvalidContentType("SNIPPET", content_type.string_value(),
-                                       kValidContentType);
+                                kHtmlContentType) &&
+        !absl::EqualsIgnoreCase(content_type.string_value(),
+                                kTextContentType)) {
+      return error::InvalidContentType(
+          "SNIPPET", content_type.string_value(),
+          absl::StrCat(kHtmlContentType, ", ", kTextContentType));
     }
   }
 

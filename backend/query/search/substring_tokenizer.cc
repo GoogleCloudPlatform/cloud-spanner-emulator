@@ -26,7 +26,6 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/query/search/tokenizer.h"
@@ -64,22 +63,6 @@ absl::Status SubstringTokenizer::ValidateNgramSize(int ngram_size_min,
         absl::StrCat("ngram_size_max cannot be greater than ",
                      kMaxAllowedNgramSizeMax, "."));
   }
-
-  return absl::OkStatus();
-}
-
-absl::Status SubstringTokenizer::TokenizeSubstring(
-    absl::string_view str, std::vector<std::string>& token_list) {
-  std::string lower_str;
-  absl::Status status;
-  zetasql::functions::LowerUtf8(str, &lower_str, &status);
-  ZETASQL_RETURN_IF_ERROR(status);
-
-  std::vector<std::string> tokens = absl::StrSplit(
-      lower_str, absl::ByAnyChar(kDelimiter), absl::SkipWhitespace());
-
-  token_list.reserve(token_list.size() + tokens.size());
-  token_list.insert(token_list.end(), tokens.begin(), tokens.end());
 
   return absl::OkStatus();
 }
@@ -157,14 +140,25 @@ absl::StatusOr<zetasql::Value> SubstringTokenizer::Tokenize(
   token_list.push_back(tokenize_signature);
 
   if (!text.is_null()) {
+    auto process_single_value =
+        [&](const zetasql::Value& value) -> absl::Status {
+      std::string lower_str;
+      absl::Status status;
+      zetasql::functions::LowerUtf8(value.string_value(), &lower_str,
+                                      &status);
+      ZETASQL_RETURN_IF_ERROR(status);
+      token_list.push_back(lower_str);
+      return absl::OkStatus();
+    };
+
     if (text.type()->IsArray()) {
       for (auto& value : text.elements()) {
-        ZETASQL_RETURN_IF_ERROR(TokenizeSubstring(value.string_value(), token_list));
+        ZETASQL_RETURN_IF_ERROR(process_single_value(value));
         // Add array gap so evaluator will handle cross array phrase search.
         token_list.push_back(kGapString);
       }
     } else {
-      ZETASQL_RETURN_IF_ERROR(TokenizeSubstring(text.string_value(), token_list));
+      ZETASQL_RETURN_IF_ERROR(process_single_value(text));
     }
   }
 

@@ -68,11 +68,6 @@ CREATE TABLE Users(id bigint PRIMARY KEY) ON COMMIT DROP;
 ERROR: <ON COMMIT> clause is not supported in <CREATE TABLE> statement.
 ==
 
-CREATE TABLE Users(id bigint PRIMARY KEY) WITH (fillfactor=99);
---
-ERROR: <WITH> clause is not supported in <CREATE TABLE> statement.
-==
-
 CREATE TABLE Users(id bigint PRIMARY KEY) PARTITION BY RANGE (id);
 --
 ERROR: <PARTITION BY> clause is not supported in <CREATE TABLE> statement.
