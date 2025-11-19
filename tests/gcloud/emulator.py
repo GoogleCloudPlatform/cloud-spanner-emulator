@@ -49,12 +49,20 @@ class TestCase(unittest.TestCase):
     if os.environ.get('TEST_UNDECLARED_OUTPUTS_DIR'):
       env['CLOUDSDK_CONFIG'] = os.path.join(
           os.environ.get('TEST_UNDECLARED_OUTPUTS_DIR'), '.config', 'gcloud')
+    command = (GCLOUD_BINARY,) + args
     try:
-      return subprocess.check_output(
-          (GCLOUD_BINARY,) + args, env=env, universal_newlines=True
-      ).strip()
+      result = subprocess.run(
+          command,
+          env=env,
+          universal_newlines=True,
+          check=True,
+          # `capture_output` is not supported in python3.6.
+          stdout=subprocess.PIPE,
+          stderr=subprocess.PIPE,
+      )
+      return result.stdout.strip()
     except subprocess.CalledProcessError as e:
-      print(f'Invoking gcloud with args: {args} failed with error: {e.output}')
+      print(f'Invoking gcloud with args: {args} failed with error: {e.stderr}')
       raise e
 
   def GCloudVersion(self):

@@ -85,9 +85,9 @@ CREATE TABLE tablegen(
   k      bigint PRIMARY KEY,
   v1     bigint,
   v2     bigint,
-  g1     bigint GENERATED ALWAYS AS (v2 + 1) STORED,
+  g1     bigint GENERATED ALWAYS AS (v1 + v2 + 1) STORED,
   g2     bigint NOT NULL GENERATED ALWAYS AS (v1 + v2) STORED,
-  g3     bigint GENERATED ALWAYS AS (v1) STORED,
+  g3     bigint GENERATED ALWAYS AS (v1 + v2 + 1) STORED,
   b1     bool GENERATED ALWAYS AS (INTERVAL '1' DAY > INTERVAL '30' DAY) STORED,
   b2     bool GENERATED ALWAYS AS (INTERVAL '1-2 3 4:5:6' = ANY(ARRAY[INTERVAL '1-2 3 4:5:6'])) STORED,
   v3     bigint NOT NULL DEFAULT (2)

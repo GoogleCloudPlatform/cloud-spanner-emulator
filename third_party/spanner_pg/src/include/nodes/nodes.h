@@ -360,6 +360,9 @@ typedef enum NodeTag
 	T_ExplainStmt,
 	T_CreateTableAsStmt,
 	T_CreateSeqStmt,
+	// SPANGRES BEGIN
+	// TODO: expose when queue is implemented.
+	// SPANGRES END
 	T_AlterSeqStmt,
 	T_VariableSetStmt,
 	T_VariableShowStmt,

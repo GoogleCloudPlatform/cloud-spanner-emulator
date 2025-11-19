@@ -2081,7 +2081,7 @@ absl::StatusOr<zetasql::Value> EvalJsonbQueryArray(
       spangres::datatypes::GetPgJsonbArrayType();
   ZETASQL_RET_CHECK(args.size() == 1);
   if (args[0].is_null()) {
-    return zetasql::values::Null(spangres::datatypes::GetPgJsonbType());
+    return zetasql::values::Null(spangres::datatypes::GetPgJsonbArrayType());
   }
 
   ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
@@ -2098,8 +2098,9 @@ absl::StatusOr<zetasql::Value> EvalJsonbQueryArray(
   return zetasql::Value::MakeArray(gsql_pg_jsonb_array, values);
 }
 
+// Maps to both `jsonb_query_array` and `jsonb_array_elements`.
 std::unique_ptr<zetasql::Function> JsonbQueryArrayFunction(
-    absl::string_view catalog_name) {
+    absl::string_view catalog_name, const char* function_name) {
   const zetasql::Type* gsql_pg_jsonb =
       postgres_translator::spangres::datatypes::GetPgJsonbType();
   const zetasql::Type* gsql_pg_jsonb_array =
@@ -2108,8 +2109,7 @@ std::unique_ptr<zetasql::Function> JsonbQueryArrayFunction(
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(PGFunctionEvaluator(EvalJsonbQueryArray));
   return std::make_unique<zetasql::Function>(
-      kZetaSQLJsonQueryArrayFunctionName, catalog_name,
-      zetasql::Function::SCALAR,
+      function_name, catalog_name, zetasql::Function::SCALAR,
       std::vector<zetasql::FunctionSignature>{
           zetasql::FunctionSignature{gsql_pg_jsonb_array,
                                        {gsql_pg_jsonb},
@@ -4603,8 +4603,12 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   functions.push_back(std::move(jsonb_subscript_func));
   auto jsonb_typeof_func = JsonbTypeofFunction(catalog_name);
   functions.push_back(std::move(jsonb_typeof_func));
-  auto jsonb_query_array_func = JsonbQueryArrayFunction(catalog_name);
+  auto jsonb_query_array_func = JsonbQueryArrayFunction(
+      catalog_name, kZetaSQLJsonQueryArrayFunctionName);
   functions.push_back(std::move(jsonb_query_array_func));
+  auto jsonb_array_elements_func =
+      JsonbQueryArrayFunction(catalog_name, kPGJsonbArrayElementsFunctionName);
+  functions.push_back(std::move(jsonb_array_elements_func));
   auto jsonb_build_array_func = JsonbBuildArrayFunction(catalog_name);
   functions.push_back(std::move(jsonb_build_array_func));
   auto jsonb_build_object_func = JsonbBuildObjectFunction(catalog_name);
@@ -4755,6 +4759,7 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   return functions;
 }
 
+// TODO: Clean up once usage is removed from mainline.
 SpannerPGTVFs GetSpannerPGTVFs(const std::string& catalog_name) {
   SpannerPGTVFs tvfs;
   auto jsonb_array_elements_tvf =

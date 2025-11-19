@@ -76,7 +76,10 @@ class AnalyzeStatementTest : public testing::Test {
     zetasql::TypeFactory type_factory{};
     std::unique_ptr<const Schema> schema =
         test::CreateSchemaWithOneTable(&type_factory, dialect);
-    FunctionCatalog function_catalog{&type_factory};
+    FunctionCatalog function_catalog{
+        &type_factory,
+        /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+        /*latest_schema=*/schema.get()};
     function_catalog.SetLatestSchema(schema.get());
     auto analyzer_options = MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
     Catalog catalog{schema.get(), &function_catalog, &type_factory,
@@ -150,13 +153,16 @@ TEST_F(AnalyzeStatementTest, SelectFromPGCatalog_PostgreSQL) {
 
 class CatalogTest : public testing::Test {
  public:
-  CatalogTest() : type_factory_(), function_catalog_(&type_factory_) {}
+  CatalogTest() : type_factory_() {}
 
   void SetUp() override {
     schema_ = test::CreateSchemaWithOneTable(&type_factory_);
-    function_catalog_.SetLatestSchema(schema_.get());
+    function_catalog_ = std::make_unique<FunctionCatalog>(
+        &type_factory_,
+        /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+        /*latest_schema=*/schema_.get());
     catalog_ = std::make_unique<Catalog>(
-        schema_.get(), &function_catalog_, &type_factory_,
+        schema_.get(), function_catalog_.get(), &type_factory_,
         MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone));
   }
 
@@ -166,7 +172,7 @@ class CatalogTest : public testing::Test {
     ZETASQL_ASSERT_OK_AND_ASSIGN(schema_, test::CreateSchemaFromDDL(
                                       statements, &type_factory_, "", dialect));
     catalog_ = std::make_unique<Catalog>(
-        schema_.get(), &function_catalog_, &type_factory_,
+        schema_.get(), function_catalog_.get(), &type_factory_,
         MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone));
   }
 
@@ -175,10 +181,10 @@ class CatalogTest : public testing::Test {
     ZETASQL_ASSERT_OK_AND_ASSIGN(schema_,
                          test::CreateSchemaFromDDL(statements, &type_factory_));
     catalog_ = std::make_unique<Catalog>(
-        schema_.get(), &function_catalog_, &type_factory_,
+        schema_.get(), function_catalog_.get(), &type_factory_,
         MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone));
     change_stream_internal_query_catalog_ = std::make_unique<Catalog>(
-        schema_.get(), &function_catalog_, &type_factory_,
+        schema_.get(), function_catalog_.get(), &type_factory_,
         MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone), /*reader=*/nullptr,
         /*query_evaluator=*/nullptr,
         /*change_stream_internal_lookup=*/"test_stream");
@@ -194,7 +200,7 @@ class CatalogTest : public testing::Test {
   zetasql::TypeFactory type_factory_;
   std::unique_ptr<test::ScopedEmulatorFeatureFlagsSetter> flag_setter_;
   std::unique_ptr<const Schema> schema_ = nullptr;
-  FunctionCatalog function_catalog_;
+  std::unique_ptr<FunctionCatalog> function_catalog_;
   std::unique_ptr<Catalog> catalog_;
   std::unique_ptr<Catalog> change_stream_internal_query_catalog_;
 };

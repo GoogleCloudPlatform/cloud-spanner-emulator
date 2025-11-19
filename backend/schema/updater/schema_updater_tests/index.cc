@@ -2353,6 +2353,171 @@ TEST_P(SchemaUpdaterTest, AlterVectorIndex) {
   EXPECT_EQ(new_schema->FindIndex("VI")->stored_columns().size(), 0);
 }
 
+TEST_P(SchemaUpdaterTest, CreateSearchIndexWithOptions) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema(
+                                     {
+                                         R"sql(
+        CREATE TABLE T (
+          col1 bigint NOT NULL,
+          col2 text,
+          col3 spanner.tokenlist generated always as (spanner.tokenize_fulltext(col2)) stored hidden,
+          PRIMARY KEY (col1))
+      )sql",
+                                         R"sql(
+        CREATE SEARCH INDEX I1 ON T(col3) WITH ( sort_order_sharding = true )
+      )sql",
+                                         R"sql(
+        CREATE SEARCH INDEX I2 ON T(col3) WITH ( sort_order_sharding = false )
+      )sql",
+                                         R"sql(
+        CREATE SEARCH INDEX I3 ON T(col3) WITH ( disable_automatic_uid_column = true )
+      )sql",
+                                         R"sql(
+        CREATE SEARCH INDEX I4 ON T(col3) WITH ( disable_automatic_uid_column = false )
+      )sql",
+                                         R"sql(
+        CREATE SEARCH INDEX I5 ON T(col3) WITH ( sort_order_sharding = true, disable_automatic_uid_column = true )
+      )sql",
+                                         R"sql(
+        CREATE SEARCH INDEX I6 ON T(col3) WITH ( sort_order_sharding = false, disable_automatic_uid_column = false )
+      )sql",
+                                     },
+                                     "", POSTGRESQL, false));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+                                     R"sql(
+        CREATE TABLE T (
+          col1 INT64 NOT NULL,
+          col2 STRING(MAX),
+          col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN
+        ) PRIMARY KEY (col1)
+      )sql",
+                                     R"sql(
+        CREATE SEARCH INDEX I1 ON T(col3) OPTIONS ( sort_order_sharding = true )
+      )sql",
+                                     R"sql(
+        CREATE SEARCH INDEX I2 ON T(col3) OPTIONS ( sort_order_sharding = false )
+      )sql",
+                                     R"sql(
+        CREATE SEARCH INDEX I3 ON T(col3) OPTIONS ( disable_automatic_uid_column = true )
+      )sql",
+                                     R"sql(
+        CREATE SEARCH INDEX I4 ON T(col3) OPTIONS ( disable_automatic_uid_column = false )
+      )sql",
+                                     R"sql(
+        CREATE SEARCH INDEX I5 ON T(col3) OPTIONS ( sort_order_sharding = true, disable_automatic_uid_column = true )
+      )sql",
+                                     R"sql(
+        CREATE SEARCH INDEX I6 ON T(col3) OPTIONS ( sort_order_sharding = false, disable_automatic_uid_column = false )
+      )sql",
+                                 }));
+  }
+  auto i1 = schema->FindIndex("I1");
+  EXPECT_NE(i1, nullptr);
+  EXPECT_TRUE(i1->search_index_options().sort_order_sharding());
+  EXPECT_FALSE(i1->search_index_options().has_disable_automatic_uid_column());
+
+  auto i2 = schema->FindIndex("I2");
+  EXPECT_NE(i2, nullptr);
+  EXPECT_FALSE(i2->search_index_options().sort_order_sharding());
+  EXPECT_FALSE(i2->search_index_options().has_disable_automatic_uid_column());
+
+  auto i3 = schema->FindIndex("I3");
+  EXPECT_NE(i3, nullptr);
+  EXPECT_FALSE(i3->search_index_options().has_sort_order_sharding());
+  EXPECT_TRUE(i3->search_index_options().disable_automatic_uid_column());
+
+  auto i4 = schema->FindIndex("I4");
+  EXPECT_NE(i4, nullptr);
+  EXPECT_FALSE(i4->search_index_options().has_sort_order_sharding());
+  EXPECT_FALSE(i4->search_index_options().disable_automatic_uid_column());
+
+  auto i5 = schema->FindIndex("I5");
+  EXPECT_NE(i5, nullptr);
+  EXPECT_TRUE(i5->search_index_options().sort_order_sharding());
+  EXPECT_TRUE(i5->search_index_options().disable_automatic_uid_column());
+
+  auto i6 = schema->FindIndex("I6");
+  EXPECT_NE(i6, nullptr);
+  EXPECT_FALSE(i6->search_index_options().sort_order_sharding());
+  EXPECT_FALSE(i6->search_index_options().disable_automatic_uid_column());
+}
+
+TEST_P(SchemaUpdaterTest, CreateSearchIndexWithInvalidOptions) {
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        CreateSchema(
+            {
+                R"sql(
+        CREATE TABLE T (
+          col1 bigint NOT NULL,
+          col2 text,
+          col3 spanner.tokenlist generated always as (spanner.tokenize_fulltext(col2)) stored hidden,
+          PRIMARY KEY (col1))
+      )sql",
+                R"sql(
+        CREATE SEARCH INDEX I1 ON T(col3) WITH ( invalid_option = true )
+      )sql"},
+            "", POSTGRESQL, false),
+        zetasql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            testing::HasSubstr("Invalid search index option 'invalid_option' "
+                               "in <CREATE SEARCH INDEX> statement")));
+    EXPECT_THAT(
+        CreateSchema(
+            {
+                R"sql(
+      CREATE TABLE T (
+          col1 bigint NOT NULL,
+          col2 text,
+          col3 spanner.tokenlist generated always as (spanner.tokenize_fulltext(col2)) stored hidden,
+        PRIMARY KEY (col1))
+    )sql",
+                R"sql(
+        CREATE SEARCH INDEX I1 ON T(col3) WITH ( sort_order_sharding = 123 )
+      )sql"},
+            "", POSTGRESQL, false),
+        zetasql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            testing::HasSubstr("Failed to provide valid option value for "
+                               "'sort_order_sharding' in <CREATE SEARCH INDEX> "
+                               "statement")));
+
+  } else {
+    EXPECT_THAT(CreateSchema({
+                    R"sql(
+        CREATE TABLE T (
+          col1 INT64 NOT NULL,
+          col2 STRING(MAX),
+          col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN
+        ) PRIMARY KEY (col1)
+      )sql",
+                    R"sql(
+        CREATE SEARCH INDEX I1 ON T(col3) OPTIONS ( invalid_option = true )
+      )sql"}),
+                zetasql_base::testing::StatusIs(
+                    absl::StatusCode::kInvalidArgument,
+                    testing::HasSubstr("Option: invalid_option is unknown.")));
+    EXPECT_THAT(CreateSchema({
+                    R"sql(
+      CREATE TABLE T (
+        col1 INT64 NOT NULL,
+        col2 STRING(MAX),
+        col3 TOKENLIST AS(TOKENIZE_FULLTEXT(col2)) STORED HIDDEN
+      ) PRIMARY KEY (col1)
+    )sql",
+                    R"sql(
+        CREATE SEARCH INDEX I1 ON T(col3) OPTIONS ( sort_order_sharding = 123 )
+      )sql"}),
+                zetasql_base::testing::StatusIs(
+                    absl::StatusCode::kInvalidArgument,
+                    testing::HasSubstr(
+                        "Unexpected value for option: sort_order_sharding.")));
+  }
+}
+
 }  // namespace
 
 }  // namespace test

@@ -140,7 +140,10 @@ absl::Status BackfillEvaluatedColumnValue(
             (evaluated_column->is_generated() ||
              evaluated_column->has_default_value()));
   ZETASQL_RET_CHECK_NE(context, nullptr);
-  FunctionCatalog function_catalog(context->type_factory());
+  FunctionCatalog function_catalog(
+      context->type_factory(),
+      /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+      /*latest_schema=*/context->validated_new_schema());
   function_catalog.SetLatestSchema(context->validated_new_schema());
   zetasql::AnalyzerOptions analyzer_options = MakeGoogleSqlAnalyzerOptions(
       context->validated_new_schema()->default_time_zone());

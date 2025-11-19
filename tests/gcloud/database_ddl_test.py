@@ -16,10 +16,29 @@
 
 """Tests for Cloud Spanner gcloud command for ddl statements to CREATE/ALTER/DROP CHANGE STREAM."""
 
+import subprocess
+
 from tests.gcloud import emulator
 
 
 class GCloudDatabaseDdlTest(emulator.TestCase):
+
+  def testInstanceNotFoundError(self):
+    try:
+      self.RunGCloud(
+          'spanner',
+          'databases',
+          'ddl',
+          'describe',
+          'unknown-database',
+          '--instance=unknown-instance',
+      )
+      self.fail('Expected instance not found error')
+    except subprocess.CalledProcessError as err:
+      e = err
+    self.assertIsNotNone(e)
+    self.assertIn('Instance does not exist.', e.stderr)
+
   # TODO: Test returned strings from ddl.
   def testUpdateDDLChangeStream(self):
     # Create an instance.

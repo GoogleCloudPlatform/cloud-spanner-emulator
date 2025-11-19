@@ -133,6 +133,12 @@ class Index::Builder {
     return *this;
   }
 
+  Builder& set_search_index_options(
+      const ddl::SearchIndexOptionsProto& search_index_options) {
+    instance_->search_index_options_ = search_index_options;
+    return *this;
+  }
+
  private:
   std::unique_ptr<Index> instance_;
 };

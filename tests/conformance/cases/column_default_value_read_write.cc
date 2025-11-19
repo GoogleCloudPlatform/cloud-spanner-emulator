@@ -24,6 +24,7 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
+#include "absl/strings/substitute.h"
 #include "absl/time/time.h"
 #include "google/cloud/spanner/numeric.h"
 #include "google/cloud/spanner/timestamp.h"
@@ -56,7 +57,9 @@ class ColumnDefaultValueReadWriteTest
  private:
   test::ScopedEmulatorFeatureFlagsSetter feature_flags_setter_ =
       test::ScopedEmulatorFeatureFlagsSetter(
-          {.enable_user_defined_functions = true});
+          {.enable_dml_returning = true,
+           .enable_upsert_queries = true,
+           .enable_user_defined_functions = true});
 };
 
 MATCHER_P(WhenLowercased, matcher, "") {

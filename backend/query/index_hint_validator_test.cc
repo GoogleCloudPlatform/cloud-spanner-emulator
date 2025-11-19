@@ -44,8 +44,7 @@ namespace {
 class IndexHintValidatorTest : public testing::Test {
  public:
   IndexHintValidatorTest()
-      : analyzer_options_(MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone)),
-        fn_catalog_(&type_factory_) {}
+      : analyzer_options_(MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone)) {}
 
   void SetUp() override {
     ZETASQL_ASSERT_OK_AND_ASSIGN(schema_, test::CreateSchemaFromDDL(
@@ -77,7 +76,12 @@ class IndexHintValidatorTest : public testing::Test {
       ALTER TABLE T2 ADD FOREIGN KEY(col2) REFERENCES T1(col1))"},
                                       &type_factory_));
 
-    catalog_ = std::make_unique<Catalog>(schema_.get(), &fn_catalog_,
+    fn_catalog_ = std::make_unique<FunctionCatalog>(
+        &type_factory_,
+        /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+        /*latest_schema=*/schema_.get());
+
+    catalog_ = std::make_unique<Catalog>(schema_.get(), fn_catalog_.get(),
                                          &type_factory_, analyzer_options_);
   }
 
@@ -96,7 +100,7 @@ class IndexHintValidatorTest : public testing::Test {
 
   const zetasql::AnalyzerOptions analyzer_options_;
 
-  const FunctionCatalog fn_catalog_;
+  std::unique_ptr<const FunctionCatalog> fn_catalog_;
 
   std::unique_ptr<const Schema> schema_;
 

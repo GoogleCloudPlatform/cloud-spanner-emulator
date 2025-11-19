@@ -62,6 +62,7 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
+#include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/function.h"
 #include "third_party/spanner_pg/catalog/function_identifier.h"
 #include "third_party/spanner_pg/catalog/type.h"
@@ -880,7 +881,8 @@ absl::Status EngineSystemCatalog::AddProcedure(
 absl::StatusOr<std::unique_ptr<PostgresExtendedFunctionSignature>>
 EngineSystemCatalog::BuildVariadicPostgresExtendedFunctionSignature(
     const std::string& mapped_function_name,
-    const zetasql::FunctionSignature& signature, Oid proc_oid) {
+    const zetasql::FunctionSignature& signature, Oid proc_oid,
+    const std::vector<std::string>& query_features_names) {
   // Get the original builtin function.
   const zetasql::Function* mapped_builtin_function;
   ZETASQL_ASSIGN_OR_RETURN(
@@ -895,7 +897,7 @@ EngineSystemCatalog::BuildVariadicPostgresExtendedFunctionSignature(
           mapped_builtin_function->GetGroup(), mapped_builtin_function->mode(),
           std::vector<zetasql::FunctionSignature>{signature},
           mapped_builtin_function->function_options()),
-      proc_oid);
+      proc_oid, query_features_names);
 }
 
 absl::Status EngineSystemCatalog::AddFunction(
@@ -908,6 +910,9 @@ absl::Status EngineSystemCatalog::AddFunction(
         absl::StrCat("Function ", function_arguments.postgres_function_name(),
                      " was already added to the catalog."));
   }
+
+  const std::vector<std::string>& function_query_features_names =
+      function_arguments.query_features_names();
 
   // Get the list of procs that match the PostgreSQL proc name and namespace
   // name.
@@ -935,6 +940,8 @@ absl::Status EngineSystemCatalog::AddFunction(
         signature_arguments.explicit_mapped_function_name().empty()
             ? function_arguments.mapped_function_name()
             : signature_arguments.explicit_mapped_function_name();
+    const std::vector<std::string>& signature_query_features_names =
+        signature_arguments.query_features_names();
 
     if (signature_arguments.postgres_proc_oid() != InvalidOid) {
       // The proc oid is provided and validation should not be performed.
@@ -944,7 +951,8 @@ absl::Status EngineSystemCatalog::AddFunction(
           std::unique_ptr<PostgresExtendedFunctionSignature> signature,
           BuildVariadicPostgresExtendedFunctionSignature(
               mapped_function_name, signature_arguments.signature(),
-              signature_arguments.postgres_proc_oid()));
+              signature_arguments.postgres_proc_oid(),
+              signature_query_features_names));
       function_signatures.push_back(std::move(signature));
       AddFunctionToReverseMappings(mapped_function_name,
                                    signature_arguments.postgres_proc_oid());
@@ -985,8 +993,8 @@ absl::Status EngineSystemCatalog::AddFunction(
     if (!signature_arguments.has_mapped_function()) {
       function_signatures.push_back(
           std::make_unique<PostgresExtendedFunctionSignature>(
-              engine_system_catalog_signature, /*mapped_function=*/nullptr,
-              oid));
+              engine_system_catalog_signature, /*mapped_function=*/nullptr, oid,
+              signature_query_features_names));
     } else {
       // Get and verify a copy of the mapped builtin function and signature for
       // specific signature.
@@ -1021,8 +1029,8 @@ absl::Status EngineSystemCatalog::AddFunction(
       // Construct the PostgresExtendedFunctionSignature.
       function_signatures.push_back(
           std::make_unique<PostgresExtendedFunctionSignature>(
-              engine_system_catalog_signature, std::move(mapped_function),
-              oid));
+              engine_system_catalog_signature, std::move(mapped_function), oid,
+              signature_query_features_names));
       AddFunctionToReverseMappings(mapped_function_name, oid);
     }
   }
@@ -1030,7 +1038,8 @@ absl::Status EngineSystemCatalog::AddFunction(
   std::unique_ptr<PostgresExtendedFunction> function =
       std::make_unique<PostgresExtendedFunction>(
           function_arguments.postgres_function_name(),
-          function_arguments.mode(), std::move(function_signatures));
+          function_arguments.mode(), std::move(function_signatures),
+          function_query_features_names);
 
   engine_functions_.insert(
       {function_arguments.postgres_function_name(), std::move(function)});

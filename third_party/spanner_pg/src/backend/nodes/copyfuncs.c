@@ -4736,6 +4736,10 @@ _copyCreateSchemaStmt(const CreateSchemaStmt *from)
 	return newnode;
 }
 
+// SPANGRES BEGIN
+// TODO: expose when queue is implemented.
+// SPANGRES END
+
 static AlterSpangresStatsStmt *
 _copyAlterSpangresStatsStmt(const AlterSpangresStatsStmt *from)
 {
@@ -5912,6 +5916,9 @@ copyObjectImpl(const void *from)
 		case T_CreateSeqStmt:
 			retval = _copyCreateSeqStmt(from);
 			break;
+		// SPANGRES BEGIN
+		// TODO: expose when queue is implemented.
+		// SPANGRES END
 		case T_AlterSeqStmt:
 			retval = _copyAlterSeqStmt(from);
 			break;

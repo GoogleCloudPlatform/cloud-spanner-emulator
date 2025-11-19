@@ -343,6 +343,9 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 		CreateSearchIndexStmt AlterSearchIndexStmt
 		// SPANGRES END
 		CreateLocalityGroupStmt AlterLocalityGroupStmt
+    // SPANGRES BEGIN
+    // TODO: expose when queue is implemented.
+    // SPANGRES END
 
 %type <node>	select_no_parens select_with_parens select_clause
 				simple_select values_clause
@@ -775,6 +778,9 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 	PLANS POLICY
 	POSITION PRECEDING PRECISION PRESERVE PREPARE PREPARED PRIMARY
 	PRIOR PRIVILEGES PROCEDURAL PROCEDURE PROCEDURES PROGRAM PUBLICATION
+	// SPANGRES BEGIN
+	// TODO: expose when queue is implemented.
+	// SPANGRES END
 
 	QUOTE
 
@@ -1065,6 +1071,9 @@ stmt:
 			| AlterOpFamilyStmt
 			| CreatePolicyStmt
 			| CreatePLangStmt
+      // SPANGRES BEGIN
+      // TODO: expose when queue is implemented.
+      // SPANGRES END
 			| CreateSchemaStmt
 			// SPANGRES BEGIN
 			| CreateSearchIndexStmt
@@ -7278,6 +7287,9 @@ DropStmt:	DROP object_type_any_name IF_P EXISTS any_name_list opt_drop_behavior
 					n->objects = list_make1($6);
 					$$ = (Node *)n;
 				}
+			// SPANGRES BEGIN
+			// TODO: expose when queue is implemented.
+			// SPANGRES END
 		;
 
 /* object types taking any_name/any_name_list */
@@ -11467,6 +11479,10 @@ change_stream_tracked_tables:
            n->opt_reset_options = $7;
            $$ = (Node *)n;
          }
+
+// SPANGRES BEGIN
+// TODO: expose when queue is implemented.
+// SPANGRES END
 
 /*****************************************************************************
  *
@@ -18077,6 +18093,9 @@ unreserved_keyword:
 			| PROCEDURES
 			| PROGRAM
 			| PUBLICATION
+      // SPANGRES BEGIN
+      // TODO: expose when queue is implemented.
+      // SPANGRES END
 			| QUOTE
 			| RANGE
 			| READ
@@ -18672,6 +18691,9 @@ bare_label_keyword:
 			| PROCEDURES
 			| PROGRAM
 			| PUBLICATION
+      // SPANGRES BEGIN
+      // TODO: expose when queue is implemented.
+      // SPANGRES END
 			| QUOTE
 			| RANGE
 			| READ

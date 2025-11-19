@@ -1717,8 +1717,7 @@ ALTER TABLE U SET ON DELETE NO ACTION;
 --
 ERROR:.* Cannot create or alter table U with ON DELETE NO ACTION because there is a row deletion policy on ancestor table T.
 ==
-# Policy on foreign key
-# --regex
+# Policy on foreign key with delete cascade
 CREATE TABLE T (
   Key INT64,
   CreatedAt TIMESTAMP,
@@ -1726,11 +1725,19 @@ CREATE TABLE T (
 CREATE TABLE U (
   MyKey INT64,
   Key INT64,
-  CONSTRAINT FK_Key FOREIGN KEY(Key) REFERENCES T(Key),
+  CONSTRAINT FK_Key FOREIGN KEY(Key) REFERENCES T(Key) ON DELETE CASCADE,
 ) PRIMARY KEY(MyKey);
 ALTER TABLE T ADD ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
 --
-ERROR:.* Cannot add a row deletion policy to table `T`. It is referenced by one or more foreign keys: `FK_Key`.
+CREATE TABLE T (
+  Key INT64,
+  CreatedAt TIMESTAMP,
+) PRIMARY KEY(Key), ROW DELETION POLICY (OLDER_THAN(CreatedAt, INTERVAL 7 DAY));
+CREATE TABLE U (
+  MyKey INT64,
+  Key INT64,
+  CONSTRAINT FK_Key FOREIGN KEY(Key) REFERENCES T(Key) ON DELETE CASCADE,
+) PRIMARY KEY(MyKey);
 ==
 # ANALYZE is no-op for emulator.
 ANALYZE

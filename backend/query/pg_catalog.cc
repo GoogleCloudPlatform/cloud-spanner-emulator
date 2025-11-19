@@ -2099,10 +2099,6 @@ void PGCatalog::FillPGProcTable() {
         ZETASQL_VLOG(1) << "Failed to get type mapping for "
                    << arg.type()->DebugString();
         continue;
-      } else if (type_mapping->PostgresTypeOid() == TEXTOID) {
-        type_mapping = types::PgVarcharMapping();
-      } else if (type_mapping->PostgresTypeOid() == TEXTARRAYOID) {
-        type_mapping = types::PgVarcharArrayMapping();
       }
       if (arg.repeated()) {
         variadic_type_oid = type_mapping->PostgresTypeOid();

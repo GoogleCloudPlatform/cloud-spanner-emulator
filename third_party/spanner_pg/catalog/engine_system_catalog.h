@@ -484,7 +484,8 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   absl::StatusOr<std::unique_ptr<PostgresExtendedFunctionSignature>>
   BuildVariadicPostgresExtendedFunctionSignature(
       const std::string& mapped_function_name,
-      const zetasql::FunctionSignature& signature, Oid proc_oid);
+      const zetasql::FunctionSignature& signature, Oid proc_oid,
+      const std::vector<std::string>& query_features_names);
 
   // Creates a PostgresExtendedFunction using the arguments and adds it to the
   // catalog.

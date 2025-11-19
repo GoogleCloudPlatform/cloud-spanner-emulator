@@ -33,13 +33,11 @@
 #define CATALOG_BUILTIN_FUNCTION_H_
 
 #include <string>
-#include <tuple>
 #include <vector>
 
-#include "absl/container/flat_hash_map.h"
+#include "zetasql/public/function.h"
+#include "zetasql/public/function_signature.h"
 #include "absl/strings/string_view.h"
-#include "third_party/spanner_pg/catalog/function.h"
-#include "third_party/spanner_pg/catalog/function_identifier.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 
 // This file contains classes and methods to easily add builtin functions
@@ -80,11 +78,13 @@ class PostgresFunctionSignatureArguments {
       const zetasql::FunctionSignature& signature,
       bool has_mapped_function = true,
       const std::string& explicit_mapped_function_name = "",
-      Oid postgres_proc_oid = InvalidOid)
+      Oid postgres_proc_oid = InvalidOid,
+      std::vector<std::string> query_features_names = {})
       : signature_(signature),
         has_mapped_function_(has_mapped_function),
         explicit_mapped_function_name_(explicit_mapped_function_name),
-        postgres_proc_oid_(postgres_proc_oid) {}
+        postgres_proc_oid_(postgres_proc_oid),
+        query_features_names_(query_features_names) {}
 
   const zetasql::FunctionSignature& signature() const { return signature_; }
   bool has_mapped_function() const { return has_mapped_function_; }
@@ -95,6 +95,10 @@ class PostgresFunctionSignatureArguments {
   // for validated signatures.
   Oid postgres_proc_oid() const { return postgres_proc_oid_; }
 
+  const std::vector<std::string>& query_features_names() const {
+    return query_features_names_;
+  }
+
  private:
   zetasql::FunctionSignature signature_;
   bool has_mapped_function_;
@@ -102,6 +106,9 @@ class PostgresFunctionSignatureArguments {
   // general mapped function name in PostgresFunctionArguments.
   std::string explicit_mapped_function_name_;
   Oid postgres_proc_oid_;
+  // The query feature names that must be enabled so that this signature is
+  // enabled.
+  std::vector<std::string> query_features_names_;
 };
 
 // Helper class used by AddFunction to create a PostgresExtendedFunction.
@@ -120,12 +127,14 @@ class PostgresFunctionArguments {
       const std::vector<PostgresFunctionSignatureArguments>&
           signature_arguments,
       zetasql::Function::Mode mode = zetasql::Function::SCALAR,
-      absl::string_view postgres_namespace = "pg_catalog")
+      absl::string_view postgres_namespace = "pg_catalog",
+      std::vector<std::string> query_features_names = {})
       : postgres_function_name_(postgres_function_name),
         mapped_function_name_(mapped_function_name),
         signature_arguments_(signature_arguments),
         mode_(mode),
-        postgres_namespace_(postgres_namespace) {}
+        postgres_namespace_(postgres_namespace),
+        query_features_names_(query_features_names) {}
 
   const std::string& postgres_function_name() const {
     return postgres_function_name_;
@@ -149,12 +158,19 @@ class PostgresFunctionArguments {
 
   const std::string& postgres_namespace() const { return postgres_namespace_; }
 
+  const std::vector<std::string>& query_features_names() const {
+    return query_features_names_;
+  }
+
  private:
   std::string postgres_function_name_;
   std::string mapped_function_name_;
   std::vector<PostgresFunctionSignatureArguments> signature_arguments_;
   zetasql::Function::Mode mode_;
   std::string postgres_namespace_;
+  // The query feature names that must be enabled so that this function is
+  // enabled.
+  std::vector<std::string> query_features_names_;
 };
 
 }  // namespace postgres_translator

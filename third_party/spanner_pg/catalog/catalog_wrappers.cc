@@ -1366,7 +1366,7 @@ extern "C" const FormData_pg_proc* GetProcByOid(Oid oid) {
 }
 
 extern "C" bool ShouldCoerceUnknownLiterals() {
-  return false;
+  return true;
 }
 
 extern "C" int GetFunctionArgInfo(Oid proc_oid, Oid **p_argtypes,

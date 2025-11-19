@@ -1056,9 +1056,6 @@ TEST_P(SearchTest, SnippetContentTypeCaseInsensitive) {
 // The required tokenize_json or tokenize_jsonb function will be added in the
 // schema file to ensure JSON search schema can work.
 TEST_P(SearchTest, JsonSearch) {
-  if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    GTEST_SKIP() << "JSON_CONTAINS is not supported in the emulator.";
-  }
   std::string query = dialect_ == database_api::DatabaseDialect::POSTGRESQL
                           ?
                           R"sql(

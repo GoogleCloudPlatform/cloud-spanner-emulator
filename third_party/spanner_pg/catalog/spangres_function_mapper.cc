@@ -181,6 +181,7 @@ SpangresFunctionMapper::ToPostgresFunctionArguments(
                        FunctionArgumentTypeFrom(argument));
       gsql_arguments.push_back(gsql_arg_type);
     }
+    std::vector<std::string> query_features;
 
     zetasql::FunctionSignature gsql_signature = FunctionSignatureFrom(
         gsql_return_type, gsql_arguments, signature.deprecated());
@@ -190,14 +191,18 @@ SpangresFunctionMapper::ToPostgresFunctionArguments(
     pg_signatures.push_back(PostgresFunctionSignatureArguments(
         gsql_signature,
         /*has_mapped_function=*/true,
-        /*explicit_mapped_function_name=*/"", signature_oid));
+        /*explicit_mapped_function_name=*/"", signature_oid, query_features));
   }
 
+  std::string_view postgres_function_name = postgresql_name_path[1];
   std::string mapped_function_name = absl::StrJoin(mapped_name_path, ".");
+  std::string_view postgres_function_namespace =
+      PostgresNamespaceFrom(postgresql_name_path[0]);
+  std::vector<std::string> query_features;
   result.push_back(PostgresFunctionArguments(
-      postgresql_name_path[1], mapped_function_name, pg_signatures,
+      postgres_function_name, mapped_function_name, pg_signatures,
       zetasql::Function::SCALAR,  // Only Scalar functions are supported
-      PostgresNamespaceFrom(postgresql_name_path[0])));
+      postgres_function_namespace, query_features));
 
   return result;
 }

@@ -123,7 +123,7 @@ struct TranslationOptions {
   // This enables support for search index in Spangres.
   bool enable_search_index = true;
   // enable_locality_groups allows create/drop/alter locality groups.
-  bool enable_locality_groups = false;
+  bool enable_locality_groups = true;
   // enable_alter_index allows translation of <ALTER INDEX>.
   bool enable_alter_index = true;
   // enable_role_based_access allows role-based access control, e.g.

@@ -70,8 +70,6 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
   database->storage_ = std::make_unique<InMemoryStorage>();
   database->lock_manager_ = std::make_unique<LockManager>(clock);
   database->type_factory_ = std::make_unique<zetasql::TypeFactory>();
-  database->query_engine_ =
-      std::make_unique<QueryEngine>(database->type_factory_.get());
   database->action_manager_ = std::make_unique<ActionManager>();
   database->dialect_ = schema_change_operation.database_dialect;
   database->pg_oid_assigner_ = std::make_unique<PgOidAssigner>(
@@ -97,6 +95,10 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
     database->versioned_catalog_ =
         std::make_unique<VersionedCatalog>(std::move(schema));
   }
+
+  database->query_engine_ = std::make_unique<QueryEngine>(
+      database->type_factory_.get(),
+      database->versioned_catalog_->GetLatestSchema());
 
   database->action_manager_->AddActionsForSchema(
       database->versioned_catalog_->GetLatestSchema(),

@@ -144,6 +144,10 @@ class Index : public SchemaNode {
     return vector_index_options_;
   }
 
+  ddl::SearchIndexOptionsProto search_index_options() const {
+    return search_index_options_;
+  }
+
   std::optional<SchemaNameInfo> GetSchemaNameInfo() const override {
     return SchemaNameInfo{.name = name_, .kind = "Index", .global = true};
   }
@@ -234,6 +238,9 @@ class Index : public SchemaNode {
 
   // Applies only to vector index. The options for the vector index.
   ddl::VectorIndexOptionsProto vector_index_options_;
+
+  // Applies only to search index. The options for the search index.
+  ddl::SearchIndexOptionsProto search_index_options_;
 
   // The locality group this index belongs to.
   const LocalityGroup* locality_group_ = nullptr;

@@ -4289,6 +4289,10 @@ _outCreateSeqStmt(StringInfo str, const CreateSeqStmt *node)
 	WRITE_BOOL_FIELD(if_not_exists);
 }
 
+// SPANGRES BEGIN
+// TODO: expose when queue is implemented.
+// SPANGRES END
+
 static void _outAlterSeqStmt(StringInfo str, const AlterSeqStmt *node)
 {
 	WRITE_NODE_TYPE("ALTERSEQSTMT");
@@ -5197,6 +5201,9 @@ outNode(StringInfo str, const void *obj)
 			case T_CreateSeqStmt:
 				_outCreateSeqStmt(str, obj);
 				break;
+			// SPANGRES BEGIN
+			// TODO: expose when queue is implemented.
+			// SPANGRES END
 			case T_AlterSeqStmt:
 				_outAlterSeqStmt(str, obj);
 				break;

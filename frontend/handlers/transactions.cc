@@ -66,9 +66,15 @@ absl::Status BeginTransaction(
     *mutations.Add() = request->mutation_key();
     absl::Status status =
         MutationFromProto(*txn->schema(), mutations, &mutation);
-    if (!status.ok()) {
-      return absl::InvalidArgumentError(status.message());
+    // MutationFromProto returns FailedPrecondition if the proto does not
+    // contain a syntactically valid proto. Spanner however returns
+    // InvalidArgument in the same scenario, so we convert that here to
+    // InvalidArgument. All other errors are returned as-is.
+    if (status.code() == absl::StatusCode::kFailedPrecondition) {
+      status =
+          absl::Status(absl::StatusCode::kInvalidArgument, status.message());
     }
+    ZETASQL_RETURN_IF_ERROR(status);
     // Set a precommit token in the begin transaction response.
     response->mutable_precommit_token();
   }

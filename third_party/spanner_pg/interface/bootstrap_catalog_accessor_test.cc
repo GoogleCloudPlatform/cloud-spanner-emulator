@@ -96,26 +96,23 @@ TEST_F(PgNamespaceDataTest, GetPgNamespaceDataFromBootstrapFailure) {
               zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
-INSTANTIATE_TEST_SUITE_P(
-  PgNamespaceDataTestData,
-  PgNamespaceDataTest,
-  testing::Values(
-    R"pb(
-      oid: 11
-      nspname: "pg_catalog"
-    )pb",
-    R"pb(
-      oid: 2200
-      nspname: "public"
-    )pb",
-    R"pb(
-      oid: 50000
-      nspname: "spanner"
-    )pb",
-    R"pb(
-      oid: 50077
-      nspname: "spanner_sys"
-    )pb"));
+INSTANTIATE_TEST_SUITE_P(PgNamespaceDataTestData, PgNamespaceDataTest,
+                         testing::Values(
+                             R"pb(
+                               oid: 11 nspname: "pg_catalog"
+                             )pb",
+                             R"pb(
+                               oid: 2200 nspname: "public"
+                             )pb",
+                             R"pb(
+                               oid: 50000 nspname: "spanner"
+                             )pb",
+                             R"pb(
+                               oid: 50077 nspname: "spanner_sys"
+                             )pb",
+                             R"pb(
+                               oid: 50080 nspname: "ai"
+                             )pb"));
 
 TEST_P(PgProcDataTest, GetPgProcDataFromBootstrapOidSuccess) {
   PgProcData expected = ParseTextProtoOrDie(GetParam());

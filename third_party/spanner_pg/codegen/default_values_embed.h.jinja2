@@ -1,0 +1,7 @@
+{{ GENERATED_CODE_HEADER }}
+
+namespace postgres_translator {{ "{" }}
+  constexpr char kDefaultValuesEmbed[] = R"(
+{{ default_values | tojson(indent=2) }}
+  )";
+{{ "}" }}

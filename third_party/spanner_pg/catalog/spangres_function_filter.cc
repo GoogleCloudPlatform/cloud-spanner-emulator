@@ -71,6 +71,8 @@ static zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
         "pg.map_double_to_int",
         "pg.map_float_to_int",
 
+        "pg.generate_array",
+
         // Registered through make_date
         "date",
         // Registered through pg.extract

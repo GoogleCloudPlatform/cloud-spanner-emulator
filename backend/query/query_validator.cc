@@ -42,6 +42,7 @@
 #include "backend/transaction/read_write_transaction.h"
 #include "common/constants.h"
 #include "common/errors.h"
+#include "common/pg_literals.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -643,8 +644,10 @@ absl::Status QueryValidator::ValidateSequenceFunction(
     const zetasql::Value& value =
         node->argument_list(0)->GetAs<zetasql::ResolvedLiteral>()->value();
     if (value.type()->IsString()) {
+      std::string sequence_name =
+          GetFullyQualifiedNameFromPgLiteral(value.string_value());
       const Sequence* current_sequence =
-          schema()->FindSequence(value.string_value(),
+          schema()->FindSequence(sequence_name,
                                  /*exclude_internal=*/true);
       if (current_sequence == nullptr) {
         return error::SequenceNotFound(value.string_value());

@@ -49,11 +49,9 @@ class DmlTest
     : public DatabaseTest,
       public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
-  // TODO: b/296685434 - Remove `enable_upsert_queries` after it is enabled by
-  // default.
   DmlTest()
       : feature_flags_({.enable_postgresql_interface = true,
-                        .enable_upsert_queries = true}) {}
+                        .enable_insert_on_conflict_dml = true}) {}
 
   void SetUp() override {
     dialect_ = GetParam();
@@ -771,12 +769,11 @@ TEST_P(DmlTest, ReturningWithAction) {
   EXPECT_THAT(result_or, IsOkAndHoldsRow({"Levin", 28, "DELETE"}));
 }
 
-// TODO: Reenable once fixed
-TEST_P(DmlTest, DISABLED_ReturningGeneratedColumns) {
-  EmulatorFeatureFlags::Flags flags;
-  flags.enable_dml_returning = true;
-  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-
+TEST_P(DmlTest, ReturningGeneratedColumns) {
+  // TODO: b/310194797 - Generated columns are NULL in POSTGRES dialect.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
   std::string returning =
       (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "RETURNING"
                                                                 : "THEN RETURN";
@@ -795,16 +792,13 @@ TEST_P(DmlTest, DISABLED_ReturningGeneratedColumns) {
   EXPECT_THAT(Query("SELECT g1, g2, g3 + 1, v3 FROM tablegen WHERE k = 1;"),
               IsOkAndHoldsRow({3, 2, 4, 2}));
 
-  // TODO: Add required support for `THEN RETURN` after generated
-  // column implementation.
-  if (!in_prod_env()) return;
-
   // Update THEN RETURN
   std::vector<ValueRow> result_for_update;
-  ZETASQL_EXPECT_OK(
-      CommitDmlReturning({SqlStatement("UPDATE tablegen SET v1 = 3 WHERE k = 1 "
-                                       "THEN RETURN g1, g2, g3 + 1;")},
-                         result_for_update));
+  ZETASQL_EXPECT_OK(CommitDmlReturning(
+      {SqlStatement(absl::Substitute("UPDATE tablegen SET v1 = 3 WHERE k = 1 "
+                                     "$0 g1, g2, g3 + 1;",
+                                     returning))},
+      result_for_update));
   result_or = result_for_update;
   EXPECT_THAT(result_or, IsOkAndHoldsRow({5, 4, 6}));
   EXPECT_THAT(Query("SELECT g1, g2, g3 + 1 FROM tablegen WHERE k = 1;"),
@@ -886,6 +880,150 @@ TEST_P(DmlTest, UpsertDmlSimpleTable) {
                         {5, "Susan", 25}}));
 }
 
+TEST_P(DmlTest, InsertOnConflictDmlSimpleTable) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
+  PopulateDatabase();
+  std::vector<ValueRow> returning_rows;
+  std::string returning_clause =
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
+          ? "RETURNING id, name, age"
+          : "THEN RETURN WITH ACTION AS action id, name, age";
+
+  // INSERT ON CONFLICT DO NOTHING DML.
+  std::string sql = absl::StrCat(
+      "INSERT INTO users(id, name, age) "
+      "VALUES (3, 'John', 30), (1, 'Bob', 31), (5, 'Susan', 28) "
+      "ON CONFLICT(id) DO NOTHING ",
+      returning_clause);
+  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  absl::StatusOr<std::vector<ValueRow>> rows_or = returning_rows;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(rows_or,
+                IsOkAndHoldsUnorderedRows({{3, "John", 30}, {5, "Susan", 28}}));
+  } else {
+    EXPECT_THAT(rows_or,
+                IsOkAndHoldsUnorderedRows(
+                    {{3, "John", 30, "INSERT"}, {5, "Susan", 28, "INSERT"}}));
+  }
+
+  EXPECT_THAT(
+      Query("SELECT id, name, age FROM users WHERE id < 10 ORDER BY id"),
+      IsOkAndHoldsRows({{1, "Levin", 27},
+                        {2, "Mark", 32},
+                        {3, "John", 30},
+                        {5, "Susan", 28}}));
+
+  returning_rows.clear();
+  // INSERT ON CONFLICT DO UPDATE DML.
+  sql = absl::StrCat(
+      "INSERT INTO users(id, name, age) "
+      "VALUES (3, 'John', 35), (1, 'Bob', 31), "
+      "(5, 'Susan', 25), (6, 'Bill', 25) "
+      "ON CONFLICT(id) DO UPDATE SET age = excluded.age + users.age ",
+      returning_clause);
+  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  rows_or = returning_rows;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows({{3, "John", 65},
+                                                    {1, "Levin", 58},
+                                                    {5, "Susan", 53},
+                                                    {6, "Bill", 25}}));
+  } else {
+    EXPECT_THAT(rows_or,
+                IsOkAndHoldsUnorderedRows({{3, "John", 65, "UPDATE"},
+                                           {1, "Levin", 58, "UPDATE"},
+                                           {5, "Susan", 53, "UPDATE"},
+                                           {6, "Bill", 25, "INSERT"}}));
+  }
+  EXPECT_THAT(
+      Query("SELECT id, name, age FROM users WHERE id < 10 ORDER BY id"),
+      IsOkAndHoldsRows({{1, "Levin", 58},
+                        {2, "Mark", 32},
+                        {3, "John", 65},
+                        {5, "Susan", 53},
+                        {6, "Bill", 25}}));
+}
+
+TEST_P(DmlTest, MultipleInsertOnConflictDmlInTransaction) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
+  // INSERT ON CONFLICT DO NOTHING DML.
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  std::vector<SqlStatement> sql_statements;
+  // This DML inserts the 3 new rows.
+  sql_statements.push_back(
+      SqlStatement("INSERT INTO users(id, name, age) "
+                   "VALUES (3, 'John', 30), (1, 'Bob', 31), (5, 'Susan', 28) "
+                   "ON CONFLICT(id) DO NOTHING"));
+  // This DML updates the existing rows with id(s) 1, 3, 5 and then inserts
+  // two new rows with id 6.
+  sql_statements.push_back(SqlStatement(
+      "INSERT INTO users(id, name, age) "
+      "VALUES (3, 'John', 35), (1, 'Bob', 31), "
+      "(5, 'Susan', 25), (6, 'Bill', 25) "
+      "ON CONFLICT(id) DO UPDATE SET age = excluded.age + users.age "));
+  ZETASQL_EXPECT_OK(CommitDmlTransaction(txn, sql_statements));
+
+  EXPECT_THAT(
+      Query("SELECT id, name, age FROM users WHERE id < 10 ORDER BY id"),
+      IsOkAndHoldsRows({{1, "Bob", 62},
+                        {3, "John", 65},
+                        {5, "Susan", 53},
+                        {6, "Bill", 25}}));
+}
+
+TEST_P(DmlTest, InsertOnConflictDmlOnUniqueIndexAsConflictTarget) {
+  // Skip the test in PG since we cannot create a non null filtered unique index
+  // in PG.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
+
+  ZETASQL_ASSERT_OK(UpdateSchema(
+      {"CREATE TABLE TableWithIndex (K INT64, ColA INT64, ColB INT64, Val "
+       "STRING(MAX)) PRIMARY KEY(K)",
+       "CREATE UNIQUE INDEX IndexColA ON TableWithIndex(ColA)"}));
+  // Load data
+  ZETASQL_EXPECT_OK(Insert("TableWithIndex", {"K", "ColA", "ColB", "Val"},
+                   {1, 10, 100, "A"}));
+
+  std::vector<ValueRow> returning_rows;
+  // INSERT ON CONFLICT DO NOTHING DML.
+  // 1st row is ignored because ColA already exists in the index.
+  // 2nd row is a new row and is inserted.
+  std::string sql =
+      "INSERT INTO TableWithIndex(K, ColA, ColB) "
+      "VALUES (5, 10, 10), (2, 2, 2) "
+      "ON CONFLICT(ColA) DO NOTHING THEN RETURN K, ColA, ColB";
+  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  absl::StatusOr<std::vector<ValueRow>> rows_or = returning_rows;
+  EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows({{2, 2, 2}}));
+
+  // Existing rows are ignored.
+  returning_rows.clear();
+  sql =
+      "INSERT INTO TableWithIndex(K, ColA, ColB) "
+      "VALUES (5, 10, 10), (2, 2, 2), (100, 100, 100) "
+      "ON CONFLICT ON UNIQUE CONSTRAINT IndexColA DO NOTHING "
+      "THEN RETURN K, ColA, ColB";
+  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  rows_or = returning_rows;
+  EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows({{100, 100, 100}}));
+
+  returning_rows.clear();
+  // INSERT ON CONFLICT DO UPDATE DML.
+  // 1st row is updated because ColA already exists in the index.
+  // The 2nd row is a new row and is inserted.
+  sql =
+      "INSERT INTO TableWithIndex(K, ColA, ColB, Val) "
+      "VALUES (5, 10, 10, '5'), (20, 20, 20, '20') "
+      "ON CONFLICT(ColA) DO UPDATE SET ColB = excluded.ColB + 1, "
+      "Val = CONCAT('updated_', TableWithIndex.Val) "
+      "THEN RETURN WITH ACTION AS action K, ColA, ColB, Val";
+  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  rows_or = returning_rows;
+  EXPECT_THAT(rows_or,
+              IsOkAndHoldsUnorderedRows({{20, 20, 20, "20", "INSERT"},
+                                         {1, 10, 11, "updated_A", "UPDATE"}}));
+}
+
 TEST_P(DmlTest, UpsertDmlGeneratedColumnTable) {
   // Populate `tablegen` table
   ZETASQL_EXPECT_OK(CommitDml(
@@ -917,14 +1055,71 @@ TEST_P(DmlTest, UpsertDmlGeneratedColumnTable) {
     sql = absl::Substitute(sql, "OR UPDATE", "");
   }
   ZETASQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
+  EXPECT_THAT(
+      Query("SELECT k, g1, g2, v3 FROM tablegen WHERE TRUE ORDER BY k"),
+      IsOkAndHoldsRows({{1, 21, 20, 1}, {2, 41, 40, 2}, {5, 101, 100, 5}}));
+}
+
+TEST_P(DmlTest, InsertOnConflictDmlGeneratedColumnTable) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
+  std::vector<ValueRow> returning_rows;
+  std::string returning_clause =
+      (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
+          ? "RETURNING k, v1, v2, v3"
+          : "THEN RETURN WITH ACTION AS action k, v1, v2, v3, g1, g2";
+  // Populate `tablegen` table
+  ZETASQL_EXPECT_OK(CommitDml(
+      {SqlStatement("INSERT INTO tablegen(k, v1, v2) VALUES (1, 1, 1);")}));
+
+  // INSERT ON CONFLICT DO NOTHING DML.
+  std::string sql = absl::StrCat(
+      "INSERT INTO tablegen(k, v1, v2) "
+      "VALUES (2, 2, 2), (1, 2, 2) ON CONFLICT(k) DO NOTHING ",
+      returning_clause);
+
+  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  absl::StatusOr<std::vector<ValueRow>> rows_or = returning_rows;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    EXPECT_THAT(
-        Query("SELECT k, g1, g2, v3 FROM tablegen WHERE TRUE ORDER BY k"),
-        IsOkAndHoldsRows({{1, 11, 20, 1}, {2, 21, 40, 2}, {5, 51, 100, 5}}));
+    EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows({{2, 2, 2, 2}}));
   } else {
-    EXPECT_THAT(
-        Query("SELECT k, g1, g2, v3 FROM tablegen WHERE TRUE ORDER BY k"),
-        IsOkAndHoldsRows({{1, 21, 20, 1}, {2, 41, 40, 2}, {5, 101, 100, 5}}));
+    EXPECT_THAT(rows_or,
+                IsOkAndHoldsUnorderedRows({{2, 2, 2, 2, 5, 4, "INSERT"}}));
+  }
+  EXPECT_THAT(Query("SELECT k, g2, v3 FROM tablegen WHERE TRUE ORDER BY k"),
+              IsOkAndHoldsRows({{1, 2, 2}, {2, 4, 2}}));
+
+  returning_rows.clear();
+  // INSERT ON CONFLICT DO UPDATE DML.
+  sql = absl::StrCat(
+      "INSERT INTO tablegen(k, v1, v2, v3) "
+      "VALUES (2, 20, 20, 2), (1, 10, 10, 1), (5, 50, 50, 5) "
+      "ON CONFLICT(k) DO UPDATE SET "
+      "v1 = excluded.v1 + tablegen.v1 + 1, v3 = excluded.v3 * 2 ",
+      returning_clause);
+  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  rows_or = returning_rows;
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows(
+                             {{5, 50, 50, 5}, {1, 12, 1, 2}, {2, 23, 2, 4}}));
+  } else {
+    EXPECT_THAT(rows_or,
+                IsOkAndHoldsUnorderedRows({{5, 50, 50, 5, 101, 100, "INSERT"},
+                                           {1, 12, 1, 2, 14, 13, "UPDATE"},
+                                           {2, 23, 2, 4, 26, 25, "UPDATE"}}));
+  }
+
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(Query("SELECT k, v1, v2, v3, g1, g2 FROM tablegen WHERE TRUE "
+                      "ORDER BY k"),
+                IsOkAndHoldsRows({{1, 12, 1, 2, 14, 13},
+                                  {2, 23, 2, 4, 26, 25},
+                                  {5, 50, 50, 5, 101, 100}}));
+  } else {
+    EXPECT_THAT(Query("SELECT k, v1, v2, v3, g1, g2 FROM tablegen WHERE TRUE "
+                      "ORDER BY k"),
+                IsOkAndHoldsRows({{1, 12, 1, 2, 14, 13},
+                                  {2, 23, 2, 4, 26, 25},
+                                  {5, 50, 50, 5, 101, 100}}));
   }
 }
 

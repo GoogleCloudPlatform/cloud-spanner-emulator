@@ -2874,6 +2874,7 @@ TEST_P(InformationSchemaTest, NamedSchemaTableConstraints) {
       {"named_schema", "ns_table_1", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"named_schema", "ns_table_2", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"named_schema", "ns_table_2", "FOREIGN KEY", "NO", "NO", "YES"},  // NOLINT
+      {"named_schema", "ns_table_2", "FOREIGN KEY", "NO", "NO", "YES"},  // NOLINT
     });
     // clang-format on
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -2882,7 +2883,8 @@ TEST_P(InformationSchemaTest, NamedSchemaTableConstraints) {
     auto expected = ExpectedRows(results, {
       {"named_schema", "ns_table_1", "PRIMARY KEY", "NO", "NO", "YES"}, // NOLINT
       {"named_schema", "ns_table_2", "PRIMARY KEY", "NO", "NO", "YES"}, // NOLINT
-      {"named_schema", "ns_table_2", "FOREIGN KEY", "NO", "NO", "YES"} // NOLINT
+      {"named_schema", "ns_table_2", "FOREIGN KEY", "NO", "NO", "YES"}, // NOLINT
+      {"named_schema", "ns_table_2", "FOREIGN KEY", "NO", "NO", "YES"}, // NOLINT
     });
 
     // clang-format on
@@ -2995,6 +2997,7 @@ TEST_P(InformationSchemaTest, NamedSchemaConstraintTableUsage) {
     // clang-format off
     auto expected = ExpectedRows(results, {
       {"named_schema", "ns_table_1", "named_schema", "PK_ns_table_1"},  // NOLINT
+      {"named_schema", "ns_table_1", "named_schema", "fk_ns_table_2_delete_cascade"},  // NOLINT
       {"named_schema", "ns_table_2", "named_schema", "PK_ns_table_2"},  // NOLINT
     });
     // clang-format on
@@ -3003,6 +3006,7 @@ TEST_P(InformationSchemaTest, NamedSchemaConstraintTableUsage) {
     // clang-format off
     auto expected = ExpectedRows(results, {
       {"", "named_schema", "ns_table_1", "", "named_schema", "PK_ns_table_1"}, // NOLINT
+      {"", "named_schema", "ns_table_1", "", "named_schema", "fk_ns_table_2_delete_cascade"}, // NOLINT
       {"", "named_schema", "ns_table_2", "", "named_schema", "PK_ns_table_2"} // NOLINT
     });
     // clang-format on
@@ -3099,6 +3103,7 @@ TEST_P(InformationSchemaTest, NamedSchemaReferentialConstraints) {
     // clang-format off
     auto expected = ExpectedRows(results, {
       {"named_schema", "fk_ns_table_2", "named_schema2", "PK_ns_table_1", "NONE", "NO ACTION", "NO ACTION", "COMMITTED"},  // NOLINT
+      {"named_schema", "fk_ns_table_2_delete_cascade", "named_schema", "PK_ns_table_1", "NONE", "NO ACTION", "CASCADE", "COMMITTED"},  // NOLINT
     });
     // clang-format on
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -3106,6 +3111,7 @@ TEST_P(InformationSchemaTest, NamedSchemaReferentialConstraints) {
     // clang-format off
     auto expected = ExpectedRows(results, {
       {"","named_schema", "fk_ns_table_2", "", "named_schema2", "PK_ns_table_1", "SIMPLE", "NO ACTION", "NO ACTION", "COMMITTED"},  // NOLINT
+      {"", "named_schema", "fk_ns_table_2_delete_cascade", "", "named_schema", "PK_ns_table_1", "SIMPLE", "NO ACTION", "CASCADE", "COMMITTED"},  // NOLINT
     });
     // clang-format on
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -3269,6 +3275,7 @@ TEST_P(InformationSchemaTest, NamedSchemaKeyColumnUsage) {
       {"named_schema", "PK_ns_table_1", "named_schema", "ns_table_1", "key1", 1, Ni()},  // NOLINT
       {"named_schema", "PK_ns_table_2", "named_schema", "ns_table_2", "key1", 1, Ni()}, // NOLINT
       {"named_schema", "fk_ns_table_2", "named_schema", "ns_table_2", "key1", 1, 1},  // NOLINT
+      {"named_schema", "fk_ns_table_2_delete_cascade", "named_schema", "ns_table_2", "key1", 1, 1},  // NOLINT
     });
     // clang-format on
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -3278,6 +3285,7 @@ TEST_P(InformationSchemaTest, NamedSchemaKeyColumnUsage) {
       {"", "named_schema", "PK_ns_table_1", "", "named_schema", "ns_table_1", "key1", 1, Ni()},  // NOLINT
       {"", "named_schema", "PK_ns_table_2", "","named_schema", "ns_table_2", "key1", 1, Ni()}, // NOLINT
       {"", "named_schema", "fk_ns_table_2", "", "named_schema", "ns_table_2", "key1", 1, 1},  // NOLINT
+      {"", "named_schema", "fk_ns_table_2_delete_cascade", "", "named_schema", "ns_table_2", "key1", 1, 1},  // NOLINT
     });
     // clang-format on
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
@@ -3428,6 +3436,7 @@ TEST_P(InformationSchemaTest, NamedSchemaConstraintColumnUsage) {
     auto expected = ExpectedRows(results, {
       {"named_schema", "ns_table_1", "key1", "named_schema", "CK_IS_NOT_NULL_ns_table_1_key1"}, // NOLINT
       {"named_schema", "ns_table_1", "key1", "named_schema", "PK_ns_table_1"},  // NOLINT
+      {"named_schema", "ns_table_1", "key1", "named_schema", "fk_ns_table_2_delete_cascade"},  // NOLINT
       {"named_schema", "ns_table_2", "key1", "named_schema", "CK_IS_NOT_NULL_ns_table_2_key1"},  // NOLINT
       {"named_schema", "ns_table_2", "key1", "named_schema", "PK_ns_table_2"} // NOLINT
     });
@@ -3437,6 +3446,7 @@ TEST_P(InformationSchemaTest, NamedSchemaConstraintColumnUsage) {
     // clang-format off
     auto expected = ExpectedRows(results, {
       {"", "named_schema", "ns_table_1", "key1", "", "named_schema", "PK_ns_table_1"},  // NOLINT
+      {"", "named_schema", "ns_table_1", "key1", "", "named_schema", "fk_ns_table_2_delete_cascade"},  // NOLINT
       {"", "named_schema", "ns_table_2", "key1", "", "named_schema", "PK_ns_table_2"} // NOLINT
     });
     // clang-format on

@@ -63,15 +63,13 @@ class FunctionCatalog {
 
  private:
   void AddZetaSQLBuiltInFunctions(zetasql::TypeFactory* type_factory);
+  void AddPGLambdaFunctions();
   void AddSpannerFunctions();
   void AddMlFunctions();
   void AddSearchFunctions(zetasql::TypeFactory* type_factory);
 
   void AddSpannerPGFunctions();
   void AddFunctionAliases();
-
-  std::unique_ptr<zetasql::Function> GetReplacedPGFunction(
-      const std::string& function_name);
 
   std::unique_ptr<zetasql::Function> GetPGToCharFunction(
       const std::string& catalog_name);

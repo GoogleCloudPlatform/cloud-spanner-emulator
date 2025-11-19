@@ -115,6 +115,7 @@ cc_library(
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:error_shim",
         "//third_party/spanner_pg/src/backend",
+        "//third_party/spanner_pg/src/backend/utils:fmgr_sources_header",
         "//third_party/spanner_pg/util:nodetag_to_string",
         "//third_party/spanner_pg/util:oid_to_string",
         "//third_party/spanner_pg/util:pg_list_iterators",

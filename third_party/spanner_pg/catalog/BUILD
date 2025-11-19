@@ -174,6 +174,7 @@ cc_test(
         ":engine_system_catalog",
         ":spangres_function_mapper",
         "//third_party/spanner_pg/test_catalog",  # buildcleaner: keep
+        "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@com_google_protobuf//:protobuf",
@@ -315,6 +316,8 @@ cc_library(
     deps = [
         "//third_party/spanner_pg/postgres_includes",
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_zetasql//zetasql/public:function",
     ],
@@ -552,7 +555,6 @@ cc_library(
         "builtin_scalar_functions.h",
     ],
     deps = [
-        ":function",
         ":function_identifier",
         ":spangres_type",
         "//third_party/spanner_pg/postgres_includes",
@@ -629,6 +631,7 @@ cc_test(
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "//third_party/spanner_pg/test_catalog",
         "//third_party/spanner_pg/test_catalog:spanner_test_catalog",
+        "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest",

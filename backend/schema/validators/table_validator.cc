@@ -168,6 +168,9 @@ absl::Status ValidateDescendantTables(
   for (auto* children : table->children()) {
     queue.push_back(children);
   }
+  for (const ForeignKey* fk : table->referencing_foreign_keys()) {
+    queue.push_back(fk->referencing_table());
+  }
 
   while (!queue.empty()) {
     const Table* child = queue.back();
@@ -180,6 +183,9 @@ absl::Status ValidateDescendantTables(
 
     for (auto* grandchildren : child->children()) {
       queue.push_back(grandchildren);
+    }
+    for (const ForeignKey* fk : child->referencing_foreign_keys()) {
+      queue.push_back(fk->referencing_table());
     }
   }
 
@@ -211,27 +217,43 @@ absl::Status ValidateRowDeletionPolicy(
         children->on_delete_action() == Table::OnDeleteAction::kNoAction) {
       return error::RowDeletionPolicyHasChildWithOnDeleteNoAction(
           table_name, children->Name());
-    } else {
-      return absl::OkStatus();
     }
+    for (const ForeignKey* fk : children->foreign_keys()) {
+      if (fk->enforced() &&
+          fk->on_delete_action() != ForeignKey::Action::kCascade) {
+        // Foreign key without ON DELETE CASCADE action is not allowed, if
+        // referenced table or ancestor table has Row deletion policy.
+        if (fk->referenced_table()->row_deletion_policy().has_value()) {
+          return error::ForeignKeyRowDeletionPolicyAddNotAllowed(table_name,
+                                                                 fk->Name());
+        }
+        for (const Table* ancestor_table = fk->referenced_table()->parent();
+             ancestor_table != nullptr;
+             ancestor_table = ancestor_table->parent()) {
+          if (ancestor_table->row_deletion_policy().has_value()) {
+            return error::ForeignKeyRowDeletionPolicyAddNotAllowed(table_name,
+                                                                   fk->Name());
+          }
+        }
+      }
+    }
+    return absl::OkStatus();
   }));
 
-  auto is_enforced = [](const ForeignKey* fk) { return fk->enforced(); };
-  const int enforced_count =
-      absl::c_count_if(table->referencing_foreign_keys(), is_enforced);
+  std::vector<std::string> fk_block_row_deletion_policy;
+  for (const ForeignKey* fk : table->referencing_foreign_keys()) {
+    if (fk->enforced() &&
+        fk->on_delete_action() != ForeignKey::Action::kCascade) {
+      fk_block_row_deletion_policy.push_back(fk->Name());
+    }
+  }
 
-  if (enforced_count == 0) {
+  if (fk_block_row_deletion_policy.empty()) {
     return absl::OkStatus();
   }
 
-  std::vector<const ForeignKey*> enforced_fks(enforced_count);
-  absl::c_copy_if(table->referencing_foreign_keys(), enforced_fks.begin(),
-                  is_enforced);
   return error::ForeignKeyRowDeletionPolicyAddNotAllowed(
-      table_name,
-      absl::StrJoin(enforced_fks, ",", [](std::string* out, auto fk) {
-        absl::StrAppend(out, fk->Name());
-      }));
+      table_name, absl::StrJoin(fk_block_row_deletion_policy, ","));
 }
 
 absl::Status ValidateUpdateRowDeletionPolicy(const Table* table,

@@ -4000,6 +4000,10 @@ _readCreateSeqStmt(void)
 	READ_DONE();
 }
 
+// SPANGRES BEGIN
+// TODO: expose when queue is implemented.
+// SPANGRES END
+
 static AlterSeqStmt*
 _readAlterSeqStmt(void)
 {
@@ -4548,6 +4552,9 @@ parseNodeString(void)
 		return_value = _readRangeFunction();
 	else if (MATCH("CREATESEQSTMT", 13))
 		return_value = _readCreateSeqStmt();
+	// SPANGRES BEGIN
+	// TODO: expose when queue is implemented.
+	// SPANGRES END
 	else if (MATCH("ALTERSEQSTMT", 12))
 		return_value = _readAlterSeqStmt();
 	else if (MATCH("RENAMESTMT", 10))

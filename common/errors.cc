@@ -3199,6 +3199,28 @@ absl::Status UnsupportedReturningWithUpsertQueries(
                        insert_mode));
 }
 
+absl::Status ConflictTargetNotFound() {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      "There is no unique constraint matching the ON CONFLICT specification");
+}
+
+absl::Status NullFilteredIndexAsConflictTargetIsNotFound(
+    absl::string_view index_name) {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      absl::Substitute("Null filtered index as conflict target is not "
+                       "supported: $0",
+                       index_name));
+}
+
+absl::Status UnsupportedPendingCommitTimestampInInsertOnConflictDml() {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      "INSERT...ON CONFLICT DML with PENDING_COMMIT_TIMESTAMP() value is not "
+      "supported in Emulator");
+}
+
 absl::Status UnsupportedGeneratedKeyWithUpsertQueries() {
   return absl::Status(
       absl::StatusCode::kUnimplemented,

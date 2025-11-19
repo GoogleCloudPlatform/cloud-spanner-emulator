@@ -3652,6 +3652,9 @@ aclcheck_error(AclResult aclerr, ObjectType objtype,
           case OBJECT_CHANGE_STREAM:
 					case OBJECT_SEARCH_INDEX:
 					// SPANGRES END
+					// SPANGRES BEGIN
+					// TODO: expose when queue is implemented.
+					// SPANGRES END
 					case OBJECT_LOCALITY_GROUP:
             elog(ERROR, "unsupported object type %d", objtype);
 				}
@@ -3793,6 +3796,9 @@ aclcheck_error(AclResult aclerr, ObjectType objtype,
 					case OBJECT_USER_MAPPING:
           case OBJECT_CHANGE_STREAM:
 					case OBJECT_SEARCH_INDEX:
+					// SPANGRES END
+					// SPANGRES BEGIN
+					// TODO: expose when queue is implemented.
 					// SPANGRES END
 					case OBJECT_LOCALITY_GROUP:
             elog(ERROR, "unsupported object type %d", objtype);

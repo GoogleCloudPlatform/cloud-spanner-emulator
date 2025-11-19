@@ -27,6 +27,9 @@ import (
 	"os/signal"
 	"time"
 
+	// We need this to make sure that the gateway can serialize the google.rpc.ErrorInfo proto.
+	_ "google.golang.org/genproto/googleapis/rpc/errdetails"
+
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 

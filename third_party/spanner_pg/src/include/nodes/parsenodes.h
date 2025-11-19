@@ -1959,6 +1959,7 @@ typedef enum ObjectType
   OBJECT_CHANGE_STREAM,
   OBJECT_LOCALITY_GROUP,
 	// SPANGRES BEGIN
+	// TODO: expose when queue is implemented.
   OBJECT_SEARCH_INDEX,
 	// SPANGRES END
 } ObjectType;
@@ -2856,6 +2857,11 @@ typedef struct AlterSeqStmt
 	bool		for_identity;
 	bool		missing_ok;		/* skip error if a role is missing? */
 } AlterSeqStmt;
+
+// SPANGRES BEGIN
+// TODO: expose when queue is implemented.
+// SPANGRES END
+
 
 /* ----------------------
  *		Create {Aggregate|Operator|Type} Statement

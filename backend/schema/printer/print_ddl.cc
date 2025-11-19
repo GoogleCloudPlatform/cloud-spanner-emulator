@@ -254,6 +254,22 @@ std::string PrintIndex(const Index* index) {
       }
       absl::StrAppend(&ddl_string, absl::StrJoin(order_by_clause, ", "));
     }
+    ddl::SearchIndexOptionsProto options = index->search_index_options();
+    std::vector<std::string> options_str;
+    if (options.has_sort_order_sharding()) {
+      options_str.push_back(
+          absl::StrCat("sort_order_sharding = ",
+                       options.sort_order_sharding() ? "true" : "false"));
+    }
+    if (options.has_disable_automatic_uid_column()) {
+      options_str.push_back(absl::StrCat(
+          "disable_automatic_uid_column = ",
+          options.disable_automatic_uid_column() ? "true" : "false"));
+    }
+    if (!options_str.empty()) {
+      absl::StrAppend(&ddl_string, " OPTIONS (",
+                      absl::StrJoin(options_str, ", "), ")");
+    }
   }
 
   if (index->parent()) {

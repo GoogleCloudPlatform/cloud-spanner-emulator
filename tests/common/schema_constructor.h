@@ -123,6 +123,7 @@ CreateGpkSchemaWithOneTable(
                 k3gen_storedpk INT64 NOT NULL AS (k2) STORED,
                 k4 INT64,
                 k5 INT64 AS (k4+1) STORED,
+                k6gen_nonstored INT64 AS (k5 + 1),
               ) PRIMARY KEY (k1_pk,k3gen_storedpk)
             )";
   if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
@@ -141,6 +142,9 @@ CreateGpkSchemaWithOneTable(
   return CreateSchemaFromDDL(
       {
           test_table,
+          R"(
+              CREATE UNIQUE INDEX test_index ON test_table(k5)
+            )",
       },
       type_factory
       // copybara:protos_strip_begin

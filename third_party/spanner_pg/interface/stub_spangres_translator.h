@@ -110,6 +110,12 @@ class StubSpangresTranslator : public interfaces::SpangresTranslatorInterface {
                                 absl::string_view table_name) {
     return absl::FailedPreconditionError("invoked stub SpangresTranslator");
   }
+
+  absl::StatusOr<bool> IsBuiltinFunction(
+      std::unique_ptr<EngineBuiltinFunctionCatalog> builtin_function_catalog,
+      absl::string_view function_name) override {
+    return absl::FailedPreconditionError("invoked stub SpangresTranslator");
+  }
 };
 
 }  // namespace spangres

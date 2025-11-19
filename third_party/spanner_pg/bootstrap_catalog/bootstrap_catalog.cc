@@ -32,7 +32,9 @@
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <memory>
+#include <ostream>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -331,7 +333,7 @@ absl::StatusOr<const PgProcData*> PgBootstrapCatalog::GetProcProto(
   auto it = proc_proto_by_oid_.find(oid);
   if (it == proc_proto_by_oid_.end()) {
     return absl::NotFoundError(
-        absl::StrCat("Procedure with oid ", oid, " not found"));
+        absl::StrCat("Procedure proto with oid ", oid, " not found"));
   }
   return it->second.get();
 }

@@ -87,11 +87,12 @@ cc_library(
     srcs = ["proc_changelist.cc"],
     hdrs = ["proc_changelist.h"],
     deps = [
+        "//third_party/spanner_pg/codegen:default_values_reader",
         "//third_party/spanner_pg/interface:bootstrap_catalog_data_cc_proto",
         "//third_party/spanner_pg/postgres_includes",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_zetasql//zetasql/base:logging",
+        "@com_google_zetasql//zetasql/base:no_destructor",
     ],
 )
 
