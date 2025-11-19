@@ -73,6 +73,7 @@ go_library(
         ":spanner_gateway",
         "@com_google_googleapis//google/spanner/admin/instance/v1:instance_go_proto",
         "@grpc_ecosystem_grpc_gateway//runtime:go_default_library",
+        "@org_golang_google_genproto_googleapis_rpc//errdetails",
         "@org_golang_google_grpc//:go_default_library",
     ],
 )

@@ -1150,7 +1150,10 @@ TEST_F(GeneratedPrimaryKeyTransactionTest,
                       )sql"},
                     type_factory_.get())
                     .value();
-  FunctionCatalog function_catalog(type_factory_.get());
+  FunctionCatalog function_catalog(
+      type_factory_.get(),
+      /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+      /*latest_schema=*/schema.get());
   ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
   action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
                                        &function_catalog, type_factory_.get());

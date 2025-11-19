@@ -957,6 +957,10 @@ TEST_F(SerializationDeserializationTest, AlterColumnLocalityGroupStmt) {
   EXPECT_THAT(alter_column_locality_group_stmt, CanSerializeAndDeserialize());
 }
 
+// SPANGRES BEGIN
+// TODO: expose when queue is implemented.
+// SPANGRES END
+
 TEST_F(SerializationDeserializationTest, CreateRoleStmt) {
   CreateRoleStmt* create_role_stmt = makeNode(CreateRoleStmt);
   create_role_stmt->stmt_type = ROLESTMT_ROLE;

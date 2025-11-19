@@ -813,6 +813,20 @@ TEST_P(SequenceReadWriteTest, DropTableShouldNotImpactSequenceInternalState) {
         IsOkAndHoldsRows({{true}}));
   }
 }
+
+TEST_P(SequenceReadWriteTest, GetNextSequenceValueWithCaseSensitiveSequence) {
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    GTEST_SKIP();
+  }
+  ZETASQL_ASSERT_OK(UpdateSchema(
+      {R"(CREATE SEQUENCE "CaseSensitiveSequence" BIT_REVERSED_POSITIVE)"}));
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  ZETASQL_EXPECT_OK(
+      QueryTransaction(txn, R"(SELECT nextval('"CaseSensitiveSequence"'))"));
+  ZETASQL_EXPECT_OK(Rollback(txn));  // Rollback to close the transaction.
+  ZETASQL_ASSERT_OK(UpdateSchema({R"(DROP SEQUENCE "CaseSensitiveSequence")"}));
+}
+
 }  // namespace
 
 }  // namespace test

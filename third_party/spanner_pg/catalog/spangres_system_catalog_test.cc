@@ -240,6 +240,7 @@ TEST_F(SpangresSystemCatalogTest, GetTypes) {
 
   // Disabling in the emulator as jsonb_array_elements is not yet supported.
   TEST_F(SpangresSystemCatalogTest, DISABLED_GetTableValuedFunctions) {
+  SpangresSystemCatalog::ResetEngineSystemCatalog();
   const EngineSystemCatalog* catalog = GetSpangresTestSystemCatalog();
   absl::flat_hash_map<Oid, const zetasql::TableValuedFunction*> tvfs;
   ZETASQL_ASSERT_OK(catalog->GetTableValuedFunctions(&tvfs));
@@ -251,8 +252,8 @@ TEST_F(SpangresSystemCatalogTest, GetTypes) {
     tvf_names.push_back(tvf->Name());
   }
   EXPECT_GE(tvfs.size(), 1);
-  EXPECT_THAT(tvf_oids, Contains(F_JSONB_ARRAY_ELEMENTS));
-  EXPECT_THAT(tvf_names, Contains("jsonb_array_elements"));
+  EXPECT_THAT(tvf_oids, testing::Contains(F_JSONB_ARRAY_ELEMENTS));
+  EXPECT_THAT(tvf_names, testing::Contains("jsonb_array_elements"));
 }
 
   // Disabling in the emulator as cancel_query is not yet supported.

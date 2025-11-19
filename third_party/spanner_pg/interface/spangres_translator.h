@@ -164,6 +164,11 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
       absl::string_view expression,
       std::optional<absl::string_view> table_name);
 
+  // Checks if the function is a built-in function of Spangres or PostgreSQL.
+  absl::StatusOr<bool> IsBuiltinFunction(
+      std::unique_ptr<EngineBuiltinFunctionCatalog> builtin_function_catalog,
+      absl::string_view function_name) override;
+
  private:
   // Wraps node of expression in a SELECT $expression (with a `FROM $table_name`
   // clause if table_name is provided).

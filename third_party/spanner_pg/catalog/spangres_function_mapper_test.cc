@@ -44,6 +44,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
+#include "absl/strings/str_join.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
@@ -76,6 +77,13 @@ MATCHER_P(PostgresFunctionArgumentsEq, other, "") {
   if (arg.mode() != other.mode()) {
     *result_listener << "where the expected mode " << other.mode()
                      << " != " << arg.mode();
+    return false;
+  }
+  if (arg.query_features_names() != other.query_features_names()) {
+    *result_listener << "where the expected query_features_names "
+                     << absl::StrJoin(other.query_features_names(), ", ")
+                     << " != "
+                     << absl::StrJoin(arg.query_features_names(), ", ");
     return false;
   }
   if (arg.signature_arguments().size() != other.signature_arguments().size()) {
@@ -113,6 +121,16 @@ MATCHER_P(PostgresFunctionArgumentsEq, other, "") {
                        << "].postgres_proc_oid "
                        << other_sig_args.postgres_proc_oid()
                        << " != " << arg_sig_args.postgres_proc_oid();
+      return false;
+    }
+
+    if (arg_sig_args.query_features_names() !=
+        other_sig_args.query_features_names()) {
+      *result_listener
+          << "where the expected signature_arguments[" << i
+          << "].query_features_names "
+          << absl::StrJoin(other_sig_args.query_features_names(), ", ")
+          << " != " << absl::StrJoin(arg_sig_args.query_features_names(), ", ");
       return false;
     }
 
@@ -283,41 +301,37 @@ TEST_F(TestSpangresFunctionMapper, MapsFunctionWithMultipleSignatures) {
       result[0],
       PostgresFunctionArgumentsEq(PostgresFunctionArguments(
           "textregexeq", "regexp_contains",
-          {
-              PostgresFunctionSignatureArguments(zetasql::FunctionSignature(
-                  gsql_bool,
-                  {{gsql_string,
-                    zetasql::FunctionArgumentTypeOptions()
-                        .set_argument_name(
-                            "required_arg1",
-                            zetasql::FunctionEnums::POSITIONAL_ONLY)
-                        .set_cardinality(zetasql::FunctionEnums::REQUIRED)},
-                   {gsql_string,
-                    zetasql::FunctionArgumentTypeOptions()
-                        .set_argument_name(
-                            "required_arg2",
-                            zetasql::FunctionEnums::POSITIONAL_ONLY)
-                        .set_cardinality(zetasql::FunctionEnums::REQUIRED)}},
-                  /*context_ptr=*/nullptr)),
-              PostgresFunctionSignatureArguments(zetasql::FunctionSignature(
-                  gsql_bool,
-                  {{zetasql::SignatureArgumentKind::ARG_TYPE_ARBITRARY,
-                    zetasql::FunctionEnums::REPEATED}},
-                  /*context_id=*/0,
-                  zetasql::FunctionSignatureOptions().set_is_deprecated(
-                      true))),
-              PostgresFunctionSignatureArguments(zetasql::FunctionSignature(
-                  gsql_bool,
-                  {gsql_string,
-                   {gsql_string,
-                    zetasql::FunctionArgumentTypeOptions()
-                        .set_argument_name(
-                            "optional_arg",
-                            zetasql::FunctionEnums::POSITIONAL_OR_NAMED)
-                        .set_cardinality(zetasql::FunctionEnums::OPTIONAL)}},
-                  /*context_ptr=*/nullptr)),
-          },
-          zetasql::Function::SCALAR, "pg_catalog")));
+          {PostgresFunctionSignatureArguments(zetasql::FunctionSignature(
+               gsql_bool,
+               {{gsql_string,
+                 zetasql::FunctionArgumentTypeOptions()
+                     .set_argument_name(
+                         "required_arg1",
+                         zetasql::FunctionEnums::POSITIONAL_ONLY)
+                     .set_cardinality(zetasql::FunctionEnums::REQUIRED)},
+                {gsql_string,
+                 zetasql::FunctionArgumentTypeOptions()
+                     .set_argument_name(
+                         "required_arg2",
+                         zetasql::FunctionEnums::POSITIONAL_ONLY)
+                     .set_cardinality(zetasql::FunctionEnums::REQUIRED)}},
+               /*context_ptr=*/nullptr)),
+           PostgresFunctionSignatureArguments(zetasql::FunctionSignature(
+               gsql_bool,
+               {{zetasql::SignatureArgumentKind::ARG_TYPE_ARBITRARY,
+                 zetasql::FunctionEnums::REPEATED}},
+               /*context_id=*/0,
+               zetasql::FunctionSignatureOptions().set_is_deprecated(true))),
+           PostgresFunctionSignatureArguments(zetasql::FunctionSignature(
+               gsql_bool,
+               {gsql_string,
+                {gsql_string,
+                 zetasql::FunctionArgumentTypeOptions()
+                     .set_argument_name(
+                         "optional_arg",
+                         zetasql::FunctionEnums::POSITIONAL_OR_NAMED)
+                     .set_cardinality(zetasql::FunctionEnums::OPTIONAL)}},
+               /*context_ptr=*/nullptr))})));
 }
 
 TEST_F(TestSpangresFunctionMapper, MapsSpannerNamespacedFunction) {

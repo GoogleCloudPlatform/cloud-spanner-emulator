@@ -293,6 +293,12 @@ absl::Status ExecuteSql(RequestContext* ctx,
             // error.
             error.SetPayload(kConstraintError, absl::Cord(""));
           }
+          if (ShouldReturnTransaction(request->transaction())) {
+            // The transaction ID has not been returned to the user yet, so we
+            // must rollback the transaction to avoid leaving it in an active
+            // state.
+            txn->Rollback().IgnoreError();
+          }
           return error;
         }
         backend::QueryResult& result = maybe_result.value();
@@ -468,6 +474,12 @@ absl::Status ExecuteStreamingSql(
             // error.
             error.SetPayload(kConstraintError, absl::Cord(""));
           }
+          if (ShouldReturnTransaction(request->transaction())) {
+            // The transaction ID has not been returned to the user yet, so we
+            // must rollback the transaction to avoid leaving it in an active
+            // state.
+            txn->Rollback().IgnoreError();
+          }
           return error;
         }
         backend::QueryResult& result = maybe_result.value();
@@ -634,6 +646,13 @@ absl::Status ExecuteBatchDml(RequestContext* ctx,
         *response->mutable_status() = StatusToProto(error);
         txn->SetDmlReplayOutcome(*response);
         txn->MaybeInvalidate(error);
+        if (!txn->IsInvalid() &&
+            ShouldReturnTransaction(request->transaction())) {
+          // The transaction ID has not been returned to the user yet, so we
+          // must rollback the transaction to avoid leaving it in an active
+          // state.
+          txn->Rollback().IgnoreError();
+        }
         return absl::OkStatus();
       } else if (maybe_result.status().code() == absl::StatusCode::kAborted) {
         return maybe_result.status();

@@ -3283,6 +3283,10 @@ _equalInterleaveSpec(const InterleaveSpec *a, const InterleaveSpec *b)
 	return true;
 }
 
+// SPANGRES BEGIN
+// TODO: expose when queue is implemented.
+// SPANGRES END
+
 static bool
 _equalAlterSpangresStatsStmt(const AlterSpangresStatsStmt *a, const AlterSpangresStatsStmt *b)
 {
@@ -3874,6 +3878,9 @@ equal(const void *a, const void *b)
 		case T_CreateSeqStmt:
 			retval = _equalCreateSeqStmt(a, b);
 			break;
+		// SPANGRES BEGIN
+		// TODO: expose when queue is implemented.
+		// SPANGRES END
 		case T_AlterSeqStmt:
 			retval = _equalAlterSeqStmt(a, b);
 			break;

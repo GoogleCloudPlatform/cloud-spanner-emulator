@@ -44,10 +44,13 @@
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
+#include "zetasql/resolved_ast/resolved_ast_enums.pb.h"
+#include "zetasql/resolved_ast/resolved_column.h"
 #include "zetasql/resolved_ast/resolved_node.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
@@ -71,10 +74,12 @@
 #include "backend/query/function_catalog.h"
 #include "backend/query/hint_rewriter.h"
 #include "backend/query/index_hint_validator.h"
+#include "backend/query/insert_on_conflict_dml_execution.h"
 #include "backend/query/partitionability_validator.h"
 #include "backend/query/partitioned_dml_validator.h"
 #include "backend/query/query_context.h"
 #include "backend/query/query_engine_options.h"
+#include "backend/query/query_engine_util.h"
 #include "backend/query/query_validator.h"
 #include "backend/query/queryable_column.h"
 #include "backend/query/queryable_view.h"
@@ -84,11 +89,7 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
-#include "common/limits.h"
 #include "frontend/converters/values.h"
-#include "third_party/spanner_pg/interface/emulator_parser.h"
-#include "third_party/spanner_pg/interface/pg_arena.h"
-#include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -96,6 +97,7 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
 namespace {
 
 // A RowCursor backed by vectors (one per each row) of values.
@@ -140,13 +142,16 @@ class VectorsRowCursor : public RowCursor {
 };
 
 zetasql::EvaluatorOptions CommonEvaluatorOptions(
-    zetasql::TypeFactory* type_factory, const std::string time_zone) {
+    zetasql::TypeFactory* type_factory, const std::string time_zone,
+    bool return_all_insert_rows_insert_ignore_dml = false) {
   zetasql::EvaluatorOptions options;
   options.type_factory = type_factory;
   absl::TimeZone time_zone_obj;
   absl::LoadTimeZone(time_zone, &time_zone_obj);
   options.default_time_zone = time_zone_obj;
   options.scramble_undefined_orderings = true;
+  options.return_all_insert_rows_insert_ignore_dml =
+      return_all_insert_rows_insert_ignore_dml;
   return options;
 }
 
@@ -173,53 +178,16 @@ absl::StatusOr<zetasql::AnalyzerOptions> MakeAnalyzerOptionsWithParameters(
       zetasql::FEATURE_V_1_4_SQL_GRAPH_DYNAMIC_LABEL_PROPERTIES_IN_DDL);
   options.mutable_language()->EnableLanguageFeature(
       zetasql::FEATURE_V_1_4_SQL_GRAPH_DYNAMIC_LABEL_EXTENSION_IN_DDL);
+  if (EmulatorFeatureFlags::instance().flags().enable_insert_on_conflict_dml) {
+    options.mutable_language()->EnableLanguageFeature(
+        zetasql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
+  } else {
+    options.mutable_language()->DisableLanguageFeature(
+        zetasql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
+  }
   ZETASQL_RETURN_IF_ERROR(
       options.mutable_language()->EnableReservableKeyword("GRAPH_TABLE"));
   return options;
-}
-
-// Uses googlesql/public/analyzer to build an AnalyzerOutput for an query.
-// We need to analyze the SQL before executing it in order to determine what
-// kind of statement (query or DML) it is.
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>> Analyze(
-    const std::string& sql, zetasql::Catalog* catalog,
-    const zetasql::AnalyzerOptions& options,
-    zetasql::TypeFactory* type_factory) {
-  // Check the overall length of the query string.
-  if (sql.size() > limits::kMaxQueryStringSize) {
-    return error::QueryStringTooLong(sql.size(), limits::kMaxQueryStringSize);
-  }
-
-  std::unique_ptr<const zetasql::AnalyzerOutput> output;
-  ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeStatement(sql, options, catalog,
-                                              type_factory, &output));
-  return output;
-}
-
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
-AnalyzePostgreSQL(const std::string& sql, zetasql::EnumerableCatalog* catalog,
-                  zetasql::AnalyzerOptions& options,
-                  zetasql::TypeFactory* type_factory,
-                  const FunctionCatalog* function_catalog) {
-  // Check the overall length of the query string.
-  if (sql.size() > limits::kMaxQueryStringSize) {
-    return error::QueryStringTooLong(sql.size(), limits::kMaxQueryStringSize);
-  }
-
-  options.CreateDefaultArenasIfNotSet();
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
-      postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
-  // PG needs ASC NULLS LAST and DESC NULLS FIRST for functions implemented as
-  // a SQL rewrite.
-  options.mutable_language()->EnableLanguageFeature(
-      zetasql::FEATURE_V_1_3_NULLS_FIRST_LAST_IN_ORDER_BY);
-  return postgres_translator::spangres::ParseAndAnalyzePostgreSQL(
-      sql, catalog, options, type_factory,
-      std::make_unique<FunctionCatalog>(
-          type_factory,
-          /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
-          /*schema=*/function_catalog->GetLatestSchema()));
 }
 
 // TODO : Replace with a better error transforming mechanism,
@@ -247,17 +215,6 @@ absl::Status MaybeTransformZetaSQLDMLError(absl::Status error) {
 bool IsGenerated(const zetasql::Column* column) {
   return column->GetAs<QueryableColumn>()->wrapped_column()->is_generated();
 }
-
-struct ExecuteUpdateResult {
-  // A mutation which describes the set of data changes required by the DML
-  // statement.
-  Mutation mutation;
-  // Number of rows that were modified.
-  int64_t modify_row_count;
-  // Output row cursor from THEN RETURN clause. This row cursor pointer will be
-  // NULL if there are no output rows like regular DMLs.
-  std::unique_ptr<RowCursor> returning_row_cursor;
-};
 
 // Simple visitor to traverse an expression and check if it references
 // a pending commit timestamp value column (that is, a column set to
@@ -339,7 +296,7 @@ absl::StatusOr<std::tuple<Mutation, int64_t, bool>> BuildInsert(
     MutationOpType op_type,
     const std::vector<zetasql::ResolvedColumn>& insert_columns,
     const CaseInsensitiveStringSet& pending_ts_columns, bool is_upsert_query,
-    DatabaseDialect database_dialect) {
+    DatabaseDialect database_dialect, bool include_all_returned_columns) {
   // Only include non-generated primary key columns and insert columns in the
   // INSERT mutation.
   CaseInsensitiveStringSet insert_column_names;
@@ -355,6 +312,7 @@ absl::StatusOr<std::tuple<Mutation, int64_t, bool>> BuildInsert(
     bool is_key = key_offsets.has_value() &&
                   std::find(key_offsets->begin(), key_offsets->end(), i) !=
                       key_offsets->end();
+    const auto& column_name = table->GetColumn(i)->Name();
     if (IsGenerated(table->GetColumn(i))) {
       if (is_key) {
         // TODO: b/310194797 - GSQL reference implementation returns NULL for
@@ -367,10 +325,13 @@ absl::StatusOr<std::tuple<Mutation, int64_t, bool>> BuildInsert(
           return error::UnsupportedGeneratedKeyWithUpsertQueries();
         }
       }
-      excluded_column_idx.insert(i);
+      if (include_all_returned_columns) {
+        column_names.push_back(column_name);
+      } else {
+        excluded_column_idx.insert(i);
+      }
       continue;
     }
-    const auto& column_name = table->GetColumn(i)->Name();
     if (!insert_column_names.contains(column_name) && !is_key) {
       excluded_column_idx.insert(i);
       continue;
@@ -390,6 +351,10 @@ absl::StatusOr<std::tuple<Mutation, int64_t, bool>> BuildInsert(
       zetasql::Value column_value = iterator->GetColumnValue(i);
       const auto& column_name = table->GetColumn(i)->Name();
       if (pending_ts_columns.find(column_name) != pending_ts_columns.end()) {
+        if (include_all_returned_columns) {
+          return error::
+              UnsupportedPendingCommitTimestampInInsertOnConflictDml();
+        }
         column_value =
             zetasql::Value::StringValue(kCommitTimestampIdentifier);
       }
@@ -605,10 +570,16 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedInsert(
     const zetasql::ResolvedInsertStmt* insert_statement,
     const zetasql::ParameterValueMap& parameters,
     zetasql::TypeFactory* type_factory, DatabaseDialect database_dialect,
-    const std::string time_zone) {
+    const std::string time_zone,
+    bool return_all_insert_rows_insert_ignore_dml = false) {
   if (insert_statement->insert_mode() ==
       zetasql::ResolvedInsertStmt::OR_REPLACE) {
     return error::UnsupportedUpsertQueries("Insert or replace");
+  }
+  if (return_all_insert_rows_insert_ignore_dml) {
+    ZETASQL_RET_CHECK(insert_statement->insert_mode() ==
+              zetasql::ResolvedInsertStmt::OR_IGNORE)
+        << insert_statement->DebugString();
   }
   bool is_upsert_query = insert_statement->insert_mode() ==
                              zetasql::ResolvedInsertStmt::OR_IGNORE ||
@@ -636,7 +607,9 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedInsert(
   }
 
   auto prepared_insert = std::make_unique<zetasql::PreparedModify>(
-      insert_statement, CommonEvaluatorOptions(type_factory, time_zone));
+      insert_statement,
+      CommonEvaluatorOptions(type_factory, time_zone,
+                             return_all_insert_rows_insert_ignore_dml));
   ZETASQL_ASSIGN_OR_RETURN(auto analyzer_options,
                    MakeAnalyzerOptionsWithParameters(parameters, time_zone));
   ZETASQL_RETURN_IF_ERROR(prepared_insert->Prepare(analyzer_options));
@@ -660,11 +633,17 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateResolvedInsert(
       BuildReturningRowResult(insert_statement->returning(), pending_ts_columns,
                               std::move(returning_iter)));
 
+  // When `return_all_insert_rows_insert_ignore_dml` is true, then the
+  // mutation should have all table scan columns (not only insert columns)
+  // including all generated columns.
   ZETASQL_ASSIGN_OR_RETURN(
       const auto& mutation_and_count,
       BuildInsert(std::move(iterator), op_type,
-                  insert_statement->insert_column_list(), pending_ts_columns,
-                  is_upsert_query, database_dialect));
+                  (return_all_insert_rows_insert_ignore_dml)
+                      ? insert_statement->table_scan()->column_list()
+                      : insert_statement->insert_column_list(),
+                  pending_ts_columns, is_upsert_query, database_dialect,
+                  return_all_insert_rows_insert_ignore_dml));
 
   // Resulting mutation count can be 0 only if all insert rows already
   // existed and none were inserted due to OR_IGNORE insert mode, or if the
@@ -748,12 +727,14 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateUpdate(
     const zetasql::ResolvedStatement* resolved_statement,
     zetasql::Catalog* catalog, const zetasql::ParameterValueMap& parameters,
     zetasql::TypeFactory* type_factory, DatabaseDialect database_dialect,
-    const Schema* schema, const std::string time_zone) {
+    const Schema* schema, const std::string time_zone,
+    bool return_all_insert_rows_insert_ignore_dml = false) {
   switch (resolved_statement->node_kind()) {
     case zetasql::RESOLVED_INSERT_STMT:
       return EvaluateResolvedInsert(
           resolved_statement->GetAs<zetasql::ResolvedInsertStmt>(),
-          parameters, type_factory, database_dialect, time_zone);
+          parameters, type_factory, database_dialect, time_zone,
+          return_all_insert_rows_insert_ignore_dml);
     case zetasql::RESOLVED_UPDATE_STMT:
       return EvaluateResolvedUpdate(
           resolved_statement->GetAs<zetasql::ResolvedUpdateStmt>(),
@@ -1059,6 +1040,166 @@ std::string QueryEngine::GetTimeZone(const Schema* schema) {
   return time_zone;
 }
 
+absl::StatusOr<QueryResult> QueryEngine::ExecuteInsertOnConflictDml(
+    const Query& query, const zetasql::ResolvedStatement* resolved_statement,
+    const std::map<std::string, zetasql::Value>& params,
+    google::spanner::emulator::backend::Catalog& catalog,
+    zetasql::AnalyzerOptions& analyzer_options,
+    const QueryContext& context) const {
+  QueryResult result;
+  ZETASQL_RET_CHECK(
+      EmulatorFeatureFlags::instance().flags().enable_insert_on_conflict_dml);
+  const zetasql::ResolvedInsertStmt* insert_statement =
+      resolved_statement->GetAs<zetasql::ResolvedInsertStmt>();
+  const auto& on_conflict_clause = insert_statement->on_conflict_clause();
+  const Table* table = context.schema->FindTable(
+      insert_statement->table_scan()->table()->Name());
+  if (table == nullptr) {
+    return error::TableNotFound(
+        insert_statement->table_scan()->table()->Name());
+  }
+
+  // 1. In PostgreSQL dialect, we will try to translate the INSERT ON CONFLICT
+  // DO UPDATE DML to INSERT OR UPDATE DML, if eligible, for backward
+  // compatibility. This is consistent with logic in Cloud Spanner.
+  if (on_conflict_clause->conflict_action() ==
+          zetasql::ResolvedOnConflictClauseEnums::UPDATE &&
+      context.schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
+    ZETASQL_ASSIGN_OR_RETURN(bool can_translate_to_insert_or_update_mode,
+                     CanTranslateToInsertOrUpdateMode(*insert_statement));
+
+    if (can_translate_to_insert_or_update_mode) {
+      ZETASQL_ASSIGN_OR_RETURN(
+          auto insert_or_update_dml,
+          AnalyzeAsInsertOrUpdateDML(query.sql, &catalog, analyzer_options,
+                                     type_factory_, &function_catalog_));
+
+      ZETASQL_ASSIGN_OR_RETURN(auto insert_or_update_stmt,
+                       ExtractValidatedResolvedStatementAndOptions(
+                           insert_or_update_dml.get(), context));
+
+      ZETASQL_ASSIGN_OR_RETURN(
+          auto insert_or_update_result,
+          EvaluateUpdate(insert_or_update_stmt.get(), &catalog, params,
+                         type_factory_, context.schema->dialect(),
+                         context.schema,
+                         GetTimeZone(function_catalog_.GetLatestSchema())));
+      ZETASQL_RETURN_IF_ERROR(context.writer->Write(insert_or_update_result.mutation));
+      result.modified_row_count = insert_or_update_result.modify_row_count;
+      result.rows = std::move(insert_or_update_result.returning_row_cursor);
+      return result;
+    }
+  }
+
+  // 2. Get the conflict target in the DML. Its either a primary key or a unique
+  // index.
+  // Set to kReservedIndexNameForPrimaryKey or the unique index name.
+  std::string conflict_target_unique_constraint_name;
+  // Set to key columns of the conflict target.
+  std::vector<std::string> conflict_target_key_columns;
+  ZETASQL_RETURN_IF_ERROR(ResolveConflictTarget(
+      table, on_conflict_clause, conflict_target_key_columns,
+      &conflict_target_unique_constraint_name));
+
+  // 3. Extract the INSERT part of the DML and run in OR_IGNORE insert
+  // mode to get *all* insert rows (new and existing).
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto insert_or_ignore_analyzer_output,
+      BuildAndAnalyzeInsertOrIgnoreDMLToGetAllInsertRows(
+          query.sql, &catalog, *table, analyzer_options,
+          context.schema->dialect(), type_factory_, &function_catalog_));
+
+  ZETASQL_ASSIGN_OR_RETURN(auto insert_or_ignore_stmt,
+                   ExtractValidatedResolvedStatementAndOptions(
+                       insert_or_ignore_analyzer_output.get(), context));
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      auto insert_or_ignore_result,
+      EvaluateUpdate(insert_or_ignore_stmt.get(), &catalog, params,
+                     type_factory_, context.schema->dialect(), context.schema,
+                     GetTimeZone(function_catalog_.GetLatestSchema()),
+                     /*return_all_insert_rows_insert_ignore_dml=*/true));
+
+  // 4. Get all table rows keys. The key columns are the conflict target key
+  // columns.
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::set<Key> original_table_row_keys,
+      GetOriginalTableRows(table, conflict_target_unique_constraint_name,
+                           conflict_target_key_columns, context.reader));
+
+  // 5. Populate the column information required for insert or update action.
+  absl::flat_hash_set<int> insert_column_index_in_mutation_for_insert;
+  absl::flat_hash_set<int> insert_column_index_in_mutation_for_update;
+  std::vector<std::string> columns_in_mutation;
+  std::map<Key, std::vector<zetasql::Value>> insert_row_map;
+  std::vector<Key> existing_rows;
+  std::vector<Key> new_rows;
+  ZETASQL_RETURN_IF_ERROR(ExtractColumnInfoAndRowsForInsertOrUpdateAction(
+      insert_statement, conflict_target_key_columns, insert_or_ignore_result,
+      original_table_row_keys, &insert_row_map, &existing_rows, &new_rows,
+      &columns_in_mutation, &insert_column_index_in_mutation_for_insert,
+      &insert_column_index_in_mutation_for_update));
+
+  InsertOnConflictReturningRows returning_rows;
+  // 6. Build and execute INSERT DML with insert rows that do not violate the
+  // conflict target.
+  if (!new_rows.empty()) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        auto insert_new_rows_stmt,
+        BuildInsertDMLForNewRows(insert_statement, new_rows, insert_row_map,
+                                 columns_in_mutation,
+                                 insert_column_index_in_mutation_for_insert));
+
+    ZETASQL_ASSIGN_OR_RETURN(
+        auto insert_stmt_execute_update_result,
+        EvaluateUpdate(insert_new_rows_stmt.get(), &catalog, params,
+                       type_factory_, context.schema->dialect(), context.schema,
+                       GetTimeZone(function_catalog_.GetLatestSchema())));
+
+    ZETASQL_RETURN_IF_ERROR(
+        context.writer->Write(insert_stmt_execute_update_result.mutation));
+    result.modified_row_count +=
+        insert_stmt_execute_update_result.modify_row_count;
+    ZETASQL_RETURN_IF_ERROR(CollectReturningRows(
+        std::move(insert_stmt_execute_update_result.returning_row_cursor),
+        returning_rows));
+  }
+
+  // 7. Build and execute UPDATE DML with insert rows that violates the conflict
+  // target and hence the respective table rows should be updated.
+  if (on_conflict_clause->conflict_action() ==
+          zetasql::ResolvedOnConflictClauseEnums::UPDATE &&
+      !existing_rows.empty()) {
+    ZETASQL_ASSIGN_OR_RETURN(auto update_existing_rows_resolved_stmt,
+                     BuildUpdateDMLForExistingRows(
+                         insert_statement, *type_factory_, catalog,
+                         existing_rows, insert_row_map, columns_in_mutation,
+                         insert_column_index_in_mutation_for_update,
+                         conflict_target_key_columns));
+
+    ZETASQL_ASSIGN_OR_RETURN(
+        auto update_stmt_execute_update_result,
+        EvaluateUpdate(update_existing_rows_resolved_stmt.get(), &catalog,
+                       params, type_factory_, context.schema->dialect(),
+                       context.schema,
+                       GetTimeZone(function_catalog_.GetLatestSchema())));
+    ZETASQL_RETURN_IF_ERROR(
+        context.writer->Write(update_stmt_execute_update_result.mutation));
+    result.modified_row_count +=
+        update_stmt_execute_update_result.modify_row_count;
+    ZETASQL_RETURN_IF_ERROR(CollectReturningRows(
+        std::move(update_stmt_execute_update_result.returning_row_cursor),
+        returning_rows));
+  }
+  // 8. Finally, combine returning rows from both actions and return the result.
+  if (!returning_rows.rows.empty()) {
+    result.rows = std::make_unique<VectorsRowCursor>(
+        returning_rows.column_names, returning_rows.column_types,
+        returning_rows.rows);
+  }
+  return result;
+}
+
 absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
     const Query& query, const QueryContext& context,
     v1::ExecuteSqlRequest_QueryMode query_mode) const {
@@ -1140,15 +1281,35 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
 
     // Only execute the SQL statement if the user did not request PLAN mode.
     if (query_mode != v1::ExecuteSqlRequest::PLAN) {
-      ZETASQL_ASSIGN_OR_RETURN(
-          auto execute_update_result,
-          EvaluateUpdate(resolved_statement.get(), &catalog, params,
-                         type_factory_, context.schema->dialect(),
-                         context.schema,
-                         GetTimeZone(function_catalog_.GetLatestSchema())));
-      ZETASQL_RETURN_IF_ERROR(context.writer->Write(execute_update_result.mutation));
-      result.modified_row_count = execute_update_result.modify_row_count;
-      result.rows = std::move(execute_update_result.returning_row_cursor);
+      bool is_insert_on_conflict_stmt =
+          resolved_statement->Is<zetasql::ResolvedInsertStmt>() &&
+          resolved_statement->GetAs<zetasql::ResolvedInsertStmt>()
+                  ->on_conflict_clause() != nullptr;
+      if (!is_insert_on_conflict_stmt) {
+        ZETASQL_ASSIGN_OR_RETURN(
+            auto execute_update_result,
+            EvaluateUpdate(resolved_statement.get(), &catalog, params,
+                           type_factory_, context.schema->dialect(),
+                           context.schema,
+                           GetTimeZone(function_catalog_.GetLatestSchema())));
+        ZETASQL_RETURN_IF_ERROR(context.writer->Write(execute_update_result.mutation));
+        result.modified_row_count = execute_update_result.modify_row_count;
+        result.rows = std::move(execute_update_result.returning_row_cursor);
+      } else {
+        if (!EmulatorFeatureFlags::instance()
+                 .flags()
+                 .enable_insert_on_conflict_dml) {
+          std::string error_message =
+              (context.schema->dialect() ==
+               database_api::DatabaseDialect::POSTGRESQL)
+                  ? "This ON CONFLICT clause in INSERT"
+                  : "ON CONFLICT clause in INSERT";
+          return error::UnsupportedUpsertQueries(error_message);
+        }
+        ZETASQL_ASSIGN_OR_RETURN(result, ExecuteInsertOnConflictDml(
+                                     query, resolved_statement.get(), params,
+                                     catalog, analyzer_options, context));
+      }
     } else {
       // Add the columns and types of the returning clause to the result.
       auto returning_clause = GetReturningClause(resolved_statement.get());

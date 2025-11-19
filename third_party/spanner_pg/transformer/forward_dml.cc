@@ -430,13 +430,21 @@ ForwardTransformer::BuildGsqlOnConflictClauseForInsertDML(
       /*update_where_expression=*/std::move(update_where_expr));
 }
 
+static bool IsZetaSQLInsertOnConflictClauseEnabled(
+    const zetasql::LanguageOptions& language_options) {
+  return language_options.LanguageFeatureEnabled(
+      zetasql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
+}
+
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedInsertStmt>>
 ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
   zetasql::ResolvedInsertStmt::InsertMode insert_mode =
       zetasql::ResolvedInsertStmt::OR_ERROR;
-    if (query.onConflict != nullptr) {
-      switch (query.onConflict->action) {
-        case ONCONFLICT_NOTHING:
+  if (query.onConflict != nullptr &&
+      !IsZetaSQLInsertOnConflictClauseEnabled(
+          catalog_adapter_->analyzer_options().language())) {
+    switch (query.onConflict->action) {
+      case ONCONFLICT_NOTHING:
         insert_mode = zetasql::ResolvedInsertStmt::OR_IGNORE;
         break;
       case ONCONFLICT_UPDATE:
@@ -446,8 +454,8 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
         return absl::UnimplementedError(
             "INSERT...ON CONFLICT statements are not supported.");
         break;
-      }
     }
+  }
 
   // The first RangeTblEntry is always the INSERT target table.
   // If there is exactly one RangeTblEntry, the statement is a simple
@@ -647,11 +655,15 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
       on_conflict_clause = nullptr;
   if (insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE ||
       insert_mode == zetasql::ResolvedInsertStmt::OR_IGNORE) {
+    ZETASQL_RET_CHECK(!IsZetaSQLInsertOnConflictClauseEnabled(
+        catalog_adapter_->analyzer_options().language()));
     ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedOnConflictClause(
         query, rte_count, *table_scan->table(), insert_column_list,
         &target_table_scope,
         (insert_mode == zetasql::ResolvedInsertStmt::OR_IGNORE)));
   } else if (query.onConflict != nullptr) {
+    ZETASQL_RET_CHECK(IsZetaSQLInsertOnConflictClauseEnabled(
+        catalog_adapter_->analyzer_options().language()));
     // Get the RangeTblEntry node for the excluded alias, available in
     // ON CONFLICT DO UPDATE DML only.
     RangeTblEntry* rte_for_excluded_alias = rt_fetch(rte_count, query.rtable);

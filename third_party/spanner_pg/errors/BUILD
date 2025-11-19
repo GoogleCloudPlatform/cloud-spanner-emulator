@@ -98,9 +98,7 @@ proto_library(
 
 cc_proto_library(
     name = "errors_cc_proto",
-    visibility = [
-        "//:__subpackages__",
-    ],
+    visibility = ["//:__subpackages__"],
     deps = [":errors_proto"],
 )
 

@@ -317,6 +317,7 @@ message Function {
   enum Language {
     UNSPECIFIED_LANGUAGE = 0;
     SQL = 1;
+    REMOTE = 2;
   }
 
   enum SqlSecurity {
@@ -355,6 +356,8 @@ message CreateFunction {
   optional SQLExpressionOrigin sql_body_origin = 12;
   optional Function.Language language = 10;
   optional Function.Determinism determinism = 11;
+  optional bool is_remote = 13;
+  repeated SetOption options = 14;
 }
 
 message DropFunction {
@@ -918,6 +921,11 @@ message CreateSearchIndex {
   repeated StoredColumnDefinition stored_column_definition = 8;
   repeated SetOption set_options = 9;
   optional bool null_filtered = 10;
+}
+
+message SearchIndexOptionsProto {
+  optional bool sort_order_sharding = 1;
+  optional bool disable_automatic_uid_column = 2;
 }
 
 message DropSearchIndex {

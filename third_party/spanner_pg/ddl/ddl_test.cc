@@ -240,11 +240,11 @@ TEST_F(DdlTest, UnsupportedCreateFunctionStatement) {
   create_function->set_function_kind(google::spanner::emulator::backend::ddl::Function::VIEW);
   create_function->set_sql_security(
       google::spanner::emulator::backend::ddl::Function::UNSPECIFIED_SQL_SECURITY);
-  EXPECT_THAT(base_helper_.SchemaPrinter()->PrintDDLStatement(input),
-              StatusIs(
-                  absl::StatusCode::kInternal,
-                  testing::HasSubstr(
-                      "Only SQL SECURITY INVOKER or DEFINER is supported.")));
+  EXPECT_THAT(
+      base_helper_.SchemaPrinter()->PrintDDLStatement(input),
+      StatusIs(absl::StatusCode::kInternal,
+               testing::HasSubstr(
+                   "Only security_invoker={true,false} are supported.")));
 }
 
 // Certain SDL options should be ignored by the schema printer. CREATE DATABASE

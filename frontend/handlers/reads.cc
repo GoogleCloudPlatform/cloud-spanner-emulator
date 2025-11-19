@@ -97,7 +97,16 @@ absl::Status Read(RequestContext* ctx, const spanner_api::ReadRequest* request,
 
     // Execute read on backend.
     std::unique_ptr<backend::RowCursor> cursor;
-    ZETASQL_RETURN_IF_ERROR(txn->Read(read_arg, &cursor));
+    auto status = txn->Read(read_arg, &cursor);
+    if (!status.ok()) {
+      if (ShouldReturnTransaction(request->transaction())) {
+        // The transaction ID has not been returned to the user yet, so we
+        // must rollback the transaction to avoid leaving it in an active
+        // state.
+        txn->Rollback().IgnoreError();
+      }
+      return status;
+    }
 
     // Populate transaction metadata.
     if (ShouldReturnTransaction(request->transaction())) {
@@ -156,7 +165,16 @@ absl::Status StreamingRead(
 
     // Execute read on backend.
     std::unique_ptr<backend::RowCursor> cursor;
-    ZETASQL_RETURN_IF_ERROR(txn->Read(read_arg, &cursor));
+    auto read_status = txn->Read(read_arg, &cursor);
+    if (!read_status.ok()) {
+      if (ShouldReturnTransaction(request->transaction())) {
+        // The transaction ID has not been returned to the user yet, so we
+        // must rollback the transaction to avoid leaving it in an active
+        // state.
+        txn->Rollback().IgnoreError();
+      }
+      return read_status;
+    }
 
     // Convert read results to protos.
     ZETASQL_ASSIGN_OR_RETURN(

@@ -47,7 +47,8 @@ class PgQueryableChangeStreamTvfTest : public testing::Test {
       : schema_(test::CreateSchemaWithOneTableAndOneChangeStream(
             &type_factory_, database_api::DatabaseDialect::POSTGRESQL)),
         analyzer_options_(MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone)),
-        fn_catalog_(&type_factory_),
+        fn_catalog_(&type_factory_, kCloudSpannerEmulatorFunctionCatalogName,
+                    schema_.get()),
         catalog_(std::make_unique<Catalog>(
             schema_.get(), &fn_catalog_, &type_factory_, analyzer_options_)) {}
 
@@ -62,7 +63,9 @@ class PgQueryableChangeStreamTvfTest : public testing::Test {
         postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
     return postgres_translator::spangres::ParseAndAnalyzePostgreSQL(
         sql, catalog_.get(), analyzer_options_, &type_factory_,
-        std::make_unique<FunctionCatalog>(&type_factory_));
+        std::make_unique<FunctionCatalog>(
+            &type_factory_, kCloudSpannerEmulatorFunctionCatalogName,
+            schema_.get()));
   }
   std::unique_ptr<const Schema> schema_ = nullptr;
   zetasql::TypeFactory type_factory_;

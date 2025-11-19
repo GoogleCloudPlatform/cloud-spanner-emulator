@@ -1059,7 +1059,6 @@ SchemaUpdaterImpl::ApplyDDLStatement(
             ddl_statement->alter_placement().placement_name());
       }
       const auto& set_options = ddl_statement->alter_placement().set_options();
-      ddl_statement->create_placement().set_options();
       if (!set_options.empty()) {
         ZETASQL_RETURN_IF_ERROR(AlterNode<Placement>(
             placement,
@@ -2792,8 +2791,10 @@ SchemaUpdaterImpl::TranslatePostgreSqlQueryInView(absl::string_view query) {
       MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
           GetTimeZone(), admin::database::v1::POSTGRESQL);
   analyzer_options.CreateDefaultArenasIfNotSet();
-  FunctionCatalog function_catalog(type_factory_);
-  function_catalog.SetLatestSchema(latest_schema_);
+  FunctionCatalog function_catalog(
+      type_factory_,
+      /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+      /*latest_schema=*/latest_schema_);
   Catalog catalog(latest_schema_, &function_catalog, type_factory_,
                   analyzer_options);
 
@@ -3584,6 +3585,19 @@ bool SetInt64Option(absl::string_view sdl_type, absl::string_view sdl_name,
   return true;
 }
 
+bool SetBoolOption(absl::string_view sdl_type, absl::string_view sdl_name,
+                   absl::string_view option_name, bool option_value,
+                   google::protobuf::Message* proto, std::string* error) {
+  const google::protobuf::FieldDescriptor* field =
+      GetFieldDescriptor(sdl_type, sdl_name, option_name, proto, error);
+  if (field == nullptr) {
+    return false;
+  }
+  const google::protobuf::Reflection* reflection = proto->GetReflection();
+  reflection->SetBool(proto, field, option_value);
+  return true;
+}
+
 bool SetStringOption(absl::string_view sdl_type, absl::string_view sdl_name,
                      absl::string_view option_name,
                      absl::string_view option_value, google::protobuf::Message* proto,
@@ -3612,6 +3626,11 @@ bool ApplyOptions(absl::string_view sdl_type, absl::string_view sdl_name,
                            option.string_value(), proto, error)) {
         return false;
       }
+    } else if (option.has_bool_value()) {
+      if (!SetBoolOption(sdl_type, sdl_name, option.option_name(),
+                         option.bool_value(), proto, error)) {
+        return false;
+      }
     } else {
       *error =
           absl::StrCat("Unable to set ", option.option_name(), " option on ",
@@ -3620,6 +3639,20 @@ bool ApplyOptions(absl::string_view sdl_type, absl::string_view sdl_name,
     }
   }
   return true;
+}
+
+absl::Status SetSearchIndexOptions(
+    std::string_view sdl_name,
+    const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+    Index::Builder* modifier) {
+  std::string error;
+  ddl::SearchIndexOptionsProto search_index_options;
+  if (!ApplyOptions("Search Index", sdl_name, set_options,
+                    &search_index_options, &error)) {
+    return error::OptionsError(error);
+  }
+  modifier->set_search_index_options(search_index_options);
+  return absl::OkStatus();
 }
 
 absl::Status SetVectorIndexOptions(
@@ -3737,7 +3770,7 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateSearchIndex(
       ddl_index.stored_column_definition(),
       /*is_search_index=*/true, false, &ddl_index.partition_by(),
       &ddl_index.order_by(), &ddl_index.null_filtered_column(),
-      /*set_options=*/nullptr, indexed_table);
+      &ddl_index.set_options(), indexed_table);
 }
 
 absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
@@ -3994,6 +4027,7 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
     for (const KeyColumn* col : columns_used_by_index.order_by_columns) {
       builder.add_order_by_column(col);
     }
+    ZETASQL_RETURN_IF_ERROR(SetSearchIndexOptions(index_name, *set_options, &builder));
   }
   if (is_vector_index) {
     builder.set_vector_index_type(is_vector_index);
@@ -4025,7 +4059,8 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
   }
 
   if (set_options != nullptr && !set_options->empty()) {
-    ZETASQL_RETURN_IF_ERROR(SetIndexOptions(*set_options, &builder, is_vector_index));
+    ZETASQL_RETURN_IF_ERROR(SetIndexOptions(*set_options, &builder,
+                                    (is_vector_index || is_search_index)));
   }
 
   // The data table must be added after the index for correct order of
@@ -4070,8 +4105,9 @@ SchemaUpdaterImpl::GatherTransitiveDependenciesForSchemaNode(
 }
 
 bool SchemaUpdaterImpl::IsBuiltInFunction(const std::string& function_name) {
-  // Do not include the schema to avoid populating the schema's Udfs.
-  FunctionCatalog function_catalog(type_factory_);
+  FunctionCatalog function_catalog(
+      type_factory_, /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+      /*latest_schema=*/latest_schema_);
   const zetasql::Function* function = nullptr;
   function_catalog.GetFunction({function_name}, &function);
   return function != nullptr;
@@ -6029,8 +6065,10 @@ absl::Status SchemaUpdaterImpl::CreatePropertyGraph(
       zetasql::FEATURE_V_1_4_SQL_GRAPH);
   analyzer_options.mutable_language()->AddSupportedStatementKind(
       zetasql::RESOLVED_CREATE_PROPERTY_GRAPH_STMT);
-  FunctionCatalog function_catalog(type_factory_);
-  function_catalog.SetLatestSchema(latest_schema_);
+  FunctionCatalog function_catalog(
+      type_factory_,
+      /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+      /*latest_schema=*/latest_schema_);
 
   // Create a catalog based on 'latest_schema_'for property graph DDL parsing
   // and analysis.

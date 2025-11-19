@@ -26,9 +26,11 @@
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
+#include "zetasql/resolved_ast/resolved_ast.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "backend/query/catalog.h"
 #include "backend/query/change_stream/change_stream_query_validator.h"
 #include "backend/query/function_catalog.h"
 #include "backend/query/query_context.h"
@@ -87,8 +89,11 @@ struct QueryResult {
 // QueryEngine handles SQL-related requests.
 class QueryEngine {
  public:
-  explicit QueryEngine(zetasql::TypeFactory* type_factory)
-      : type_factory_(type_factory), function_catalog_(type_factory) {}
+  explicit QueryEngine(zetasql::TypeFactory* type_factory,
+                       const Schema* schema)
+      : type_factory_(type_factory),
+        function_catalog_(type_factory,
+                          kCloudSpannerEmulatorFunctionCatalogName, schema) {}
 
   // Returns the name of the table that a given DML query modifies.
   absl::StatusOr<std::string> GetDmlTargetTable(const Query& query,
@@ -103,6 +108,14 @@ class QueryEngine {
   absl::StatusOr<QueryResult> ExecuteSql(
       const Query& query, const QueryContext& context,
       v1::ExecuteSqlRequest_QueryMode query_mode) const;
+
+  absl::StatusOr<QueryResult> ExecuteInsertOnConflictDml(
+      const Query& query,
+      const zetasql::ResolvedStatement* resolved_statement,
+      const std::map<std::string, zetasql::Value>& params,
+      google::spanner::emulator::backend::Catalog& catalog,
+      zetasql::AnalyzerOptions& analyzer_options,
+      const QueryContext& context) const;
 
   // Returns OK if query is partitionable.
   absl::Status IsPartitionable(const Query& query,

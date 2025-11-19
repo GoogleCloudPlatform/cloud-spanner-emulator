@@ -60,6 +60,9 @@ SecLabelSupportsObjectType(ObjectType objtype)
 		case OBJECT_TABLE:
 		case OBJECT_TABLESPACE:
 		case OBJECT_TYPE:
+		// SPANGRES BEGIN
+		// TODO: expose when queue is implemented.
+		// SPANGRES END
 		case OBJECT_VIEW:
 			return true;
 

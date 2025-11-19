@@ -536,6 +536,31 @@ TEST_P(TransactionApiTest,
                ::testing::HasSubstr("Could not parse test as an integer")));
 }
 
+TEST_P(TransactionApiTest,
+       ThrowNotFoundErrorForMissingTableInMutationWithMultiplexedSession) {
+  if (GetSessionType() != SessionType::kMultiplexedSession) {
+    return;
+  }
+  spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
+    options { read_write {} }
+  )pb");
+  begin_request.set_session(GetSessionUri(true));
+  google::spanner::v1::Mutation m;
+  google::spanner::v1::Mutation::Write insert = PARSE_TEXT_PROTO(R"pb(
+    table: "testing"
+    columns: "int64_col"
+    values { values { string_value: "test" } }
+  )pb");
+  *m.mutable_insert() = insert;
+  // Add mutation key to begin request.
+  *begin_request.mutable_mutation_key() = m;
+
+  spanner_api::Transaction begin_response;
+  EXPECT_THAT(BeginTransaction(begin_request, &begin_response),
+              StatusIs(absl::StatusCode::kNotFound,
+                       ::testing::HasSubstr("Table not found: testing")));
+}
+
 TEST_P(TransactionApiTest, CommitTransactionWithMutations) {
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }

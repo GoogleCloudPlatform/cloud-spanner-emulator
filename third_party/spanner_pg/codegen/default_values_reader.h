@@ -29,44 +29,32 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include <algorithm>
-#include <iostream>
+#ifndef CODEGEN_DEFAULT_VALUES_READER_H_
+#define CODEGEN_DEFAULT_VALUES_READER_H_
+
+#include <cstdint>
 #include <string>
-#include <utility>
+#include <string_view>
 #include <vector>
 
-#include "absl/flags/parse.h"
 #include "absl/container/flat_hash_map.h"
-#include "third_party/spanner_pg/bootstrap_catalog/proc_changelist.h"
-#include "third_party/spanner_pg/postgres_includes/all.h"
+#include "absl/status/statusor.h"
 
-using ::postgres_translator::TEST_GetProcAndDefaultArgsToUpdate;
-using ::spanner::OverrideSpannerFlagsInUnittest;
+namespace postgres_translator {
 
-int main(int argc, char* argv[]) {
-  InitGoogle(argv[0], &argc, &argv, true);
-  OverrideSpannerFlagsInUnittest();
+// Reads the default values for all PostgreSQL signatures that contain optional
+// arguments. The output is a map of signature OIDs to their default values,
+// represented as a vector of string PostgreSQL expressions (e.g.
+// "null::bigint", "'test'::text").
+absl::StatusOr<absl::flat_hash_map<uint32_t, std::vector<std::string>>>
+GetProcsDefaultValues();
 
-  const absl::flat_hash_map<Oid, std::vector<std::string>>&
-      procs_and_default_args = TEST_GetProcAndDefaultArgsToUpdate();
+absl::StatusOr<absl::flat_hash_map<uint32_t, std::vector<std::string>>>
+GetProcsDefaultValues(std::string_view json_string);
 
-  std::vector<std::pair<Oid, std::vector<std::string>>>
-      sorted_procs_and_default_args(procs_and_default_args.begin(),
-                                    procs_and_default_args.end());
-  std::sort(sorted_procs_and_default_args.begin(),
-            sorted_procs_and_default_args.end(),
-            [](const std::pair<Oid, std::vector<std::string>>& proc1,
-               const std::pair<Oid, std::vector<std::string>>& proc2) {
-              return proc1.first < proc2.first;
-            });
+absl::flat_hash_map<uint32_t, std::vector<std::string>>
+GetProcsDefaultValuesOrDie();
 
-  for (const auto& [proc, default_args] : sorted_procs_and_default_args) {
-    std::cout << "[\n";
-    std::cout << "\tproc: " << proc << "\n";
-    for (const auto& default_arg : default_args) {
-      std::cout << "\tdefault_arg: \"" << default_arg << "\"\n";
-    }
-    std::cout << "],\n";
-  }
-  std::cout << "\n";
-}
+}  // namespace postgres_translator
+
+#endif  // CODEGEN_DEFAULT_VALUES_READER_H_

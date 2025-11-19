@@ -987,6 +987,13 @@ TEST_F(PGFunctionsTest, NumericUminus) {
                        HasSubstr("does not exist")));
 }
 
+TEST_F(PGFunctionsTest, FloatingPointCastToInt64Nulls) {
+  EXPECT_THAT(Query("SELECT null::float4 = 1::int8"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+  EXPECT_THAT(Query("SELECT null::float8 = 1::int8"),
+              IsOkAndHoldsRows({{Null<bool>()}}));
+}
+
 TEST_F(PGFunctionsTest, NumericCastToInt64) {
   EXPECT_THAT(Query("SELECT 0.1::int8"), IsOkAndHoldsRows({{0}}));
   EXPECT_THAT(Query("SELECT 0.49::int8"), IsOkAndHoldsRows({{0}}));
@@ -1000,6 +1007,8 @@ TEST_F(PGFunctionsTest, NumericCastToInt64) {
   EXPECT_THAT(Query(absl::Substitute("SELECT ($0 + 1)::numeric::int8",
                                      std::numeric_limits<int64_t>().min())),
               IsOkAndHoldsRows({{std::numeric_limits<int64_t>().min() + 1}}));
+  EXPECT_THAT(Query("SELECT null::numeric::int8"),
+              IsOkAndHoldsRows({{Null<int64_t>()}}));
 
   // Error cases
   // TODO: b/308517728 - Normalize the error message

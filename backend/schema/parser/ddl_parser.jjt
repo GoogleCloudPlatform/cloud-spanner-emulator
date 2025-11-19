@@ -225,8 +225,12 @@ void create_function_statement() :
   qualified_identifier() #name
   "(" [ function_parameter_list() ] ")"
   [ <RETURNS> function_data_type() #return_type ]
+  [ (<NOT> <DETERMINISTIC>)  #determinism ]
+  [ <LANGUAGE> (<SQL> | <REMOTE>) #language ]
+  [ <REMOTE> #remote ]
   [ <SQL> <SECURITY> sql_security() ]
-  <AS> "(" expression() #function_definition ")"
+  ( ( <AS> "(" expression() #function_definition ")" )
+  | ( options_clause() #options ) )
 }
 
 void alter_index_statement() :

@@ -1696,7 +1696,7 @@ absl::Status ValidateParseTreeNode(const ViewStmt& node) {
       FieldTypeChecker<Node*>(node.query), FieldTypeChecker<bool>(node.replace),
       FieldTypeChecker<List*>(node.options),
       FieldTypeChecker<ViewCheckOption>(node.withCheckOption),
-      FieldTypeChecker<bool>(node.is_definer),
+      FieldTypeChecker<ViewSecurityType>(node.view_security_type),
       FieldTypeChecker<char*>(node.query_string));
 
   // `view` defines the name of the new view.
@@ -1709,12 +1709,18 @@ absl::Status ValidateParseTreeNode(const ViewStmt& node) {
         "Setting column names in <CREATE VIEW> statement is not supported.");
   }
 
-  // 'replace' defines replace or not if view exists.
-
-  // 'options' used to set view options which is not supported.
+  // 'options' used to set view options
   if (node.options != nullptr) {
-    return UnsupportedTranslationError(
-        "<WITH> clause is not supported in <CREATE VIEW> statement.");
+    for (DefElem* def_elem : StructList<DefElem*>(node.options)) {
+      // We currently only support the "security_invoker" WITH option.
+      if (def_elem->defname !=
+          internal::PostgreSQLConstants::kSecurityViewOptionName) {
+        return UnsupportedTranslationError(absl::Substitute(
+            "<$0> option is not supported in <WITH> clause of <CREATE VIEW> "
+            "statement.",
+            def_elem->defname));
+      }
+    }
   }
 
   // 'withCheckOption' used for updatable views which is not supported.

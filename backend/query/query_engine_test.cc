@@ -46,6 +46,7 @@
 #include "backend/datamodel/value.h"
 #include "backend/query/query_context.h"
 #include "backend/schema/catalog/schema.h"
+#include "common/feature_flags.h"
 #include "common/limits.h"
 #include "tests/common/row_reader.h"
 #include "tests/common/schema_constructor.h"
@@ -259,7 +260,7 @@ class QueryEngineTestBase : public testing::Test {
   RowReader* dynamic_property_graph_reader() {
     return &dynamic_property_graph_reader_;
   }
-  QueryEngine& query_engine() { return query_engine_; }
+  QueryEngine& query_engine() { return *query_engine_; }
   zetasql::TypeFactory* type_factory() { return &type_factory_; }
   const Schema* proto_schema() { return proto_schema_.get(); }
   std::string read_descriptors() {
@@ -334,6 +335,7 @@ class QueryEngineTestBase : public testing::Test {
 
  protected:
   zetasql::TypeFactory type_factory_;
+  std::unique_ptr<QueryEngine> query_engine_ = nullptr;
   std::unique_ptr<const Schema> schema_;
   std::unique_ptr<const Schema> multi_table_schema_;
   std::unique_ptr<const Schema> change_stream_schema_;
@@ -343,6 +345,8 @@ class QueryEngineTestBase : public testing::Test {
   std::unique_ptr<const Schema> timestamp_date_schema_;
   std::unique_ptr<const Schema> property_graph_schema_;
   std::unique_ptr<const Schema> dynamic_property_graph_schema_;
+  std::unique_ptr<const Schema> proto_schema_ =
+      test::CreateSchemaWithProtoEnumColumn(&type_factory_, read_descriptors());
 
  private:
   std::unique_ptr<const Schema> views_schema_ =
@@ -403,7 +407,6 @@ class QueryEngineTestBase : public testing::Test {
               zetasql::values::NullJson()},
          }}}}};
 
-  QueryEngine query_engine_{&type_factory_};
   test::ScopedEmulatorFeatureFlagsSetter feature_flags_setter_ =
       test::ScopedEmulatorFeatureFlagsSetter(
           {.enable_dml_returning = true,
@@ -422,8 +425,6 @@ class QueryEngineTestBase : public testing::Test {
          {zetasql::types::Int64Type(), zetasql::types::Int64Type(),
           zetasql::types::Int64Type(), zetasql::types::Int64Type(),
           zetasql::types::Int64Type()}}}}};
-  std::unique_ptr<const Schema> proto_schema_ =
-      test::CreateSchemaWithProtoEnumColumn(&type_factory_, read_descriptors());
   test::TestRowReader timestamp_date_table_reader_{
       {{"timestamp_date_table",
         {{"int64_col", "timestamp_col", "date_col"},
@@ -440,6 +441,11 @@ struct TestQuery {
 
 class ParameterizedSelectProto : public QueryEngineTestBase,
                                  public testing::WithParamInterface<TestQuery> {
+ protected:
+  void SetUp() override {
+    query_engine_ =
+        std::make_unique<QueryEngine>(&type_factory_, proto_schema_.get());
+  }
 };
 
 class QueryEngineTest
@@ -457,7 +463,6 @@ class QueryEngineTest
                                             &type_factory_, POSTGRESQL));
       ZETASQL_ASSERT_OK_AND_ASSIGN(sequence_schema_, test::CreateSchemaWithOneSequence(
                                                  &type_factory_, POSTGRESQL));
-      query_engine().SetLatestSchemaForFunctionCatalog(sequence_schema_.get());
       timestamp_date_schema_ =
           test::CreateSchemaWithTimestampDateTable(&type_factory_, POSTGRESQL);
     } else if (GetParam() == GOOGLE_STANDARD_SQL) {
@@ -474,10 +479,11 @@ class QueryEngineTest
                            test::CreateGpkSchemaWithOneTable(&type_factory_));
       ZETASQL_ASSERT_OK_AND_ASSIGN(sequence_schema_,
                            test::CreateSchemaWithOneSequence(&type_factory_));
-      query_engine().SetLatestSchemaForFunctionCatalog(sequence_schema_.get());
       timestamp_date_schema_ =
           test::CreateSchemaWithTimestampDateTable(&type_factory_);
     }
+    query_engine_ =
+        std::make_unique<QueryEngine>(&type_factory_, sequence_schema_.get());
   }
 
   void ExecuteAndValidateReturningActionSingleRow(
@@ -1251,9 +1257,130 @@ TEST_P(QueryEngineTest, InsertOrIgnoreDmlFlagDisabled) {
   }
 }
 
+TEST_P(QueryEngineTest, InsertOnConflictDmlDoNothingFeatureFlagDisabled) {
+  test::ScopedEmulatorFeatureFlagsSetter setter(
+      {.enable_insert_on_conflict_dml = false});
+
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
+    MockRowWriter writer;
+    EXPECT_THAT(query_engine().ExecuteSql(
+                    Query{"INSERT INTO test_table (int64_col) VALUES(1) "
+                          "ON CONFLICT(int64_col) DO NOTHING"},
+                    QueryContext{schema(), reader(), &writer}),
+                StatusIs(StatusCode::kInvalidArgument,
+                         HasSubstr("ON CONFLICT is not supported")));
+  } else if (GetParam() == POSTGRESQL) {
+    // ON CONFLICT is already supported in PG., so the query should be executed
+    // successfully.
+    MockRowWriter writer;
+    ZETASQL_EXPECT_OK(query_engine().ExecuteSql(
+        Query{"INSERT INTO test_table (int64_col) VALUES(1) "
+              "ON CONFLICT(int64_col) DO NOTHING"},
+        QueryContext{schema(), reader(), &writer}));
+  }
+}
+
+TEST_P(QueryEngineTest,
+       InsertOnConflictDmlDoNothingOnUniqueIndexFeatureFlagDisabled) {
+  test::ScopedEmulatorFeatureFlagsSetter setter(
+      {.enable_insert_on_conflict_dml = false});
+
+  // Conflict target is a `string_col` which is a UNIQUE index key column.
+  // PG and GSQL return different error messages for this case.
+  Query query{
+      "INSERT INTO test_table (int64_col) VALUES(1) "
+      "ON CONFLICT(string_col) DO NOTHING"};
+  MockRowWriter writer;
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(query,
+                                  QueryContext{schema(), reader(), &writer}),
+        StatusIs(StatusCode::kUnimplemented,
+                 HasSubstr(
+                     "Column 'string_col' is not a key column. "
+                     "Columns other than primary key columns are not supported "
+                     "as ON CONFLICT targets")));
+  } else {
+    EXPECT_THAT(query_engine().ExecuteSql(
+                    query, QueryContext{schema(), reader(), &writer}),
+                StatusIs(StatusCode::kInvalidArgument,
+                         HasSubstr("ON CONFLICT is not supported")));
+  }
+}
+
+TEST_P(QueryEngineTest, InsertOnConflictDmlDoUpdateDisabled) {
+  test::ScopedEmulatorFeatureFlagsSetter setter(
+      {.enable_insert_on_conflict_dml = false});
+
+  Query query{
+      "INSERT INTO test_table (int64_col) VALUES(1) "
+      "ON CONFLICT(int64_col) DO UPDATE "
+      "SET int64_col = 10"};
+  MockRowWriter writer;
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(query,
+                                  QueryContext{schema(), reader(), &writer}),
+        StatusIs(StatusCode::kUnimplemented,
+                 HasSubstr("Column 'int64_col' must be set to the insert value "
+                           "in the statement using excluded.int64_col in the "
+                           "ON CONFLICT DO UPDATE SET clause")));
+  } else {
+    EXPECT_THAT(query_engine().ExecuteSql(
+                    query, QueryContext{schema(), reader(), &writer}),
+                StatusIs(StatusCode::kInvalidArgument,
+                         HasSubstr("ON CONFLICT is not supported")));
+  }
+}
+
+TEST_P(QueryEngineTest, InsertOnConflictNullFilteredIndex) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const Schema> schema,
+      test::CreateSchemaFromDDL(
+          {
+              R"(CREATE TABLE test_table (
+                int64_col INT64, string_col STRING(MAX), bool_col BOOL)
+                PRIMARY KEY (string_col))",
+              R"(CREATE UNIQUE NULL_FILTERED INDEX test_index1
+              ON test_table (int64_col))",
+              R"(CREATE UNIQUE INDEX test_index2 ON test_table (bool_col)
+              WHERE bool_col IS NOT NULL)",
+          },
+          type_factory(),
+          /*proto_descriptor_bytes=*/""));
+
+  test::TestRowReader reader{
+      {{"test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {{Int64(1), String("one")},
+          {Int64(2), String("two")},
+          {Int64(3), String("three")}}}}}};
+  QueryResult result;
+
+  MockRowWriter writer;
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{R"(INSERT INTO test_table (int64_col, string_col)
+                        VALUES (1, 'one') ON CONFLICT(int64_col)
+                        DO UPDATE SET int64_col = excluded.int64_col)"},
+                  QueryContext{schema.get(), &reader, &writer}),
+              StatusIs(StatusCode::kUnimplemented,
+                       HasSubstr("Null filtered index as conflict target "
+                                 "is not supported: test_index1")));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{R"(INSERT INTO test_table (int64_col, string_col)
+                        VALUES (1, 'one') ON CONFLICT(bool_col)
+                        DO UPDATE SET int64_col = excluded.int64_col)"},
+                  QueryContext{schema.get(), &reader, &writer}),
+              StatusIs(StatusCode::kUnimplemented,
+                       HasSubstr("Null filtered index as conflict target is "
+                                 "not supported: test_index2")));
+}
+
 TEST_P(QueryEngineTest, InsertOrIgnoreDmlWithReturningFlagDisabled) {
   test::ScopedEmulatorFeatureFlagsSetter setter(
-      {.enable_upsert_queries_with_returning = false});
+      {.enable_upsert_queries_with_returning = false,
+       .enable_insert_on_conflict_dml = false});
   MockRowWriter writer;
   if (GetParam() == GOOGLE_STANDARD_SQL) {
     EXPECT_THAT(
@@ -1280,7 +1407,7 @@ TEST_P(QueryEngineTest, InsertOrIgnoreDmlWithReturningFlagDisabled) {
 
 TEST_P(QueryEngineTest, InsertOrUpdateDmlFlagDisabled) {
   test::ScopedEmulatorFeatureFlagsSetter setter(
-      {.enable_upsert_queries = false});
+      {.enable_upsert_queries = false, .enable_insert_on_conflict_dml = false});
   MockRowWriter writer;
   if (GetParam() == GOOGLE_STANDARD_SQL) {
     EXPECT_THAT(
@@ -1307,7 +1434,8 @@ TEST_P(QueryEngineTest, InsertOrUpdateDmlFlagDisabled) {
 
 TEST_P(QueryEngineTest, InsertOrUpdateDmlWithReturningFlagDisabled) {
   test::ScopedEmulatorFeatureFlagsSetter setter(
-      {.enable_upsert_queries_with_returning = false});
+      {.enable_upsert_queries_with_returning = false,
+       .enable_insert_on_conflict_dml = false});
   MockRowWriter writer;
   if (GetParam() == GOOGLE_STANDARD_SQL) {
     EXPECT_THAT(
@@ -1468,6 +1596,474 @@ TEST_P(QueryEngineTest, ConnotUpdatePrimaryKey) {
                   Query{"UPDATE test_table SET int64_col=2 WHERE int64_col=2"},
                   QueryContext{schema(), reader(), &writer}),
               StatusIs(StatusCode::kInvalidArgument));
+}
+
+TEST_P(QueryEngineTest, InsertOnConflictNonexistentConflictTarget) {
+  MockRowWriter writer;
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col, string_col) "
+                "VALUES(10, 'ten') "
+                "ON CONFLICT(int64_col, string_col) DO NOTHING"},
+          QueryContext{schema(), reader(), &writer}),
+      StatusIs(StatusCode::kFailedPrecondition,
+               HasSubstr("There is no unique constraint matching the ON "
+                         "CONFLICT specification")));
+}
+
+TEST_P(QueryEngineTest, InsertOnConflictDoNothingEmptyConflictTarget) {
+  MockRowWriter writer;
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col, string_col) "
+                "VALUES(10, 'ten') ON CONFLICT DO NOTHING"},
+          QueryContext{schema(), reader(), &writer}),
+      StatusIs(StatusCode::kUnimplemented,
+               HasSubstr("ON CONFLICT clause with empty conflict target in "
+                         "INSERT statement is not supported in Emulator")));
+}
+
+TEST_P(QueryEngineTest, InsertOnConflictDoNothingDml) {
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(
+              AllOf(Field(&MutationOp::type, MutationOpType::kInsert),
+                    Field(&MutationOp::table, "test_table"),
+                    Field(&MutationOp::columns,
+                          std::vector<std::string>{"int64_col", "string_col"}),
+                    Field(&MutationOp::rows,
+                          UnorderedElementsAre(
+                              ValueList{Int64(10), String("ten")},
+                              ValueList{Int64(3), String("three")})))))))
+      .Times(2)
+      .WillOnce(Return(absl::OkStatus()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col, string_col) "
+                "VALUES(10, 'ten'), (1, 'one'), (10, 'ten'), (3, 'three') "
+                "ON CONFLICT(int64_col) DO NOTHING"},
+          QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_EQ(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+
+  // Test same input with INSERT...SELECT
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      result, query_engine().ExecuteSql(
+                  Query{"INSERT INTO test_table (int64_col, string_col) "
+                        "(SELECT 10, 'ten' UNION ALL SELECT 1, 'one' UNION ALL "
+                        " SELECT 10, 'ten' UNION ALL SELECT 3, 'three') "
+                        "ON CONFLICT(int64_col) DO NOTHING"},
+                  QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_EQ(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+}
+
+TEST_P(QueryEngineTest, InsertOnConflictDoNothingDmlWithReturning) {
+  std::string returning =
+      (GetParam() == POSTGRESQL) ? "RETURNING" : "THEN RETURN";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(
+              AllOf(Field(&MutationOp::type, MutationOpType::kInsert),
+                    Field(&MutationOp::table, "test_table"),
+                    Field(&MutationOp::columns,
+                          std::vector<std::string>{"int64_col", "string_col"}),
+                    Field(&MutationOp::rows,
+                          UnorderedElementsAre(
+                              ValueList{Int64(10), String("ten")},
+                              ValueList{Int64(3), String("three")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{absl::StrCat(
+              "INSERT INTO test_table (int64_col, string_col) "
+              "VALUES(10, 'ten'), (1, 'one'), (10, 'ten'), (3, 'three') "
+              "ON CONFLICT(int64_col) DO NOTHING ",
+              returning, " int64_col + 1 AS new_col1, string_col AS new_col")},
+          QueryContext{schema(), reader(), &writer}));
+
+  EXPECT_EQ(result.modified_row_count, 2);
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetColumnNames(*result.rows), ElementsAre("new_col1", "new_col"));
+  EXPECT_THAT(GetColumnTypes(*result.rows),
+              ElementsAre(Int64Type(), StringType()));
+  EXPECT_THAT(
+      GetAllColumnValues(std::move(result.rows)),
+      IsOkAndHolds(UnorderedElementsAre(ValueList{Int64(11), String("ten")},
+                                        ValueList{Int64(4), String("three")})));
+}
+
+TEST_P(QueryEngineTest,
+       InsertOnConflictDoNothingDmlConflictTargetUniqueIndexGsql) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "Index is null filtered in PostgreSQL by default that is "
+                    "not supported in Spanner yet.";
+  }
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "string_col"}),
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(3), String("three")})))))))
+      .Times(2)
+      .WillOnce(Return(absl::OkStatus()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col, string_col) "
+                "VALUES (1, 'one'), (3, 'three'), (40, 'four') "
+                "ON CONFLICT(string_col) DO NOTHING"},
+          QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_EQ(result.rows, nullptr);
+  // No rows are modified.
+  EXPECT_EQ(result.modified_row_count, 1);
+
+  // Re-run the query using ON UNIQUE CONSTRAINT syntax to specify the
+  // conflict target. Expect same result as above query.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result2,
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col, string_col) "
+                "VALUES (1, 'one'), (3, 'three'), (40, 'four') "
+                "ON CONFLICT ON UNIQUE CONSTRAINT test_index DO NOTHING "},
+          QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_EQ(result2.rows, nullptr);
+  // No rows are modified.
+  EXPECT_EQ(result2.modified_row_count, 1);
+}
+
+TEST_P(QueryEngineTest,
+       InsertOnConflictDoNothingDmlUnlistedUniqueIndexKeyColumn) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "Index is null filtered in PostgreSQL by default that is "
+                    "not supported in Spanner yet.";
+  }
+
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(&Mutation::ops,
+                     UnorderedElementsAre(AllOf(
+                         Field(&MutationOp::type, MutationOpType::kInsert),
+                         Field(&MutationOp::table, "test_table"),
+                         Field(&MutationOp::columns,
+                               std::vector<std::string>{"int64_col"}),
+                         Field(&MutationOp::rows,
+                               UnorderedElementsAre(ValueList{Int64(40)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  // The unique index `string_col` is the conflict target. The DML inserts
+  // int64_col:40 because its 1st in the insert row list. Since its a
+  // non-existent primary key, the DML succeeds.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col) VALUES (40), (5) "
+                "ON CONFLICT(string_col) DO NOTHING"},
+          QueryContext{schema(), reader(), &writer}));
+  ASSERT_EQ(result.rows, nullptr);
+  // No rows are modified.
+  EXPECT_EQ(result.modified_row_count, 1);
+}
+
+TEST_P(QueryEngineTest,
+       InsertOnConflictDoNothingConflictTargetUniqueIndexViolatesPrimaryKey) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "Index is null filtered in PostgreSQL by default that is "
+                    "not supported in Spanner yet.";
+  }
+
+  MockRowWriter writer;
+  // The unique index `string_col` is the conflict target. The DML inserts
+  // int64_col:1 because its 1st in the insert row list. However, int64_col:1
+  // violates the primary key constraint, so the DML fails.
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col) VALUES (1), (3), (40) "
+                "ON CONFLICT(string_col) DO NOTHING"},
+          QueryContext{schema(), reader(), &writer}),
+      StatusIs(StatusCode::kAlreadyExists,
+               HasSubstr("Failed to insert row with primary key "
+                         "({pk#int64_col:1}) due to previously existing row")));
+}
+
+TEST_P(QueryEngineTest, InsertOnConflictDoUpdateDml) {
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "string_col"}),
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(10), String("newrow")})))))))
+      .Times(2)
+      .WillOnce(Return(absl::OkStatus()));
+
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(
+              AllOf(Field(&MutationOp::type, MutationOpType::kUpdate),
+                    Field(&MutationOp::table, "test_table"),
+                    Field(&MutationOp::columns,
+                          std::vector<std::string>{"int64_col", "string_col"}),
+                    Field(&MutationOp::rows,
+                          UnorderedElementsAre(ValueList{
+                              Int64(1), String("ten==tenhundred==one")})))))))
+      .Times(2)
+      .WillOnce(Return(absl::OkStatus()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col, string_col) "
+                "VALUES(1, 'ten'), (10, 'newrow') "
+                "ON CONFLICT(int64_col) DO UPDATE SET string_col = "
+                "concat(excluded.string_col, '==', 'tenhundred', '==', "
+                "test_table.string_col) "
+                "WHERE test_table.int64_col = 1"},
+          QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_EQ(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+
+  // Test same input with INSERT...SELECT
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      result, query_engine().ExecuteSql(
+                  Query{"INSERT INTO test_table (int64_col, string_col) "
+                        "(SELECT 1 , 'ten' UNION ALL SELECT 10, 'newrow') "
+                        "ON CONFLICT(int64_col) DO UPDATE SET string_col = "
+                        "concat(excluded.string_col, '==', 'tenhundred', '==', "
+                        "test_table.string_col) "
+                        "WHERE test_table.int64_col = 1"},
+                  QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_EQ(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+}
+
+TEST_P(QueryEngineTest, InsertOnConflictDoUpdateDmlWithReturning) {
+  std::string returning =
+      (GetParam() == POSTGRESQL) ? "RETURNING" : "THEN RETURN WITH ACTION";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "string_col"}),
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(10), String("newrow")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(
+              AllOf(Field(&MutationOp::type, MutationOpType::kUpdate),
+                    Field(&MutationOp::table, "test_table"),
+                    Field(&MutationOp::columns,
+                          std::vector<std::string>{"int64_col", "string_col"}),
+                    Field(&MutationOp::rows,
+                          UnorderedElementsAre(ValueList{
+                              Int64(1), String("ten==tenhundred==one")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{absl::StrCat(
+              "INSERT INTO test_table (int64_col, string_col) "
+              "VALUES(1, 'ten'), (10, 'newrow') "
+              "ON CONFLICT(int64_col) DO UPDATE SET string_col = "
+              "concat(excluded.string_col, '==', 'tenhundred', '==', "
+              "test_table.string_col) "
+              "WHERE test_table.int64_col = 1 ",
+              returning, " test_table.*")},
+          QueryContext{schema(), reader(), &writer}));
+
+  EXPECT_EQ(result.modified_row_count, 2);
+  ASSERT_NE(result.rows, nullptr);
+  // PG returning rows does not have ACTION column.
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(GetColumnNames(*result.rows),
+                ElementsAre("int64_col", "string_col"));
+    EXPECT_THAT(GetColumnTypes(*result.rows),
+                ElementsAre(Int64Type(), StringType()));
+    EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+                IsOkAndHolds(UnorderedElementsAre(
+                    ValueList{Int64(10), String("newrow")},
+                    ValueList{Int64(1), String("ten==tenhundred==one")})));
+  }
+
+  // ZetaSQL returning rows have ACTION column.
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(GetColumnNames(*result.rows),
+                ElementsAre("int64_col", "string_col", "ACTION"));
+    EXPECT_THAT(GetColumnTypes(*result.rows),
+                ElementsAre(Int64Type(), StringType(), StringType()));
+    EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+                IsOkAndHolds(UnorderedElementsAre(
+                    ValueList{Int64(10), String("newrow"), String("INSERT")},
+                    ValueList{Int64(1), String("ten==tenhundred==one"),
+                              String("UPDATE")})));
+  }
+}
+
+TEST_P(QueryEngineTest, InsertOnConflictDoUpdateDmlCannotUpdatePrimaryKey) {
+  MockRowWriter writer;
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col, string_col) "
+                "VALUES(1, 'ten'), (10, 'newrow') "
+                "ON CONFLICT(int64_col) "
+                "DO UPDATE SET int64_col = excluded.int64_col "},
+          QueryContext{schema(), reader(), &writer}),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Cannot modify a primary key column with UPDATE")));
+}
+
+TEST_P(QueryEngineTest, InsertOnConflictDoUpdateDmlConflictTargetUniqueIndex) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "Index is null filtered in PostgreSQL by default that is "
+                    "not supported in Spanner yet.";
+  }
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "string_col"}),
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(10), String("newrow")})))))))
+      .Times(2)
+      .WillOnce(Return(absl::OkStatus()));
+
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(
+              AllOf(Field(&MutationOp::type, MutationOpType::kUpdate),
+                    Field(&MutationOp::table, "test_table"),
+                    Field(&MutationOp::columns,
+                          std::vector<std::string>{"int64_col", "string_col"}),
+                    Field(&MutationOp::rows,
+                          UnorderedElementsAre(ValueList{
+                              Int64(1), String("one==tenhundred==one")})))))))
+      .Times(2)
+      .WillOnce(Return(absl::OkStatus()));
+
+  // The unique index `string_col` is the conflict target.
+  // A row with `string_col:one` in the 1st insert row already exists in the
+  // table. That row (with int64_col:1) is updated to
+  // `string_col:one==tenhundred==one` based on UPDATE SET statement.
+  // The row with `string_col:newrow` in a the 2nd insert row is inserted
+  // because no row with that `string_col` value exists in the table. Since
+  // (int64_val:10) is a new primary key, the insert succeeds.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col, string_col) "
+                "VALUES(10, 'one'), (10, 'newrow') "
+                "ON CONFLICT(string_col) DO UPDATE SET string_col = "
+                "concat(excluded.string_col, '==', 'tenhundred', '==', "
+                "test_table.string_col)"},
+          QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_EQ(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 2);
+
+  // Re-run the query using ON UNIQUE CONSTRAINT syntax to specify the
+  // conflict target. Expect same result as above query.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result2,
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col, string_col) "
+                "VALUES(10, 'one'), (10, 'newrow') "
+                "ON CONFLICT(string_col) DO UPDATE SET string_col = "
+                "concat(excluded.string_col, '==', 'tenhundred', '==', "
+                "test_table.string_col)"},
+          QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_EQ(result2.rows, nullptr);
+  EXPECT_EQ(result2.modified_row_count, 2);
+}
+
+TEST_P(QueryEngineTest, InsertOnConflictDoNothingSkipsDuplicateInputRows) {
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "string_col"}),
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(10), String("ten")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  // Spanner does not allow duplicate insert rows with same key.
+  // The insert statement inserts 2 rows with same key (int64_col:10).
+  std::string sql =
+      "INSERT INTO test_table (int64_col, string_col) "
+      "VALUES(10, 'ten'), (1, 'one updated'), (10, 'ten') "
+      "ON CONFLICT(int64_col) DO NOTHING";
+
+  ZETASQL_EXPECT_OK(query_engine().ExecuteSql(
+      Query{sql}, QueryContext{schema(), reader(), &writer}));
+}
+
+TEST_P(QueryEngineTest, InsertOnConflictDoUpdateDuplicateInputRowsReturnError) {
+  // Spanner does not allow duplicate insert rows with same key.
+  // The insert statement inserts 2 rows with same key (int64_col:10).
+  std::string sql =
+      "INSERT INTO test_table (int64_col, string_col) "
+      "VALUES(10, 'ten'), (1, 'one updated'), (10, 'ten') "
+      "ON CONFLICT(int64_col) DO UPDATE SET "
+      "int64_col = 10 + excluded.int64_col";
+  MockRowWriter writer;
+
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Cannot affect a row second time for key: "
+                                 "{Int64(10)}")));
 }
 
 TEST_P(QueryEngineTest, TestGetValidChangeStreamMetadataFromChangeStreamQuery) {
@@ -2400,6 +2996,8 @@ class ParameterSensitiveHintTests
       schema_ = test::CreateSchemaWithOneTable(&type_factory_);
       multi_table_schema_ = test::CreateSchemaWithMultiTables(&type_factory_);
     }
+    query_engine_ =
+        std::make_unique<QueryEngine>(&type_factory_, schema_.get());
   }
 };
 
@@ -3917,6 +4515,7 @@ class DefaultValuesTest : public QueryEngineTest {
     action_manager_->AddActionsForSchema(schema(),
                                          /*function_catalog=*/nullptr,
                                          type_factory());
+    query_engine_ = std::make_unique<QueryEngine>(type_factory(), schema());
   }
 
  private:
@@ -4019,6 +4618,8 @@ class DefaultKeyTest
       dkschema_ = test::CreateSimpleDefaultKeySchema(type_factory(),
                                                      GOOGLE_STANDARD_SQL);
     }
+    query_engine_ =
+        std::make_unique<QueryEngine>(type_factory(), dkschema_.get());
     action_manager_ = std::make_unique<ActionManager>();
     action_manager_->AddActionsForSchema(schema(),
                                          /*function_catalog=*/nullptr,
@@ -4029,11 +4630,11 @@ class DefaultKeyTest
   std::unique_ptr<const Schema> dkschema_;
   test::TestRowReader reader_{
       {{"players_default_key",
-        {{"prefix", "player_id", "balance"},
+        {{"prefix", "player_id", "balance", "account_id"},
          {zetasql::types::Int64Type(), zetasql::types::Int64Type(),
-          zetasql::types::Int64Type()},
-         {{Int64(100), Int64(1), Int64(100)},
-          {Int64(1), Int64(1), Int64(1)}}}}}};
+          zetasql::types::Int64Type(), zetasql::types::Int64Type()},
+         {{Int64(100), Int64(1), Int64(100), Int64(0)},
+          {Int64(1), Int64(1), Int64(1), Int64(1)}}}}}};
   std::unique_ptr<ActionManager> action_manager_;
 };
 
@@ -4141,6 +4742,216 @@ TEST_P(DefaultKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
                                  "{Int64(100), Int64(1)}")));
 }
 
+TEST_P(DefaultKeyTest, InsertOnConflictDoNothingDmlDefaultKey) {
+  // The insert statement inserts 2 new rows and the existing row with primary
+  // key (prefix: 100, player_id:1) is ignored.
+  std::string sql =
+      "INSERT INTO players_default_key (player_id, balance) "
+      "VALUES (3, 30), (1, 10), (2, 20) "
+      "ON CONFLICT (prefix, player_id) DO NOTHING";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "players_default_key"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"prefix", "player_id", "balance"}),
+              Field(&MutationOp::rows,
+                    UnorderedElementsAre(
+                        ValueList{Int64(100), Int64(3), Int64(30)},
+                        ValueList{Int64(100), Int64(2), Int64(20)})))))))
+      .Times(2)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+
+  // Test same input with INSERT...SELECT
+  sql =
+      "INSERT INTO players_default_key (player_id, balance) "
+      "(SELECT 3, 30 UNION ALL SELECT 1, 10 UNION ALL SELECT 2, 20) "
+      "ON CONFLICT (prefix, player_id) DO NOTHING";
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
+
+TEST_P(DefaultKeyTest, InsertOnConflictDoUpdateDmlDefaultKey) {
+  // The insert statement inserts 2 new rows and the existing row with primary
+  // key (prefix: 100, player_id:1) is updated.
+  std::string sql =
+      "INSERT INTO players_default_key (player_id, balance) "
+      "VALUES (3, 30), (1, 10), (2, 20) "
+      "ON CONFLICT (prefix, player_id) "
+      "DO UPDATE SET "
+      "balance = (excluded.balance + excluded.prefix + "
+      "players_default_key.prefix) * 10";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "players_default_key"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"prefix", "player_id", "balance"}),
+              Field(&MutationOp::rows,
+                    UnorderedElementsAre(
+                        ValueList{Int64(100), Int64(3), Int64(30)},
+                        ValueList{Int64(100), Int64(2), Int64(20)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kUpdate),
+              Field(&MutationOp::table, "players_default_key"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"prefix", "player_id", "balance",
+                                             "account_id"}),
+              Field(&MutationOp::rows,
+                    // (excluded.balance + excluded.prefix + "
+                    // "players_default_key.prefix) * 10 =
+                    // (10 + 100 + 100) * 10 = 2100
+                    UnorderedElementsAre(ValueList{Int64(100), Int64(1),
+                                                   Int64(2100), Int64(0)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 3)));
+}
+
+TEST_P(DefaultKeyTest, InsertOnConflictDoNothingDmlDefaultKeyUniqueIndex) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "Index is null filtered in PostgreSQL by default that is "
+                    "not supported in Spanner yet.";
+  }
+  // The insert statement inserts 2 new rows and the existing row with primary
+  // key (prefix: 100, player_id:1) is ignored.
+  std::string sql =
+      "INSERT INTO players_default_key (player_id, account_id) "
+      "VALUES (3, DEFAULT), (1, DEFAULT), (5, 50) "
+      "ON CONFLICT (account_id) DO NOTHING";
+  MockRowWriter writer;
+  EXPECT_CALL(writer, Write(Property(
+                          &Mutation::ops,
+                          UnorderedElementsAre(AllOf(
+                              Field(&MutationOp::type, MutationOpType::kInsert),
+                              Field(&MutationOp::table, "players_default_key"),
+                              Field(&MutationOp::columns,
+                                    std::vector<std::string>{
+                                        "prefix", "player_id", "account_id"}),
+                              Field(&MutationOp::rows,
+                                    UnorderedElementsAre(ValueList{
+                                        Int64(100), Int64(5), Int64(50)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+}
+
+TEST_P(DefaultKeyTest, InsertOnConflictDoUpdateDmlDefaultKeyUniqueIndex) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "Index is null filtered in PostgreSQL by default that is "
+                    "not supported in Spanner yet.";
+  }
+  // The insert statement inserts 1 new row and the existing row with unique
+  // index key (account_id: 0) is updated.
+  std::string sql =
+      "INSERT INTO players_default_key (player_id, account_id) "
+      "VALUES (3, DEFAULT), (5, 2) "
+      "ON CONFLICT (account_id) "
+      "DO UPDATE SET "
+      "balance = (excluded.balance + excluded.prefix + "
+      "players_default_key.prefix) * 10";
+  MockRowWriter writer;
+  EXPECT_CALL(writer, Write(Property(
+                          &Mutation::ops,
+                          UnorderedElementsAre(AllOf(
+                              Field(&MutationOp::type, MutationOpType::kInsert),
+                              Field(&MutationOp::table, "players_default_key"),
+                              Field(&MutationOp::columns,
+                                    std::vector<std::string>{
+                                        "prefix", "player_id", "account_id"}),
+                              Field(&MutationOp::rows,
+                                    UnorderedElementsAre(ValueList{
+                                        Int64(100), Int64(5), Int64(2)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kUpdate),
+              Field(&MutationOp::table, "players_default_key"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"prefix", "player_id", "balance",
+                                             "account_id"}),
+              Field(&MutationOp::rows,
+                    // balance = (excluded.balance + excluded.prefix + "
+                    // "players_default_key.prefix) * 10 =
+                    // (1 + 100 + 100) * 10 = 2010
+                    UnorderedElementsAre(ValueList{Int64(100), Int64(1),
+                                                   Int64(2010), Int64(0)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
+
+TEST_P(DefaultKeyTest, InsertOnConflictDoUpdateDuplicateInputRowsReturnError) {
+  // Spanner does not allow duplicate insert rows with same key.
+  // The insert statement inserts 2 rows with same key
+  // (prefix: 100, player_id:1).
+  std::string sql =
+      "INSERT INTO players_default_key (player_id, balance) "
+      "VALUES(1, 20), (1, 200) ON CONFLICT (prefix, player_id) "
+      "DO UPDATE SET balance = excluded.balance*10";
+  MockRowWriter writer;
+
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Cannot affect a row second time for key: "
+                                 "{Int64(100), Int64(1)}")));
+}
+
+TEST_P(DefaultKeyTest,
+       InsertOnConflictDoUpdateUniqueIndexDuplicateInputRowsReturnError) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "Index is null filtered in PostgreSQL by default that is "
+                    "not supported in Spanner yet.";
+  }
+  // Spanner does not allow duplicate insert rows with same key.
+  // The insert statement inserts 3 rows with same conflict target key
+  // (account_id: 0) i.e. the DEFAULT value for account column.
+  std::string sql =
+      "INSERT INTO players_default_key (player_id) "
+      "VALUES (3), (1), (2) "
+      "ON CONFLICT ON UNIQUE CONSTRAINT players_index "
+      "DO UPDATE SET "
+      "balance = (excluded.balance + excluded.prefix + "
+      "players_default_key.prefix) * 10";
+  MockRowWriter writer;
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Cannot affect a row second time for key: "
+                                 "{Int64(0)}")));
+}
+
 class GeneratedPrimaryKeyTest : public QueryEngineTest {
  public:
   const Schema* schema() { return gpkschema_.get(); }
@@ -4148,6 +4959,8 @@ class GeneratedPrimaryKeyTest : public QueryEngineTest {
   void SetUp() override {
     ZETASQL_ASSERT_OK_AND_ASSIGN(gpkschema_,
                          test::CreateGpkSchemaWithOneTable(type_factory()));
+    query_engine_ =
+        std::make_unique<QueryEngine>(type_factory(), gpkschema_.get());
     action_manager_ = std::make_unique<ActionManager>();
     action_manager_->AddActionsForSchema(
         schema(), query_engine().function_catalog(), type_factory());
@@ -4159,13 +4972,13 @@ class GeneratedPrimaryKeyTest : public QueryEngineTest {
   std::unique_ptr<const Schema> gpkschema_;
   test::TestRowReader reader_{
       {{"test_table",
-        {{"k1_pk", "k2", "k3gen_storedpk", "k4", "k5"},
+        {{"k1_pk", "k2", "k3gen_storedpk", "k4", "k5", "k6gen_nonstored"},
          {zetasql::types::Int64Type(), zetasql::types::Int64Type(),
           zetasql::types::Int64Type(), zetasql::types::Int64Type(),
-          zetasql::types::Int64Type()},
-         {{Int64(1), Int64(1), Int64(1), Int64(1), Int64(2)},
-          {Int64(2), Int64(2), Int64(2), Int64(2), Int64(3)},
-          {Int64(4), Int64(4), Int64(4), Int64(4), Int64(5)}}}}}};
+          zetasql::types::Int64Type(), zetasql::types::Int64Type()},
+         {{Int64(1), Int64(1), Int64(1), Int64(1), Int64(2), Int64(3)},
+          {Int64(2), Int64(2), Int64(2), Int64(2), Int64(3), Int64(4)},
+          {Int64(4), Int64(4), Int64(4), Int64(4), Int64(5), Int64(6)}}}}}};
   std::unique_ptr<ActionManager> action_manager_;
 };
 
@@ -4406,6 +5219,166 @@ TEST_F(GeneratedPrimaryKeyTest, InsertOrIgnoreGPK) {
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
 }
 
+TEST_F(GeneratedPrimaryKeyTest, InsertOnConflictDoNothingGPK) {
+  // The insert statement inserts 1 new row and ignores the existing row with
+  // primary key (k1_pk: 2, k3gen_storedpk:2).
+  std::string sql =
+      "INSERT INTO test_table (k1_pk, k2, k4) VALUES (2, 2, 8), (3, 3, 12) "
+      "ON CONFLICT (k1_pk, k3gen_storedpk) DO NOTHING";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"k1_pk", "k2", "k4"}),
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(3), Int64(3), Int64(12)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+}
+
+TEST_F(GeneratedPrimaryKeyTest, InsertOnConflictDoUpdateGPKReadsStoredGPK) {
+  // The insert statement inserts 1 new row and updates the existing row with
+  // primary key (k1_pk:2, k3gen_storedpk:2).
+  std::string sql =
+      "INSERT INTO test_table (k1_pk, k2, k4) VALUES (2, 2, 10), (3, 3, 12) "
+      "ON CONFLICT(k1_pk, k3gen_storedpk) "
+      "DO UPDATE SET k4 = excluded.k3gen_storedpk + 1000";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"k1_pk", "k2", "k4"}),
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(3), Int64(3), Int64(12)})))))))
+      .Times(2)
+      .WillOnce(Return(absl::OkStatus()));
+
+  EXPECT_CALL(
+      writer,
+      Write(Property(&Mutation::ops,
+                     UnorderedElementsAre(AllOf(
+                         Field(&MutationOp::type, MutationOpType::kUpdate),
+                         Field(&MutationOp::table, "test_table"),
+                         Field(&MutationOp::columns,
+                               std::vector<std::string>{"k1_pk", "k2", "k4"}),
+                         Field(&MutationOp::rows,
+                               UnorderedElementsAre(ValueList{
+                                   Int64(2), Int64(2), Int64(1002)})))))))
+      .Times(2)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+
+  // Test same input with INSERT...SELECT
+  sql =
+      "INSERT INTO test_table (k1_pk, k2, k4) "
+      "(SELECT * from UNNEST([STRUCT(2, 2, 10), STRUCT(3, 3, 12)])) "
+      "ON CONFLICT(k1_pk, k3gen_storedpk) "
+      "DO UPDATE SET k4 = excluded.k3gen_storedpk + 1000";
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
+
+TEST_F(GeneratedPrimaryKeyTest, InsertOnConflictDoUpdateGPKReadsNonStoredGPK) {
+  // The insert statement inserts 1 new row and ignores the existing row with
+  // primary key (k1_pk: 2, k3gen_storedpk:2).
+  std::string sql =
+      "INSERT INTO test_table (k1_pk, k2, k4) VALUES (2, 2, 8), (3, 3, 12) "
+      "ON CONFLICT (k1_pk, k3gen_storedpk) "
+      "DO UPDATE "
+      "SET k4 = excluded.k6gen_nonstored + excluded.k4 + "
+      "test_table.k6gen_nonstored";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"k1_pk", "k2", "k4"}),
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(3), Int64(3), Int64(12)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kUpdate),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"k1_pk", "k2", "k4"}),
+              // k4 = (excluded.k6gen_nonstored + excluded.k4 +
+              // test_table.k6gen_nonstored) = (10 + 8 + 4) = 22  // NOLINT
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(2), Int64(2), Int64(22)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
+
+TEST_F(GeneratedPrimaryKeyTest,
+       InsertOnConflictDoUpdateUniqueIndexAsConflictTarget) {
+  // The insert statement inserts 1 new row (3, 3, 12) and updates an existing
+  // row since k4:1 already exists in the table.
+  std::string sql =
+      "INSERT INTO test_table (k1_pk, k2, k4) VALUES (2, 2, 1), (3, 3, 12) "
+      "ON CONFLICT (k5) "
+      "DO UPDATE "
+      "SET k2 = excluded.k2 + test_table.k2";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"k1_pk", "k2", "k4"}),
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(3), Int64(3), Int64(12)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kUpdate),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"k1_pk", "k2", "k4"}),
+              // k2 = (excluded.k2 + test_table.k2) = (2 + 1)
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(1), Int64(3), Int64(1)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{sql}, QueryContext{schema(), reader(), &writer}),
+              IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
+}
+
 TEST_F(GeneratedPrimaryKeyTest, InsertOrIgnoreGPKWithReturning) {
   // The insert statement inserts 2 new row. Ignores the existing row with
   // primary key (k1_pk: 2, k3gen_storedpk:2) and the 2nd insert row
@@ -4539,6 +5512,8 @@ class TimestampKeyTest
       tsschema_ =
           test::CreateSimpleTimestampKeySchema(type_factory(), POSTGRESQL);
     }
+    query_engine_ =
+        std::make_unique<QueryEngine>(type_factory(), tsschema_.get());
     action_manager_ = std::make_unique<ActionManager>();
     action_manager_->AddActionsForSchema(schema(),
                                          /*function_catalog=*/nullptr,
@@ -4565,6 +5540,9 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 TEST_P(TimestampKeyTest, InsertOrIgnoreTimestampKey) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_insert_on_conflict_dml = false;
+  emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   // The insert statement inserts the 2 new row with one key column k:1 and
   // pending_commit_timestamp in the `ts` in key column.
   std::string sql;
@@ -4635,6 +5613,38 @@ TEST_P(TimestampKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
           StatusCode::kInvalidArgument,
           HasSubstr("Cannot affect a row second time for key: "
                     "{Int64(1), String(\"spanner.commit_timestamp()\")}")));
+}
+
+TEST_P(TimestampKeyTest, InsertOnConflictWithPendingCommitTimestamp) {
+  std::string pct_function =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "SPANNER.PENDING_COMMIT_TIMESTAMP"
+          : "PENDING_COMMIT_TIMESTAMP";
+  MockRowWriter writer;
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{absl::Substitute("INSERT INTO timestamp_key_table (k, ts) "
+                                 "VALUES(1, $0()) "
+                                 "ON CONFLICT(k, ts) DO NOTHING",
+                                 pct_function)},
+          QueryContext{schema(), reader(), &writer}),
+      StatusIs(StatusCode::kUnimplemented,
+               HasSubstr("INSERT...ON CONFLICT DML with "
+                         "PENDING_COMMIT_TIMESTAMP() value is not "
+                         "supported in Emulator")));
+
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{absl::Substitute("INSERT INTO timestamp_key_table (k, ts) "
+                                 "VALUES(1, $0()) "
+                                 "ON CONFLICT(k, ts) "
+                                 "DO UPDATE SET ts = $0()",
+                                 pct_function)},
+          QueryContext{schema(), reader(), &writer}),
+      StatusIs(StatusCode::kUnimplemented,
+               HasSubstr("INSERT...ON CONFLICT DML with "
+                         "PENDING_COMMIT_TIMESTAMP() value is not "
+                         "supported in Emulator")));
 }
 
 }  // namespace

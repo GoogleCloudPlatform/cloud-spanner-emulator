@@ -363,7 +363,7 @@ INSTANTIATE_TEST_SUITE_P(
             kPGExtractFunctionName,
             {zetasql::values::NullString(),
              zetasql::values::Timestamp(absl::FromCivil(
-              absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone))},
+                 absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone))},
             CreatePgNumericNullValue(),
         },
         PGScalarFunctionTestCase{
@@ -520,9 +520,11 @@ INSTANTIATE_TEST_SUITE_P(
                 spangres::datatypes::GetPgJsonbArrayType(),
                 {*CreatePgJsonbValueWithMemoryContext("\"abc\""),
                  *CreatePgJsonbValueWithMemoryContext("\"def\"")})},
-        PGScalarFunctionTestCase{kZetaSQLJsonQueryArrayFunctionName,
-                                 {CreatePgJsonbNullValue()},
-                                 CreatePgJsonbNullValue()},
+        PGScalarFunctionTestCase{
+            kZetaSQLJsonQueryArrayFunctionName,
+            {CreatePgJsonbNullValue()},
+            zetasql::values::Null(
+                spangres::datatypes::GetPgJsonbArrayType())},
         // pg.jsonb_build_array
         PGScalarFunctionTestCase{kPGJsonbBuildArrayFunctionName,
                                  {},

@@ -888,23 +888,26 @@ class ForwardTransformer {
 
   // Construct a list of arguments for a function call. This does not support
   // named or default arguments. It should only be used for expression function
-  // calls and aggregate functions as these cannot support named or default
-  // arguments.
+  // calls (e.g. operators) and aggregate functions as these cannot support
+  // named or default arguments.
   absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
   BuildGsqlFunctionArgumentList(List* args,
                                 ExprTransformerInfo* expr_transformer_info);
 
-  // Construct a list of arguments for a function call. This supports named and
-  // default arguments. It should be used for all functions except expression
-  // functions and aggregate functions.
+  // Construct a list of arguments for a built-in function call. This supports
+  // named and default arguments by parsing information from PostgreSQL's
+  // `pg_proc` data.
   absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
   BuildGsqlFunctionArgumentList(const PgProcData& proc_data, List* args,
                                 ExprTransformerInfo* expr_transformer_info);
 
-  // Construct a list of arguments for a function call. This supports named
-  // arguments, but not default arguments. Primarily used for UDFs.
+  // Construct a list of arguments for a user-defined function (UDF) call. This
+  // supports named and default arguments by using default values from the
+  // ZetaSQL function signature.
   absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
-  BuildGsqlFunctionArgumentList(const FormData_pg_proc* pg_proc, List* args,
+  BuildGsqlFunctionArgumentList(const FormData_pg_proc* pg_proc,
+                                const zetasql::FunctionSignature* signature,
+                                List* args,
                                 ExprTransformerInfo* expr_transformer_info);
 
   // Construct a list of order by items for an aggregate function call. For

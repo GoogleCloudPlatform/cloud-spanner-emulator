@@ -45,6 +45,7 @@
 #include "backend/query/tables_from_metadata.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/property_graph.h"
@@ -187,6 +188,7 @@ static constexpr char kUpdateRule[] = "UPDATE_RULE";
 static constexpr char kDeleteRule[] = "DELETE_RULE";
 static constexpr char kSimple[] = "SIMPLE";
 static constexpr char kNoAction[] = "NO ACTION";
+static constexpr char kCascade[] = "CASCADE";
 static constexpr char kKeyColumnUsage[] = "KEY_COLUMN_USAGE";
 static constexpr char kConstraintColumnUsage[] = "CONSTRAINT_COLUMN_USAGE";
 static constexpr char kPositionInUniqueConstraint[] =
@@ -1959,6 +1961,10 @@ void InformationSchemaCatalog::FillReferentialConstraintsTable() {
       const auto& [referenced_table_schema_part, referenced_table_name_part] =
           GetSchemaAndNameForInformationSchema(
               foreign_key->referenced_table()->Name());
+      absl::string_view delete_rule = kNoAction;
+      if (foreign_key->on_delete_action() == ForeignKey::Action::kCascade) {
+        delete_rule = kCascade;
+      }
       rows.push_back({
           // constraint_catalog
           DialectTableCatalog(),
@@ -1977,7 +1983,7 @@ void InformationSchemaCatalog::FillReferentialConstraintsTable() {
           // update_rule
           String(kNoAction),
           // delete_rule
-          String(kNoAction),
+          String(delete_rule),
           // spanner_state
           String(kCommitted),
       });

@@ -363,8 +363,10 @@ absl::StatusOr<std::string> ObjectTypeToString(ObjectType object_type) {
       return "PARAMETER_ACL";
     case OBJECT_PUBLICATION_NAMESPACE:
       return "PUBLICATION_NAMESPACE";
+    default:
+      // TODO: b/446550809: Remove default case once this code on branch
+      return absl::FailedPreconditionError("Unknown object type");
   }
-  return absl::FailedPreconditionError("Unknown object type");
 }
 
 }  // namespace internal

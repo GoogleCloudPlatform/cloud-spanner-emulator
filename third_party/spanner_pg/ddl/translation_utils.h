@@ -208,6 +208,12 @@ struct PostgreSQLConstants {
   static constexpr int kMaxStringLength = 2621440;
   // Measured in bytes
   static constexpr int kMaxBytesLength = 10485760;
+
+  // OPTION to specify that a view is SQL SECURITY INVOKER.
+  // ("SQL SECURITY INVOKER" is ZetaSQL syntax and a Spanner extension.
+  // The OPTION syntax is a recent equivalent upstream-PostgreSQL addition.)
+  static constexpr absl::string_view kSecurityViewOptionName =
+      "security_invoker";
 };
 
 class PGAlterOption {

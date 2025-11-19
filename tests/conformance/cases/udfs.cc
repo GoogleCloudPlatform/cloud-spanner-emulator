@@ -68,10 +68,10 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(UDFsTest, SimpleUdf) {
   ZETASQL_ASSERT_OK(UpdateSchema({
       R"SQL(
-      CREATE FUNCTION inc(x INT64) RETURNS INT64 SQL SECURITY INVOKER
+      CREATE FUNCTION inc_udf(x INT64) RETURNS INT64 SQL SECURITY INVOKER
       AS (x + 1)
     )SQL"}));
-  EXPECT_THAT(Query("SELECT inc(1)"), IsOkAndHoldsUnorderedRows({{2}}));
+  EXPECT_THAT(Query("SELECT inc_udf(1)"), IsOkAndHoldsUnorderedRows({{2}}));
 }
 
 }  // namespace

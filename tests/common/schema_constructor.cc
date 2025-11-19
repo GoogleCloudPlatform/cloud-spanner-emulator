@@ -419,6 +419,7 @@ std::unique_ptr<const backend::Schema> CreateSimpleDefaultKeySchema(
               prefix INT64 NOT NULL DEFAULT(100),
               player_id INT64 NOT NULL,
               balance INT64 DEFAULT(1),
+              account_id INT64 DEFAULT(0),
             ) PRIMARY KEY(prefix, player_id)
           )sql";
   if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
@@ -427,6 +428,7 @@ std::unique_ptr<const backend::Schema> CreateSimpleDefaultKeySchema(
               prefix bigint DEFAULT(100),
               player_id bigint NOT NULL,
               balance bigint DEFAULT(1),
+              account_id bigint DEFAULT(0),
               PRIMARY KEY(prefix, player_id)
             )
           )sql";
@@ -434,6 +436,10 @@ std::unique_ptr<const backend::Schema> CreateSimpleDefaultKeySchema(
   auto maybe_schema = CreateSchemaFromDDL(
       {
           table_ddl,
+          R"(
+              CREATE UNIQUE INDEX players_index
+              ON players_default_key(account_id)
+            )",
       },
       type_factory
       // copybara:protos_strip_begin

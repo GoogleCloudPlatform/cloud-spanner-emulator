@@ -83,9 +83,11 @@ class ChangeStreamQueryValidatorTest : public testing::Test {
   friend class Catalog;
   ChangeStreamQueryValidatorTest()
       : analyzer_options_(MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone)),
-        fn_catalog_(&type_factory_),
         schema_(
             test::CreateSchemaWithOneTableAndOneChangeStream(&type_factory_)),
+        fn_catalog_(&type_factory_,
+                    /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+                    /*latest_schema=*/schema_.get()),
         catalog_(std::make_unique<Catalog>(
             schema_.get(), &fn_catalog_, &type_factory_, analyzer_options_)) {}
 
@@ -102,9 +104,9 @@ class ChangeStreamQueryValidatorTest : public testing::Test {
 
   const zetasql::AnalyzerOptions analyzer_options_;
 
-  const FunctionCatalog fn_catalog_;
-
   std::unique_ptr<const Schema> schema_;
+
+  const FunctionCatalog fn_catalog_;
 
   std::unique_ptr<Catalog> catalog_;
 

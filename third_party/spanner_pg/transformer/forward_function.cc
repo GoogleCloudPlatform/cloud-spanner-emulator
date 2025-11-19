@@ -62,11 +62,13 @@
 #include "third_party/spanner_pg/transformer/transformer_helper.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
+#include "third_party/spanner_pg/src/backend/utils/fmgroids.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
 namespace postgres_translator {
 
+using ::postgres_translator::internal::PostgresCastNodeTemplate;
 using ::postgres_translator::internal::PostgresCastToExpr;
 using ::postgres_translator::internal::PostgresConstCastToExpr;
 
@@ -165,7 +167,8 @@ ForwardTransformer::BuildGsqlFunctionArgumentList(
 
 absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
 ForwardTransformer::BuildGsqlFunctionArgumentList(
-    const FormData_pg_proc* pg_proc, List* args,
+    const FormData_pg_proc* pg_proc,
+    const zetasql::FunctionSignature* signature, List* args,
     ExprTransformerInfo* expr_transformer_info) {
   std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list;
 
@@ -199,9 +202,17 @@ ForwardTransformer::BuildGsqlFunctionArgumentList(
   argument_list.reserve(total_arguments);
   for (int i = 0; i < total_arguments; ++i) {
     if (!arg_index_to_expr.contains(i)) {
-      // TODO: Add support for default arguments.
-      return absl::InvalidArgumentError(
-          absl::StrCat("Function argument ", i, " is missing"));
+      ZETASQL_RET_CHECK_LT(i, signature->arguments().size());
+      const auto& arg_type = signature->argument(i);
+      if (!arg_type.HasDefault()) {
+        return absl::InvalidArgumentError(absl::StrCat(
+            "Function argument ", i, " is missing and has no default value"));
+      }
+      const std::optional<zetasql::Value>& default_value =
+          arg_type.GetDefault();
+      ZETASQL_RET_CHECK(default_value.has_value());
+      arg_index_to_expr[i] =
+          zetasql::MakeResolvedLiteral(default_value.value());
     }
     argument_list.push_back(std::move(arg_index_to_expr[i]));
   }
@@ -329,16 +340,20 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
   auto udf_catalog_entry = catalog_adapter_->GetUDFFromOid(funcid);
   if (udf_catalog_entry.ok()) {
     const zetasql::Function* udf = udf_catalog_entry.value();
+    // Currently don't support overloading UDFs.
+    ZETASQL_RET_CHECK_EQ(udf->NumSignatures(), 1)
+        << "UDF " << udf->Name() << " has multiple signatures";
+    const zetasql::FunctionSignature* signature = udf->GetSignature(0);
+
     ZETASQL_ASSIGN_OR_RETURN(auto proc_data,
                      catalog_adapter_->GetUDFProcFromOid(funcid));
     ZETASQL_ASSIGN_OR_RETURN(
         std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list,
-        BuildGsqlFunctionArgumentList(proc_data, args, expr_transformer_info));
+        BuildGsqlFunctionArgumentList(proc_data, signature, args,
+                                      expr_transformer_info));
     std::vector<zetasql::InputArgumentType> input_argument_types =
         GetInputArgumentTypes(argument_list);
-    // Currently don't support overloading UDFs.
-    ZETASQL_RET_CHECK_EQ(udf->NumSignatures(), 1);
-    const zetasql::FunctionSignature* signature = udf->GetSignature(0);
+
     // Get a concrete signature for the UDF.
     std::unique_ptr<zetasql::FunctionSignature> result_signature;
     if (!catalog_adapter_->GetEngineSystemCatalog()->SignatureMatches(
@@ -382,9 +397,47 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
   } else {
     // Build argument list with named and default argument support.
     ZETASQL_ASSIGN_OR_RETURN(auto proc_proto,
-                    PgBootstrapCatalog::Default()->GetProcProto(funcid));
-    ZETASQL_ASSIGN_OR_RETURN(argument_list, BuildGsqlFunctionArgumentList(
-          *proc_proto, args, expr_transformer_info));
+                     PgBootstrapCatalog::Default()->GetProcProto(funcid));
+
+      // The following code is a workaround to support LIKE ... ESCAPE '\'.
+      // Currently, we do not support the `like_escape` function, see
+      // b/455382891 for more context. Basically, we are transforming
+      // `textlike(arg1, like_escape(arg2, '\'))` to `textlike(arg1, arg2)`. If
+      // the escape character is not '\', we will return an error.
+      if (funcid == F_TEXTLIKE && list_length(args) == 2) {
+        // The first argument of `textlike` is T_Var and its second
+        // argument can be a T_Const or T_FuncExpr.
+        Node* second_arg = internal::PostgresCastToNode(lsecond(args));
+        if (second_arg->type == T_FuncExpr) {
+          FuncExpr* func_expr = PostgresCastNode(FuncExpr, second_arg);
+
+          if (func_expr->funcid == F_LIKE_ESCAPE_TEXT_TEXT &&
+              list_length(func_expr->args) == 2) {
+            Node* arg_escape =
+                internal::PostgresCastToNode(lsecond(func_expr->args));
+            const Const* escape_const = PostgresCastNode(Const, arg_escape);
+            ZETASQL_ASSIGN_OR_RETURN(zetasql::Value escape_value,
+                             catalog_adapter_->GetEngineSystemCatalog()
+                                 ->GetType(escape_const->consttype)
+                                 ->MakeGsqlValue(escape_const));
+            if (escape_value.type_kind() == zetasql::TYPE_STRING) {
+              if (escape_value.string_value() == "\\") {
+                // Replace the second argument of `textlike` (`like_escape`
+                // function) with the first argument of `like_escape` (the
+                // pattern to search).
+                args->elements[1] = func_expr->args->elements[0];
+              } else {
+                return absl::InvalidArgumentError(absl::StrCat(
+                    "Invalid escape character: '", escape_value.string_value(),
+                    "'. Currently only backslash '\\' is supported."));
+              }
+            }
+          }
+        }
+      }
+    ZETASQL_ASSIGN_OR_RETURN(argument_list,
+                     BuildGsqlFunctionArgumentList(*proc_proto, args,
+                                                   expr_transformer_info));
   }
 
   // Look up the function and signature.

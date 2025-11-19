@@ -58,7 +58,8 @@ message FunctionSignatureProto {
   uint32 oid = 3;
   repeated FunctionNamePathProto postgresql_name_paths = 4;
   repeated string enable_in_catalog = 5;
-  bool deprecated = 6;
+  reserved 6;
+  bool deprecated = 7;
 }
 
 message FunctionProto {
@@ -66,6 +67,7 @@ message FunctionProto {
   repeated FunctionNamePathProto postgresql_name_paths = 2;
   repeated FunctionSignatureProto signatures = 3;
   repeated string enable_in_catalog = 4;
+  reserved 5;
 }
 
 message CatalogProto {

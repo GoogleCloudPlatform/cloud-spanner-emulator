@@ -691,6 +691,41 @@ TEST_F(SchemaTest, IndexBuilder) {
             error::InvalidSchemaName("Index", index_name));
 }
 
+TEST_F(SchemaTest, PrintDDLStatementsTestSearchIndexWithOptions) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {
+              R"(CREATE TABLE T (
+  col1 INT64,
+  col2 STRING(MAX),
+) PRIMARY KEY(col1))",
+              R"(CREATE SEARCH INDEX I1 ON T(col2) OPTIONS ( sort_order_sharding = true ))",
+              R"(CREATE SEARCH INDEX I2 ON T(col2) OPTIONS ( sort_order_sharding = false ))",
+              R"(CREATE SEARCH INDEX I3 ON T(col2))",
+              R"(CREATE SEARCH INDEX I4 ON T(col2) OPTIONS ( disable_automatic_uid_column = true ))",
+              R"(CREATE SEARCH INDEX I5 ON T(col2) OPTIONS ( disable_automatic_uid_column = false ))",
+              R"(CREATE SEARCH INDEX I6 ON T(col2) OPTIONS ( sort_order_sharding = true, disable_automatic_uid_column = true ))",
+          },
+          type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(
+      statements,
+      IsOkAndHolds(ElementsAre(
+          R"(CREATE TABLE T (
+  col1 INT64,
+  col2 STRING(MAX),
+) PRIMARY KEY(col1))",
+          R"(CREATE SEARCH INDEX I1 ON T(col2) OPTIONS (sort_order_sharding = true))",
+          R"(CREATE SEARCH INDEX I2 ON T(col2) OPTIONS (sort_order_sharding = false))",
+          R"(CREATE SEARCH INDEX I3 ON T(col2))",
+          R"(CREATE SEARCH INDEX I4 ON T(col2) OPTIONS (disable_automatic_uid_column = true))",
+          R"(CREATE SEARCH INDEX I5 ON T(col2) OPTIONS (disable_automatic_uid_column = false))",
+          R"(CREATE SEARCH INDEX I6 ON T(col2) OPTIONS (sort_order_sharding = true, disable_automatic_uid_column = true))")));
+}
+
 TEST_F(SchemaTest, ViewBuilder) {
   View::Builder vb;
   vb.set_name("V1");

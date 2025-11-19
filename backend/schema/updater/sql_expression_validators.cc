@@ -369,7 +369,10 @@ absl::Status AnalyzeColumnExpression(
         options.AddExpressionColumn(name_and_type.first, name_and_type.second));
   }
   std::unique_ptr<const zetasql::AnalyzerOutput> output;
-  FunctionCatalog function_catalog(type_factory);
+  FunctionCatalog function_catalog(
+      type_factory,
+      /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+      /*latest_schema=*/schema);
   Catalog catalog(schema, &function_catalog, type_factory,
                   MakeGoogleSqlAnalyzerOptions(schema->default_time_zone()));
 

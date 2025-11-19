@@ -52,6 +52,7 @@ class EmulatorFeatureFlags {
     bool enable_default_time_zone = true;
     bool enable_property_graph_information_schema = true;
     bool enable_interleave_in = true;
+    bool enable_insert_on_conflict_dml = true;
   };
 
   static const EmulatorFeatureFlags& instance() {

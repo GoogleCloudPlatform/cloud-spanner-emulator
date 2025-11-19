@@ -761,6 +761,10 @@ absl::Status PendingCommitTimestampDmlValueOnly();
 absl::Status UnsupportedUpsertQueries(absl::string_view insert_mode);
 absl::Status UnsupportedReturningWithUpsertQueries(
     absl::string_view insert_mode);
+absl::Status ConflictTargetNotFound();
+absl::Status NullFilteredIndexAsConflictTargetIsNotFound(
+    absl::string_view index_name);
+absl::Status UnsupportedPendingCommitTimestampInInsertOnConflictDml();
 absl::Status UnsupportedGeneratedKeyWithUpsertQueries();
 absl::Status NoFeatureSupportDifferentTypeArrayCasts(
     absl::string_view from_type, absl::string_view to_type);

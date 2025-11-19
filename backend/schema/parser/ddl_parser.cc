@@ -33,6 +33,7 @@
 #include "absl/strings/ascii.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/match.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
@@ -296,6 +297,20 @@ SimpleNode* GetFirstChildNode(const SimpleNode* parent, int type) {
   return nullptr;
 }
 
+SimpleNode* GetFirstDescendantNode(const SimpleNode* parent, int type) {
+  for (int i = 0; i < parent->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(parent, i);
+    if (child->getId() == type) {
+      return child;
+    }
+    SimpleNode* descendant = GetFirstDescendantNode(child, type);
+    if (descendant != nullptr) {
+      return descendant;
+    }
+  }
+  return nullptr;
+}
+
 // Returns the text in ddl_text that was used to parse node.
 absl::string_view ExtractTextForNode(const SimpleNode* node,
                                      absl::string_view ddl_text) {
@@ -303,6 +318,18 @@ absl::string_view ExtractTextForNode(const SimpleNode* node,
   int node_offset = node->absolute_begin_column();
   int node_length = node->absolute_end_column() - node_offset;
   return absl::ClippedSubstr(ddl_text, node_offset, node_length);
+}
+
+absl::string_view StripQuotes(absl::string_view str) {
+  if (str.size() < 2) {
+    return str;
+  }
+  bool has_quotes = (str.front() == '\'' || str.front() == '"') &&
+                    (str.back() == '\'' || str.back() == '"');
+  if (has_quotes) {
+    return str.substr(1, str.size() - 2);
+  }
+  return str;
 }
 
 std::string GetQualifiedIdentifier(const SimpleNode* node) {
@@ -1343,6 +1370,38 @@ void VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
   }
 }
 
+void VisitFunctionOptionsNode(const SimpleNode* node,
+                              CreateFunction* create_function,
+                              absl::string_view ddl_text,
+                              std::vector<std::string>* errors) {
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i);
+    if (child->getId() != JJTOPTION_KEY_VAL) {
+      errors->push_back(
+          absl::StrCat("Unexpected child node: ", child->toString()));
+      continue;
+    }
+    auto option = create_function->add_options();
+    option->set_option_name(
+        ExtractTextForNode(GetChildNode(child, 0), ddl_text));
+    if (auto str_node = GetFirstDescendantNode(child, JJTANY_STRING_LITERAL);
+        str_node != nullptr) {
+      option->set_string_value(
+          StripQuotes(ExtractTextForNode(str_node, ddl_text)));
+    } else if (auto int_node = GetFirstDescendantNode(child, JJTINTEGER_VAL);
+               int_node != nullptr) {
+      int64_t int64_value;
+      if (!absl::SimpleAtoi(ExtractTextForNode(int_node, ddl_text),
+                            &int64_value)) {
+        errors->push_back(absl::StrCat("Failed to parse integer value: ",
+                                       ExtractTextForNode(int_node, ddl_text)));
+        continue;
+      }
+      option->set_int64_value(int64_value);
+    }
+  }
+}
+
 void VisitCreateFunctionNode(const SimpleNode* node,
                              CreateFunction* create_function,
                              bool is_or_replace, absl::string_view ddl_text,
@@ -1385,7 +1444,30 @@ void VisitCreateFunctionNode(const SimpleNode* node,
 
   create_function->set_function_name(GetQualifiedIdentifier(name_node));
   create_function->set_function_kind(Function::FUNCTION);
-  create_function->set_language(Function::SQL);
+
+  if (GetFirstChildNode(node, JJTREMOTE) != nullptr) {
+    create_function->set_is_remote(true);
+  }
+
+  auto language = Function::SQL;
+  const SimpleNode* language_node = GetFirstChildNode(node, JJTLANGUAGE);
+  if (language_node) {
+    absl::string_view language_text =
+        ExtractTextForNode(language_node, ddl_text);
+    if (language_text == "REMOTE") {
+      language = Function::REMOTE;
+    }
+  }
+
+  if (!create_function->is_remote()) {
+    create_function->set_language(language);
+  }
+
+  const SimpleNode* options_clause =
+      GetFirstDescendantNode(node, JJTOPTIONS_CLAUSE);
+  if (options_clause != nullptr) {
+    VisitFunctionOptionsNode(options_clause, create_function, ddl_text, errors);
+  }
 
   if (is_or_replace) {
     create_function->set_is_or_replace(true);
@@ -1402,11 +1484,30 @@ void VisitCreateFunctionNode(const SimpleNode* node,
     create_function->set_sql_security(Function::INVOKER);
   }
 
+  const SimpleNode* determinism_node = GetFirstChildNode(node, JJTDETERMINISM);
+  if (determinism_node) {
+    bool is_remote = create_function->is_remote() ||
+                     create_function->language() == Function::REMOTE;
+    if (!is_remote) {
+      errors->push_back(
+          "DETERMINISM clause is not supported for remote functions.");
+      return;
+    }
+    absl::string_view determinism_text =
+        ExtractTextForNode(determinism_node, ddl_text);
+    if (determinism_text != "NOT DETERMINISTIC") {
+      errors->push_back(
+          "Only NOT DETERMINISTIC is supported for remote functions.");
+      return;
+    }
+  }
+
   const SimpleNode* definition_node =
       GetFirstChildNode(node, JJTFUNCTION_DEFINITION);
-  ABSL_DCHECK(definition_node);
-  create_function->set_sql_body(
-      std::string(ExtractTextForNode(definition_node, ddl_text)));
+  if (definition_node != nullptr) {
+    create_function->set_sql_body(
+        ExtractTextForNode(definition_node, ddl_text));
+  }
 }
 
 void VisitCreateViewNode(const SimpleNode* node, CreateFunction* function,

@@ -55,6 +55,7 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
+#include "common/pg_literals.h"
 #include "third_party/spanner_pg/catalog/emulator_function_evaluators.h"
 #include "third_party/spanner_pg/catalog/emulator_functions.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
@@ -129,6 +130,8 @@ std::unique_ptr<zetasql::Function> BitReverseFunction(
     const std::string& catalog_name) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(zetasql::FunctionEvaluator(EvalBitReverse));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   return std::make_unique<zetasql::Function>(
       kBitReverseFunctionName, catalog_name, zetasql::Function::SCALAR,
@@ -192,6 +195,7 @@ FunctionCatalog::FunctionCatalog(zetasql::TypeFactory* type_factory,
   AddFunctionAliases();
   AddMlFunctions();
   AddSpannerPGFunctions();
+  AddPGLambdaFunctions();
   AddSearchFunctions(type_factory);
 }
 
@@ -283,14 +287,6 @@ void FunctionCatalog::AddSpannerPGFunctions() {
       GetSpannerPGFunctions(catalog_name_);
 
   for (auto& function : spanner_pg_functions) {
-    // Since some date/timestamp functions depend on the default time zone in
-    // the schema, we need to replace them with a new version which can access
-    // the latest schema.
-    auto replaced_func = GetReplacedPGFunction(function->Name());
-    if (replaced_func != nullptr) {
-      functions_[function->Name()] = std::move(replaced_func);
-      continue;
-    }
     // If function exists, add extra signatures instead of overwriting.
     // Needed for JSONB.
     if (auto f = functions_.find(function->Name()); f != functions_.end()) {
@@ -369,20 +365,19 @@ void FunctionCatalog::AddFunctionAliases() {
   }
 }
 
-std::unique_ptr<zetasql::Function> FunctionCatalog::GetReplacedPGFunction(
-    const std::string& function_name) {
-  if (function_name == postgres_translator::kPGToCharFunctionName) {
-    return GetPGToCharFunction(catalog_name_);
-  } else if (function_name == postgres_translator::kPGExtractFunctionName) {
-    return GetPGExtractFunction(catalog_name_);
-  } else if (function_name ==
-             postgres_translator::kPGCastToTimestampFunctionName) {
-    return GetPGCastToTimestampFunction(catalog_name_);
-  } else if (function_name ==
-             postgres_translator::kPGCastToStringFunctionName) {
-    return GetPGCastToStringFunction(catalog_name_);
-  }
-  return nullptr;
+void FunctionCatalog::AddPGLambdaFunctions() {
+  // These date/timestamp PG functions need to use a lambda to access the
+  // default time zone in the latest schema, so they need to be defined here.
+  auto to_char_function = GetPGToCharFunction(catalog_name_);
+  functions_[to_char_function->Name()] = std::move(to_char_function);
+  auto extract_function = GetPGExtractFunction(catalog_name_);
+  functions_[extract_function->Name()] = std::move(extract_function);
+  auto cast_to_timestamp_function = GetPGCastToTimestampFunction(catalog_name_);
+  functions_[cast_to_timestamp_function->Name()] =
+      std::move(cast_to_timestamp_function);
+  auto cast_to_string_function = GetPGCastToStringFunction(catalog_name_);
+  functions_[cast_to_string_function->Name()] =
+      std::move(cast_to_string_function);
 }
 
 std::unique_ptr<zetasql::Function> FunctionCatalog::GetPGToCharFunction(
@@ -407,6 +402,8 @@ std::unique_ptr<zetasql::Function> FunctionCatalog::GetPGToCharFunction(
         CleanupPostgresNumberCache();
         CleanupPostgresDateTimeCache();
       }));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
   return std::make_unique<zetasql::Function>(
       postgres_translator::kPGToCharFunctionName, catalog_name,
       zetasql::Function::SCALAR,
@@ -452,6 +449,8 @@ std::unique_ptr<zetasql::Function> FunctionCatalog::GetPGExtractFunction(
   function_options.set_evaluator(postgres_translator::PGFunctionEvaluator(
       postgres_translator::EvalExtract, initialize_pg_timezone,
       CleanupPostgresDateTimeCache));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   return std::make_unique<zetasql::Function>(
       postgres_translator::kPGExtractFunctionName, catalog_name,
@@ -486,6 +485,8 @@ FunctionCatalog::GetPGCastToTimestampFunction(const std::string& catalog_name) {
   function_options.set_evaluator(postgres_translator::PGFunctionEvaluator(
       postgres_translator::EvalCastToTimestamp, initialize_pg_timezone,
       CleanupPostgresDateTimeCache));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   return std::make_unique<zetasql::Function>(
       postgres_translator::kPGCastToTimestampFunctionName, catalog_name,
@@ -516,6 +517,8 @@ std::unique_ptr<zetasql::Function> FunctionCatalog::GetPGCastToStringFunction(
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(postgres_translator::PGFunctionEvaluator(
       postgres_translator::EvalCastToString, initialize_pg_timezone));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   return std::make_unique<zetasql::Function>(
       postgres_translator::kPGCastToStringFunctionName, catalog_name,
@@ -566,6 +569,8 @@ FunctionCatalog::GetInternalSequenceStateFunction(
 
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(zetasql::FunctionEvaluator(evaluator));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   return std::make_unique<zetasql::Function>(
       kGetInternalSequenceStateFunctionName, catalog_name,
@@ -624,6 +629,8 @@ FunctionCatalog::GetTableColumnIdentityStateFunction(
 
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(zetasql::FunctionEvaluator(evaluator));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   return std::make_unique<zetasql::Function>(
       kGetTableColumnIdentityStateFunctionName, catalog_name,
@@ -652,12 +659,13 @@ FunctionCatalog::GetNextSequenceValueFunction(const std::string& catalog_name) {
       return error::SequenceNeedsAccessToSchema();
     }
 
-    // ZetaSQL algebrizer prepends a prefix to the sequence name.
     std::string sequence_name;
     if (latest_schema_->dialect() ==
         database_api::DatabaseDialect::POSTGRESQL) {
-      sequence_name = args[0].string_value();
+      sequence_name =
+          GetFullyQualifiedNameFromPgLiteral(args[0].string_value());
     } else {
+      // ZetaSQL algebrizer prepends a prefix to the sequence name.
       sequence_name =
           std::string(absl::StripPrefix(args[0].string_value(), "_sequence_"));
     }
@@ -671,6 +679,8 @@ FunctionCatalog::GetNextSequenceValueFunction(const std::string& catalog_name) {
 
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(zetasql::FunctionEvaluator(evaluator));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   return std::make_unique<zetasql::Function>(
       kGetNextSequenceValueFunctionName, catalog_name,

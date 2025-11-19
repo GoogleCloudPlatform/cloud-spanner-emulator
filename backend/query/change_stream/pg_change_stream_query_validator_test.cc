@@ -63,9 +63,11 @@ class PgChangeStreamQueryValidatorTest : public testing::Test {
   friend class Catalog;
   PgChangeStreamQueryValidatorTest()
       : analyzer_options_(MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone)),
-        fn_catalog_(&type_factory_),
         schema_(test::CreateSchemaWithOneTableAndOneChangeStream(
             &type_factory_, database_api::DatabaseDialect::POSTGRESQL)),
+        fn_catalog_(&type_factory_,
+                    /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+                    /*latest_schema=*/schema_.get()),
         catalog_(std::make_unique<Catalog>(
             schema_.get(), &fn_catalog_, &type_factory_, analyzer_options_)) {}
 
@@ -79,17 +81,18 @@ class PgChangeStreamQueryValidatorTest : public testing::Test {
     return postgres_translator::spangres::ParseAndAnalyzePostgreSQL(
         sql, catalog_.get(), analyzer_options_, &type_factory_,
         std::make_unique<FunctionCatalog>(
-            &type_factory_, kCloudSpannerEmulatorFunctionCatalogName,
-            schema_.get()));
+            &type_factory_,
+            /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+            /*latest_schema=*/schema_.get()));
   }
 
   zetasql::TypeFactory type_factory_;
 
   zetasql::AnalyzerOptions analyzer_options_;
 
-  const FunctionCatalog fn_catalog_;
-
   std::unique_ptr<const Schema> schema_;
+
+  const FunctionCatalog fn_catalog_;
 
   std::unique_ptr<Catalog> catalog_;
 

@@ -37,7 +37,10 @@ namespace backend {
 
 absl::Status VerifyCheckConstraintData(const CheckConstraint* check_constraint,
                                        const SchemaValidationContext* context) {
-  FunctionCatalog function_catalog(context->type_factory());
+  FunctionCatalog function_catalog(
+      context->type_factory(),
+      /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+      /*latest_schema=*/context->validated_new_schema());
   zetasql::AnalyzerOptions analyzer_options = MakeGoogleSqlAnalyzerOptions(
       context->validated_new_schema()->default_time_zone());
   Catalog catalog(context->validated_new_schema(), &function_catalog,

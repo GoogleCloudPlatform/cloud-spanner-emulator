@@ -578,7 +578,6 @@ class TranslateQueryParamsBuilder {
 
 // Invokes Spangres to parse Postgres-dialect SQL and transform to a ZetaSQL
 // resolved AST.
-// TODO: Move this to the Spanner dev branch once it's more stable.
 class SpangresTranslatorInterface {
  public:
   virtual ~SpangresTranslatorInterface() = default;
@@ -622,6 +621,10 @@ class SpangresTranslatorInterface {
 
   virtual absl::StatusOr<interfaces::ExpressionTranslateResult>
   TranslateParsedFunctionBody(TranslateParsedQueryParams params) = 0;
+
+  virtual absl::StatusOr<bool> IsBuiltinFunction(
+      std::unique_ptr<EngineBuiltinFunctionCatalog> builtin_function_catalog,
+      absl::string_view function_name) = 0;
 
  protected:
   SpangresTranslatorInterface() = default;

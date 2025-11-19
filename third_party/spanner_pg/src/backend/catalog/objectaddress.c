@@ -2316,6 +2316,9 @@ pg_get_object_address(PG_FUNCTION_ARGS)
 		case OBJECT_LOCALITY_GROUP:
 			objnode = (Node *) name;
 			break;
+		// SPANGRES BEGIN
+		// TODO: expose when queue is implemented.
+		// SPANGRES END
 		case OBJECT_ACCESS_METHOD:
 		case OBJECT_DATABASE:
 		case OBJECT_EVENT_TRIGGER:

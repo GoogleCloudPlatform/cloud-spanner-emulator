@@ -156,6 +156,8 @@ std::unique_ptr<zetasql::Function> TokenFunction(
     zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(zetasql::FunctionEvaluator(EvalToken));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   const zetasql::Type* string_type = type_factory->get_string();
   const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
@@ -208,6 +210,8 @@ std::unique_ptr<zetasql::Function> TokenizeNumberFunction(
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
       zetasql::FunctionEvaluator(EvalTokenizeNumber));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   const zetasql::Type* string_type = type_factory->get_string();
   const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
@@ -281,6 +285,7 @@ std::unique_ptr<zetasql::Function> TokenizeBoolFunction(
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
       zetasql::FunctionEvaluator(EvalTokenizeBool));
+  function_options.set_supports_safe_error_mode(false);
 
   const zetasql::Type* bool_type = type_factory->get_bool();
   const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
@@ -305,6 +310,8 @@ std::unique_ptr<zetasql::Function> TokenizeFullTextFunction(
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
       zetasql::FunctionEvaluator(EvalTokenizeFullText));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   const zetasql::Type* string_type = type_factory->get_string();
   const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
@@ -354,6 +361,8 @@ std::unique_ptr<zetasql::Function> TokenizeSubstringFunction(
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
       zetasql::FunctionEvaluator(EvalTokenizeSubstring));
+  function_options.set_supports_safe_error_mode(false);
+  function_options.set_arguments_are_coercible(false);
 
   const zetasql::Type* string_type = type_factory->get_string();
   const zetasql::Type* int_type = type_factory->get_int64();
@@ -421,6 +430,8 @@ std::unique_ptr<zetasql::Function> TokenlistConcatFunction(
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
       zetasql::FunctionEvaluator(EvalTokenlistConcat));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
   const zetasql::ArrayType* tokenlist_array_type = nullptr;
@@ -450,6 +461,8 @@ std::unique_ptr<zetasql::Function> SearchFunction(
     zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(zetasql::FunctionEvaluator(EvalSearch));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   const zetasql::Type* string_type = type_factory->get_string();
   const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
@@ -484,6 +497,8 @@ std::unique_ptr<zetasql::Function> SearchSubstringFunction(
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
       zetasql::FunctionEvaluator(EvalSearchSubstring));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   const zetasql::Type* string_type = type_factory->get_string();
   const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
@@ -518,6 +533,8 @@ std::unique_ptr<zetasql::Function> ScoreFunction(
     zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(zetasql::FunctionEvaluator(EvalScore));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   const zetasql::Type* double_type = type_factory->get_double();
   const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
@@ -592,6 +609,9 @@ std::unique_ptr<zetasql::Function> SnippetFunction(
     zetasql::TypeFactory* type_factory, const std::string& catalog_name,
     database_api::DatabaseDialect dialect) {
   zetasql::FunctionOptions function_options;
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
+
   const zetasql::Type* string_type = type_factory->get_string();
   const zetasql::Type* bool_type = type_factory->get_bool();
   const zetasql::Type* int64_type = type_factory->get_int64();
@@ -652,6 +672,8 @@ std::unique_ptr<zetasql::Function> TokenizeNgramsFunction(
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
       zetasql::FunctionEvaluator(EvalTokenizeNgrams));
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   const zetasql::Type* string_type = type_factory->get_string();
   const zetasql::Type* int_type = type_factory->get_int64();
@@ -701,6 +723,7 @@ std::unique_ptr<zetasql::Function> SearchNgramsFunction(
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(
       zetasql::FunctionEvaluator(EvalSearchNgrams));
+  function_options.set_supports_safe_error_mode(false);
 
   const zetasql::Type* string_type = type_factory->get_string();
   const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
@@ -739,6 +762,7 @@ std::unique_ptr<zetasql::Function> ScoreNgramsFunction(
     zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
   zetasql::FunctionOptions function_options;
   function_options.set_evaluator(zetasql::FunctionEvaluator(EvalScoreNgrams));
+  function_options.set_supports_safe_error_mode(false);
 
   const zetasql::Type* double_type = type_factory->get_double();
   const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
@@ -769,6 +793,8 @@ std::unique_ptr<zetasql::Function> TokenizeJsonFunction(
     zetasql::TypeFactory* type_factory, const std::string& catalog_name,
     database_api::DatabaseDialect dialect) {
   zetasql::FunctionOptions function_options;
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
 
   const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
   if (dialect == database_api::DatabaseDialect::POSTGRESQL) {

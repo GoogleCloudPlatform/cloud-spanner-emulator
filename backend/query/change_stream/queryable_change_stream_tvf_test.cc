@@ -45,7 +45,9 @@ class QueryableChangeStreamTvfTest : public testing::Test {
       : schema_(
             test::CreateSchemaWithOneTableAndOneChangeStream(&type_factory_)),
         analyzer_options_(MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone)),
-        fn_catalog_(&type_factory_),
+        fn_catalog_(&type_factory_,
+                    /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+                    /*latest_schema=*/schema_.get()),
         catalog_(std::make_unique<Catalog>(
             schema_.get(), &fn_catalog_, &type_factory_, analyzer_options_)) {}
 
@@ -135,12 +137,12 @@ TEST_F(QueryableChangeStreamTvfTest,
       "SELECT ChangeRecord FROM READ_change_stream_test_table ( "
       "start_timestamp=>'2022-09-27T12:30:00.123456Z', end_timestamp=>NULL, "
       "partition_string=>NULL, heartbeat_milliseconds=>1000 )");
-  EXPECT_THAT(status,
-              zetasql_base::testing::StatusIs(
-                  absl::StatusCode::kInvalidArgument,
-                  testing::HasSubstr(
-                      "Named argument partition_string not found in signature "
-                      "for call to function READ_change_stream_test_table")));
+  EXPECT_THAT(
+      status,
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          testing::HasSubstr(
+              "Named argument partition_string not found in signature")));
 }
 
 }  // namespace

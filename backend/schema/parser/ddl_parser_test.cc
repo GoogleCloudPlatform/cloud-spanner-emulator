@@ -2774,14 +2774,14 @@ TEST(AllowCommitTimestamp, CannotParseInvalidOptionValue) {
 }
 
 TEST(ParseToken, CannotParseUnterminatedTripleQuote) {
-  static const char *const statements[] = {
+  static const char* const statements[] = {
       "'''",        "''''",          "'''''",       "'''abc",
       "'''abc''",   "'''abc'",       "r'''abc",     "b'''abc",
       "\"\"\"",     "\"\"\"\"",      "\"\"\"\"\"",  "rb\"\"\"abc",
       "\"\"\"abc",  "\"\"\"abc\"\"", "\"\"\"abc\"", "r\"\"\"abc",
       "b\"\"\"abc", "rb\"\"\"abc",
   };
-  for (const char *statement : statements) {
+  for (const char* statement : statements) {
     EXPECT_THAT(
         ParseDDLStatement(statement),
         StatusIs(StatusCode::kInvalidArgument,
@@ -3586,13 +3586,13 @@ class ProtoAndEnumColumns : public ::testing::Test {
 
   // Creates proto descriptors set as string for given proto and enum types.
   std::string GenerateDescriptorBytesAsString(
-      std::string package, std::vector<std::string> &proto_types,
-      std::vector<std::string> &enum_types) {
+      std::string package, std::vector<std::string>& proto_types,
+      std::vector<std::string>& enum_types) {
     google::protobuf::FileDescriptorSet file_descriptor_set;
-    for (auto &type : proto_types) {
+    for (auto& type : proto_types) {
       *file_descriptor_set.add_file() = GenerateProtoDescriptor(package, type);
     }
-    for (auto &type : enum_types) {
+    for (auto& type : enum_types) {
       *file_descriptor_set.add_file() = GenerateEnumDescriptor(package, type);
     }
     return file_descriptor_set.SerializeAsString();
@@ -3600,14 +3600,14 @@ class ProtoAndEnumColumns : public ::testing::Test {
 
   // Populates the proto bundle for provided proto/enum types.
   absl::StatusOr<std::shared_ptr<const ProtoBundle>> SetUpBundle(
-      std::string package, std::vector<std::string> &proto_types,
-      std::vector<std::string> &enum_types) {
+      std::string package, std::vector<std::string>& proto_types,
+      std::vector<std::string>& enum_types) {
     auto insert_proto_types = std::vector<std::string>{};
-    for (auto &type : proto_types) {
+    for (auto& type : proto_types) {
       std::string fullname = (!package.empty()) ? package + "." + type : type;
       insert_proto_types.push_back(fullname);
     }
-    for (auto &type : enum_types) {
+    for (auto& type : enum_types) {
       std::string fullname = (!package.empty()) ? package + "." + type : type;
       insert_proto_types.push_back(fullname);
     }
@@ -7052,6 +7052,51 @@ TEST(UserDefinedFunction, CreateFunctionBasic) {
               )pb"));
 }
 
+TEST(UserDefinedFunction, CreateFunctionRemote) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_user_defined_functions = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  // LANGUAGE REMOTE case
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      auto statement,
+      ParseDDLStatement(
+          "CREATE FUNCTION rudf_identity_func(x INT64) RETURNS "
+          "INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS "
+          "(endpoint = 'https://google.com', max_batching_rows = 456)"));
+  EXPECT_THAT(
+      statement, test::EqualsProto(R"pb(
+        create_function {
+          function_name: "rudf_identity_func"
+          function_kind: FUNCTION
+          param { name: "x" param_typename: "INT64" }
+          return_typename: "INT64"
+          language: REMOTE
+          options { option_name: "endpoint" string_value: "https://google.com" }
+          options { option_name: "max_batching_rows" int64_value: 456 }
+        }
+      )pb"));
+
+  // REMOTE case
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      statement,
+      ParseDDLStatement(
+          "CREATE FUNCTION rudf_identity_func(x INT64) RETURNS "
+          "INT64 NOT DETERMINISTIC REMOTE OPTIONS "
+          "(endpoint = 'https://google.com', max_batching_rows = 456)"));
+  EXPECT_THAT(
+      statement, test::EqualsProto(R"pb(
+        create_function {
+          function_name: "rudf_identity_func"
+          function_kind: FUNCTION
+          param { name: "x" param_typename: "INT64" }
+          return_typename: "INT64"
+          is_remote: true
+          options { option_name: "endpoint" string_value: "https://google.com" }
+          options { option_name: "max_batching_rows" int64_value: 456 }
+        }
+      )pb"));
+}
+
 TEST(UserDefinedFunction, ParameterizedTypes) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_user_defined_functions = true;
@@ -7181,39 +7226,41 @@ TEST(UserDefinedFunction, CreateFunctionWithInvalidDeterminism) {
       ParseDDLStatement("CREATE FUNCTION foo() RETURNS STRING IMMUTABLE AS "
                         "(GENERATE_UUID())"),
       StatusIs(StatusCode::kInvalidArgument,
-               HasSubstr("Expecting 'AS' but found 'IMMUTABLE'")));
+               HasSubstr("Encountered 'IMMUTABLE' while parsing")));
 
   EXPECT_THAT(
       ParseDDLStatement("CREATE FUNCTION foo() RETURNS STRING DETERMINISTIC AS "
                         "(GENERATE_UUID())"),
       StatusIs(StatusCode::kInvalidArgument,
-               HasSubstr("Expecting 'AS' but found 'DETERMINISTIC'")));
+               HasSubstr("Encountered 'DETERMINISTIC' while parsing")));
 
   EXPECT_THAT(
       ParseDDLStatement("CREATE FUNCTION foo() RETURNS STRING STABLE AS "
                         "(GENERATE_UUID())"),
       StatusIs(StatusCode::kInvalidArgument,
-               HasSubstr("Expecting 'AS' but found 'STABLE'")));
+               HasSubstr("Encountered 'STABLE' while parsing")));
 
   EXPECT_THAT(
       ParseDDLStatement(
           "CREATE FUNCTION foo(a INT64) RETURNS STRING NOT DETERMINISTIC AS "
           "(GENERATE_UUID())"),
-      StatusIs(StatusCode::kInvalidArgument,
-               HasSubstr("Expecting 'AS' but found 'NOT'")));
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          HasSubstr(
+              "DETERMINISM clause is not supported for remote functions")));
 
   EXPECT_THAT(
       ParseDDLStatement("CREATE FUNCTION foo() RETURNS STRING VOLATILE AS "
                         "(GENERATE_UUID())"),
       StatusIs(StatusCode::kInvalidArgument,
-               HasSubstr("Expecting 'AS' but found 'VOLATILE'")));
+               HasSubstr("Encountered 'VOLATILE' while parsing")));
 
   EXPECT_THAT(
       ParseDDLStatement(
           "CREATE FUNCTION foo(a INT64) RETURNS STRING INVALID_DETERMINISM AS "
           "(GENERATE_UUID())"),
       StatusIs(StatusCode::kInvalidArgument,
-               HasSubstr("Expecting 'AS' but found 'INVALID_DETERMINISM'")));
+               HasSubstr("Encountered 'INVALID_DETERMINISM' while parsing")));
 }
 
 TEST(UserDefinedFunction, CreateFunctionLowercase) {
@@ -7632,7 +7679,7 @@ TEST(UserDefinedFunction, CreateFunctionInvalidSyntax) {
       ParseDDLStatement("CREATE FUNCTION udf_1()) RETURNS INT64 SQL SECURITY "
                         "INVOKER AS (x+1)"),
       StatusIs(StatusCode::kInvalidArgument,
-               HasSubstr("Expecting 'AS' but found ')'")));
+               HasSubstr("Encountered ')' while parsing")));
 
   EXPECT_THAT(
       ParseDDLStatement("CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL "

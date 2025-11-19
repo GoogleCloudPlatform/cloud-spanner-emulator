@@ -134,3 +134,29 @@ cc_library(
         "@com_google_zetasql//zetasql/base:bits",
     ],
 )
+
+cc_library(
+    name = "pg_literals",
+    srcs = [
+        "pg_literals.cc",
+    ],
+    hdrs = [
+        "pg_literals.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/strings",
+        "@com_googlesource_code_re2//:re2",
+    ],
+)
+
+cc_test(
+    name = "pg_literals_test",
+    srcs = ["pg_literals_test.cc"],
+    deps = [
+        ":pg_literals",
+        "//tests/common:proto_matchers",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)

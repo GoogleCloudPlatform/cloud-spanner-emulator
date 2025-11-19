@@ -211,6 +211,8 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
       const google::spanner::emulator::backend::ddl::Analyze& statement) const;
   absl::StatusOr<std::string> PrintSQLSecurityType(
       google::spanner::emulator::backend::ddl::Function::SqlSecurity sql_security) const;
+  absl::StatusOr<std::string> PrintSQLSecurityTypeForView(
+      google::spanner::emulator::backend::ddl::Function::SqlSecurity sql_security) const;
   absl::StatusOr<std::string> PrintCreateFunction(
       const google::spanner::emulator::backend::ddl::CreateFunction& statement) const;
   absl::StatusOr<std::string> PrintColumn(
@@ -1427,6 +1429,20 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintSQLSecurityType(
                    << static_cast<int64_t>(sql_security);
 }
 
+absl::StatusOr<std::string>
+SpangresSchemaPrinterImpl::PrintSQLSecurityTypeForView(
+    google::spanner::emulator::backend::ddl::Function::SqlSecurity sql_security) const {
+  switch (sql_security) {
+    case google::spanner::emulator::backend::ddl::Function::INVOKER:
+      return "security_invoker";
+      break;
+    case google::spanner::emulator::backend::ddl::Function::UNSPECIFIED_SQL_SECURITY:
+      ZETASQL_RET_CHECK_FAIL() << "Only security_invoker={true,false} are supported.";
+  }
+  ZETASQL_RET_CHECK_FAIL() << "Unsupported sql security type: "
+                   << static_cast<int64_t>(sql_security);
+}
+
 // Helper function to check if the parameter name is a UDF parameter name.
 inline bool IsUdfParameterNameReserved(absl::string_view name) {
   static const LazyRE2 kUdfParameterRegex = {R"(\$\d+|`$\d+`)"};
@@ -1437,17 +1453,20 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateFunction(
     const google::spanner::emulator::backend::ddl::CreateFunction& statement) const {
   switch (statement.function_kind()) {
     case google::spanner::emulator::backend::ddl::Function_Kind::Function_Kind_VIEW: {
-      std::string view_template =
-          statement.is_or_replace()
-              ? "CREATE OR REPLACE VIEW $0 SQL SECURITY $1 AS $2"
-              : "CREATE VIEW $0 SQL SECURITY $1 AS $2";
+      ZETASQL_ASSIGN_OR_RETURN(std::string security_type,
+                       PrintSQLSecurityTypeForView(statement.sql_security()));
 
-      ZETASQL_ASSIGN_OR_RETURN(absl::string_view security_type,
-                       PrintSQLSecurityType(statement.sql_security()));
+      std::string with_clause = "";
+      if (!security_type.empty()) {
+        with_clause = absl::Substitute("WITH ($0)", security_type);
+      }
+      std::string view_template = statement.is_or_replace()
+                                      ? "CREATE OR REPLACE VIEW $0 $1 AS $2"
+                                      : "CREATE VIEW $0 $1 AS $2";
 
       return Substitute(
           view_template, QuoteQualifiedIdentifier(statement.function_name()),
-          security_type, statement.sql_body_origin().original_expression());
+          with_clause, statement.sql_body_origin().original_expression());
     }
     case google::spanner::emulator::backend::ddl::Function_Kind::Function_Kind_INVALID_KIND:
       ZETASQL_RET_CHECK_FAIL()

@@ -669,16 +669,17 @@ TEST_F(PGCatalogTest, PGConstraint) {
       WHERE contype = 'f'
       ORDER BY
         contype, c.oid)sql");
-  EXPECT_THAT(*results,
-              ExpectedRows(*results,
-                           {
-                               {"fk_base_cascade_child", "public", "f", true,
-                                "base", "cascade_child", "a",
-                                std::vector<int>{3, 2}, std::vector<int>{3, 4}},
-                               {"fk_ns_table_2", "named_schema", "f", true,
-                                "ns_table_2", "ns_table_1", "a",
-                                std::vector<int>{1}, std::vector<int>{1}},
-                           }));
+  EXPECT_THAT(
+      *results,
+      ExpectedRows(*results, {{"fk_base_cascade_child", "public", "f", true,
+                               "base", "cascade_child", "a",
+                               std::vector<int>{3, 2}, std::vector<int>{3, 4}},
+                              {"fk_ns_table_2", "named_schema", "f", true,
+                               "ns_table_2", "ns_table_1", "a",
+                               std::vector<int>{1}, std::vector<int>{1}},
+                              {"fk_ns_table_2_delete_cascade", "named_schema",
+                               "f", true, "ns_table_2", "ns_table_1", "c",
+                               std::vector<int>{1}, std::vector<int>{1}}}));
 
   // Check empty columns.
   EXPECT_THAT(
@@ -855,29 +856,22 @@ TEST_F(PGCatalogTest, PGNamespace) {
 }
 
 TEST_F(PGCatalogTest, PGProc) {
-  if (in_prod_env()) {
-    GTEST_SKIP();
-  }
   auto expected = std::vector<ValueRow>({
-      {"read_json_test_stream", "public", PgOid(0), "f", true, 5, 0,
-       PgOid(3802),
-       std::vector<PgOid>{PgOid(1184), PgOid(1184), PgOid(1043), PgOid(20),
-                          PgOid(1015)},
+      {"read_json_test_stream", "public", PgOid(0), "f", true, 5, PgOid(3802),
+       std::vector<PgOid>{PgOid(1184), PgOid(1184), PgOid(25), PgOid(20),
+                          PgOid(1009)},
        Ns()},
-      {"read_json_test_stream2", "public", PgOid(0), "f", true, 5, 0,
-       PgOid(3802),
-       std::vector<PgOid>{PgOid(1184), PgOid(1184), PgOid(1043), PgOid(20),
-                          PgOid(1015)},
+      {"read_json_test_stream2", "public", PgOid(0), "f", true, 5, PgOid(3802),
+       std::vector<PgOid>{PgOid(1184), PgOid(1184), PgOid(25), PgOid(20),
+                          PgOid(1009)},
        Ns()},
-      {"read_json_test_stream3", "public", PgOid(0), "f", true, 5, 0,
-       PgOid(3802),
-       std::vector<PgOid>{PgOid(1184), PgOid(1184), PgOid(1043), PgOid(20),
-                          PgOid(1015)},
+      {"read_json_test_stream3", "public", PgOid(0), "f", true, 5, PgOid(3802),
+       std::vector<PgOid>{PgOid(1184), PgOid(1184), PgOid(25), PgOid(20),
+                          PgOid(1009)},
        Ns()},
-      {"read_json_test_stream4", "public", PgOid(0), "f", true, 5, 0,
-       PgOid(3802),
-       std::vector<PgOid>{PgOid(1184), PgOid(1184), PgOid(1043), PgOid(20),
-                          PgOid(1015)},
+      {"read_json_test_stream4", "public", PgOid(0), "f", true, 5, PgOid(3802),
+       std::vector<PgOid>{PgOid(1184), PgOid(1184), PgOid(25), PgOid(20),
+                          PgOid(1009)},
        Ns()},
   });
   EXPECT_THAT(Query(R"sql(
@@ -888,7 +882,6 @@ TEST_F(PGCatalogTest, PGProc) {
         prokind,
         proretset,
         pronargs,
-        pronargdefaults,
         prorettype,
         proargtypes,
         prosqlbody

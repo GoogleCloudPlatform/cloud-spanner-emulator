@@ -32,7 +32,7 @@
 # Catalog generated code
 
 load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@rules_python//python:defs.bzl", "py_binary")
 
@@ -127,5 +127,70 @@ genrule(
     tools = [":gen_pg_proc"],
     visibility = [
         "//:__subpackages__",
+    ],
+)
+
+###################################
+# Default values generation
+py_binary(
+    name = "gen_default_values_embed",
+    srcs = ["gen_default_values_embed.py"],
+    data = [
+        "default_values_embed.h.jinja2",
+        "emulator_postgresql_catalog.textproto",
+    ],
+    deps = [
+        ":postgresql_catalog_py_proto",
+        "@com_google_protobuf//:protobuf_python",
+        "@jinja2",
+    ],
+)
+
+genrule(
+    name = "run_default_values_embed",
+    srcs = [
+        "emulator_postgresql_catalog.textproto",
+    ],
+    outs = [
+        "default_values_embed.h",
+    ],
+    cmd = "$(location :gen_default_values_embed) > $(OUTS)",
+    tools = [":gen_default_values_embed"],
+)
+
+cc_library(
+    name = "default_values_embed",
+    hdrs = ["default_values_embed.h"],
+    deps = [":run_default_values_embed"],
+)
+
+cc_library(
+    name = "default_values_reader",
+    srcs = ["default_values_reader.cc"],
+    hdrs = ["default_values_reader.h"],
+    visibility = [
+        "//:__subpackages__",
+    ],
+    deps = [
+        ":default_values_embed",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_zetasql//zetasql/base:ret_check",
+        "@nlohmann_json//:json",
+    ],
+)
+
+cc_test(
+    name = "default_values_reader_test",
+    srcs = ["default_values_reader_test.cc"],
+    deps = [
+        ":default_values_embed",
+        ":default_values_reader",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

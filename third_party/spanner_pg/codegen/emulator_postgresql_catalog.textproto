@@ -6985,6 +6985,35 @@ functions {
 functions {
   mapped_name_path {
     name_path: "pg"
+    name_path: "jsonb_array_elements"
+  }
+  postgresql_name_paths {
+    name_path: "pg"
+    name_path: "jsonb_array_elements"
+  }
+  signatures {
+    return_type {
+      oid: 3807
+      name: "_jsonb"
+    }
+    arguments {
+      type {
+        oid: 3802
+        name: "jsonb"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "jsonb_array_elements"
+    }
+    deprecated: false
+  }
+}
+functions {
+  mapped_name_path {
+    name_path: "pg"
     name_path: "jsonb_build_array"
   }
   postgresql_name_paths {
@@ -10685,6 +10714,36 @@ functions {
     postgresql_name_paths {
       name_path: "spanner"
       name_path: "tokenize_fulltext"
+    }
+    deprecated: false
+  }
+}
+functions {
+  mapped_name_path {
+    name_path: "tokenize_jsonb"
+  }
+  postgresql_name_paths {
+    name_path: "spanner"
+    name_path: "tokenize_jsonb"
+  }
+  signatures {
+    return_type {
+      oid: 50001
+      name: "tokenlist"
+    }
+    arguments {
+      type {
+        oid: 3802
+        name: "jsonb"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "value"
+    }
+    oid: 50060
+    postgresql_name_paths {
+      name_path: "spanner"
+      name_path: "tokenize_jsonb"
     }
     deprecated: false
   }

@@ -182,11 +182,16 @@ inet_cidr_pton_ipv4(const char *src, u_char *dst, size_t size)
 			assert(n >= 0 && n <= 9);
 			bits *= 10;
 			bits += n;
+			// SPANGRES BEGIN
+			// Invalid bits value check.
+			// This code block was originally placed below the while loop which missed
+			// the overflow case when bits is larger than max int value.
+			if (bits > 32)
+				goto emsgsize;
+			// SPANGRES END
 		} while ((ch = *src++) != '\0' && isdigit((unsigned char) ch));
 		if (ch != '\0')
 			goto enoent;
-		if (bits > 32)
-			goto emsgsize;
 	}
 
 	/* Fiery death and destruction unless we prefetched EOS. */
@@ -302,11 +307,16 @@ inet_net_pton_ipv4(const char *src, u_char *dst)
 			assert(n >= 0 && n <= 9);
 			bits *= 10;
 			bits += n;
+			// SPANGRES BEGIN
+			// Invalid bits value check.
+			// This code block was originally placed below the while loop which missed
+			// the overflow case when bits is larger than max int value.
+			if (bits > 32)
+				goto emsgsize;
+			// SPANGRES END
 		} while ((ch = *src++) != '\0' && isdigit((unsigned char) ch));
 		if (ch != '\0')
 			goto enoent;
-		if (bits > 32)
-			goto emsgsize;
 	}
 
 	/* Fiery death and destruction unless we prefetched EOS. */

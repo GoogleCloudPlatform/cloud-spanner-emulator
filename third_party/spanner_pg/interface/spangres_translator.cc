@@ -45,6 +45,7 @@
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/analyzer_output.h"
 #include "zetasql/public/analyzer_output_properties.h"
+#include "zetasql/public/function.h"
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/strings.h"
@@ -60,6 +61,8 @@
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
 #include "absl/strings/substitute.h"
+#include "absl/types/span.h"
+#include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter_holder.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
@@ -701,6 +704,38 @@ absl::StatusOr<List*> SpangresTranslator::WrapExpressionInSelect(
   }
 
   return wrapped_tree;
+}
+
+absl::StatusOr<bool> SpangresTranslator::IsBuiltinFunction(
+    std::unique_ptr<EngineBuiltinFunctionCatalog> builtin_function_catalog,
+    absl::string_view function_name) {
+  // Check if the function is in the PostgreSQL bootstrap catalog first.
+  absl::StatusOr<absl::Span<const FormData_pg_proc* const>> procs =
+      PgBootstrapCatalog::Default()->GetProcsByName(function_name);
+  if (procs.ok() && !procs.value().empty()) {
+    return true;
+  }
+
+  // Initialize the engine system catalog if it is not already initialized.
+  const zetasql::LanguageOptions language_options;
+  ZETASQL_ASSIGN_OR_RETURN(bool initialized_catalog,
+                   SpangresSystemCatalog::TryInitializeEngineSystemCatalog(
+                       std::move(builtin_function_catalog),
+                       /*language_options=*/language_options));
+  if (initialized_catalog) {
+    DLOG(INFO) << "EngineSystemCatalog initialized in IsBuiltinFunction";
+  }
+
+  // Check if the function is in the engine system catalog.
+  postgres_translator::EngineSystemCatalog* system_catalog =
+      SpangresSystemCatalog::GetEngineSystemCatalog();
+  ZETASQL_RET_CHECK_NE(system_catalog, nullptr)
+      << "EngineSystemCatalog is not initialized";
+  const zetasql::Function* function = nullptr;
+  absl::Status results =
+      system_catalog->FindFunction({std::string(function_name)},
+                                   /*function=*/&function);
+  return results.ok() && function != nullptr;
 }
 
 absl::StatusOr<interfaces::ParserSingleOutput>

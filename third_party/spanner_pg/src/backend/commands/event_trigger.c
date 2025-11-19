@@ -953,6 +953,9 @@ EventTriggerSupportsObjectType(ObjectType obtype)
 			return false;
 		// SPANGRES END
 		case OBJECT_LOCALITY_GROUP:
+		// SPANGRES BEGIN
+		// TODO: expose when queue is implemented.
+		// SPANGRES END
 		case OBJECT_ACCESS_METHOD:
 		case OBJECT_AGGREGATE:
 		case OBJECT_AMOP:
@@ -2101,6 +2104,9 @@ stringify_grant_objtype(ObjectType objtype)
     case OBJECT_CHANGE_STREAM:
 		case OBJECT_SEARCH_INDEX:
 		// SPANGRES END
+		// SPANGRES BEGIN
+		// TODO: expose when queue is implemented.
+		// SPANGRES END
 		case OBJECT_LOCALITY_GROUP:
 			elog(ERROR, "unsupported object type: %d", (int) objtype);
 	}
@@ -2188,6 +2194,9 @@ stringify_adefprivs_objtype(ObjectType objtype)
 		case OBJECT_VIEW:
     case OBJECT_CHANGE_STREAM:
 		case OBJECT_SEARCH_INDEX:
+		// SPANGRES END
+		// SPANGRES BEGIN
+		// TODO: expose when queue is implemented.
 		// SPANGRES END
 		case OBJECT_LOCALITY_GROUP:
 			elog(ERROR, "unsupported object type: %d", (int) objtype);

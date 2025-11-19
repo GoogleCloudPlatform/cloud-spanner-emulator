@@ -42,6 +42,7 @@ TEST(EmulatorFeatureFlags, Basic) {
   EXPECT_FALSE(features.flags().enable_user_defined_functions);
   EXPECT_TRUE(features.flags().enable_fk_enforcement_option);
   EXPECT_TRUE(features.flags().enable_interleave_in);
+  EXPECT_TRUE(features.flags().enable_insert_on_conflict_dml);
 
   {
     EmulatorFeatureFlags::Flags flags;
@@ -54,6 +55,7 @@ TEST(EmulatorFeatureFlags, Basic) {
     flags.enable_upsert_queries = false;
     flags.enable_upsert_queries_with_returning = false;
     flags.enable_fk_enforcement_option = false;
+    flags.enable_insert_on_conflict_dml = false;
 
     test::ScopedEmulatorFeatureFlagsSetter setter(flags);
     EXPECT_FALSE(features.flags().enable_check_constraint);
@@ -66,6 +68,7 @@ TEST(EmulatorFeatureFlags, Basic) {
     EXPECT_FALSE(features.flags().enable_upsert_queries);
     EXPECT_FALSE(features.flags().enable_upsert_queries_with_returning);
     EXPECT_FALSE(features.flags().enable_fk_enforcement_option);
+    EXPECT_FALSE(features.flags().enable_insert_on_conflict_dml);
   }
   EXPECT_TRUE(features.flags().enable_check_constraint);
   EXPECT_TRUE(features.flags().enable_column_default_values);
@@ -77,6 +80,7 @@ TEST(EmulatorFeatureFlags, Basic) {
   EXPECT_TRUE(features.flags().enable_upsert_queries);
   EXPECT_TRUE(features.flags().enable_upsert_queries_with_returning);
   EXPECT_TRUE(features.flags().enable_fk_enforcement_option);
+  EXPECT_TRUE(features.flags().enable_insert_on_conflict_dml);
 }
 
 TEST(EmulatorFeatureFlags, ProtosFlag) {

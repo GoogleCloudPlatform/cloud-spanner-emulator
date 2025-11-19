@@ -32,12 +32,18 @@
 #ifndef CATALOG_FUNCTION_H_
 #define CATALOG_FUNCTION_H_
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "zetasql/public/function.h"
+#include "zetasql/public/function_signature.h"
 #include "zetasql/public/procedure.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 
@@ -105,10 +111,12 @@ class PostgresExtendedFunctionSignature : public zetasql::FunctionSignature {
   PostgresExtendedFunctionSignature(
       const zetasql::FunctionSignature& signature,
       std::unique_ptr<zetasql::Function> mapped_function = nullptr,
-      Oid postgres_proc_oid = InvalidOid)
+      Oid postgres_proc_oid = InvalidOid,
+      std::vector<std::string> query_features_names = {})
       : zetasql::FunctionSignature(signature),
         mapped_function_(std::move(mapped_function)),
-        postgres_proc_oid_(postgres_proc_oid) {}
+        postgres_proc_oid_(postgres_proc_oid),
+        query_features_names_(query_features_names) {}
 
   const zetasql::Function* mapped_function() const {
     return mapped_function_.get();
@@ -117,9 +125,14 @@ class PostgresExtendedFunctionSignature : public zetasql::FunctionSignature {
   // Return an InvalidOid if there is no mapped PostgreSQL proc oid.
   Oid postgres_proc_oid() const { return postgres_proc_oid_; }
 
+  const std::vector<std::string>& query_features_names() const {
+    return query_features_names_;
+  }
+
  private:
   std::unique_ptr<zetasql::Function> mapped_function_;
   Oid postgres_proc_oid_;
+  std::vector<std::string> query_features_names_;
 };
 
 class PostgresExtendedFunction : public zetasql::Function {
@@ -128,9 +141,11 @@ class PostgresExtendedFunction : public zetasql::Function {
   explicit PostgresExtendedFunction(
       const std::string& name, zetasql::Function::Mode mode,
       std::vector<std::unique_ptr<PostgresExtendedFunctionSignature>>
-          function_signatures)
+          function_signatures,
+      std::vector<std::string> query_features_names = {})
       : zetasql::Function(name, kPostgresGroup, mode),
-        postgres_signatures_(std::move(function_signatures)) {
+        postgres_signatures_(std::move(function_signatures)),
+        query_features_names_(query_features_names) {
     for (const std::unique_ptr<PostgresExtendedFunctionSignature>& signature :
          postgres_signatures_) {
       // Call the zetasql::Function AddSignature function so all of the base
@@ -184,11 +199,16 @@ class PostgresExtendedFunction : public zetasql::Function {
     }
   }
 
+  const std::vector<std::string>& query_features_names() const {
+    return query_features_names_;
+  }
+
  private:
   std::vector<std::unique_ptr<PostgresExtendedFunctionSignature>>
       postgres_signatures_;
   absl::flat_hash_map<Oid, std::vector<PostgresExtendedFunctionSignature*>>
       oid_to_signatures;
+  std::vector<std::string> query_features_names_;
 };
 
 }  // namespace postgres_translator

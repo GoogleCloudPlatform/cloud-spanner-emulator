@@ -29,7 +29,9 @@
 #include "absl/status/status.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
+#include "backend/query/function_catalog.h"
 #include "backend/query/queryable_table.h"
+#include "backend/schema/catalog/schema.h"
 #include "common/constants.h"
 #include "common/errors.h"
 #include "tests/common/schema_constructor.h"
@@ -45,8 +47,9 @@ class PartitionedDMLValidatorTest : public testing::Test {
  public:
   PartitionedDMLValidatorTest()
       : analyzer_options_(MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone)),
-        fn_catalog_(&type_factory_),
         schema_(test::CreateSchemaWithMultiTables(&type_factory_)),
+        fn_catalog_(&type_factory_, kCloudSpannerEmulatorFunctionCatalogName,
+                    schema_.get()),
         catalog_(std::make_unique<Catalog>(
             schema_.get(), &fn_catalog_, &type_factory_, analyzer_options_)) {}
 
@@ -64,9 +67,9 @@ class PartitionedDMLValidatorTest : public testing::Test {
 
   const zetasql::AnalyzerOptions analyzer_options_;
 
-  const FunctionCatalog fn_catalog_;
-
   std::unique_ptr<const Schema> schema_;
+
+  const FunctionCatalog fn_catalog_;
 
   std::unique_ptr<Catalog> catalog_;
 };

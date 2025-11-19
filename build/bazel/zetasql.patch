@@ -560,3 +560,80 @@ index 6d59d274..cc8d1398 100644
  
    static std::vector<Value> ToValues(absl::Span<const ValueConstructor> slice) {
      std::vector<Value> values;
+diff --git a/zetasql/resolved_ast/BUILD b/zetasql/resolved_ast/BUILD
+index 37aa9de..d6c7a59 100644
+--- a/zetasql/resolved_ast/BUILD
++++ b/zetasql/resolved_ast/BUILD
+@@ -666,6 +666,7 @@ cc_library(
+     name = "rewrite_utils",
+     srcs = ["rewrite_utils.cc"],
+     hdrs = ["rewrite_utils.h"],
++    visibility = ["//visibility:public"],
+     deps = [
+         ":column_factory",
+         ":resolved_ast",
+diff --git a/zetasql/public/evaluator_base.h b/zetasql/public/evaluator_base.h
+index 108f274..b07e952 100644
+--- a/zetasql/public/evaluator_base.h
++++ b/zetasql/public/evaluator_base.h
+@@ -253,6 +253,10 @@ struct EvaluatorOptions {
+   // accounting charges each of them individually. In some cases, it is
+   // necessary to set this option to a very large value.
+   int64_t max_intermediate_byte_size = 128 * 1024 * 1024;
++
++  // Insert ignore DML statements return all the rows that were processed,
++  // including the rows that were not inserted.
++  bool return_all_insert_rows_insert_ignore_dml = false;
+ };
+ 
+ class PreparedExpressionBase {
+diff --git a/zetasql/public/evaluator_base.cc b/zetasql/public/evaluator_base.cc
+index d11d6fd..cdf69e0 100644
+--- a/zetasql/public/evaluator_base.cc
++++ b/zetasql/public/evaluator_base.cc
+@@ -458,6 +458,8 @@ class Evaluator {
+         evaluator_options_.max_intermediate_byte_size;
+     evaluation_options.return_all_rows_for_dml = false;
+     evaluation_options.return_early_from_exists_subquery = true;
++    evaluation_options.return_all_insert_rows_insert_ignore_dml =
++        evaluator_options_.return_all_insert_rows_insert_ignore_dml;
+ 
+     auto context = std::make_unique<EvaluationContext>(evaluation_options);
+ 
+diff --git a/zetasql/reference_impl/evaluation.h b/reference_impl/evaluation.h
+index b3dc04a..274d8c0 100644
+--- a/zetasql/reference_impl/evaluation.h
++++ b/zetasql/reference_impl/evaluation.h
+@@ -113,6 +113,10 @@ struct EvaluationOptions {
+   // EXISTS subquery even after seeing the first row, to flag non-determinism
+   // if some subsequent row produces an error.
+   bool return_early_from_exists_subquery = false;
++
++  // If true, the reference implementation will return all rows for INSERT
++  // IGNORE DML statements, including the rows that were not inserted.
++  bool return_all_insert_rows_insert_ignore_dml = false;
+ };
+ 
+ class ProtoFieldReader;
+diff --git a/zetasql/reference_impl/value_expr.cc b/zetasql/reference_impl/value_expr.cc
+index 6956e63..aae162f 100644
+--- a/zetasql/reference_impl/value_expr.cc
++++ b/zetasql/reference_impl/value_expr.cc
+@@ -3996,6 +3996,7 @@ absl::StatusOr<Value> DMLInsertValueExpr::Eval(
+   ZETASQL_RETURN_IF_ERROR(resolved_node_->CheckFieldsAccessed());
+ 
+   if (!context->options().return_all_rows_for_dml &&
++      !context->options().return_all_insert_rows_insert_ignore_dml &&
+       stmt()->insert_mode() == ResolvedInsertStmt::OR_IGNORE) {
+     // INSERT IGNORE inserts only new rows, others are ignored.
+     // Number of rows modified must match the number of rows actually inserted.
+@@ -4366,7 +4367,8 @@ absl::StatusOr<int64_t> DMLInsertValueExpr::InsertRows(
+         dml_returning_rows.erase(dml_returning_rows.begin() + i);
+       }
+       // Erase the rows that were not inserted because they already exist.
+-      if (stmt()->insert_mode() == ResolvedInsertStmt::OR_IGNORE) {
++      if (stmt()->insert_mode() == ResolvedInsertStmt::OR_IGNORE &&
++          !context->options().return_all_insert_rows_insert_ignore_dml) {
+         rows_to_insert.erase(rows_to_insert.begin() + rows_ignored_indexes[i]);
+       }
+     }

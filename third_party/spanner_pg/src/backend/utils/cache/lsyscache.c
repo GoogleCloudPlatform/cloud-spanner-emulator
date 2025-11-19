@@ -2980,20 +2980,18 @@ get_typsubscript(Oid typid, Oid *typelemp)
 	if (typform == NULL) {
 		elog(ERROR, "catalog lookup failed for type %u", typid);
 	}
-
-	if (typform->typelem == InvalidOid) {
-		ereport(ERROR,
-				(errcode(ERRCODE_DATATYPE_MISMATCH),
-				 errmsg("cannot subscript type %s because it is not an array",
-						format_type_be(typid))));
-	}
-
 	RegProcedure handler = typform->typsubscript;
+
 	if (typelemp) {
 		*typelemp = typform->typelem;
+		return handler;
 	}
-
-	return handler;
+	else
+	{
+		if (typelemp)
+			*typelemp = InvalidOid;
+		return InvalidOid;
+	}
 	// SPANGRES END
 }
 
