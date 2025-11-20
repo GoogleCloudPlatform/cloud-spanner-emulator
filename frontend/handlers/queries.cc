@@ -647,7 +647,7 @@ absl::Status ExecuteBatchDml(RequestContext* ctx,
         txn->SetDmlReplayOutcome(*response);
         txn->MaybeInvalidate(error);
         if (!txn->IsInvalid() &&
-            ShouldReturnTransaction(request->transaction())) {
+            ShouldReturnTransaction(request->transaction()) && index == 0) {
           // The transaction ID has not been returned to the user yet, so we
           // must rollback the transaction to avoid leaving it in an active
           // state.

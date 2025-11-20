@@ -1807,6 +1807,15 @@ TEST_P(QueryEngineTest,
                          "({pk#int64_col:1}) due to previously existing row")));
 }
 
+TEST_P(QueryEngineTest, InsertOnConflictDmlMixedCase) {
+  MockRowWriter writer;
+  ZETASQL_EXPECT_OK(query_engine().ExecuteSql(
+      Query{"insert into test_table (int64_col, string_col) "
+            "VALUES(10, 'ten') "
+            "On Conflict(int64_col) DO UPDATE set string_col = 'newrow'"},
+      QueryContext{schema(), reader(), &writer}));
+}
+
 TEST_P(QueryEngineTest, InsertOnConflictDoUpdateDml) {
   MockRowWriter writer;
   EXPECT_CALL(

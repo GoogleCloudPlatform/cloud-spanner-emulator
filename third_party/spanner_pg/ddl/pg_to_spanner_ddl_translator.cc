@@ -496,6 +496,8 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       const ObjectWithArgs& object_with_args, bool is_grant,
       absl::string_view parent_statement_type) const;
 
+  // TODO: expose when queue is implemented.
+
   // Parses PG column type represented as a List into schema name and type name.
   absl::Status ParseColumnType(const TypeName& type, std::string& schema_name,
                                std::string& type_name) const;
@@ -576,6 +578,7 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   absl::Status TranslateAlterSequence(const AlterSeqStmt& alter_statement,
                                       const TranslationOptions& options,
                                       google::spanner::emulator::backend::ddl::AlterSequence& out) const;
+  // TODO: expose when queue is implemented.
 
   // Rename translation statement.
   absl::Status TranslateRenameStatement(const RenameStmt& rename_statement,
@@ -1190,6 +1193,8 @@ PostgreSQLToSpannerDDLTranslatorImpl::GetFunctionName(
       static_cast<String*>(lsecond(object_with_args.objname))->sval;
   return function_name;
 }
+
+// TODO: expose when queue is implemented.
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateInterleaveIn(
     const InterleaveSpec* pg_interleave,
@@ -1912,6 +1917,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSequence(
   return absl::OkStatus();
 }
 
+// TODO: expose when queue is implemented.
+
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
     const CreateStmt& create_statement, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::CreateTable& out) const {
@@ -2512,6 +2519,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropStatement(
     case OBJECT_SEQUENCE:
       return TranslateDropSequence(drop_statement, options,
                                    *out.mutable_drop_sequence());
+    // TODO: expose when queue is implemented.
     default:
       ZETASQL_RET_CHECK_FAIL()
           << "removeType should have been validated in ValidateTreeNode.";
@@ -3801,6 +3809,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
           *statement, options_, *result_statement.mutable_create_sequence()));
       break;
     }
+
+    // TODO: expose when queue is implemented.
 
     case T_AlterSeqStmt: {
       ZETASQL_ASSIGN_OR_RETURN(

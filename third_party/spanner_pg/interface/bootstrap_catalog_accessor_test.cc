@@ -108,7 +108,7 @@ INSTANTIATE_TEST_SUITE_P(PgNamespaceDataTestData, PgNamespaceDataTest,
                                oid: 50000 nspname: "spanner"
                              )pb",
                              R"pb(
-                               oid: 50077 nspname: "spanner_sys"
+                               oid: 75004 nspname: "spanner_sys"
                              )pb",
                              R"pb(
                                oid: 50080 nspname: "ai"

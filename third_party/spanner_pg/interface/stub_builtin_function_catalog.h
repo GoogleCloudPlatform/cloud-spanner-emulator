@@ -34,19 +34,28 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "zetasql/public/builtin_function.h"
 #include "zetasql/public/builtin_function_options.h"
+#include "zetasql/public/catalog.h"
 #include "zetasql/public/function.h"
+#include "zetasql/public/function_signature.h"
 #include "zetasql/public/language_options.h"
+#include "zetasql/public/table_valued_function.h"
+#include "zetasql/public/types/type.h"
+#include "zetasql/public/types/type_factory.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
+#include "absl/status/status.h"
 #include "third_party/spanner_pg/interface/engine_builtin_function_catalog.h"
 
 namespace postgres_translator {
 
-// Stub version of EngineBuiltinFunctionCatalog that holds all ZetaSQL builtin
-// functions.
+// Stub version of EngineBuiltinFunctionCatalog that holds:
+// * ZetaSQL builtin functions.
+// * a few namespaced functions.
 class StubBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
  public:
   explicit StubBuiltinFunctionCatalog(
@@ -56,19 +65,29 @@ class StubBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
         googlesql_builtin_types_unused_;
     absl::Status status = zetasql::GetBuiltinFunctionsAndTypes(
         zetasql::BuiltinFunctionOptions(language_options), *type_factory(),
-        googlesql_builtin_functions_, googlesql_builtin_types_unused_);
+        functions_, googlesql_builtin_types_unused_);
     // `status` can be an error when `BuiltinFunctionOptions` is misconfigured.
     // The call above only supplies a `LangaugeOptions` and is low risk. If that
     // configuration becomes more complex, then this `status` should probably be
     // propagated out, which requires changing `StubBuiltinFunctionCatalog` to
     // use a factory function rather than a constructor that is doing work.
     ABSL_DCHECK_OK(status);
+
+    // Add a function in a different namespace.
+    functions_.insert({"ai.if", std::make_unique<zetasql::Function>(
+                                    std::vector<std::string>{"ai", "if"}, "pg",
+                                    zetasql::Function::SCALAR,
+                                    /*function_signatures=*/
+                                    std::vector<zetasql::FunctionSignature>{
+                                        {zetasql::types::BoolType(),
+                                         {zetasql::types::StringType()},
+                                         /*context_ptr=*/nullptr}})});
   }
 
   absl::StatusOr<const zetasql::Function*> GetFunction(
       const std::string& name) const override {
-    auto it = googlesql_builtin_functions_.find(name);
-    if (it != googlesql_builtin_functions_.end()) {
+    auto it = functions_.find(name);
+    if (it != functions_.end()) {
       return it->second.get();
     } else {
       return nullptr;
@@ -87,7 +106,7 @@ class StubBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
 
   absl::Status GetFunctions(
       absl::flat_hash_set<const zetasql::Function*>* output) const override {
-    for (const auto& function_mapping : googlesql_builtin_functions_) {
+    for (const auto& function_mapping : functions_) {
       output->insert(function_mapping.second.get());
     }
     return absl::OkStatus();
@@ -105,7 +124,7 @@ class StubBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
   // Each PostgresExtendedFunction must have its own implementation in the
   // storage engine or map to a ZetaSQL function in this set.
   absl::flat_hash_map<std::string, std::unique_ptr<zetasql::Function>>
-      googlesql_builtin_functions_;
+      functions_;
 };
 
 }  // namespace postgres_translator

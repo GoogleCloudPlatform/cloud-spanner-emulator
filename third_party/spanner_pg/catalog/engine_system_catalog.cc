@@ -57,6 +57,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
+#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "absl/synchronization/mutex.h"
@@ -187,14 +188,28 @@ const PostgresTypeMapping* EngineSystemCatalog::GetTypeFromReverseMapping(
 absl::Status EngineSystemCatalog::GetFunction(
     const std::string& name, const zetasql::Function** function,
     const FindOptions& options) {
-  *function = GetFunction(name);
+  std::vector<absl::string_view> name_path = absl::StrSplit(name, '.');
+  absl::string_view namespace_name, function_name;
+  if (name_path.size() > 2) {
+    // PG doesn't support nested namespaces.
+    *function = nullptr;
+    return absl::OkStatus();
+  } else if (name_path.size() == 2) {
+    namespace_name = name_path[0];
+    function_name = name_path[1];
+  } else {
+    namespace_name = "pg_catalog";
+    function_name = name_path[0];
+  }
+  *function = GetFunction(namespace_name, function_name);
   return absl::OkStatus();
 }
 
 const PostgresExtendedFunction* EngineSystemCatalog::GetFunction(
-    const std::string& name) const {
-  auto it = engine_functions_.find(name);
-  if (it != engine_functions_.end()) {
+    absl::string_view namespace_name, absl::string_view function_name) const {
+  if (auto it = engine_functions_.find(std::make_pair(
+          std::string(namespace_name), std::string(function_name)));
+      it != engine_functions_.end()) {
     return it->second.get();
   } else {
     return nullptr;
@@ -268,8 +283,14 @@ EngineSystemCatalog::GetFunctionAndSignature(
     Oid proc_oid,
     const std::vector<zetasql::InputArgumentType>& input_argument_types,
     const zetasql::LanguageOptions& language_options) {
-  ZETASQL_ASSIGN_OR_RETURN(const char* proc_name,
-                   PgBootstrapCatalog::Default()->GetProcName(proc_oid));
+  ZETASQL_ASSIGN_OR_RETURN(const struct FormData_pg_proc* proc,
+                   PgBootstrapCatalog::Default()->GetProc(proc_oid));
+  ZETASQL_RET_CHECK_NE(proc, nullptr);
+
+  ZETASQL_ASSIGN_OR_RETURN(
+      const char* namespace_name,
+      PgBootstrapCatalog::Default()->GetNamespaceName(proc->pronamespace));
+  ZETASQL_RET_CHECK_NE(namespace_name, nullptr);
 
   // This builds a string representation of the postgres input types
   // to be used in error messages.
@@ -293,7 +314,8 @@ EngineSystemCatalog::GetFunctionAndSignature(
   std::string postgres_input_args_string = absl::StrJoin(
       postgres_input_type_names.begin(), postgres_input_type_names.end(), ", ");
 
-  const PostgresExtendedFunction* function = GetFunction(proc_name);
+  const PostgresExtendedFunction* function =
+      GetFunction(namespace_name, NameStr(proc->proname));
   if (function != nullptr) {
     ZETASQL_ASSIGN_OR_RETURN(
         const std::vector<PostgresExtendedFunctionSignature*>& signatures,
@@ -316,8 +338,9 @@ EngineSystemCatalog::GetFunctionAndSignature(
           // unsupported and requires an explicit cast on the output.
           // TODO : support explicit casting on function output.
           return absl::UnimplementedError(absl::StrCat(
-              "Postgres Function requires an explicit cast: ", "Name: ",
-              proc_name, ", ", "Oid: ", proc_oid, ", ", "Arguments: ", "(",
+              "Postgres Function requires an explicit cast: ", "Namespace: ",
+              namespace_name, "Name: ", NameStr(proc->proname), ", ",
+              "Oid: ", proc_oid, ", ", "Arguments: ", "(",
               postgres_input_args_string, ")"));
         }
 
@@ -339,7 +362,7 @@ EngineSystemCatalog::GetFunctionAndSignature(
     }
   }
   return PostgresExtendedFunction::UnsupportedFunctionError(
-      proc_name, postgres_input_args_string);
+      NameStr(proc->proname), postgres_input_args_string);
 }
 
 absl::StatusOr<FunctionAndSignature>
@@ -521,7 +544,7 @@ absl::StatusOr<bool> EngineSystemCatalog::IsSetReturningFunction(
 
 absl::Status EngineSystemCatalog::GetFunctions(
     absl::flat_hash_set<const zetasql::Function*>* output) const {
-  for (const auto& [function_name, function] : engine_functions_) {
+  for (const auto& [_, function] : engine_functions_) {
     for (const std::unique_ptr<PostgresExtendedFunctionSignature>& signature :
          function->GetPostgresSignatures()) {
       // If there isn't a mapped function, the signature is unsupported and
@@ -552,9 +575,10 @@ absl::Status EngineSystemCatalog::GetFunctions(
 
 absl::StatusOr<std::vector<FunctionSigPair>>
 EngineSystemCatalog::GetFunctionSigPairs(
+    absl::string_view function_namespace,
     absl::string_view function_name) const {
   const PostgresExtendedFunction* pg_function =
-      GetFunction(std::string(function_name));
+      GetFunction(function_namespace, function_name);
   ZETASQL_RET_CHECK_NE(pg_function, nullptr) << "Function not found: " << function_name;
   std::vector<FunctionSigPair> signatures;
   for (const std::unique_ptr<PostgresExtendedFunctionSignature>& signature :
@@ -604,7 +628,7 @@ absl::Status EngineSystemCatalog::GetProcedures(
 
 absl::Status EngineSystemCatalog::GetPostgreSQLFunctions(
     absl::flat_hash_set<const PostgresExtendedFunction*>* output) const {
-  for (const auto& [function_name, function] : engine_functions_) {
+  for (const auto& [_, function] : engine_functions_) {
     output->insert(function.get());
   }
 
@@ -904,10 +928,13 @@ absl::Status EngineSystemCatalog::AddFunction(
     const PostgresFunctionArguments& function_arguments,
     const zetasql::LanguageOptions& language_options) {
   // The function should not already be in the catalog.
-  if (engine_functions_.find(function_arguments.postgres_function_name()) !=
-      engine_functions_.end()) {
+  std::pair<std::string, std::string> function_key =
+      std::make_pair(function_arguments.postgres_namespace(),
+                     function_arguments.postgres_function_name());
+  if (engine_functions_.find(function_key) != engine_functions_.end()) {
     return absl::InvalidArgumentError(
-        absl::StrCat("Function ", function_arguments.postgres_function_name(),
+        absl::StrCat("Function ", function_arguments.postgres_namespace(), ".",
+                     function_arguments.postgres_function_name(),
                      " was already added to the catalog."));
   }
 
@@ -1041,8 +1068,7 @@ absl::Status EngineSystemCatalog::AddFunction(
           function_arguments.mode(), std::move(function_signatures),
           function_query_features_names);
 
-  engine_functions_.insert(
-      {function_arguments.postgres_function_name(), std::move(function)});
+  engine_functions_.insert({function_key, std::move(function)});
 
   return absl::OkStatus();
 }

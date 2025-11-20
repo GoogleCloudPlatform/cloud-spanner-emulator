@@ -313,6 +313,7 @@ absl::StatusOr<std::string> ObjectTypeToString(ObjectType object_type) {
       return "OPERATOR FAMILY";
     case OBJECT_LOCALITY_GROUP:
       return "LOCALITY GROUP";
+    // TODO: expose when queue is implemented.
     case OBJECT_SEARCH_INDEX:
       return "SEARCH INDEX";
     case OBJECT_POLICY:

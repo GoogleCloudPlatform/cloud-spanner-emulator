@@ -151,6 +151,7 @@ struct PostgreSQLConstants {
   static constexpr char kInternalLocalityGroupStorageOptionName[] = "inflash";
   static constexpr char kInternalLocalityGroupSpillTimeSpanOptionName[] =
     "age_based_spill_policy";
+  // TODO: expose when queue is implemented.
   static constexpr absl::string_view kSpangresDefaultSequenceKindOptionName =
       "spanner.default_sequence_kind";
   static constexpr absl::string_view

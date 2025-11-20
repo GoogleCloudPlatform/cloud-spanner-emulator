@@ -285,6 +285,26 @@ TEST_P(BatchDmlTest, BatchDmlFailsInReadOnlyTxn) {
   }
 }
 
+TEST_P(BatchDmlTest, InvalidNonInitialDmlTransactionRemainsOpen) {
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+
+  auto result = client().ExecuteBatchDml(
+      txn,
+      {SqlStatement("INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27)"),
+       SqlStatement("UPDATE users SET name = 'Mark' WHERE id = 1"),
+       // Invalid Dml since table does not exist.
+       SqlStatement(
+           "INSERT INTO InvalidTable(id, name, age) VALUES (1, 'Levin', 27)")});
+  ZETASQL_EXPECT_OK(ToUtilStatus(result.status()));
+  EXPECT_EQ(result.value().stats.size(), 2);
+  EXPECT_THAT(ToUtilStatus(result.value().status),
+              StatusIs(!in_prod_env() && dialect_ == database_api::POSTGRESQL
+                           ? absl::StatusCode::kNotFound
+                           : absl::StatusCode::kInvalidArgument));
+  // Commit succeeds on same transaction because it was not rolled back.
+  ZETASQL_EXPECT_OK(CommitTransaction(txn, {}));
+}
+
 }  // namespace
 
 }  // namespace test

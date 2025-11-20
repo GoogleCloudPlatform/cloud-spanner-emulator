@@ -72,6 +72,13 @@ class InsertOnConflictDoUpdateRewriter
   const zetasql::ResolvedColumn* struct_column_holder_;
 };
 
+class InsertOnConflictToInsertOrIgnoreRewriter
+    : public zetasql::ResolvedASTDeepCopyVisitor {
+ public:
+  absl::Status VisitResolvedInsertStmt(
+      const zetasql::ResolvedInsertStmt* node) override;
+};
+
 // Resolves the conflict target from the ON CONFLICT clause.
 // Populates the conflict target key columns (either primary key columns or
 // unique index key columns) and the unique constraint name.
@@ -81,20 +88,15 @@ absl::Status ResolveConflictTarget(
     std::vector<std::string>& conflict_target_key_columns,
     std::string* conflict_target_unique_constraint_name);
 
-// This method extracts the INSERT subsection from the input SQL,
-// and rewrites it to be able to return all the rows from the INSERT statement.
+// This method extracts the INSERT subsection from the input ON CONFLICT DML,
+// and rewrites it into a INSERT OR IGNORE stmt AST.
 // For example, if the input SQL is
 // "INSERT INTO t1 (key, val) VALUES (1, 2) ON CONFLICT(c1) ...",
-// then this function will return a SQL that looks like
-// "INSERT OR IGNORE INTO t1 (key, val) VALUES (1, 2)" (in GSQL) or
-// "INSERT INTO t1 (key, val) VALUES (1, 2) ON CONFLICT(c1) DO NOTHING"
-// (in PG dialect) where key is the primary key column.
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
-BuildAndAnalyzeInsertOrIgnoreDMLToGetAllInsertRows(
-    const std::string& sql, Catalog* catalog, const Table& table,
-    zetasql::AnalyzerOptions& analyzer_options,
-    database_api::DatabaseDialect dialect, zetasql::TypeFactory* type_factory,
-    const FunctionCatalog* function_catalog);
+// then this function will return an AST equivalent to the SQL
+// "INSERT OR IGNORE INTO t1 (key, val) VALUES (1, 2)"
+absl::StatusOr<std::unique_ptr<const zetasql::ResolvedInsertStmt>>
+BuildInsertOrIgnoreStmtFromInsertOnConflictStmt(
+    const zetasql::ResolvedInsertStmt* insert_on_conflict_stmt);
 
 // Given the insert statement and insert row column information, populate the
 // column information required to build and execute the insert or update action

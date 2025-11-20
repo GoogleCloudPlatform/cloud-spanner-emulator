@@ -124,6 +124,7 @@ struct TranslationOptions {
   bool enable_search_index = true;
   // enable_locality_groups allows create/drop/alter locality groups.
   bool enable_locality_groups = true;
+  // TODO: expose when queue is implemented.
   // enable_alter_index allows translation of <ALTER INDEX>.
   bool enable_alter_index = true;
   // enable_role_based_access allows role-based access control, e.g.

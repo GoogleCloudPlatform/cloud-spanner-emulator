@@ -151,7 +151,8 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
 
   // Get the PostgresExtendedFunction by name.
   // Returns nullptr if the function is not found.
-  const PostgresExtendedFunction* GetFunction(const std::string& name) const;
+  const PostgresExtendedFunction* GetFunction(
+      absl::string_view namespace_name, absl::string_view function_name) const;
 
   // Get the builtin function by PostgresExprIdentifier.
   // Returns nullptr if the function_id is not found.
@@ -262,6 +263,7 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // for a specific function by name.
   // Output should be populated with the mapped builtin functions.
   absl::StatusOr<std::vector<FunctionSigPair>> GetFunctionSigPairs(
+      absl::string_view function_namespace,
       absl::string_view function_name) const;
 
   // GetSetReturningFunctions is used to surface the registered system Set
@@ -595,7 +597,8 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
 
   // Stores the PostgreSQL functions which are supported in this storage engine.
   // The key is the PostgreSQL function name.
-  absl::flat_hash_map<std::string, std::unique_ptr<PostgresExtendedFunction>>
+  absl::flat_hash_map<std::pair<std::string, std::string>,
+                      std::unique_ptr<PostgresExtendedFunction>>
       engine_functions_;
 
   // Stores a pointer to builtin functions that are accessed internally by this

@@ -36,6 +36,7 @@
 
 #include <array>
 #include <cstdint>
+#include <set>
 #include <string>
 
 #include "absl/algorithm/container.h"
@@ -960,14 +961,17 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
       node.removeType != OBJECT_SCHEMA && node.removeType != OBJECT_VIEW &&
       node.removeType != OBJECT_CHANGE_STREAM &&
       node.removeType != OBJECT_SEQUENCE
-      && node.removeType != OBJECT_SEARCH_INDEX &&
-      node.removeType != OBJECT_LOCALITY_GROUP) {
+      && node.removeType != OBJECT_SEARCH_INDEX
+      && node.removeType != OBJECT_LOCALITY_GROUP
+      // TODO: expose when queue is implemented.
+    ) {
     auto object_type = internal::ObjectTypeToString(node.removeType);
     const std::string error_message =
         "Only <DROP TABLE>, <DROP INDEX>, <DROP SCHEMA>, <DROP VIEW>, "
         "<DROP SEQUENCE>, "
         "<DROP SEARCH INDEX>, "
         "<DROP LOCALITY GROUP>, "
+        // TODO: expose when queue is implemented.
         "and <DROP CHANGE STREAM> statements are supported.";
     if (!object_type.ok()) {
       return UnsupportedTranslationError(error_message);
@@ -1010,6 +1014,7 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
         (SingleItemListAsNode<RangeVar, T_RangeVar>(node.objects)));
     ZETASQL_RET_CHECK(locality_group_to_drop_node->relname &&
               *locality_group_to_drop_node->relname != '\0');
+  // TODO: expose when queue is implemented.
   } else if (node.removeType != OBJECT_SCHEMA) {
     ZETASQL_ASSIGN_OR_RETURN(const List* object_to_drop_list,
                      (SingleItemListAsNode<List, T_List>(node.objects)));
@@ -1071,7 +1076,9 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
           node.removeType == OBJECT_VIEW || node.removeType == OBJECT_SCHEMA ||
           node.removeType == OBJECT_CHANGE_STREAM
           || node.removeType == OBJECT_SEARCH_INDEX ||
-          node.removeType == OBJECT_LOCALITY_GROUP)) {
+          node.removeType == OBJECT_LOCALITY_GROUP
+          // TODO: expose when queue is implemented.
+          )) {
       return UnsupportedTranslationError(
           "<IF EXISTS> is not supported by <DROP> statement.");
     }
@@ -1828,6 +1835,8 @@ absl::Status ValidateParseTreeNode(const CreateChangeStreamStmt& node,
 
   return absl::OkStatus();
 }
+
+// TODO: expose when queue is implemented.
 
 absl::Status ValidateParseTreeNode(const CreateSearchIndexStmt& node) {
   ZETASQL_RET_CHECK_EQ(node.type, T_CreateSearchIndexStmt);

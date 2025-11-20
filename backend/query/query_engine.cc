@@ -1104,14 +1104,8 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteInsertOnConflictDml(
   // 3. Extract the INSERT part of the DML and run in OR_IGNORE insert
   // mode to get *all* insert rows (new and existing).
   ZETASQL_ASSIGN_OR_RETURN(
-      auto insert_or_ignore_analyzer_output,
-      BuildAndAnalyzeInsertOrIgnoreDMLToGetAllInsertRows(
-          query.sql, &catalog, *table, analyzer_options,
-          context.schema->dialect(), type_factory_, &function_catalog_));
-
-  ZETASQL_ASSIGN_OR_RETURN(auto insert_or_ignore_stmt,
-                   ExtractValidatedResolvedStatementAndOptions(
-                       insert_or_ignore_analyzer_output.get(), context));
+      auto insert_or_ignore_stmt,
+      BuildInsertOrIgnoreStmtFromInsertOnConflictStmt(insert_statement));
 
   ZETASQL_ASSIGN_OR_RETURN(
       auto insert_or_ignore_result,

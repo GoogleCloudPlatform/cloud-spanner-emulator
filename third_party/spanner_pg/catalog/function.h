@@ -143,6 +143,7 @@ class PostgresExtendedFunction : public zetasql::Function {
       std::vector<std::unique_ptr<PostgresExtendedFunctionSignature>>
           function_signatures,
       std::vector<std::string> query_features_names = {})
+      // TODO: Consider passing full function name path here.
       : zetasql::Function(name, kPostgresGroup, mode),
         postgres_signatures_(std::move(function_signatures)),
         query_features_names_(query_features_names) {
