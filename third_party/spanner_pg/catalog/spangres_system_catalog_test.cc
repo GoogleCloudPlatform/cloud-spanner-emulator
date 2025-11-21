@@ -627,7 +627,8 @@ TEST_F(SpangresSystemCatalogTest, StringToDateCastOverride) {
 
 TEST_F(SpangresSystemCatalogTest, MinAggregateRemapTest) {
   EngineSystemCatalog* catalog = GetSpangresTestSystemCatalog();
-  const PostgresExtendedFunction* min_function = catalog->GetFunction("min");
+  const PostgresExtendedFunction* min_function =
+      catalog->GetFunction("pg_catalog", "min");
   ASSERT_NE(min_function, nullptr);
 
   static const zetasql::Type* gsql_pg_numeric =

@@ -38,9 +38,6 @@
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_replace.h"
-#include "absl/strings/str_split.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
 #include "backend/datamodel/key.h"
@@ -89,42 +86,23 @@ absl::Status InsertOnConflictDoUpdateRewriter::VisitResolvedColumnRef(
   return absl::OkStatus();
 }
 
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
-BuildAndAnalyzeInsertOrIgnoreDMLToGetAllInsertRows(
-    const std::string& sql, Catalog* catalog, const Table& table,
-    zetasql::AnalyzerOptions& analyzer_options,
-    database_api::DatabaseDialect dialect, zetasql::TypeFactory* type_factory,
-    const FunctionCatalog* function_catalog) {
-  // Split on keyword "ON CONFLICT" to get the INSERT section of the query.
-  std::vector<std::string> query_parts = absl::StrSplit(sql, "ON CONFLICT");
-  ZETASQL_RET_CHECK_EQ(query_parts.size(), 2);
-  std::string insert_dml_subpart = query_parts[0];
-  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
-    absl::StrAppend(&insert_dml_subpart, " ON CONFLICT(");
-    for (int i = 0; i < table.primary_key().size(); ++i) {
-      absl::StrAppend(&insert_dml_subpart,
-                      table.primary_key()[i]->column()->Name());
-      if (i < table.primary_key().size() - 1) {
-        absl::StrAppend(&insert_dml_subpart, ", ");
-      }
-    }
-    // Defer to OR_IGNORE translation of ON CONFLICT DO NOTHING DML in
-    // PostgreSQL.
-    analyzer_options.mutable_language()->DisableLanguageFeature(
-        zetasql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
-    absl::StrAppend(&insert_dml_subpart, ") DO NOTHING");
-    auto analyzer_output =
-        AnalyzePostgreSQL(insert_dml_subpart, catalog, analyzer_options,
-                          type_factory, function_catalog);
-    // Re-enable after the step for the rest of the execution.
-    analyzer_options.mutable_language()->EnableLanguageFeature(
-        zetasql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
-    return analyzer_output;
-  }
-  insert_dml_subpart = absl::StrReplaceAll(
-      insert_dml_subpart, {{"INSERT INTO", "INSERT OR IGNORE INTO"}});
+absl::Status InsertOnConflictToInsertOrIgnoreRewriter::VisitResolvedInsertStmt(
+    const ResolvedInsertStmt* node) {
+  ZETASQL_RETURN_IF_ERROR(CopyVisitResolvedInsertStmt(node));
+  zetasql::ResolvedInsertStmt* insert_stmt =
+      GetUnownedTopOfStack<zetasql::ResolvedInsertStmt>();
+  insert_stmt->set_on_conflict_clause(nullptr);
+  insert_stmt->set_insert_mode(ResolvedInsertStmt::OR_IGNORE);
+  return absl::OkStatus();
+}
 
-  return Analyze(insert_dml_subpart, catalog, analyzer_options, type_factory);
+absl::StatusOr<std::unique_ptr<const zetasql::ResolvedInsertStmt>>
+BuildInsertOrIgnoreStmtFromInsertOnConflictStmt(
+    const ResolvedInsertStmt* insert_on_conflict_stmt) {
+  ZETASQL_RET_CHECK_NE(insert_on_conflict_stmt->on_conflict_clause(), nullptr);
+  InsertOnConflictToInsertOrIgnoreRewriter rewriter;
+  ZETASQL_RETURN_IF_ERROR(insert_on_conflict_stmt->Accept(&rewriter));
+  return rewriter.ConsumeRootNode<zetasql::ResolvedInsertStmt>();
 }
 
 absl::Status ExtractColumnInfoAndRowsForInsertOrUpdateAction(

@@ -632,6 +632,8 @@ TEST_F(DdlTest, DisableDropSearchIndex) {
                        "<DROP SEARCH INDEX> statement is not supported."));
 }
 
+// TODO: expose when queue is implemented.
+
 TEST_F(DdlTest, DisableCreateLocalityGroup) {
   const std::string input =
       "CREATE LOCALITY GROUP lg";

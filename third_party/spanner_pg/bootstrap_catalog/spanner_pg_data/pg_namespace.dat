@@ -1,7 +1,7 @@
 [
 { oid => '50000', oid_symbol => 'SPANNER_NSP', nspname => 'spanner',
   nspacl => '_null_' },
-{ oid => '50077', oid_symbol => 'SPANNER_SYS_NSP', nspname => 'spanner_sys',
+{ oid => '75004', oid_symbol => 'SPANNER_SYS_NSP', nspname => 'spanner_sys',
   nspacl => '_null_' },
 { oid => '50080', oid_symbol => 'SPANNER_AI_NSP', nspname => 'ai',
   nspacl => '_null_' },

@@ -271,6 +271,8 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
   absl::StatusOr<std::string> PrintRenameTable(
       const google::spanner::emulator::backend::ddl::RenameTable& statement) const;
 
+  // TODO: expose when queue is implemented.
+
   absl::StatusOr<std::vector<std::string>> WrapOutput(
       absl::StatusOr<std::string> printing_result) const;
 
@@ -376,6 +378,8 @@ SpangresSchemaPrinterImpl::PrintDDLStatement(
     case google::spanner::emulator::backend::ddl::DDLStatement::kDropLocalityGroup:
       return WrapOutput(
           PrintDropLocalityGroup(statement.drop_locality_group()));
+
+    // TODO: expose when queue is implemented.
     default:
       // Ignore unsupported statements
       return StatementTranslationError("Unsupported statement");
@@ -1177,6 +1181,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropFunction(
                    << static_cast<int64_t>(statement.function_kind());
 }
 
+// TODO: expose when queue is implemented.
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintRenameTable(
     const google::spanner::emulator::backend::ddl::RenameTable& statement) const {
   std::string output;

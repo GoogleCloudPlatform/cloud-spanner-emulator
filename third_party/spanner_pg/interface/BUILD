@@ -87,6 +87,7 @@ cc_library(
         ":parser_interface",
         ":pg_evaluators_stubs",  # buildcleaner: keep
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/flags:parse",  # buildcleaner: keep
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",

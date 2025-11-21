@@ -366,7 +366,7 @@ TEST_F(EngineSystemCatalogTest, FunctionSignaturesByIdx) {
 
   const PostgresExtendedFunction* function = nullptr;
   // Look at abs, which has mapped googlesql functions.
-  function = catalog->GetFunction("abs");
+  function = catalog->GetFunction("pg_catalog", "abs");
   ASSERT_NE(function, nullptr);
   ASSERT_EQ(function->mode(), zetasql::Function::SCALAR);
   ASSERT_EQ(function->NumSignatures(), 2);
@@ -669,7 +669,8 @@ TEST_F(EngineSystemCatalogTest, AnyOidAggregateFunction) {
                        TestSystemCatalog::GetTestCatalog());
 
   ZETASQL_ASSERT_OK(catalog->AddBoolAndFunction());
-  const PostgresExtendedFunction* function = catalog->GetFunction("bool_and");
+  const PostgresExtendedFunction* function =
+      catalog->GetFunction("pg_catalog", "bool_and");
   ASSERT_NE(function, nullptr);
   ASSERT_EQ(function->mode(), zetasql::Function::AGGREGATE);
   ASSERT_EQ(function->NumSignatures(), 1);

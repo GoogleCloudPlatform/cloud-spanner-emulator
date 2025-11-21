@@ -107,6 +107,7 @@ absl::Status ValidateParseTreeNode(const ViewStmt& node);
 absl::Status ValidateParseTreeNode(const CreateChangeStreamStmt& node,
                                    const TranslationOptions& options);
 absl::Status ValidateParseTreeNode(const AlterChangeStreamStmt& node);
+// TODO: expose when queue is implemented.
 absl::Status ValidateParseTreeNode(const CreateSearchIndexStmt& node);
 absl::Status ValidateParseTreeNode(const CreateRoleStmt& node);
 absl::Status ValidateParseTreeNode(const DropRoleStmt& node);
