@@ -1924,6 +1924,21 @@ TEST(ParseAlterTable, CanParseAddTokenListColumn) {
                   )pb")));
 }
 
+TEST(ParseAlterTable, CanParseAddUuidColumn) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
+                    ALTER TABLE Albums ADD COLUMN Name_UUID UUID
+                  )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            alter_table {
+              table_name: "Albums"
+              add_column { column { column_name: "Name_UUID" type: UUID } }
+            }
+          )pb")));
+}
+
 TEST(ParseAlterTable, CanParseAddColumnNoColumnName) {
   EXPECT_THAT(ParseDDLStatement("ALTER TABLE Users ADD COLUMN STRING(MAX)"),
               StatusIs(StatusCode::kInvalidArgument));
@@ -8022,6 +8037,46 @@ TEST(ParseCreateTable, CanParseCreateTableWithInterval) {
                         }
                       }
                       primary_key { key_name: "K" }
+                    }
+                  )pb")));
+}
+
+TEST(ParseCreateTable, CanParseCreateTableWithUUID) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE Albums (
+      Id UUID NOT NULL,
+      Value UUID,
+      UUID UUID,
+      UuidArray ARRAY<UUID>,
+      UuidStruct STRUCT<UuidVal UUID>
+    ) PRIMARY KEY (Id)
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "Albums"
+                      column { column_name: "Id" type: UUID not_null: true }
+                      column { column_name: "Value" type: UUID }
+                      column { column_name: "UUID" type: UUID }
+                      column {
+                        column_name: "UuidArray"
+                        type: ARRAY
+                        array_subtype { type: UUID }
+                      }
+                      column {
+                        column_name: "UuidStruct"
+                        type: STRUCT
+                        type_definition {
+                          type: STRUCT
+                          struct_descriptor {
+                            field {
+                              name: "UuidVal"
+                              type { type: UUID }
+                            }
+                          }
+                        }
+                      }
+                      primary_key { key_name: "Id" }
                     }
                   )pb")));
 }

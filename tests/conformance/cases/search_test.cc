@@ -1484,20 +1484,22 @@ class TokenizeNumberParametersTest
          .expected_error =
              HasSubstr("TOKENIZE_NUMBER: tree_base must be in the range "
                        "[2, 10], got: 11")},
-        {.query = "SELECT TOKENIZE_NUMBER(2e255, min=>CAST('inf' AS FLOAT64))",
+        {.query = "SELECT TOKENIZE_NUMBER(2e255, algorithm=>'logtree', "
+                  "min=>CAST('inf' AS FLOAT64))",
          .expected_error =
              HasSubstr("TOKENIZE_NUMBER: min must be finite, got: inf")},
-        {.query = "SELECT TOKENIZE_NUMBER(2e255, max=>CAST('nan' AS FLOAT64))",
+        {.query = "SELECT TOKENIZE_NUMBER(2e255, algorithm=>'logtree', "
+                  "max=>CAST('nan' AS FLOAT64))",
          .expected_error =
              HasSubstr("TOKENIZE_NUMBER: max must be finite, got: nan")},
-        {.query = "SELECT TOKENIZE_NUMBER(2, min=>5, max=>-1)",
-         .expected_error = HasSubstr(
-             "TOKENIZE_NUMBER: min must be less than max, got: 5 and -1")},
-        {.query = "SELECT TOKENIZE_NUMBER(2e255, granularity=>CAST('inf' AS "
-                  "FLOAT64))",
+        {.query = "SELECT TOKENIZE_NUMBER(2e255, algorithm=>'logtree', "
+                  "granularity=>CAST('inf' AS FLOAT64))",
          .expected_error =
              HasSubstr("TOKENIZE_NUMBER: granularity must be finite and "
                        "positive, got: inf")},
+        {.query = "SELECT TOKENIZE_NUMBER(2, min=>5, max=>-1)",
+         .expected_error = HasSubstr(
+             "TOKENIZE_NUMBER: min must be less than max, got: 5 and -1")},
         {.query = "SELECT TOKENIZE_NUMBER(5, min=>1, max=>10, granularity=>11)",
          .expected_error = AnyOf(
              HasSubstr(

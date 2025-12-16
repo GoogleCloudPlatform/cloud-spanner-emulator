@@ -1,0 +1,45 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE Users(
+  UserId     INT64 NOT NULL,
+  Name       STRING(MAX),
+  Age        INT64,
+) PRIMARY KEY (UserId);
+
+CREATE TABLE Accounts(
+  UserId     INT64 NOT NULL,
+  AccountId  INT64 NOT NULL,
+  Balance    INT64,
+) PRIMARY KEY (UserId,AccountId),
+INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+
+CREATE CHANGE STREAM Stream1 FOR ALL OPTIONS (
+exclude_insert = true );
+
+CREATE CHANGE STREAM Stream2 FOR ALL OPTIONS (
+exclude_update = true );
+
+CREATE CHANGE STREAM Stream3 FOR ALL OPTIONS (
+exclude_delete = true );
+===
+@Dialect=POSTGRESQL
+CREATE TABLE users(
+  userid     int8 PRIMARY KEY,
+  name       text,
+  age        int8
+);
+
+CREATE TABLE accounts(
+  userid     int8 NOT NULL,
+  accountid  int8 NOT NULL,
+  balance    int8,
+  PRIMARY KEY (userid, accountid)
+) INTERLEAVE IN PARENT users ON DELETE CASCADE;
+
+CREATE CHANGE STREAM stream1 FOR ALL WITH (
+exclude_insert = true );
+
+CREATE CHANGE STREAM stream2 FOR ALL WITH (
+exclude_update = true );
+
+CREATE CHANGE STREAM stream3 FOR ALL WITH (
+exclude_delete = true );

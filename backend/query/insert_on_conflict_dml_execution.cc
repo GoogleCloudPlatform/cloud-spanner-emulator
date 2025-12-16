@@ -523,6 +523,29 @@ BuildFromArrayScanClause(
       /*is_outer=*/false);
 }
 
+inline std::unique_ptr<const zetasql::ResolvedExpr>
+BuildExprForColumnValueFromInsertRow(
+    const zetasql::ResolvedColumn& array_element_column,
+    const std::pair<const zetasql::Type*, int>& excluded_column_info) {
+  auto array_element_column_ref = zetasql::MakeResolvedColumnRef(
+      array_element_column.type(), array_element_column, false);
+  auto get_struct_field = zetasql::MakeResolvedGetStructField(
+      excluded_column_info.first, std::move(array_element_column_ref),
+      excluded_column_info.second);
+  return std::move(get_struct_field);
+}
+
+inline std::unique_ptr<const zetasql::ResolvedExpr>
+BuildExprForColumnValueFromTableScan(
+    absl::flat_hash_map<std::string, zetasql::ResolvedColumn>&
+        table_scan_column_name_to_type_map,
+    const std::string& key_column_name) {
+  auto column_ref = zetasql::MakeResolvedColumnRef(
+      table_scan_column_name_to_type_map[key_column_name].type(),
+      table_scan_column_name_to_type_map[key_column_name], false);
+  return std::move(column_ref);
+}
+
 absl::StatusOr<std::unique_ptr<const zetasql::ResolvedUpdateStmt>>
 BuildUpdateDMLForExistingRows(
     const zetasql::ResolvedInsertStmt* insert_stmt,
@@ -590,18 +613,31 @@ BuildUpdateDMLForExistingRows(
     std::pair<const zetasql::Type*, int> excluded_column_info =
         struct_field_info_by_name[key_column_name];
 
-    auto array_element_column_ref = zetasql::MakeResolvedColumnRef(
-        array_element_column.type(), array_element_column, false);
-    auto get_struct_field = zetasql::MakeResolvedGetStructField(
-        excluded_column_info.first, std::move(array_element_column_ref),
-        excluded_column_info.second);
+    // If the key value in insert row is NULL then establish equality
+    // by checking that the table row value is also NULL using `IS NULL`
+    // function. Otherwise build regular equality expression using `=` function:
+    // IF(excluded.<key_column_name> IS NULL,
+    //    <key_column_name> IS NULL,
+    //    excluded.<key_column_name> = <key_column_name>)
+    ZETASQL_ASSIGN_OR_RETURN(
+        auto if_condition,
+        function_builder.IsNull(BuildExprForColumnValueFromInsertRow(
+            array_element_column, excluded_column_info)));
+    ZETASQL_ASSIGN_OR_RETURN(
+        auto if_true_expr,
+        function_builder.IsNull(BuildExprForColumnValueFromTableScan(
+            table_scan_column_name_to_type_map, key_column_name)));
+    ZETASQL_ASSIGN_OR_RETURN(
+        auto if_false_expr,
+        function_builder.Equal(
+            BuildExprForColumnValueFromInsertRow(array_element_column,
+                                                 excluded_column_info),
+            BuildExprForColumnValueFromTableScan(
+                table_scan_column_name_to_type_map, key_column_name)));
     ZETASQL_ASSIGN_OR_RETURN(
         auto predicate,
-        function_builder.Equal(
-            zetasql::MakeResolvedColumnRef(
-                table_scan_column_name_to_type_map[key_column_name].type(),
-                table_scan_column_name_to_type_map[key_column_name], false),
-            std::move(get_struct_field)));
+        function_builder.If(std::move(if_condition), std::move(if_true_expr),
+                            std::move(if_false_expr)));
     ZETASQL_VLOG(1) << "Key join predicate: " << predicate->DebugString();
     where_expr_predicates.push_back(std::move(predicate));
   }

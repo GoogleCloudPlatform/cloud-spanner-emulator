@@ -92,6 +92,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -128,6 +129,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -164,6 +166,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -192,6 +195,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -228,6 +232,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -264,6 +269,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -300,6 +306,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -359,6 +366,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -661,6 +669,34 @@ functions {
     }
     deprecated: false
   }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
+        oid: 2950
+        name: "uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 2950
+        name: "uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "uuid_eq"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -963,6 +999,34 @@ functions {
     }
     deprecated: false
   }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
+        oid: 2950
+        name: "uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 2950
+        name: "uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "uuid_gt"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -1265,6 +1329,34 @@ functions {
     }
     deprecated: false
   }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
+        oid: 2950
+        name: "uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 2950
+        name: "uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "uuid_ge"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -1567,6 +1659,34 @@ functions {
     }
     deprecated: false
   }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
+        oid: 2950
+        name: "uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 2950
+        name: "uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "uuid_lt"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -1869,6 +1989,34 @@ functions {
     }
     deprecated: false
   }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
+        oid: 2950
+        name: "uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 2950
+        name: "uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "uuid_le"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -1936,6 +2084,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -2022,6 +2171,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -2324,6 +2474,34 @@ functions {
     }
     deprecated: false
   }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
+        oid: 2950
+        name: "uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 2950
+        name: "uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "uuid_ne"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -2383,6 +2561,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -2469,6 +2648,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -2550,6 +2730,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -2647,6 +2828,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -2675,6 +2857,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -2981,6 +3164,34 @@ functions {
     }
     deprecated: false
   }
+  signatures {
+    return_type {
+      oid: 2951
+      name: "_uuid"
+    }
+    arguments {
+      type {
+        oid: 2951
+        name: "_uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 2951
+        name: "_uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "array_cat"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3009,6 +3220,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3037,6 +3249,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3073,6 +3286,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3110,6 +3324,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3139,6 +3354,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3190,6 +3406,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3223,6 +3440,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3251,6 +3469,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3316,6 +3535,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3336,6 +3556,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3405,6 +3626,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3468,6 +3690,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3567,6 +3790,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3632,6 +3856,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3660,6 +3885,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3709,6 +3935,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3738,6 +3965,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3767,6 +3995,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3814,6 +4043,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3835,6 +4065,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3864,6 +4095,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3892,6 +4124,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3921,6 +4154,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3950,6 +4184,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -3979,6 +4214,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4007,6 +4243,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4054,6 +4291,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4082,6 +4320,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4110,6 +4349,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4138,6 +4378,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4209,6 +4450,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4264,6 +4506,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4333,6 +4576,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4400,6 +4644,50 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
+}
+functions {
+  mapped_name_path {
+    name_path: "new_uuid"
+  }
+  postgresql_name_paths {
+    name_path: "pg"
+    name_path: "gen_random_uuid"
+  }
+  signatures {
+    return_type {
+      oid: 2950
+      name: "uuid"
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "gen_random_uuid"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
+}
+functions {
+  mapped_name_path {
+    name_path: "pending_commit_timestamp"
+  }
+  postgresql_name_paths {
+    name_path: "spanner"
+    name_path: "pending_commit_timestamp"
+  }
+  signatures {
+    return_type {
+      oid: 1184
+      name: "timestamptz"
+    }
+    oid: 50005
+    postgresql_name_paths {
+      name_path: "spanner"
+      name_path: "pending_commit_timestamp"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4439,6 +4727,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4478,6 +4767,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4517,6 +4807,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4556,6 +4847,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4595,6 +4887,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -4837,6 +5130,36 @@ functions {
     }
     deprecated: false
   }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
+        oid: 2951
+        name: "_uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_values"
+    }
+    arguments {
+      type {
+        oid: 2951
+        name: "_uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "arraycontained"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -5079,6 +5402,36 @@ functions {
     }
     deprecated: false
   }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
+        oid: 2951
+        name: "_uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    arguments {
+      type {
+        oid: 2951
+        name: "_uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_values"
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "arraycontains"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -5386,6 +5739,34 @@ functions {
     }
     deprecated: false
   }
+  signatures {
+    return_type {
+      oid: 20
+      name: "int8"
+    }
+    arguments {
+      type {
+        oid: 2951
+        name: "_uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+        name: "int8"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "array_length"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -5628,6 +6009,36 @@ functions {
     }
     deprecated: false
   }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
+        oid: 2951
+        name: "_uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    arguments {
+      type {
+        oid: 2951
+        name: "_uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_values"
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "arrayoverlap"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -5676,6 +6087,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -5983,6 +6395,34 @@ functions {
     }
     deprecated: false
   }
+  signatures {
+    return_type {
+      oid: 20
+      name: "int8"
+    }
+    arguments {
+      type {
+        oid: 2951
+        name: "_uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+        name: "int8"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "array_upper"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6012,6 +6452,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6041,6 +6482,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6070,6 +6512,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6099,6 +6542,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6128,6 +6572,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6249,6 +6694,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6297,6 +6743,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6326,6 +6773,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6372,6 +6820,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6409,6 +6858,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6446,6 +6896,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6483,6 +6934,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6555,6 +7007,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6619,6 +7072,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6656,6 +7110,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6693,6 +7148,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6730,6 +7186,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6767,6 +7224,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6804,6 +7262,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6841,6 +7300,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6878,6 +7338,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6915,6 +7376,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6952,6 +7414,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -6981,6 +7444,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7010,6 +7474,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7052,6 +7517,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7102,6 +7568,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7139,6 +7606,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7176,6 +7644,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7213,6 +7682,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7277,6 +7747,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7314,6 +7785,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7351,6 +7823,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7388,6 +7861,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7425,6 +7899,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7484,6 +7959,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7513,6 +7989,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7572,6 +8049,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7641,6 +8119,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7670,6 +8149,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7730,6 +8210,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7759,6 +8240,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7788,6 +8270,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7817,6 +8300,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7909,6 +8393,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7938,6 +8423,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7967,6 +8453,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -7996,6 +8483,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -8068,6 +8556,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -8140,6 +8629,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -8177,6 +8667,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -8214,6 +8705,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -8275,6 +8767,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -8336,6 +8829,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -8373,6 +8867,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -8545,6 +9040,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -8582,6 +9078,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -8808,6 +9305,25 @@ functions {
     }
     arguments {
       type {
+        oid: 2950
+        name: "uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "to_jsonb"
+    }
+    deprecated: false
+  }
+  signatures {
+    return_type {
+      oid: 3802
+      name: "jsonb"
+    }
+    arguments {
+      type {
         oid: 1000
         name: "_bool"
       }
@@ -9017,6 +9533,25 @@ functions {
     }
     arguments {
       type {
+        oid: 2951
+        name: "_uuid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "to_jsonb"
+    }
+    deprecated: false
+  }
+  signatures {
+    return_type {
+      oid: 3802
+      name: "jsonb"
+    }
+    arguments {
+      type {
         oid: 26
         name: "oid"
       }
@@ -9048,6 +9583,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9085,6 +9621,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9122,6 +9659,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9162,6 +9700,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9198,6 +9737,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9242,6 +9782,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9278,6 +9819,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9322,6 +9864,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9350,6 +9893,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9378,6 +9922,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9449,6 +9994,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9504,6 +10050,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9586,6 +10133,16 @@ functions {
       name: "options"
       default_value: "null::jsonb"
     }
+    arguments {
+      type {
+        oid: 25
+        name: "text"
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "dictionary"
+      default_value: "null::text"
+    }
     oid: 50058
     postgresql_name_paths {
       name_path: "spanner"
@@ -9593,6 +10150,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9652,6 +10210,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9724,6 +10283,16 @@ functions {
       name: "enhance_query_options"
       default_value: "null::jsonb"
     }
+    arguments {
+      type {
+        oid: 25
+        name: "text"
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "dictionary"
+      default_value: "null::text"
+    }
     oid: 50033
     postgresql_name_paths {
       name_path: "spanner"
@@ -9731,6 +10300,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9800,6 +10370,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9859,6 +10430,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9887,6 +10459,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9915,6 +10488,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9943,6 +10517,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -9971,6 +10546,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10063,6 +10639,16 @@ functions {
       name: "enhance_query_options"
       default_value: "null::jsonb"
     }
+    arguments {
+      type {
+        oid: 25
+        name: "text"
+      }
+      cardinality: OPTIONAL
+      named_argument_kind: NAMED_ONLY
+      name: "dictionary"
+      default_value: "null::text"
+    }
     oid: 50059
     postgresql_name_paths {
       name_path: "spanner"
@@ -10070,6 +10656,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10099,6 +10686,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10127,6 +10715,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10163,6 +10752,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10192,6 +10782,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10228,6 +10819,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10373,6 +10965,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10401,6 +10994,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10450,6 +11044,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10499,6 +11094,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10527,6 +11123,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10576,6 +11173,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10606,6 +11204,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10717,6 +11316,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10747,6 +11347,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10858,6 +11459,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -10958,6 +11560,7 @@ functions {
     }
     deprecated: true
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -11149,6 +11752,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -11179,6 +11783,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -11261,6 +11866,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -11316,6 +11922,7 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 functions {
   mapped_name_path {
@@ -11344,5 +11951,6 @@ functions {
     }
     deprecated: false
   }
+  mode: SCALAR
 }
 

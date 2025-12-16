@@ -262,6 +262,17 @@ transformExprRecurse(ParseState *pstate, Node *expr)
 				n->arg = (Expr *) transformExprRecurse(pstate, (Node *) n->arg);
 				/* the argument can be any type, so don't coerce it */
 				n->argisrow = type_is_rowtype(exprType((Node *) n->arg));
+
+				// SPANGRES BEGIN
+				// Coerce non-row UNKNOWNOID types to TEXTOID as there is no way to
+				// resolve the type after this point and elsewhere the parser defaults
+				// to TEXTOID for UNKNOWNOID.
+				if (ShouldCoerceUnknownLiterals() && !n->argisrow &&
+						exprType((Node *) n->arg) == UNKNOWNOID)
+					n->arg = (Expr *) coerce_to_common_type(
+						pstate, (Node *) n->arg, TEXTOID, "NULLTEST");
+				// SPANGRES END
+
 				result = expr;
 				break;
 			}

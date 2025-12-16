@@ -559,8 +559,8 @@ absl::Status QueryValidator::VisitResolvedLiteral(
     const zetasql::ResolvedLiteral* node) {
   if (node->type()->IsArray() &&
       node->type()->AsArray()->element_type()->IsStruct() &&
-      node->value().is_empty_array()) {
-    return error::UnsupportedArrayConstructorSyntaxForEmptyStructArray();
+      node->value().is_null()) {
+    return error::UnsupportedArrayConstructorSyntaxForNullValuedStructArray();
   }
 
   return DefaultVisit(node);

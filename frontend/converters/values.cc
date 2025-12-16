@@ -341,6 +341,21 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
       return zetasql::values::Interval(interval_value.value());
     }
 
+    case zetasql::TypeKind::TYPE_UUID: {
+      if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
+        return error::ValueProtoTypeMismatch(value_pb.DebugString(),
+                                             type->DebugString());
+      }
+
+      absl::StatusOr<zetasql::UuidValue> uuid_value =
+          zetasql::UuidValue::FromString(value_pb.string_value());
+      if (!uuid_value.ok()) {
+        return error::CouldNotParseStringAsUuid(value_pb.string_value(),
+                                                uuid_value.status().message());
+      }
+      return zetasql::values::Uuid(uuid_value.value());
+    }
+
     case zetasql::TypeKind::TYPE_ARRAY: {
       if (value_pb.kind_case() != google::protobuf::Value::kListValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
@@ -583,6 +598,12 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
             _ << "\nWhen encoding struct element #" << i << ": "
               << value.field(i).DebugString() << " in " << value.DebugString());
       }
+      break;
+    }
+
+    case zetasql::TypeKind::TYPE_UUID: {
+      ZETASQL_ASSIGN_OR_RETURN(zetasql::UuidValue uuid_value, value.uuid_value());
+      value_pb.set_string_value(uuid_value.ToString());
       break;
     }
 

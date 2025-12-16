@@ -73,6 +73,17 @@ Node* PlaceHolderNode() {
   return reinterpret_cast<Node*>(a_const);
 }
 
+// Return an Expr.
+// The value of this Expr is unspecified.
+// Intended for testing,
+// where you need a placeholder Expr value and you don't care what it is.
+Expr* PlaceHolderExpr() {
+  A_Const* a_const = makeNode(A_Const);
+  a_const->val.sval = *makeString(pstrdup("PlaceHolder Test Expr"));
+  a_const->location = 1;
+  return reinterpret_cast<Expr*>(a_const);
+}
+
 using SerializationDeserializationTest = ValidMemoryContext;
 
 TEST_F(SerializationDeserializationTest, RawStmt) {

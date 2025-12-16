@@ -14,6 +14,10 @@
 // limitations under the License.
 //
 
+#include "google/spanner/admin/database/v1/common.pb.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -25,22 +29,29 @@ namespace {
 
 using zetasql_base::testing::StatusIs;
 
-class DeleteRangeTest : public DatabaseTest {
+class DeleteRangeTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
   absl::Status SetUpDatabase() override {
-    return SetSchema({R"(
-      CREATE TABLE Users(
-        ShardID  INT64 NOT NULL,
-        UserID   INT64,
-        ClassID  STRING(MAX),
-        Name     STRING(MAX),
-        Age      INT64
-      ) PRIMARY KEY (ShardID, UserID DESC, ClassID)
-    )"});
+    return SetSchemaFromFile("delete_range.test");
   }
 };
 
-TEST_F(DeleteRangeTest, CannotDeleteRangeWithMultipleDifferingKeyParts) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectDeleteRangeTest, DeleteRangeTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<DeleteRangeTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(DeleteRangeTest, CannotDeleteRangeWithMultipleDifferingKeyParts) {
   // Insert a few rows.
   ZETASQL_EXPECT_OK(Insert("Users", {"ShardID", "UserID", "ClassID", "Name", "Age"},
                    {1, 2, "New", "John", 21}));

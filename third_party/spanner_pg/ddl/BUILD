@@ -209,6 +209,8 @@ cc_library(
         "//third_party/spanner_pg/util:pg_list_iterators",
         "//third_party/spanner_pg/util:postgres",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

@@ -1632,16 +1632,14 @@ get_func_namespace(Oid funcid)
 Oid
 get_func_rettype(Oid funcid)
 {
-	HeapTuple	tp;
-	Oid			result;
-
-	tp = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for function %u", funcid);
-
-	result = ((Form_pg_proc) GETSTRUCT(tp))->prorettype;
-	ReleaseSysCache(tp);
-	return result;
+	// SPANGRES BEGIN
+	const FormData_pg_proc* proc_data = GetProcByOid(funcid);
+	if (proc_data == NULL) {
+		elog(ERROR, "catalog lookup failed for function %u", funcid);
+	} else {
+		return proc_data->prorettype;
+	}
+	// SPANGRES END
 }
 
 /*
@@ -1791,16 +1789,14 @@ func_parallel(Oid funcid)
 char
 get_func_prokind(Oid funcid)
 {
-	HeapTuple	tp;
-	char		result;
-
-	tp = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for function %u", funcid);
-
-	result = ((Form_pg_proc) GETSTRUCT(tp))->prokind;
-	ReleaseSysCache(tp);
-	return result;
+	// SPANGRES BEGIN
+	const FormData_pg_proc* proc_data = GetProcByOid(funcid);
+	if (proc_data == NULL) {
+		elog(ERROR, "catalog lookup failed for function %u", funcid);
+	} else {
+		return proc_data->prokind;
+	}
+	// SPANGRES END
 }
 
 /*

@@ -36,7 +36,6 @@
 #include <string_view>
 #include <vector>
 
-#include "zetasql/public/function.h"
 #include "zetasql/public/function.pb.h"
 #include "zetasql/public/function_signature.h"
 #include "zetasql/public/types/type.h"
@@ -196,12 +195,12 @@ SpangresFunctionMapper::ToPostgresFunctionArguments(
 
   std::string_view postgres_function_name = postgresql_name_path[1];
   std::string mapped_function_name = absl::StrJoin(mapped_name_path, ".");
+  zetasql::FunctionEnums::Mode mode = function.mode();
   std::string_view postgres_function_namespace =
       PostgresNamespaceFrom(postgresql_name_path[0]);
   std::vector<std::string> query_features;
   result.push_back(PostgresFunctionArguments(
-      postgres_function_name, mapped_function_name, pg_signatures,
-      zetasql::Function::SCALAR,  // Only Scalar functions are supported
+      postgres_function_name, mapped_function_name, pg_signatures, mode,
       postgres_function_namespace, query_features));
 
   return result;

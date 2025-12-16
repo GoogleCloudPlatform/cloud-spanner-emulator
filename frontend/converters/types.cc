@@ -77,6 +77,11 @@ absl::Status TypeFromProto(
       return absl::OkStatus();
     }
 
+    case google::spanner::v1::TypeCode::UUID: {
+      *type = factory->get_uuid();
+      return absl::OkStatus();
+    }
+
     case google::spanner::v1::TypeCode::FLOAT64: {
       *type = factory->get_double();
       return absl::OkStatus();
@@ -193,6 +198,11 @@ absl::Status TypeToProto(const zetasql::Type* type,
 
     case zetasql::TYPE_FLOAT: {
       type_pb->set_code(google::spanner::v1::TypeCode::FLOAT32);
+      return absl::OkStatus();
+    }
+
+    case zetasql::TYPE_UUID: {
+      type_pb->set_code(google::spanner::v1::TypeCode::UUID);
       return absl::OkStatus();
     }
 

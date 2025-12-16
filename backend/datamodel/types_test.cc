@@ -42,6 +42,7 @@ class TypesTest : public ::testing::Test {
         type_factory_.get_bytes(),     type_factory_.get_date(),
         type_factory_.get_timestamp(), type_factory_.get_numeric(),
         type_factory_.get_json(),      type_factory_.get_float(),
+        type_factory_.get_uuid(),
     };
   }
 

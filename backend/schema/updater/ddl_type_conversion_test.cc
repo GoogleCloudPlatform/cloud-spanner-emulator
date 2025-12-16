@@ -487,6 +487,55 @@ TEST_F(DDLColumnTypeToGoogleSqlTypeTest, StructOfInterval) {
               test::EqualsProto(struct_type));
 }
 
+TEST_F(DDLColumnTypeToGoogleSqlTypeTest, Uuid) {
+  auto ddl_type = MakeColumnDefinitionForType(ddl::ColumnDefinition::UUID);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* converted_type,
+                       DDLColumnTypeToGoogleSqlType(ddl_type, &type_factory_));
+  EXPECT_TRUE(converted_type->Equals(type_factory_.get_uuid()));
+  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(converted_type),
+              test::EqualsProto(ddl_type));
+}
+
+TEST_F(DDLColumnTypeToGoogleSqlTypeTest, ArrayOfUuid) {
+  auto array_type =
+      MakeColumnDefinitionForArrayType(ddl::ColumnDefinition::UUID);
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      const zetasql::Type* converted_type,
+      DDLColumnTypeToGoogleSqlType(array_type, &type_factory_));
+
+  const zetasql::Type* googlesql_array_type;
+  ZETASQL_ASSERT_OK(type_factory_.MakeArrayType(type_factory_.get_uuid(),
+                                        &googlesql_array_type));
+  EXPECT_TRUE(converted_type->Equals(googlesql_array_type));
+  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(converted_type),
+              test::EqualsProto(array_type));
+}
+
+TEST_F(DDLColumnTypeToGoogleSqlTypeTest, StructOfUuid) {
+  ddl::ColumnDefinition struct_type = PARSE_TEXT_PROTO(R"pb(
+    type: STRUCT
+    type_definition {
+      type: STRUCT
+      struct_descriptor {
+        field {
+          name: "foo"
+          type { type: UUID }
+        }
+      }
+    }
+  )pb");
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      const zetasql::Type* converted_type,
+      DDLColumnTypeToGoogleSqlType(struct_type, &type_factory_));
+
+  const zetasql::Type* googlesql_struct_type;
+  ZETASQL_ASSERT_OK(type_factory_.MakeStructType(
+      {{"foo", zetasql::types::UuidType()}}, &googlesql_struct_type));
+  EXPECT_TRUE(converted_type->Equals(googlesql_struct_type));
+  EXPECT_THAT(GoogleSqlTypeToDDLColumnType(converted_type),
+              test::EqualsProto(struct_type));
+}
+
 TEST_F(DDLColumnTypeToGoogleSqlTypeTest, InvalidGoogleSqlType) {
   ddl::ColumnDefinition unknown_type;
   unknown_type.set_type(ddl::ColumnDefinition::NONE);

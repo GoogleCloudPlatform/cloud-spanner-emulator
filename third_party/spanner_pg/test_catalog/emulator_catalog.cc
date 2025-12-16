@@ -190,6 +190,9 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
       .set_hidden(true)
       .build();
 
+  std::unique_ptr<const Column> uuid_value =
+      column_builder("uuid_value", tb.get(), type_factory.get_uuid()).build();
+
   std::unique_ptr<const KeyColumn> int64_value_primary =
       KeyColumn::Builder().set_column(int64_value.get()).build();
 
@@ -205,6 +208,7 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
           .add_column(jsonb_value.get())
           .add_column(float_value.get())
           .add_column(tokenlist_value.get())
+          .add_column(uuid_value.get())
           .add_key_column(int64_value_primary.get())
           .build();
   graph->Add(std::move(int64_value));
@@ -218,6 +222,7 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
   graph->Add(std::move(jsonb_value));
   graph->Add(std::move(float_value));
   graph->Add(std::move(tokenlist_value));
+  graph->Add(std::move(uuid_value));
   graph->Add(std::move(int64_value_primary));
   graph->Add(std::move(table));
 }
@@ -238,6 +243,7 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
   //       jsonb_array ARRAY<PG.JSONB>,
   //       float_array ARRAY<FLOAT>,
   //       tokenlist_array ARRAY<TOKENLIST> HIDDEN,
+  //       uuid_array ARRAY<UUID>,
   //     ) PRIMARY KEY(key)
   //   )",
   Table::Builder tb = table_builder("ArrayTypes");
@@ -302,6 +308,11 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
           .set_hidden(true)
           .build();
 
+  const zetasql::Type* uuid_array_type =
+      get_array_type(type_factory, type_factory.get_uuid()).value();
+  std::unique_ptr<const Column> uuid_array =
+      column_builder("uuid_array", tb.get(), uuid_array_type).build();
+
   std::unique_ptr<const KeyColumn> primary_key_constraint =
       KeyColumn::Builder().set_column(key_column.get()).build();
   std::unique_ptr<const Table> table =
@@ -317,6 +328,7 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
           .add_column(jsonb_array.get())
           .add_column(float_array.get())
           .add_column(tokenlist_array.get())
+          .add_column(uuid_array.get())
           .add_key_column(primary_key_constraint.get())
           .build();
   graph->Add(std::move(key_column));
@@ -331,6 +343,7 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
   graph->Add(std::move(jsonb_array));
   graph->Add(std::move(float_array));
   graph->Add(std::move(tokenlist_array));
+  graph->Add(std::move(uuid_array));
   graph->Add(std::move(primary_key_constraint));
   graph->Add(std::move(table));
 }
@@ -565,20 +578,24 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
   options.set_name_resolution_mode(zetasql::NAME_RESOLUTION_DEFAULT);
   options.set_product_mode(zetasql::PRODUCT_EXTERNAL);
   options.SetEnabledLanguageFeatures({
-      zetasql::FEATURE_EXTENDED_TYPES, zetasql::FEATURE_NAMED_ARGUMENTS,
-      zetasql::FEATURE_NUMERIC_TYPE, zetasql::FEATURE_TABLESAMPLE,
+      zetasql::FEATURE_EXTENDED_TYPES,
+      zetasql::FEATURE_NAMED_ARGUMENTS,
+      zetasql::FEATURE_NUMERIC_TYPE,
+      zetasql::FEATURE_TABLESAMPLE,
       zetasql::FEATURE_TIMESTAMP_NANOS,
       zetasql::FEATURE_V_1_1_HAVING_IN_AGGREGATE,
       zetasql::FEATURE_V_1_1_NULL_HANDLING_MODIFIER_IN_AGGREGATE,
       zetasql::FEATURE_V_1_1_ORDER_BY_COLLATE,
       zetasql::FEATURE_V_1_1_SELECT_STAR_EXCEPT_REPLACE,
-      zetasql::FEATURE_V_1_2_SAFE_FUNCTION_CALL, zetasql::FEATURE_JSON_TYPE,
+      zetasql::FEATURE_V_1_2_SAFE_FUNCTION_CALL,
+      zetasql::FEATURE_JSON_TYPE,
       zetasql::FEATURE_JSON_ARRAY_FUNCTIONS,
       zetasql::FEATURE_JSON_STRICT_NUMBER_PARSING,
       zetasql::FEATURE_V_1_4_WITH_EXPRESSION,
       zetasql::FEATURE_V_1_4_ENABLE_FLOAT_DISTANCE_FUNCTIONS,
       zetasql::FEATURE_V_1_4_DOT_PRODUCT,
       zetasql::FEATURE_INTERVAL_TYPE,
+      zetasql::FEATURE_V_1_4_UUID_TYPE,
   });
   options.EnableLanguageFeature(zetasql::FEATURE_V_1_3_DML_RETURNING);
   options.SetSupportedStatementKinds({

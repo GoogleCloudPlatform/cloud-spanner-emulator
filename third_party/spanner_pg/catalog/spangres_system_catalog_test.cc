@@ -90,6 +90,7 @@ const zetasql::Type* gsql_date = zetasql::types::DateType();
 const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
 const zetasql::Type* gsql_interval = zetasql::types::IntervalType();
 const zetasql::Type* gsql_tokenlist = zetasql::types::TokenListType();
+const zetasql::Type* gsql_uuid = zetasql::types::UuidType();
 const zetasql::Type* gsql_int64_array = zetasql::types::Int64ArrayType();
 const zetasql::Type* gsql_string_array = zetasql::types::StringArrayType();
 const zetasql::Type* gsql_bool_array = zetasql::types::BoolArrayType();
@@ -103,6 +104,7 @@ const zetasql::Type* gsql_interval_array =
     zetasql::types::IntervalArrayType();
 const zetasql::Type* gsql_tokenlist_array =
     zetasql::types::TokenListArrayType();
+const zetasql::Type* gsql_uuid_array = zetasql::types::UuidArrayType();
 
 static zetasql::LanguageOptions GetLanguageOptions() {
   zetasql::LanguageOptions options;
@@ -222,18 +224,34 @@ TEST_F(SpangresSystemCatalogTest, GetTypes) {
   absl::flat_hash_set<const zetasql::Type*> types;
   ZETASQL_ASSERT_OK(catalog->GetTypes(&types));
   std::vector<const zetasql::Type*> expected_types{
-      gsql_bool, gsql_int64, gsql_float, gsql_double, gsql_string, gsql_bytes,
-      gsql_date, gsql_timestamp,
+      gsql_bool,
+      gsql_int64,
+      gsql_float,
+      gsql_double,
+      gsql_string,
+      gsql_bytes,
+      gsql_date,
+      gsql_timestamp,
       gsql_interval,
       gsql_tokenlist,
+      gsql_uuid,
       types::PgNumericMapping()->mapped_type(),
       types::PgJsonbMapping()->mapped_type(),
-      types::PgOidMapping()->mapped_type(), gsql_bool_array, gsql_int64_array,
-      gsql_float_array, gsql_double_array, gsql_string_array, gsql_bytes_array,
-      gsql_date_array, gsql_timestamp_array,
+      types::PgOidMapping()->mapped_type(),
+      gsql_bool_array,
+      gsql_int64_array,
+      gsql_float_array,
+      gsql_double_array,
+      gsql_string_array,
+      gsql_bytes_array,
+      gsql_date_array,
+      gsql_timestamp_array,
       gsql_interval_array,
       gsql_tokenlist_array,
-      GetPgNumericArrayType(), GetPgJsonbArrayType(), GetPgOidArrayType()};
+      gsql_uuid_array,
+      GetPgNumericArrayType(),
+      GetPgJsonbArrayType(),
+      GetPgOidArrayType()};
 
   EXPECT_THAT(types, UnorderedPointwise(TypeEquals(), expected_types));
 }
@@ -539,7 +557,8 @@ TEST_F(SpangresSystemCatalogTest, ArrayCatFunctions) {
       zetasql::types::TimestampArrayType(),
       types::PgNumericArrayMapping()->mapped_type(),
       zetasql::types::DateArrayType(),
-      zetasql::types::IntervalArrayType()};
+      zetasql::types::IntervalArrayType(),
+      zetasql::types::UuidArrayType()};
 
   for (const zetasql::Type* array_type : array_types) {
     std::vector<zetasql::InputArgumentType> input_types{
@@ -773,6 +792,10 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
       "array_length", "pg.array_length", {ANYARRAYOID, INT8OID},
       {zetasql::InputArgumentType(gsql_pg_jsonb_array),
        zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered("array_length", "pg.array_length",
+                               {ANYARRAYOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_uuid_array),
+                                zetasql::InputArgumentType(gsql_int64)});
   AssertPGFunctionIsRegistered("array_upper", "pg.array_upper",
                                {ANYARRAYOID, INT8OID},
                                {zetasql::InputArgumentType(gsql_int64_array),
@@ -809,6 +832,10 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
       "array_upper", "pg.array_upper", {ANYARRAYOID, INT8OID},
       {zetasql::InputArgumentType(gsql_pg_jsonb_array),
        zetasql::InputArgumentType(gsql_int64)});
+  AssertPGFunctionIsRegistered("array_upper", "pg.array_upper",
+                               {ANYARRAYOID, INT8OID},
+                               {zetasql::InputArgumentType(gsql_uuid_array),
+                                zetasql::InputArgumentType(gsql_int64)});
   AssertPGFunctionIsRegistered(
       "arraycontained", "pg.array_contained", {ANYARRAYOID, ANYARRAYOID},
       {zetasql::InputArgumentType(gsql_int64_array),
@@ -837,6 +864,10 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
       "arraycontained", "pg.array_contained", {ANYARRAYOID, ANYARRAYOID},
       {zetasql::InputArgumentType(gsql_pg_numeric_array),
        zetasql::InputArgumentType(gsql_pg_numeric_array)});
+  AssertPGFunctionIsRegistered("arraycontained", "pg.array_contained",
+                               {ANYARRAYOID, ANYARRAYOID},
+                               {zetasql::InputArgumentType(gsql_uuid_array),
+                                zetasql::InputArgumentType(gsql_uuid_array)});
   AssertPGFunctionIsRegistered(
       "arraycontains", "pg.array_contains", {ANYARRAYOID, ANYARRAYOID},
       {zetasql::InputArgumentType(gsql_int64_array),
@@ -865,6 +896,10 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
       "arraycontains", "pg.array_contains", {ANYARRAYOID, ANYARRAYOID},
       {zetasql::InputArgumentType(gsql_pg_numeric_array),
        zetasql::InputArgumentType(gsql_pg_numeric_array)});
+  AssertPGFunctionIsRegistered("arraycontains", "pg.array_contains",
+                               {ANYARRAYOID, ANYARRAYOID},
+                               {zetasql::InputArgumentType(gsql_uuid_array),
+                                zetasql::InputArgumentType(gsql_uuid_array)});
   AssertPGFunctionIsRegistered(
       "arrayoverlap", "pg.array_overlap", {ANYARRAYOID, ANYARRAYOID},
       {zetasql::InputArgumentType(gsql_int64_array),
@@ -893,6 +928,10 @@ TEST_F(SpangresSystemCatalogTest, ScalarFunctionsEnabled) {
       "arrayoverlap", "pg.array_overlap", {ANYARRAYOID, ANYARRAYOID},
       {zetasql::InputArgumentType(gsql_pg_numeric_array),
        zetasql::InputArgumentType(gsql_pg_numeric_array)});
+  AssertPGFunctionIsRegistered("arrayoverlap", "pg.array_overlap",
+                               {ANYARRAYOID, ANYARRAYOID},
+                               {zetasql::InputArgumentType(gsql_uuid_array),
+                                zetasql::InputArgumentType(gsql_uuid_array)});
   // Comparison functions
   AssertPGFunctionIsRegistered("textregexne", "pg.textregexne",
                                {TEXTOID, TEXTOID},
@@ -1051,6 +1090,29 @@ TEST_F(SpangresSystemCatalogTest, IntervalFunctions) {
                                {TIMESTAMPTZOID, TIMESTAMPTZOID},
                                {zetasql::InputArgumentType(gsql_timestamp),
                                 zetasql::InputArgumentType(gsql_timestamp)});
+}
+
+TEST_F(SpangresSystemCatalogTest, UuidFunctions) {
+  AssertPGFunctionIsRegistered("uuid_eq", "$equal", {UUIDOID, UUIDOID},
+                               {zetasql::InputArgumentType(gsql_uuid),
+                                zetasql::InputArgumentType(gsql_uuid)});
+  AssertPGFunctionIsRegistered("uuid_ne", "$not_equal", {UUIDOID, UUIDOID},
+                               {zetasql::InputArgumentType(gsql_uuid),
+                                zetasql::InputArgumentType(gsql_uuid)});
+  AssertPGFunctionIsRegistered("uuid_lt", "$less", {UUIDOID, UUIDOID},
+                               {zetasql::InputArgumentType(gsql_uuid),
+                                zetasql::InputArgumentType(gsql_uuid)});
+  AssertPGFunctionIsRegistered("uuid_le", "$less_or_equal", {UUIDOID, UUIDOID},
+                               {zetasql::InputArgumentType(gsql_uuid),
+                                zetasql::InputArgumentType(gsql_uuid)});
+  AssertPGFunctionIsRegistered("uuid_gt", "$greater", {UUIDOID, UUIDOID},
+                               {zetasql::InputArgumentType(gsql_uuid),
+                                zetasql::InputArgumentType(gsql_uuid)});
+  AssertPGFunctionIsRegistered("uuid_ge", "$greater_or_equal",
+                               {UUIDOID, UUIDOID},
+                               {zetasql::InputArgumentType(gsql_uuid),
+                                zetasql::InputArgumentType(gsql_uuid)});
+  AssertPGFunctionIsRegistered("gen_random_uuid", "new_uuid", {}, {});
 }
 
 }  // namespace

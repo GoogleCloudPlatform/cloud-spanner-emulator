@@ -501,7 +501,188 @@ TEST_F(TypeTest, PgIntervalMapping) {
               StatusIs(absl::StatusCode::kUnimplemented));
 }
 
+TEST_F(TypeTest, PgUuidMappingNullConversions) {
+  const PostgresTypeMapping* pg_uuid_mapping = types::PgUuidMapping();
+  EXPECT_TRUE(pg_uuid_mapping->mapped_type()->IsUuid());
+  EXPECT_THAT(pg_uuid_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+              "pg.uuid");
+  EXPECT_THAT(pg_uuid_mapping->PostgresTypeOid(), UUIDOID);
+  EXPECT_TRUE(pg_uuid_mapping->IsSupportedType(zetasql::LanguageOptions()));
+  EXPECT_TRUE(pg_uuid_mapping->Equals(types::PgUuidMapping()));
+
+  // Test conversions for null uuid
+  // TestMakeGsqlValue
+  pg_uuid_t pg_uuid_null;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const_null,
+                       CheckedPgMakeConst(
+                           /*consttype=*/UUIDOID,
+                           /*consttypmod=*/-1,
+                           /*constcollid=*/InvalidOid,
+                           /*constlen=*/sizeof(pg_uuid_t),
+                           /*constvalue=*/UUIDPGetDatum(&pg_uuid_null),
+                           /*constisnull=*/true,
+                           /*constbyval=*/false));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value gsql_value_null,
+                       pg_uuid_mapping->MakeGsqlValue(pg_const_null));
+  EXPECT_TRUE(gsql_value_null.is_null());
+
+  // Test MakeGsqlValueFromStringConst
+  EXPECT_THAT(pg_uuid_mapping->MakeGsqlValueFromStringConst("null"),
+              IsOkAndHolds(zetasql::Value::NullUuid()));
+
+  // Test MakePgConst
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const_null2,
+                       pg_uuid_mapping->MakePgConst(gsql_value_null));
+  EXPECT_TRUE(pg_const_null2->constisnull);
+}
+
+using UuidTypeTestParameterized =
+    ::postgres_translator::test::ValidMemoryContextParameterized<
+        absl::string_view>;
+
+TEST_P(UuidTypeTestParameterized, PgUuidMappingNonNullConversions) {
+  const PostgresTypeMapping* pg_uuid_mapping = types::PgUuidMapping();
+  const absl::string_view uuid_string = GetParam();
+
+  // Test MakeGsqlValue
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const, UuidStringToPgConst(uuid_string));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value gsql_value,
+                       pg_uuid_mapping->MakeGsqlValue(pg_const));
+  EXPECT_EQ(gsql_value.uuid_value()->ToString(), uuid_string);
+
+  // Test MakeGsqlValueFromStringConst
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      zetasql::Value gsql_value2,
+      pg_uuid_mapping->MakeGsqlValueFromStringConst(uuid_string));
+  EXPECT_EQ(gsql_value2.uuid_value()->ToString(), uuid_string);
+
+  // Test MakePgConst
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const2,
+                       pg_uuid_mapping->MakePgConst(gsql_value));
+  EXPECT_NE(pg_const2, nullptr);
+  EXPECT_FALSE(pg_const2->constisnull);
+  EXPECT_EQ(pg_const2->consttype, pg_const->consttype);
+  EXPECT_EQ(pg_const2->constlen, pg_const->constlen);
+  EXPECT_THAT(PgConstToUuidString(pg_const2), IsOkAndHolds(uuid_string));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    UuidTypeTest, UuidTypeTestParameterized,
+    ::testing::Values("9a31411b-caca-4ff1-86e9-39fbd2bc3f39",
+                      "00000000-0000-0000-0000-000000000000",
+                      "ffffffff-ffff-ffff-ffff-ffffffffffff",
+                      "00000000-0000-0000-86e9-39fbd2bc3f39",
+                      "9a31411b-caca-4ff1-0000-000000000000",
+                      "1fadf09b-caca-4ff1-86e9-39fbd2bc3f39"));
+
 // Supported Array Types.
+TEST_F(TypeTest, PgUuidArrayMapping) {
+  const PostgresTypeMapping* pg_uuid_array_mapping =
+      types::PgUuidArrayMapping();
+  EXPECT_TRUE(pg_uuid_array_mapping->mapped_type()->IsArray());
+  EXPECT_TRUE(pg_uuid_array_mapping->mapped_type()
+                  ->AsArray()
+                  ->element_type()
+                  ->IsUuid());
+  EXPECT_EQ(pg_uuid_array_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+            "pg._uuid");
+  EXPECT_EQ(pg_uuid_array_mapping->PostgresTypeOid(), UUIDARRAYOID);
+  EXPECT_TRUE(
+      pg_uuid_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
+  EXPECT_TRUE(pg_uuid_array_mapping->Equals(types::PgUuidArrayMapping()));
+
+  absl::string_view uuid_string1 = "9a31411b-caca-4ff1-86e9-39fbd2bc3f39";
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const1, UuidStringToPgConst(uuid_string1));
+
+  absl::string_view uuid_string2 = "1111111c-caca-4ff1-86e9-39fbd2bc3f39";
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const2, UuidStringToPgConst(uuid_string2));
+
+  // Test MakeGsqlValue for null array
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const Const* pg_null_arr_const,
+                       CheckedPgMakeConst(
+                           /*consttype=*/UUIDARRAYOID,
+                           /*consttypmod=*/-1,
+                           /*constcollid=*/InvalidOid,
+                           /*constlen=*/-1,
+                           /*constvalue=*/PointerGetDatum(nullptr),
+                           /*constisnull=*/true,
+                           /*constbyval=*/false));
+  EXPECT_THAT(pg_uuid_array_mapping->MakeGsqlValue(pg_null_arr_const),
+              IsOkAndHolds(zetasql::Value::Null(
+                  pg_uuid_array_mapping->mapped_type()->AsArray())));
+
+  // Test MakeGsqlValue for empty array
+  std::vector<Datum> empty_array_elements;
+  Datum empty_array_val = MakePgArray(UUIDOID, std::move(empty_array_elements));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const Const* pg_empty_arr_const,
+                       CheckedPgMakeConst(
+                           /*consttype=*/UUIDARRAYOID,
+                           /*consttypmod=*/-1,
+                           /*constcollid=*/InvalidOid,
+                           /*constlen=*/-1,
+                           /*constvalue=*/empty_array_val,
+                           /*constisnull=*/false,
+                           /*constbyval=*/false));
+  EXPECT_THAT(
+      pg_uuid_array_mapping->MakeGsqlValue(pg_empty_arr_const),
+      IsOkAndHolds(zetasql::Value::MakeArray(
+                       pg_uuid_array_mapping->mapped_type()->AsArray(), {})
+                       .value()));
+
+  // TODO : Add test for MakeGsqlValue with null array elements.
+  // Currently, MakePgArray does not support null array elements. It internally
+  // uses construct_array which does not support null elements. We need to
+  // update MakePgArray to use construct_md_array instead which supports null
+  // elements.
+
+  // Test MakeGsqlValue for non empty array
+  std::vector<Datum> array_elements{pg_const1->constvalue,
+                                    pg_const2->constvalue};
+  Datum array_val = MakePgArray(UUIDOID, std::move(array_elements));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const Const* pg_arr_const,
+                       CheckedPgMakeConst(
+                           /*consttype=*/UUIDARRAYOID,
+                           /*consttypmod=*/-1,
+                           /*constcollid=*/InvalidOid,
+                           /*constlen=*/-1,
+                           /*constvalue=*/array_val,
+                           /*constisnull=*/false,
+                           /*constbyval=*/false));  // Pass-by-reference
+
+  zetasql::Value gsql_array_value =
+      zetasql::Value::MakeArray(
+          pg_uuid_array_mapping->mapped_type()->AsArray(),
+          {zetasql::Value::Uuid(
+               *zetasql::UuidValue::FromString(uuid_string1)),
+           zetasql::Value::Uuid(
+               *zetasql::UuidValue::FromString(uuid_string2))})
+          .value();
+  EXPECT_THAT(pg_uuid_array_mapping->MakeGsqlValue(pg_arr_const),
+              IsOkAndHolds(gsql_array_value));
+
+  // Test MakeGsqlValueFromStringConst with a mix of null and non null elements
+  EXPECT_THAT(
+      pg_uuid_array_mapping->MakeGsqlValueFromStringConst(
+          "'{9a31411b-caca-4ff1-86e9-39fbd2bc3f39,null}'"),
+      IsOkAndHolds(zetasql::Value::MakeArray(
+                       pg_uuid_array_mapping->mapped_type()->AsArray(),
+                       {zetasql::Value::Uuid(
+                            *zetasql::UuidValue::FromString(uuid_string1)),
+                        zetasql::Value::NullUuid()})
+                       .value()));
+
+  // Test roundtrip conversions (ZetaSQL::Value -> PGConst ->
+  // ZetaSQL::Value)
+  // TODO : Compare pg_const individual array elements as well.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(const Const* pg_const,
+                       pg_uuid_array_mapping->MakePgConst(gsql_array_value));
+  EXPECT_NE(pg_const, nullptr);
+  EXPECT_FALSE(pg_const->constisnull);
+  EXPECT_EQ(pg_const->consttype, UUIDARRAYOID);
+
+  EXPECT_THAT(pg_uuid_array_mapping->MakeGsqlValue(pg_const),
+              IsOkAndHolds(gsql_array_value));
+}
 
 TEST_F(TypeTest, PgBoolArrayMapping) {
   const PostgresTypeMapping* pg_bool_array_mapping =

@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -28,20 +29,29 @@ namespace test {
 
 namespace {
 
-class CaseSensitivityTest : public DatabaseTest {
+class CaseSensitivityTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
   absl::Status SetUpDatabase() override {
-    return SetSchema({R"(
-      CREATE TABLE Users(
-        ID   INT64 NOT NULL,
-        Name STRING(MAX),
-        Age  INT64
-      ) PRIMARY KEY (ID)
-    )"});
+    return SetSchemaFromFile("case_sensitivity.test");
   }
 };
 
-TEST_F(CaseSensitivityTest, NamesAreCaseInsensitive) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectCaseSensitivityTest, CaseSensitivityTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<CaseSensitivityTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(CaseSensitivityTest, NamesAreCaseInsensitive) {
   // Insert a few rows, with random case changes in table and column names.
   ZETASQL_EXPECT_OK(Insert("UserS", {"Id", "NamE"}, {1, "John"}));
   ZETASQL_EXPECT_OK(Insert("UsErs", {"iD", "NAme"}, {2, "Peter"}));

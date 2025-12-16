@@ -888,7 +888,12 @@ TEST_F(PGCatalogTest, PGProc) {
       FROM
         pg_catalog.pg_proc as p
       LEFT JOIN pg_catalog.pg_namespace as n on n.oid = p.pronamespace
-      WHERE n.nspname != 'pg_catalog' AND n.nspname != 'spanner'
+      WHERE n.nspname != 'pg_catalog'
+        AND n.nspname != 'spanner'
+        AND n.nspname != 'spanner_sys'
+        AND n.nspname != 'ai'
+        AND n.nspname != 'ml'
+        AND n.nspname != 'hll_count'
       ORDER BY
         p.oid)sql"),
               IsOkAndHoldsRows(expected));

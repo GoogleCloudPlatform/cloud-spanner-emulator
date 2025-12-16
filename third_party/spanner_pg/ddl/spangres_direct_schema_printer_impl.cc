@@ -96,6 +96,7 @@ static auto kTypeMap =
     {google::spanner::emulator::backend::ddl::ColumnDefinition::TIMESTAMP, "timestamp with time zone"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::PG_JSONB, "jsonb"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::INTERVAL, "interval"},
+    {google::spanner::emulator::backend::ddl::ColumnDefinition::UUID, "uuid"},
     {google::spanner::emulator::backend::ddl::ColumnDefinition::TOKENLIST, "spanner.tokenlist"},
 });
 
@@ -705,20 +706,6 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateTable(
   }
   StrAppend(&after_create, locality_group);
 
-  std::vector<std::string> table_options;
-  for (const google::spanner::emulator::backend::ddl::SetOption& option : statement.set_options()) {
-    if (option.option_name() == "fulltext_dictionary_table" &&
-        option.bool_value()) {
-      table_options.push_back(StrCat(
-          QuoteIdentifier(PGConstants::kSpangresTableTypeOptionName), " = ",
-          QuoteStringLiteral(PGConstants::kFullTextDictionaryTableType)));
-    }
-  }
-  if (!table_options.empty()) {
-    StrAppend(&after_create,
-              Substitute(" WITH ($0)", absl::StrJoin(table_options, ",")));
-  }
-
   output.push_back(std::move(after_create));
   return absl::StrJoin(output, "\n");
 }
@@ -1274,14 +1261,14 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateIndex(
           ? ""
           : StrCat(" INCLUDE (", absl::StrJoin(include_columns, ", "), ")");
 
-  std::string locality_group = "";
+  std::string other_options = "";
   for (const google::spanner::emulator::backend::ddl::SetOption& option : statement.set_options()) {
     if (option.option_name() == "locality_group") {
-      StrAppend(&locality_group, " LOCALITY GROUP ");
+      StrAppend(&other_options, " LOCALITY GROUP ");
       if (option.null_value()) {
-        StrAppend(&locality_group, "NULL");
+        StrAppend(&other_options, "NULL");
       } else {
-        StrAppend(&locality_group, option.string_value());
+        StrAppend(&other_options, option.string_value());
       }
     }
   }
@@ -1314,7 +1301,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateIndex(
                 QuoteIdentifier(GetSchemaLocalName(statement.index_name())),
                 " ON ", QuoteQualifiedIdentifier(statement.index_base_name()),
                 " (", absl::StrJoin(key_parts, ", "), ")", include,
-                locality_group, interleave_in, where);
+                other_options, interleave_in, where);
 }
 
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSchema(

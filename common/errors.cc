@@ -409,6 +409,16 @@ absl::Status CouldNotParseStringAsInterval(absl::string_view str,
           "https://cloud.google.com/spanner/docs/data-types#interval_type"));
 }
 
+absl::Status CouldNotParseStringAsUuid(absl::string_view str,
+                                       absl::string_view error) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::StrCat(
+          "Could not parse ", str, " as a UUID: ", error,
+          ".For details on the UUID type, see "
+          "https://cloud.google.com/spanner/docs/data-types#uuid_type"));
+}
+
 absl::Status TimestampMustBeInUTCTimeZone(absl::string_view str) {
   return absl::Status(
       absl::StatusCode::kFailedPrecondition,
@@ -3113,11 +3123,11 @@ absl::Status UnsupportedReturnStructAsColumn() {
       "value. Rewrite the query to flatten the struct fields in the result.");
 }
 
-absl::Status UnsupportedArrayConstructorSyntaxForEmptyStructArray() {
+absl::Status UnsupportedArrayConstructorSyntaxForNullValuedStructArray() {
   return absl::Status(
       absl::StatusCode::kUnimplemented,
       "Unsupported query shape: Spanner does not support array constructor "
-      "syntax for an empty array where array elements are Structs.");
+      "syntax for a null-valued array of struct.");
 }
 
 absl::Status UnsupportedFeatureSafe(absl::string_view feature_type,

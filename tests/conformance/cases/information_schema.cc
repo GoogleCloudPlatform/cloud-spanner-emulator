@@ -4263,6 +4263,9 @@ TEST_P(SequenceInformationSchemaTest, PGSequencesTable) {
   if (GetParam() != POSTGRESQL) {
     return;
   }
+  if (in_prod_env()) {
+    GTEST_SKIP() << "Skipping test for PG dialect in prod env temporarily.";
+  }
   auto results = Query("select * from information_schema.sequences");
   LogResults(results);
   // clang-format off

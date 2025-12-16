@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "gmock/gmock.h"
@@ -45,38 +46,17 @@ using InsertMutationBuilder = cloud::spanner::InsertMutationBuilder;
 using UpdateMutationBuilder = cloud::spanner::UpdateMutationBuilder;
 using DeleteMutationBuilder = cloud::spanner::DeleteMutationBuilder;
 using ReplaceMutationBuilder = cloud::spanner::ReplaceMutationBuilder;
-class ChangeStreamExclusionTest : public DatabaseTest {
+class ChangeStreamExclusionTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchema({
-        R"(
-          CREATE TABLE Users(
-            UserId     INT64 NOT NULL,
-            Name       STRING(MAX),
-            Age        INT64,
-          ) PRIMARY KEY (UserId)
-        )",
-        R"(
-          CREATE TABLE Accounts(
-            UserId     INT64 NOT NULL,
-            AccountId  INT64 NOT NULL,
-            Balance        INT64,
-          ) PRIMARY KEY (UserId,AccountId),
-          INTERLEAVE IN PARENT Users ON DELETE CASCADE
-        )",
-        R"(
-          CREATE CHANGE STREAM Stream1 FOR ALL OPTIONS (
-          exclude_insert = true )
-        )",
-        R"(
-          CREATE CHANGE STREAM Stream2 FOR ALL OPTIONS (
-          exclude_update = true )
-        )",
-        R"(
-          CREATE CHANGE STREAM Stream3 FOR ALL OPTIONS (
-          exclude_delete = true )
-        )",
-    }));
+    ZETASQL_RETURN_IF_ERROR(SetSchemaFromFile("change_streams_exclusion.test"));
     ZETASQL_ASSIGN_OR_RETURN(test_session_uri_,
                      CreateTestSession(raw_client(), database()));
     ZETASQL_RETURN_IF_ERROR(PopulateTestData());
@@ -110,15 +90,19 @@ class ChangeStreamExclusionTest : public DatabaseTest {
       absl::Time start, std::string change_stream_name) {
     ZETASQL_ASSIGN_OR_RETURN(
         std::vector<std::string> active_tokens,
-        GetActiveTokenFromInitialQuery(start, change_stream_name,
+        GetActiveTokenFromInitialQuery(dialect_, start, change_stream_name,
                                        test_session_uri_, raw_client()));
     std::vector<DataChangeRecord> merged_data_change_records;
     DataChangeRecordsCount data_change_records_count;
     for (const auto& partition_token : active_tokens) {
-      std::string sql = absl::Substitute(
-          "SELECT * FROM "
-          "READ_$0 ('$1','$2', '$3', 300000 )",
-          change_stream_name, start, Clock().Now(), partition_token);
+      std::string sql_template =
+          "SELECT * FROM READ_$0 ('$1', '$2', '$3', 300000)";
+      if (dialect_ == database_api::POSTGRESQL) {
+        sql_template =
+            "SELECT * FROM spanner.read_json_$0 ('$1', '$2', '$3', 300000)";
+      }
+      std::string sql = absl::Substitute(sql_template, change_stream_name,
+                                         start, Clock().Now(), partition_token);
       ZETASQL_ASSIGN_OR_RETURN(
           test::ChangeStreamRecords change_records,
           ExecuteChangeStreamQuery(sql, test_session_uri_, raw_client()));
@@ -142,7 +126,14 @@ class ChangeStreamExclusionTest : public DatabaseTest {
   }
 };
 
-TEST_F(ChangeStreamExclusionTest, SingleInsertModTypeFilter) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectChangeStreamExclusionTest, ChangeStreamExclusionTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<ChangeStreamExclusionTest::ParamType>&
+           info) { return database_api::DatabaseDialect_Name(info.param); });
+
+TEST_P(ChangeStreamExclusionTest, SingleInsertModTypeFilter) {
   auto mutation_builder_insert =
       InsertMutationBuilder("Users", {"UserId", "Name"});
   std::vector<ValueRow> rows = {{3, "name3"}};
@@ -171,7 +162,7 @@ TEST_F(ChangeStreamExclusionTest, SingleInsertModTypeFilter) {
   ASSERT_EQ(data_change_records.insert_count, 1);
 }
 
-TEST_F(ChangeStreamExclusionTest, SingleUpdateModTypeFilter) {
+TEST_P(ChangeStreamExclusionTest, SingleUpdateModTypeFilter) {
   auto mutation_builder_update =
       UpdateMutationBuilder("Users", {"UserId", "Name"});
   std::vector<ValueRow> rows = {{1, "name1Update"}};
@@ -201,7 +192,7 @@ TEST_F(ChangeStreamExclusionTest, SingleUpdateModTypeFilter) {
   ASSERT_EQ(data_change_records.update_count, 1);
 }
 
-TEST_F(ChangeStreamExclusionTest, SingleDeleteModTypeFilter) {
+TEST_P(ChangeStreamExclusionTest, SingleDeleteModTypeFilter) {
   auto mutation_builder_delete = DeleteMutationBuilder(
       "Users", KeySet().AddKey(cloud::spanner::MakeKey(1)));
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
@@ -227,7 +218,7 @@ TEST_F(ChangeStreamExclusionTest, SingleDeleteModTypeFilter) {
   ASSERT_EQ(data_change_records.total_count, 0);
 }
 
-TEST_F(ChangeStreamExclusionTest, MultipleModTypesFilter) {
+TEST_P(ChangeStreamExclusionTest, MultipleModTypesFilter) {
   auto mutation_builder_insert =
       InsertMutationBuilder("Users", {"UserId", "Name"});
   std::vector<ValueRow> rows = {{3, "name3"}};
@@ -270,7 +261,7 @@ TEST_F(ChangeStreamExclusionTest, MultipleModTypesFilter) {
   ASSERT_EQ(data_change_records.delete_count, 0);
 }
 
-TEST_F(ChangeStreamExclusionTest, CascadeDeleteModTypeFilter) {
+TEST_P(ChangeStreamExclusionTest, CascadeDeleteModTypeFilter) {
   auto mutation_builder_insert =
       InsertMutationBuilder("Accounts", {"UserId", "AccountId", "Balance"});
   std::vector<ValueRow> rows = {{1, 111, 250}};

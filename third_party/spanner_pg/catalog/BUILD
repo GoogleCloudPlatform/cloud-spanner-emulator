@@ -31,8 +31,6 @@
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
-# Catalog libraries for mappings between Postgres and GoogleSQL.
-
 package(
     default_visibility = [
         "//:__subpackages__",
@@ -104,7 +102,6 @@ cc_library(
         "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/flags:commandlineflag",
-        "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:reflection",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

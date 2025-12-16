@@ -376,6 +376,23 @@ absl::StatusOr<NullIfExpr*> makeNullIfExpr(Oid rettype, List* args, Oid opno,
   return nullif_expr;
 }
 
+absl::StatusOr<DistinctExpr*> makeDistinctExpr(Oid rettype, List* args,
+                                               Oid opno, Oid opfuncid,
+                                               bool opretset, Oid opcollid,
+                                               Oid inputcollid, int location) {
+  DistinctExpr* distinctexpr;
+  ZETASQL_ASSIGN_OR_RETURN(distinctexpr, CheckedPgMakeNode(DistinctExpr));
+  distinctexpr->opno = opno;
+  distinctexpr->opfuncid = opfuncid;
+  distinctexpr->opresulttype = rettype;
+  distinctexpr->opretset = opretset;
+  distinctexpr->opcollid = opcollid;
+  distinctexpr->inputcollid = inputcollid;
+  distinctexpr->args = args;
+  distinctexpr->location = location;
+  return distinctexpr;
+}
+
 absl::StatusOr<SetOperationStmt*> makeSetOperationStmt(
     SetOperation op, bool all, Node* larg, Node* rarg, List* colTypes,
     List* colTypmods, List* colCollations, List* groupClauses) {

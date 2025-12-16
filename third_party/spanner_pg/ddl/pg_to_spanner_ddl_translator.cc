@@ -631,6 +631,7 @@ GetTypeMap() {
       {"decimal", google::spanner::emulator::backend::ddl::ColumnDefinition::PG_NUMERIC},
       {"jsonb", google::spanner::emulator::backend::ddl::ColumnDefinition::PG_JSONB},
       {"interval", google::spanner::emulator::backend::ddl::ColumnDefinition::INTERVAL},
+      {"uuid", google::spanner::emulator::backend::ddl::ColumnDefinition::UUID},
       {"tokenlist", google::spanner::emulator::backend::ddl::ColumnDefinition::TOKENLIST},
       // Unsupported standard types from pg_catalog schema
       {"aclitem", absl::nullopt},
@@ -1601,6 +1602,11 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessPostgresType(
         absl::StrCat("Column of type <interval> is not supported."));
   }
 
+  if (!options.enable_uuid_type && type_name == "uuid") {
+    return UnsupportedTranslationError(
+        absl::StrCat("Type <uuid> is not supported."));
+  }
+
   auto type_it = GetTypeMap().find(type_name);
   if (type_it == GetTypeMap().end()) {
     // type not found
@@ -2012,27 +2018,6 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
     } else {
       locality_group_option->set_string_value(
           create_statement.locality_group_name->value);
-    }
-  }
-
-  if (create_statement.options != nullptr) {
-    for (int i = 0; i < list_length(create_statement.options); ++i) {
-      DefElem* elem = ::postgres_translator::internal::PostgresCastNode(
-          DefElem, create_statement.options->elements[i].ptr_value);
-      std::string name = absl::AsciiStrToLower(elem->defname);
-
-      if (name == PGConstants::kSpangresTableTypeOptionName) {
-        ZETASQL_ASSIGN_OR_RETURN(const String* arg_value,
-                         (DowncastNode<String, T_String>(elem->arg)));
-        const std::string type_option_value = arg_value->sval;
-        if (type_option_value == PGConstants::kFullTextDictionaryTableType) {
-          google::spanner::emulator::backend::ddl::SetOption* const fulltext_dictionary_table_option =
-              out.add_set_options();
-          fulltext_dictionary_table_option->set_option_name(
-              "fulltext_dictionary_table");
-          fulltext_dictionary_table_option->set_bool_value(true);
-        }
-      }
     }
   }
 
@@ -2850,7 +2835,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterDatabase(
           }
 
           case T_String: {
-            opt->set_string_value(arg->val.sval.sval);
+              opt->set_string_value(arg->val.sval.sval);
             break;
           }
 
