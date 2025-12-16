@@ -269,6 +269,7 @@ const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions() {
         "is_trail",
         "is_simple",
         "$dynamic_property_equals",
+        "new_uuid",
           // clang-format on
       };
   return supported_functions;

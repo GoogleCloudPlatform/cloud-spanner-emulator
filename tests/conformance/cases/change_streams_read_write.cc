@@ -148,10 +148,10 @@ class ChangeStreamTest : public DatabaseTest {
 
   absl::StatusOr<std::vector<DataChangeRecord>> GetDataRecordsFromStartToNow(
       absl::Time start, std::string change_stream_name) {
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::vector<std::string> active_tokens,
-        GetActiveTokenFromInitialQuery(start, change_stream_name,
-                                       test_session_uri_, raw_client()));
+    ZETASQL_ASSIGN_OR_RETURN(std::vector<std::string> active_tokens,
+                     GetActiveTokenFromInitialQuery(
+                         database_api::GOOGLE_STANDARD_SQL, start,
+                         change_stream_name, test_session_uri_, raw_client()));
     std::vector<DataChangeRecord> merged_data_change_records;
     // Ensure that end time is no less than start time.
     absl::Time end = std::max(Clock().Now(), start);

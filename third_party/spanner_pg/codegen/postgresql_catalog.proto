@@ -68,6 +68,7 @@ message FunctionProto {
   repeated FunctionSignatureProto signatures = 3;
   repeated string enable_in_catalog = 4;
   reserved 5;
+  zetasql.FunctionEnums.Mode mode = 6;
 }
 
 message CatalogProto {

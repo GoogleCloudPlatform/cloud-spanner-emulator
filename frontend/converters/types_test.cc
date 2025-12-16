@@ -64,6 +64,8 @@ using zetasql::types::NumericArrayType;
 using zetasql::types::NumericType;
 using zetasql::types::StringType;
 using zetasql::types::TimestampType;
+using zetasql::types::UuidArrayType;
+using zetasql::types::UuidType;
 using postgres_translator::spangres::datatypes::GetPgJsonbArrayType;
 using postgres_translator::spangres::datatypes::GetPgJsonbType;
 using postgres_translator::spangres::datatypes::GetPgNumericArrayType;
@@ -155,6 +157,7 @@ TEST_F(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
       {StringType(), "code: STRING"},
       {BytesType(), "code: BYTES"},
       {IntervalType(), "code: INTERVAL"},
+      {UuidType(), "code: UUID"},
       {Int64ArrayType(), "code: ARRAY array_element_type { code: INT64 }"},
       {GetPgOidArrayType(),
        R"(code: ARRAY
@@ -169,6 +172,7 @@ TEST_F(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
           array_element_type { code: JSON type_annotation: PG_JSONB })"},
       {IntervalArrayType(),
        "code: ARRAY array_element_type { code: INTERVAL }"},
+      {UuidArrayType(), "code: ARRAY array_element_type { code: UUID }"},
       {EmptyStructType(), "code: STRUCT struct_type: { }"},
       {str_int_pair_type,
        R"(code: STRUCT

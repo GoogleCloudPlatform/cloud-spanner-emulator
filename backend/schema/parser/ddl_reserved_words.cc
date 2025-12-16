@@ -216,6 +216,7 @@ static const CaseInsensitiveStringSet* const pseudo_reserved_words =
     "UNIQUE",
     "UPDATE",
     "USAGE",
+    "UUID",
     "VIEW",
     "VECTOR",
     "VECTOR_LENGTH",

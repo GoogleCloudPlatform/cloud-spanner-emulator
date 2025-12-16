@@ -97,6 +97,11 @@ using zetasql::types::IntervalArrayType;
 using zetasql::types::IntervalType;
 using zetasql::values::Interval;
 
+using zetasql::UuidValue;
+using zetasql::types::UuidArrayType;
+using zetasql::types::UuidType;
+using zetasql::values::Uuid;
+
 using postgres_translator::spangres::datatypes::CreatePgJsonbValue;
 using postgres_translator::spangres::datatypes::CreatePgNumericValue;
 using postgres_translator::spangres::datatypes::CreatePgOidValue;
@@ -242,6 +247,12 @@ TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
       {Interval(IntervalValue()), "string_value: 'P0Y'"},
       {Interval(IntervalValue::MaxValue()),
        "string_value: 'P10000Y3660000DT87840000H'"},
+      {Uuid(UuidValue::FromString("00000000-0000-0000-0000-000000000000")
+                .value()),
+       "string_value: '00000000-0000-0000-0000-000000000000'"},
+      {Uuid(UuidValue::FromString("9a31411b-caca-4ff1-86e9-39fbd2bc3f39")
+                .value()),
+       "string_value: '9a31411b-caca-4ff1-86e9-39fbd2bc3f39'"},
       {Int64Array({}), "list_value: { values [] }"},
       {Int64Array({1, 2, 3}),
        "list_value: { values [{string_value: '1'}, {string_value: '2'}, "
@@ -313,6 +324,22 @@ TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
        "list_value: { values [{string_value: 'P-10000Y-3660000DT-87840000H'}, "
        "{string_value: 'P0Y'},"
        " {null_value: NULL_VALUE}, {string_value: 'P10000Y3660000DT87840000H' "
+       "}] }"},
+      {zetasql::Value::MakeArray(
+           UuidArrayType(),
+           {Uuid(UuidValue::FromString("00000000-0000-0000-0000-000000000000")
+                     .value()),
+            Uuid(UuidValue::FromString("9a31411b-caca-4ff1-86e9-39fbd2bc3f39")
+                     .value()),
+            zetasql::values::Null(UuidType()),
+            Uuid(UuidValue::FromString("ffffffff-ffff-ffff-ffff-ffffffffffff")
+                     .value())})
+           .value(),
+       "list_value: { values [{string_value: "
+       "'00000000-0000-0000-0000-000000000000'}, "
+       "{string_value: '9a31411b-caca-4ff1-86e9-39fbd2bc3f39'}, "
+       "{null_value: NULL_VALUE}, {string_value: "
+       "'ffffffff-ffff-ffff-ffff-ffffffffffff' "
        "}] }"},
   };
 

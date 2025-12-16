@@ -848,15 +848,17 @@ SchemaUpdaterImpl::ApplyDDLStatement(
             ddl_statement->mutable_create_function();
         ZETASQL_RET_CHECK(create_function->has_sql_body_origin() &&
                   create_function->sql_body_origin().has_original_expression());
-        ZETASQL_ASSIGN_OR_RETURN(
-            ExpressionTranslateResult result,
-            TranslatePostgreSqlQueryInView(absl::StripAsciiWhitespace(
-                create_function->sql_body_origin().original_expression())));
+        auto result = TranslatePostgreSqlQueryInView(absl::StripAsciiWhitespace(
+            create_function->sql_body_origin().original_expression()));
+        if (!result.ok()) {
+          return error::ViewBodyAnalysisError(create_function->function_name(),
+                                              result.status().message());
+        }
         // Overwrite the original_expression to the deparsed (formalized) PG
         // expression which can be different from the user-input PG expression.
         create_function->mutable_sql_body_origin()->set_original_expression(
-            result.original_postgresql_expression);
-        create_function->set_sql_body(result.translated_googlesql_expression);
+            result->original_postgresql_expression);
+        create_function->set_sql_body(result->translated_googlesql_expression);
       }
       ZETASQL_RETURN_IF_ERROR(CreateFunction(ddl_statement->create_function()));
       break;
@@ -6626,6 +6628,7 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
         .enable_serial_types = EmulatorFeatureFlags::instance()
                                    .flags()
                                    .enable_serial_auto_increment,
+        .enable_uuid_type = true,
     };
     ZETASQL_ASSIGN_OR_RETURN(ddl::DDLStatementList ddl_statement_list,
                      translator->TranslateForEmulator(parser_output, options));

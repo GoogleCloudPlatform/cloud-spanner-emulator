@@ -17,6 +17,7 @@
 #include <memory>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "google/spanner/v1/commit_response.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
@@ -28,6 +29,7 @@
 #include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
 #include "absl/status/status.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -40,19 +42,17 @@ using test::EqualsProto;
 using test::proto::Partially;
 using zetasql_base::testing::StatusIs;
 
-class DmlReplayTest : public DatabaseTest {
+class DmlReplayTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchema({
-        R"(
-          CREATE TABLE Users(
-            ID       INT64 NOT NULL,
-            Name     STRING(MAX),
-            Age      INT64,
-            Updated  TIMESTAMP,
-          ) PRIMARY KEY (ID)
-        )",
-    }));
+    ZETASQL_RETURN_IF_ERROR(SetSchemaFromFile("dml_replay.test"));
 
     // Create a raw session for tests which cannot use the C++ client library
     // directly.
@@ -104,7 +104,15 @@ class DmlReplayTest : public DatabaseTest {
   std::string session_name_;
 };
 
-TEST_F(DmlReplayTest, DMLSequenceNumberOutOfOrderReturnsError) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectDmlReplayTest, DmlReplayTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<DmlReplayTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(DmlReplayTest, DMLSequenceNumberOutOfOrderReturnsError) {
   spanner_api::Transaction txn;
   ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
@@ -154,7 +162,7 @@ TEST_F(DmlReplayTest, DMLSequenceNumberOutOfOrderReturnsError) {
   }
 }
 
-TEST_F(DmlReplayTest, StreamingDMLSequenceNumberOutOfOrderReturnsError) {
+TEST_P(DmlReplayTest, StreamingDMLSequenceNumberOutOfOrderReturnsError) {
   spanner_api::Transaction txn;
   ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
@@ -210,7 +218,7 @@ TEST_F(DmlReplayTest, StreamingDMLSequenceNumberOutOfOrderReturnsError) {
   }
 }
 
-TEST_F(DmlReplayTest, BatchDMLSequenceNumberOutOfOrderReturnsError) {
+TEST_P(DmlReplayTest, BatchDMLSequenceNumberOutOfOrderReturnsError) {
   spanner_api::Transaction txn;
   ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
@@ -261,7 +269,7 @@ TEST_F(DmlReplayTest, BatchDMLSequenceNumberOutOfOrderReturnsError) {
   }
 }
 
-TEST_F(DmlReplayTest, DMLRequestHashMismatchReturnsError) {
+TEST_P(DmlReplayTest, DMLRequestHashMismatchReturnsError) {
   spanner_api::Transaction txn;
   ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
@@ -314,7 +322,7 @@ TEST_F(DmlReplayTest, DMLRequestHashMismatchReturnsError) {
   ZETASQL_EXPECT_OK(Commit(txn.id(), &response));
 }
 
-TEST_F(DmlReplayTest, StreamingDMLRequestHashMismatchReturnsError) {
+TEST_P(DmlReplayTest, StreamingDMLRequestHashMismatchReturnsError) {
   spanner_api::Transaction txn;
   ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
@@ -373,7 +381,7 @@ TEST_F(DmlReplayTest, StreamingDMLRequestHashMismatchReturnsError) {
   ZETASQL_EXPECT_OK(Commit(txn.id(), &response));
 }
 
-TEST_F(DmlReplayTest, BatchDMLRequestHashMismatchReturnsError) {
+TEST_P(DmlReplayTest, BatchDMLRequestHashMismatchReturnsError) {
   spanner_api::Transaction txn;
   ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
@@ -427,7 +435,7 @@ TEST_F(DmlReplayTest, BatchDMLRequestHashMismatchReturnsError) {
   ZETASQL_EXPECT_OK(Commit(txn.id(), &response));
 }
 
-TEST_F(DmlReplayTest, DMLSequenceReplaySucceeds) {
+TEST_P(DmlReplayTest, DMLSequenceReplaySucceeds) {
   spanner_api::Transaction txn;
   ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
@@ -501,7 +509,7 @@ TEST_F(DmlReplayTest, DMLSequenceReplaySucceeds) {
   }
 }
 
-TEST_F(DmlReplayTest, StreamingDMLSequenceReplaySucceeds) {
+TEST_P(DmlReplayTest, StreamingDMLSequenceReplaySucceeds) {
   spanner_api::Transaction txn;
   ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
@@ -583,7 +591,7 @@ TEST_F(DmlReplayTest, StreamingDMLSequenceReplaySucceeds) {
   }
 }
 
-TEST_F(DmlReplayTest, BatchDMLSequenceReplaySucceeds) {
+TEST_P(DmlReplayTest, BatchDMLSequenceReplaySucceeds) {
   spanner_api::Transaction txn;
   ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
@@ -663,7 +671,7 @@ TEST_F(DmlReplayTest, BatchDMLSequenceReplaySucceeds) {
   }
 }
 
-TEST_F(DmlReplayTest, ExecuteAndCommitBatchDMLWithReplaySucceeds) {
+TEST_P(DmlReplayTest, ExecuteAndCommitBatchDMLWithReplaySucceeds) {
   spanner_api::Transaction txn;
   ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
@@ -720,7 +728,7 @@ TEST_F(DmlReplayTest, ExecuteAndCommitBatchDMLWithReplaySucceeds) {
   ZETASQL_EXPECT_OK(Commit(txn.id(), &response));
 }
 
-TEST_F(DmlReplayTest, BatchDMLReturnsTransactionInResponse) {
+TEST_P(DmlReplayTest, BatchDMLReturnsTransactionInResponse) {
   spanner_api::Transaction txn;
   ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 

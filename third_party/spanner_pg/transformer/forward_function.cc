@@ -404,7 +404,8 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
       // b/455382891 for more context. Basically, we are transforming
       // `textlike(arg1, like_escape(arg2, '\'))` to `textlike(arg1, arg2)`. If
       // the escape character is not '\', we will return an error.
-      if (funcid == F_TEXTLIKE && list_length(args) == 2) {
+      if ((funcid == F_TEXTLIKE || funcid == F_TEXTICLIKE) &&
+          list_length(args) == 2) {
         // The first argument of `textlike` is T_Var and its second
         // argument can be a T_Const or T_FuncExpr.
         Node* second_arg = internal::PostgresCastToNode(lsecond(args));
@@ -415,6 +416,11 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
               list_length(func_expr->args) == 2) {
             Node* arg_escape =
                 internal::PostgresCastToNode(lsecond(func_expr->args));
+            if (arg_escape->type != T_Const) {
+              return absl::InvalidArgumentError(
+                  "Invalid escape character. Currently only backslash "
+                  "constant '\\' is supported.");
+            }
             const Const* escape_const = PostgresCastNode(Const, arg_escape);
             ZETASQL_ASSIGN_OR_RETURN(zetasql::Value escape_value,
                              catalog_adapter_->GetEngineSystemCatalog()
@@ -429,7 +435,7 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
               } else {
                 return absl::InvalidArgumentError(absl::StrCat(
                     "Invalid escape character: '", escape_value.string_value(),
-                    "'. Currently only backslash '\\' is supported."));
+                    "'. Currently only backslash constant '\\' is supported."));
               }
             }
           }

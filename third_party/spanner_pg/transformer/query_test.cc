@@ -339,6 +339,16 @@ void StripPgExpr(Expr* expr) {
       StripPgExpr(subscripting_ref->refassgnexpr);
       break;
     }
+    case T_DistinctExpr: {
+      DistinctExpr* distinct_expr = PostgresCastNode(DistinctExpr, expr);
+      distinct_expr->location = -1;
+      distinct_expr->inputcollid = InvalidOid;
+      distinct_expr->opcollid = InvalidOid;
+      for (Expr* arg : StructList<Expr*>(distinct_expr->args)) {
+        StripPgExpr(arg);
+      }
+      break;
+    }
     default:
       ABSL_LOG(ERROR) << "Unexpected Expr type: "
                             << NodeTagToString(expr->type);

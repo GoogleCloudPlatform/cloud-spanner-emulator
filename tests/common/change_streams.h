@@ -21,12 +21,14 @@
 #include <vector>
 
 #include "google/protobuf/struct.pb.h"
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.grpc.pb.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "google/cloud/spanner/database.h"
 #include "frontend/converters/pg_change_streams.h"
 #include "grpcpp/support/sync_stream.h"
@@ -176,8 +178,9 @@ absl::StatusOr<test::ChangeStreamRecords> ExecuteChangeStreamQuery(
     absl::string_view sql, absl::string_view session_uri, SpannerStub* client);
 
 absl::StatusOr<std::vector<std::string>> GetActiveTokenFromInitialQuery(
-    absl::Time start, absl::string_view change_stream_name,
-    absl::string_view session_uri, SpannerStub* client);
+    admin::database::v1::DatabaseDialect dialect, absl::Time start,
+    absl::string_view change_stream_name, absl::string_view session_uri,
+    SpannerStub* client);
 
 }  // namespace test
 }  // namespace emulator

@@ -881,7 +881,6 @@ TEST_P(DmlTest, UpsertDmlSimpleTable) {
 }
 
 TEST_P(DmlTest, InsertOnConflictDmlSimpleTable) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
   PopulateDatabase();
   std::vector<ValueRow> returning_rows;
   std::string returning_clause =
@@ -945,7 +944,6 @@ TEST_P(DmlTest, InsertOnConflictDmlSimpleTable) {
 }
 
 TEST_P(DmlTest, MultipleInsertOnConflictDmlInTransaction) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
   // INSERT ON CONFLICT DO NOTHING DML.
   auto txn = Transaction(Transaction::ReadWriteOptions());
   std::vector<SqlStatement> sql_statements;
@@ -1061,7 +1059,6 @@ TEST_P(DmlTest, UpsertDmlGeneratedColumnTable) {
 }
 
 TEST_P(DmlTest, InsertOnConflictDmlGeneratedColumnTable) {
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
   std::vector<ValueRow> returning_rows;
   std::string returning_clause =
       (GetParam() == database_api::DatabaseDialect::POSTGRESQL)

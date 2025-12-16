@@ -144,6 +144,8 @@ foreach my $header (@ARGV)
 # While duplicate OIDs would only cause a failure if they appear in
 # the same catalog, our project policy is that manually assigned OIDs
 # should be globally unique, to avoid confusion.
+my $min_oid = 50000;
+my $max_oid = 75000;
 my $found = 0;
 foreach my $oid (keys %oidcounts)
 {
@@ -153,7 +155,22 @@ foreach my $oid (keys %oidcounts)
 	$found++;
 }
 if ($found) {
-	my $next_oid = (reverse sort { $a <=> $b } keys %oidcounts)[0] + 1;
+	my @sorted_oids = sort { $a <=> $b } keys %oidcounts;
+	my $next_oid;
+	for my $i (0 .. $#sorted_oids - 1) {
+		next if $sorted_oids[$i] < $min_oid - 1;
+		die "found $found duplicate OID(s) in catalog data.\nNo more OIDs available in range [$min_oid, $max_oid).\n" if $sorted_oids[$i] >= $max_oid - 1;
+		if ($sorted_oids[$i+1] > $sorted_oids[$i] + 1) {
+			$next_oid = $sorted_oids[$i] + 1;
+			last;
+		}
+	}
+	if (!defined $next_oid) {
+		$next_oid = $sorted_oids[-1] + 1;
+	}
+	if ($next_oid >= $max_oid) {
+		die "found $found duplicate OID(s) in catalog data.\nNo more OIDs available in range [$min_oid, $max_oid).\n";
+	}
 	die "found $found duplicate OID(s) in catalog data.\nNext unused OID should be $next_oid.\n";
 }
 

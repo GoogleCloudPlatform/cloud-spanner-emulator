@@ -56,6 +56,7 @@ bool IsSupportedColumnType(const zetasql::Type* type) {
     case zetasql::TypeKind::TYPE_NUMERIC:
     case zetasql::TypeKind::TYPE_JSON:
     case zetasql::TypeKind::TYPE_TOKENLIST:
+    case zetasql::TypeKind::TYPE_UUID:
       return true;
     case zetasql::TypeKind::TYPE_PROTO:
     case zetasql::TypeKind::TYPE_ENUM: {

@@ -32,7 +32,9 @@
 #ifndef DDL_TRANSLATION_UTILS_H_
 #define DDL_TRANSLATION_UTILS_H_
 
+#include <cstdint>
 #include <string>
+#include <tuple>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
@@ -74,8 +76,8 @@ class FieldTypeChecker {
 template <typename StructT, typename... FieldTypes>
 void AssertStructConsistsOf(const StructT& structure,
                             const FieldTypeChecker<FieldTypes>&...) {
-  // Check that the node has at least the number of specified fields.
-  static_assert(sizeof(std::tuple<FieldTypes...>) <= sizeof(structure),
+  // Check that no new fields were added to the node.
+  static_assert(sizeof(std::tuple<FieldTypes...>) == sizeof(structure),
                 "Structure is different from what is expected");
 }
 
@@ -110,9 +112,6 @@ struct PostgreSQLConstants {
       "disable_automatic_uid_column";
   static constexpr absl::string_view kSearchIndexSortOrderOptionName =
       "sort_order_sharding";
-  static constexpr absl::string_view kSpangresTableTypeOptionName = "type";
-  static constexpr absl::string_view kFullTextDictionaryTableType =
-      "fulltext_dictionary";
 
   // TODO: use kDatabaseOptimizerVersionName,
   // kInternalDatabaseVersionRetentionPeriodName,

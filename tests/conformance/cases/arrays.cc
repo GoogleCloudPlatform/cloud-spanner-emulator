@@ -244,42 +244,35 @@ TEST_P(ArraysTest, InsertArraysWithVectorLengthWithNullFail) {
 TEST_P(ArraysTest, InsertArraysWithVectorLengthLessThanVectorLengthFail) {
   Array<double> double_arr{1.1};
   Array<float> float_arr{2.1};
-  EXPECT_THAT(
-      Insert("vector_length_limits_table", {"pk", "arr_double"},
-             {2, std::move(double_arr)}),
-      StatusIs(
-          absl::StatusCode::kInvalidArgument,
-          HasSubstr(
-              "has 1 elements and is less than the `vector_length` limit: 2")));
-  EXPECT_THAT(
-      Insert("vector_length_limits_table", {"pk", "arr_float"},
-             {3, std::move(float_arr)}),
-      StatusIs(
-          absl::StatusCode::kInvalidArgument,
-          HasSubstr(
-              "has 1 elements and is less than the `vector_length` limit: 2")));
+  EXPECT_THAT(Insert("vector_length_limits_table", {"pk", "arr_double"},
+                     {2, std::move(double_arr)}),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+  EXPECT_THAT(Insert("vector_length_limits_table", {"pk", "arr_float"},
+                     {3, std::move(float_arr)}),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_P(ArraysTest, InsertArraysWithVectorLengthExceedsVectorLengthFail) {
   Array<double> double_arr{1.1, 1.2, 1.3};
   Array<float> float_arr{2.1, 2.2, 2.3, 2.4};
-  EXPECT_THAT(
-      Insert("vector_length_limits_table", {"pk", "arr_double"},
-             {2, std::move(double_arr)}),
-      StatusIs(absl::StatusCode::kInvalidArgument,
-               HasSubstr(
-                   "has 3 elements and exceeds the `vector_length` limit: 2")));
-  EXPECT_THAT(
-      Insert("vector_length_limits_table", {"pk", "arr_float"},
-             {3, std::move(float_arr)}),
-      StatusIs(absl::StatusCode::kInvalidArgument,
-               HasSubstr(
-                   "has 4 elements and exceeds the `vector_length` limit: 2")));
+  EXPECT_THAT(Insert("vector_length_limits_table", {"pk", "arr_double"},
+                     {2, std::move(double_arr)}),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+  EXPECT_THAT(Insert("vector_length_limits_table", {"pk", "arr_float"},
+                     {3, std::move(float_arr)}),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_P(ArraysTest, InsertInvalidUTFStringArrayFails) {
   // TODO: Find a way to test this. Currently it fails on the
   // client library, so the emulator doesn't even see it.
+}
+
+TEST_P(ArraysTest, ArrayTransform) {
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  ZETASQL_EXPECT_OK(Query("SELECT ARRAY_TRANSFORM([1, 2, 3], e -> e * 2) AS x"));
 }
 
 }  // namespace

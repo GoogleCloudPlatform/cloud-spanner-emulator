@@ -50,7 +50,9 @@ using ::google::spanner::emulator::test::TestRowCursor;
 using ::google::spanner::v1::PartialResultSet;
 using ::google::spanner::v1::ReadRequest;
 using ::google::spanner::v1::ResultSet;
+using zetasql::IntervalValue;
 using zetasql::StructField;
+using zetasql::UuidValue;
 using zetasql::Value;
 using zetasql::types::BoolType;
 using zetasql::types::BytesType;
@@ -61,18 +63,19 @@ using zetasql::types::FloatType;
 using zetasql::types::GeographyType;
 using zetasql::types::Int64ArrayType;
 using zetasql::types::Int64Type;
+using zetasql::types::IntervalType;
 using zetasql::types::StringType;
 using zetasql::types::TimestampType;
+using zetasql::types::UuidType;
 using zetasql::values::Bool;
 using zetasql::values::Datetime;
 using zetasql::values::Double;
 using zetasql::values::Float;
 using zetasql::values::Int64;
+using zetasql::values::Interval;
 using zetasql::values::NullString;
 using zetasql::values::String;
-using zetasql::IntervalValue;
-using zetasql::types::IntervalType;
-using zetasql::values::Interval;
+using zetasql::values::Uuid;
 using zetasql_base::testing::StatusIs;
 
 class AccessProtosTest : public testing::Test {
@@ -840,6 +843,153 @@ TEST_F(AccessProtosTest, CanConvertEmptyIntervalRowCursorToResultSet) {
                                       fields {
                                         name: "interval"
                                         type { code: INTERVAL }
+                                      }
+                                    }
+                                  }
+                             )pb"));
+}
+
+TEST_F(AccessProtosTest, CanConvertUuidRowCursorToResultSet) {
+  TestRowCursor cursor({"int64", "uuid"}, {Int64Type(), UuidType()},
+                       {{Int64(1), Uuid(UuidValue::MinValue())},
+                        {Int64(2), Uuid(UuidValue())},
+                        {Int64(3), Uuid(UuidValue::MaxValue())}});
+  ResultSet result_pb;
+  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
+
+  EXPECT_THAT(
+      result_pb,
+      test::EqualsProto(
+          R"pb(metadata {
+                 row_type {
+                   fields {
+                     name: "int64"
+                     type { code: INT64 }
+                   }
+                   fields {
+                     name: "uuid"
+                     type { code: UUID }
+                   }
+                 }
+               }
+               rows {
+                 values { string_value: "1" }
+                 values { string_value: "00000000-0000-0000-0000-000000000000" }
+               }
+               rows {
+                 values { string_value: "2" }
+                 values { string_value: "00000000-0000-0000-0000-000000000000" }
+               }
+               rows {
+                 values { string_value: "3" }
+                 values { string_value: "ffffffff-ffff-ffff-ffff-ffffffffffff" }
+               })pb"));
+}
+
+TEST_F(AccessProtosTest, CanConvertUuidRowCursorToResultSetWithLimit) {
+  TestRowCursor cursor({"int64", "uuid"}, {Int64Type(), UuidType()},
+                       {{Int64(1), Uuid(UuidValue::MinValue())},
+                        {Int64(2), Uuid(UuidValue())},
+                        {Int64(3), Uuid(UuidValue::MaxValue())}});
+  ResultSet result_pb;
+  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 1, &result_pb));
+
+  EXPECT_THAT(
+      result_pb,
+      test::EqualsProto(
+          R"pb(metadata {
+                 row_type {
+                   fields {
+                     name: "int64"
+                     type { code: INT64 }
+                   }
+                   fields {
+                     name: "uuid"
+                     type { code: UUID }
+                   }
+                 }
+               }
+               rows {
+                 values { string_value: "1" }
+                 values { string_value: "00000000-0000-0000-0000-000000000000" }
+               })pb"));
+}
+
+TEST_F(AccessProtosTest, CanConvertUuidRowCursorToPartialResultSet) {
+  TestRowCursor cursor({"int64", "uuid"}, {Int64Type(), UuidType()},
+                       {{Int64(1), Uuid(UuidValue::MinValue())},
+                        {Int64(2), Uuid(UuidValue())},
+                        {Int64(3), Uuid(UuidValue::MaxValue())}});
+  std::vector<PartialResultSet> results;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 0));
+
+  EXPECT_THAT(
+      results[0],
+      test::EqualsProto(
+          R"pb(metadata {
+                 row_type {
+                   fields {
+                     name: "int64"
+                     type { code: INT64 }
+                   }
+                   fields {
+                     name: "uuid"
+                     type { code: UUID }
+                   }
+                 }
+               }
+               values { string_value: "1" }
+               values { string_value: "00000000-0000-0000-0000-000000000000" }
+               values { string_value: "2" }
+               values { string_value: "00000000-0000-0000-0000-000000000000" }
+               values { string_value: "3" }
+               values { string_value: "ffffffff-ffff-ffff-ffff-ffffffffffff" }
+          )pb"));
+}
+
+TEST_F(AccessProtosTest, CanConvertUuidRowCursorToPartialResultSetWithLimit) {
+  TestRowCursor cursor({"int64", "uuid"}, {Int64Type(), UuidType()},
+                       {{Int64(1), Uuid(UuidValue::MinValue())},
+                        {Int64(2), Uuid(UuidValue())},
+                        {Int64(3), Uuid(UuidValue::MaxValue())}});
+  std::vector<PartialResultSet> results;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 1));
+
+  EXPECT_THAT(
+      results[0],
+      test::EqualsProto(
+          R"pb(metadata {
+                 row_type {
+                   fields {
+                     name: "int64"
+                     type { code: INT64 }
+                   }
+                   fields {
+                     name: "uuid"
+                     type { code: UUID }
+                   }
+                 }
+               }
+               values { string_value: "1" }
+               values { string_value: "00000000-0000-0000-0000-000000000000" }
+          )pb"));
+}
+
+TEST_F(AccessProtosTest, CanConvertEmptyUuidRowCursorToResultSet) {
+  TestRowCursor cursor({"int64", "uuid"}, {Int64Type(), UuidType()}, {});
+  ResultSet result_pb;
+  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
+
+  EXPECT_THAT(result_pb, test::EqualsProto(
+                             R"pb(metadata {
+                                    row_type {
+                                      fields {
+                                        name: "int64"
+                                        type { code: INT64 }
+                                      }
+                                      fields {
+                                        name: "uuid"
+                                        type { code: UUID }
                                       }
                                     }
                                   }

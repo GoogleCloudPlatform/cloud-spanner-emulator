@@ -84,6 +84,7 @@ const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
 const zetasql::Type* gsql_string = zetasql::types::StringType();
 const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
 const zetasql::Type* gsql_interval = zetasql::types::IntervalType();
+const zetasql::Type* gsql_uuid = zetasql::types::UuidType();
 
 absl::StatusOr<zetasql::Value> EvalPendingCommitTimestamp(
     absl::Span<const zetasql::Value> args) {
@@ -528,6 +529,8 @@ std::unique_ptr<zetasql::Function> FunctionCatalog::GetPGCastToStringFunction(
               gsql_string, {gsql_pg_numeric}, /*context_ptr=*/nullptr},
           zetasql::FunctionSignature{
               gsql_string, {gsql_interval}, /*context_ptr=*/nullptr},
+          zetasql::FunctionSignature{
+              gsql_string, {gsql_uuid}, /*context_ptr=*/nullptr},
       },
       function_options);
 }

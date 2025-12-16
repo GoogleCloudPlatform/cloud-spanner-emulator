@@ -158,6 +158,10 @@ absl::StatusOr<NullIfExpr*> makeNullIfExpr(Oid rettype, List* args, Oid opno,
                                            Oid inputcollid = InvalidOid,
                                            int location = -1);
 
+absl::StatusOr<DistinctExpr*> makeDistinctExpr(
+    Oid rettype, List* args, Oid opno, Oid opfuncid, bool opretset = false,
+    Oid opcollid = InvalidOid, Oid inputcollid = InvalidOid, int location = -1);
+
 absl::StatusOr<SetOperationStmt*> makeSetOperationStmt(
     SetOperation op, bool all, Node* larg, Node* rarg, List* colTypes = NULL,
     List* colTypmods = NULL, List* colCollations = NULL,

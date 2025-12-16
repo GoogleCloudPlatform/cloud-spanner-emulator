@@ -184,20 +184,6 @@ void AddStringFunctions(std::vector<PostgresFunctionArguments>& functions) {
   }
 }
 
-void AddTimeFunctions(std::vector<PostgresFunctionArguments>& functions) {
-  // TODO: b/446758885 - Automate registration of pending_commit_timestamp
-  functions.push_back({"pending_commit_timestamp",
-                       "pending_commit_timestamp",
-                       {{
-                           {gsql_timestamp, {}, /*context_ptr=*/nullptr},
-                           /*has_mapped_function=*/true,
-                           /*explicit_mapped_function_name=*/"",
-                           /*postgres_proc_oid=*/50005,
-                       }},
-                       /*mode=*/zetasql::Function::SCALAR,
-                       /*postgres_namespace=*/"spanner"});
-}
-
 }  // namespace
 
 void AddScalarFunctions(std::vector<PostgresFunctionArguments>& functions) {
@@ -206,7 +192,6 @@ void AddScalarFunctions(std::vector<PostgresFunctionArguments>& functions) {
   AddFormattingFunctions(functions);
   AddMathematicalFunctions(functions);
   AddStringFunctions(functions);
-  AddTimeFunctions(functions);
 }
 
 }  // namespace postgres_translator

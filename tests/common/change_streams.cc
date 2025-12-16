@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "google/protobuf/struct.pb.h"
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -295,21 +296,29 @@ absl::StatusOr<test::ChangeStreamRecords> ExecuteChangeStreamQuery(
 }
 
 absl::StatusOr<std::vector<std::string>> GetActiveTokenFromInitialQuery(
-    absl::Time start, absl::string_view change_stream_name,
-    absl::string_view session_uri, SpannerStub* client) {
+    admin::database::v1::DatabaseDialect dialect, absl::Time start,
+    absl::string_view change_stream_name, absl::string_view session_uri,
+    SpannerStub* client) {
   std::vector<std::string> active_tokens;
-  std::string sql = absl::Substitute(
-      "SELECT * FROM "
-      "READ_$0 ('$1',NULL, NULL, 300000 )",
-      change_stream_name, start);
+  std::string sql_template = "SELECT * FROM READ_$0 ('$1', NULL, NULL, 300000)";
+  if (dialect == admin::database::v1::POSTGRESQL) {
+    sql_template =
+        "SELECT * FROM spanner.read_json_$0 ('$1', NULL, NULL, 300000)";
+  }
+  std::string sql = absl::Substitute(sql_template, change_stream_name, start);
   ZETASQL_ASSIGN_OR_RETURN(test::ChangeStreamRecords change_records,
                    ExecuteChangeStreamQuery(sql, session_uri, client));
   for (const auto& child_partition_record :
        change_records.child_partition_records) {
     for (const auto& child_partition :
          child_partition_record.child_partitions.values()) {
-      active_tokens.push_back(
-          child_partition.list_value().values(0).string_value());
+      if (dialect == admin::database::v1::POSTGRESQL) {
+        active_tokens.push_back(
+            child_partition.struct_value().fields().at("token").string_value());
+      } else {
+        active_tokens.push_back(
+            child_partition.list_value().values(0).string_value());
+      }
     }
   }
   return active_tokens;

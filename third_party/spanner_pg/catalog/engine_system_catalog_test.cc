@@ -70,6 +70,8 @@ const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
 const zetasql::Type* gsql_date = zetasql::types::DateType();
 const zetasql::Type* gsql_interval = zetasql::types::IntervalType();
 
+const zetasql::Type* gsql_uuid = zetasql::types::UuidType();
+
 const zetasql::Type* gsql_bool_array = zetasql::types::BoolArrayType();
 const zetasql::Type* gsql_bytes_array = zetasql::types::BytesArrayType();
 const zetasql::Type* gsql_int64_array = zetasql::types::Int64ArrayType();
@@ -80,6 +82,8 @@ const zetasql::Type* gsql_timestamp_array =
 const zetasql::Type* gsql_date_array = zetasql::types::DateArrayType();
 const zetasql::Type* gsql_interval_array =
     zetasql::types::IntervalArrayType();
+
+const zetasql::Type* gsql_uuid_array = zetasql::types::UuidArrayType();
 
 static zetasql::LanguageOptions GetLanguageOptions() {
   return zetasql::LanguageOptions();
@@ -261,6 +265,8 @@ TEST_F(EngineSystemCatalogTest, BoolTest) {
   CheckType(types::PgDateMapping(), "date", DATEOID, gsql_date);
   CheckType(types::PgIntervalMapping(), "interval", INTERVALOID, gsql_interval);
 
+  CheckType(types::PgUuidMapping(), "uuid", UUIDOID, gsql_uuid);
+
   // Supported Array Types.
   CheckType(types::PgBoolArrayMapping(), "_bool", BOOLARRAYOID,
             gsql_bool_array);
@@ -283,6 +289,9 @@ TEST_F(EngineSystemCatalogTest, BoolTest) {
             gsql_date_array);
   CheckType(types::PgIntervalArrayMapping(), "_interval", INTERVALARRAYOID,
             gsql_interval_array);
+
+  CheckType(types::PgUuidArrayMapping(), "_uuid", UUIDARRAYOID,
+            gsql_uuid_array);
 }
 
 // GetTypes is only used by the RQG and will return the mapped ZetaSQL types.

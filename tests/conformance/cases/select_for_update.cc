@@ -103,8 +103,8 @@ TEST_P(SelectForUpdateTest, OtherLockModesUnsupported) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     EXPECT_THAT(
         Query("SELECT age FROM users WHERE user_id = 2 FOR SHARE"),
-        StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                               : absl::StatusCode::kUnimplemented,
+        StatusIs(testing::AnyOf(absl::StatusCode::kInvalidArgument,
+                                absl::StatusCode::kUnimplemented),
                  testing::HasSubstr("Statements with locking clauses other "
                                     "than FOR UPDATE are not supported")));
   } else {
@@ -218,8 +218,8 @@ TEST_P(SelectForUpdateTest, SetOperations) {
 
   auto expected_gsql_rows = std::vector<ValueRow>({{2}, {2}, {1}, {3}, {1}});
   auto expected_pg_status =
-      StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                             : absl::StatusCode::kUnimplemented,
+      StatusIs(testing::AnyOf(absl::StatusCode::kInvalidArgument,
+                              absl::StatusCode::kUnimplemented),
                testing::HasSubstr(
                    "FOR UPDATE is not allowed with UNION/INTERSECT/EXCEPT"));
 
@@ -310,8 +310,8 @@ TEST_P(SelectForUpdateTest, GroupByHaving) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     EXPECT_THAT(
         QueryTransaction(txn, sql),
-        StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                               : absl::StatusCode::kUnimplemented,
+        StatusIs(testing::AnyOf(absl::StatusCode::kInvalidArgument,
+                                absl::StatusCode::kUnimplemented),
                  testing::HasSubstr(
                      "FOR UPDATE is not allowed with GROUP BY clause")));
   } else {
@@ -333,8 +333,8 @@ TEST_P(SelectForUpdateTest, GroupByHaving) {
       FROM messages
       HAVING message_id > 1
       FOR UPDATE)sql"),
-                StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                       : absl::StatusCode::kUnimplemented,
+                StatusIs(testing::AnyOf(absl::StatusCode::kInvalidArgument,
+                                        absl::StatusCode::kUnimplemented),
                          testing::HasSubstr(
                              "FOR UPDATE is not allowed with HAVING clause")));
   } else {

@@ -145,7 +145,8 @@ struct TranslationOptions {
   // enable_hidden_column allows translation of the <HIDDEN> constraint.
   bool enable_hidden_column = true;
   bool enable_serial_types = false;
-  bool enable_fulltext_dictionary_tables = false;
+  // enable_uuid_type allows translation of UUID type.
+  bool enable_uuid_type = false;
 };
 
 // Interface for translating PostgreSQL DDL parse tree (AST) to Spanner schema

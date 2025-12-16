@@ -714,6 +714,19 @@ TEST_P(ViewsTest, ForUpdateInViewsUnsupported) {
                     testing::HasSubstr("Unexpected lock mode in query")));
   }
 }
+
+TEST_P(ViewsTest, PGTranslationErrorReturnsViewBodyDefinitionError) {
+  if (GetParam() != POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({R"(CREATE VIEW MyView AS SELECT 1 INTO int4_tbl;)"},
+                           /*proto_descriptor_bytes=*/"",
+                           database_api::DatabaseDialect::POSTGRESQL,
+                           /*use_gsql_to_pg_translation=*/false),
+              ::zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr(
+                      "Error analyzing the definition of view `myview`:")));
+}
+
 }  // namespace
 
 }  // namespace test

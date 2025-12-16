@@ -926,6 +926,21 @@ TEST_F(CatalogTest, GetExtendedTypes) {
               StatusIs(absl::StatusCode::kNotFound));
 }
 
+TEST_F(CatalogTest, GetUuidType) {
+  MakeCatalog(
+      {
+          R"(
+        CREATE TABLE test_table (
+          k UUID,
+          v STRING(MAX)
+        ) PRIMARY KEY (k))",
+      },
+      database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+  const zetasql::Type* uuid_type;
+  ZETASQL_ASSERT_OK(catalog().FindType({"UUID"}, &uuid_type));
+  EXPECT_EQ(uuid_type, zetasql::types::UuidType());
+}
+
 }  // namespace
 }  // namespace backend
 }  // namespace emulator

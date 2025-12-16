@@ -15179,10 +15179,7 @@ opt_float:	'(' Iconst ')'
 								 errmsg("precision for type float must be at least 1 bit"),
 								 parser_errposition(@2)));
 					else if ($2 <= 24)
-						ereport(ERROR,
-								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-								 errmsg("The Postgres Type is not supported: float4"),
-								 parser_errposition(@2)));
+						$$ = SystemTypeName("float4");
 					else if ($2 <= 53)
 						$$ = SystemTypeName("float8");
 					else

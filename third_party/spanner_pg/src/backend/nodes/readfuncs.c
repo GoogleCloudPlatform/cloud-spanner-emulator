@@ -3793,7 +3793,7 @@ _readIndexStmt(void)
 	READ_NODE_FIELD(indexIncludingParams);
 	READ_NODE_FIELD(options);
 	READ_NODE_FIELD(locality_group_name);
-  READ_NODE_FIELD(interleavespec);
+        READ_NODE_FIELD(interleavespec);
 	READ_NODE_FIELD(whereClause);
 	READ_NODE_FIELD(excludeOpNames);
 	READ_STRING_FIELD(idxcomment);

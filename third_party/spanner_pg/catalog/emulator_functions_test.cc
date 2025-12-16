@@ -106,6 +106,13 @@ static zetasql::Value CreateIntervalValue(absl::string_view interval_string) {
                                                  /*allow_nanos=*/true));
 }
 
+static zetasql::Value CreateUuidValue(absl::string_view uuid_string) {
+  absl::StatusOr<zetasql::UuidValue> uuid_value =
+      zetasql::UuidValue::FromString(uuid_string);
+  ABSL_CHECK_OK(uuid_value) << "Failed to parse UUID string: " << uuid_string;
+  return zetasql::values::Uuid(*uuid_value);
+}
+
 class EmulatorFunctionsTest : public ::testing::Test {
  protected:
   EmulatorFunctionsTest() {
@@ -276,6 +283,18 @@ const zetasql::Value kIntervalMaxValue =
     zetasql::values::Interval(zetasql::IntervalValue::MaxValue());
 const zetasql::Value kIntervalMinValue =
     zetasql::values::Interval(zetasql::IntervalValue::MinValue());
+
+const zetasql::Value kNullUuidValue = zetasql::Value::NullUuid();
+const zetasql::Value kUuidValue = zetasql::values::Uuid(
+    *zetasql::UuidValue::FromString("11111111-1111-1111-1111-111111111111"));
+const zetasql::Value kUuidMaxValue =
+    zetasql::values::Uuid(zetasql::UuidValue::MaxValue());
+const zetasql::Value kUuidMinValue =
+    zetasql::values::Uuid(zetasql::UuidValue::MinValue());
+const zetasql::Value kNullUuidArrayValue =
+    zetasql::values::Null(zetasql::types::UuidArrayType());
+const zetasql::Value kUuidArrayValue = zetasql::values::Array(
+    zetasql::types::UuidArrayType(), {kUuidValue, kUuidMaxValue});
 
 const zetasql::Value kMaxTimestampValue =
     zetasql::values::Timestamp(zetasql::types::TimestampMaxBaseTime());
@@ -785,6 +804,9 @@ INSTANTIATE_TEST_SUITE_P(
                       zetasql::IntervalValue::MaxValue())}),
              zetasql::values::Int64(1)},
             zetasql::values::Int64(2)},
+        PGScalarFunctionTestCase{kPGArrayLengthFunctionName,
+                                 {kUuidArrayValue, zetasql::values::Int64(1)},
+                                 zetasql::values::Int64(2)},
         PGScalarFunctionTestCase{
             kZetaSQLSubtractFunctionName,
             {CreatePgNumericNullValue(),
@@ -1380,6 +1402,9 @@ INSTANTIATE_TEST_SUITE_P(
                       zetasql::IntervalValue::MaxValue())}),
              zetasql::values::Int64(1)},
             zetasql::values::Int64(2)},
+        PGScalarFunctionTestCase{kPGArrayUpperFunctionName,
+                                 {kUuidArrayValue, zetasql::values::Int64(1)},
+                                 zetasql::values::Int64(2)},
 
         PGScalarFunctionTestCase{kPGTextregexneFunctionName,
                                  {zetasql::values::String("abcdefg"),
@@ -3715,6 +3740,8 @@ TEST_F(EvalToJsonbTest, NullValueInput) {
   EXPECT_THAT(evaluator_, NullToJsonb(zetasql::Value::NullInterval()));
   EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::Null(
                               zetasql::types::IntervalArrayType())));
+  EXPECT_THAT(evaluator_, NullToJsonb(kNullUuidValue));
+  EXPECT_THAT(evaluator_, NullToJsonb(kNullUuidArrayValue));
 }
 
 MATCHER_P2(TimestampToJsonb, input, expected_string, "") {
@@ -3984,6 +4011,29 @@ TEST_F(EvalToJsonbTest, IntervalInput) {
   EXPECT_THAT(evaluator_,
               IntervalToJsonb("-1-5 8 -12:78:24",
                               "\"-1 years -5 mons +8 days -13:18:24\""));
+}
+
+MATCHER_P2(UuidToJsonb, input, expected_string, "") {
+  EXPECT_THAT(
+      arg(absl::MakeConstSpan({CreateUuidValue(input)})),
+      zetasql_base::testing::IsOkAndHolds(
+          CreatePgJsonbValueWithMemoryContext(expected_string).value()));
+  return true;
+}
+
+TEST_F(EvalToJsonbTest, UuidInput) {
+  EXPECT_THAT(evaluator_,
+              UuidToJsonb("00000000-0000-0000-0000-000000000000",
+                          R"("00000000-0000-0000-0000-000000000000")"));
+  EXPECT_THAT(evaluator_,
+              UuidToJsonb("11111111-1111-1111-1111-111111111111",
+                          R"("11111111-1111-1111-1111-111111111111")"));
+  EXPECT_THAT(evaluator_,
+              UuidToJsonb("9a31411b-caca-4ff1-86e9-39fbd2bc3f39",
+                          R"("9a31411b-caca-4ff1-86e9-39fbd2bc3f39")"));
+  EXPECT_THAT(evaluator_,
+              UuidToJsonb("ffffffff-ffff-ffff-ffff-ffffffffffff",
+                          R"("ffffffff-ffff-ffff-ffff-ffffffffffff")"));
 }
 
 MATCHER_P2(ArrayToJsonb, array_input, expected_string, "") {

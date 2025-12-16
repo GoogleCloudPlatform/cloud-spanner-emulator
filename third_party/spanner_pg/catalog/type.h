@@ -185,6 +185,7 @@ const PostgresTypeMapping* PgTimestamptzMapping();
 const PostgresTypeMapping* PgDateMapping();
 const PostgresTypeMapping* PgIntervalMapping();
 const PostgresTypeMapping* PgTokenlistMapping();
+const PostgresTypeMapping* PgUuidMapping();
 
 // Supported Array Types.
 const PostgresTypeMapping* PgBoolArrayMapping();
@@ -198,6 +199,7 @@ const PostgresTypeMapping* PgTimestamptzArrayMapping();
 const PostgresTypeMapping* PgDateArrayMapping();
 const PostgresTypeMapping* PgIntervalArrayMapping();
 const PostgresTypeMapping* PgTokenlistArrayMapping();
+const PostgresTypeMapping* PgUuidArrayMapping();
 }  // namespace types
 
 }  // namespace postgres_translator

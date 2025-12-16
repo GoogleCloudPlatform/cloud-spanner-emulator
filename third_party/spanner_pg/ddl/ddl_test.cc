@@ -178,6 +178,23 @@ TEST_F(DdlTest, DisableIntervalType) {
                        "Column of type <interval> is not supported."));
 }
 
+TEST_F(DdlTest, DisableUUIDType) {
+  const std::string input = "CREATE Table users(id UUID PRIMARY KEY);";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_uuid_type = false});
+
+  EXPECT_THAT(statements, StatusIs(absl::StatusCode::kFailedPrecondition,
+                                   "Type <uuid> is not supported."));
+}
+
 TEST_F(DdlTest, DisableAnalyze) {
   const std::string input = "ANALYZE;";
 

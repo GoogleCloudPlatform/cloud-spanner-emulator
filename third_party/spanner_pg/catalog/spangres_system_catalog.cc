@@ -512,6 +512,9 @@ absl::Status SpangresSystemCatalog::AddTypes(
     ZETASQL_RETURN_IF_ERROR(
         AddType(builtin_types::PgTokenlistArrayMapping(), language_options));
 
+    ZETASQL_RETURN_IF_ERROR(AddType(builtin_types::PgUuidMapping(), language_options));
+    ZETASQL_RETURN_IF_ERROR(
+        AddType(builtin_types::PgUuidArrayMapping(), language_options));
   return absl::OkStatus();
 }
 

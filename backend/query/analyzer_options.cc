@@ -103,7 +103,9 @@ zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       zetasql::FEATURE_SQL_GRAPH_DYNAMIC_LABEL_PROPERTIES_IN_DDL,
       zetasql::FEATURE_SQL_GRAPH_DYNAMIC_LABEL_EXTENSION_IN_DDL,
       zetasql::FEATURE_SQL_GRAPH_DYNAMIC_ELEMENT_TYPE,
+      zetasql::FEATURE_UUID_TYPE,
       zetasql::FEATURE_FOR_UPDATE,
+      zetasql::FEATURE_INLINE_LAMBDA_ARGUMENT,
   });
   if (EmulatorFeatureFlags::instance().flags().enable_protos) {
     options.EnableLanguageFeature(zetasql::FEATURE_PROTO_BASE);

@@ -224,6 +224,35 @@ absl::StatusOr<ValuePairVector> ConstValuePairs() {
       zetasql::MakeResolvedLiteral(zetasql::types::IntervalType(),
                                      zetasql::Value::NullInterval()));
 
+  // uuid <-> uuid
+  // Test null uuid
+  pg_uuid_t* pg_uuid;
+  ZETASQL_ASSIGN_OR_RETURN(Const * pg_null_uuid_const,
+                   CheckedPgMakeConst(
+                       /*consttype=*/UUIDOID,
+                       /*consttypmod=*/-1,
+                       /*constcollid=*/InvalidOid,
+                       /*constlen=*/sizeof(Datum),
+                       /*constvalue=*/UUIDPGetDatum(&pg_uuid),
+                       /*constisnull=*/true,
+                       /*constbyval=*/false));
+  value_pairs.emplace_back(
+      PostgresCastToExpr(pg_null_uuid_const),
+      zetasql::MakeResolvedLiteral(zetasql::types::UuidType(),
+                                     zetasql::Value::NullUuid()));
+
+  // Test non null uuid
+  ZETASQL_ASSIGN_OR_RETURN(
+      zetasql::UuidValue uuid_value,
+      zetasql::UuidValue::FromString("9a31411b-caca-4ff1-86e9-39fbd2bc3f39"));
+  ZETASQL_ASSIGN_OR_RETURN(Const * pg_uuid_const,
+                   UuidStringToPgConst(uuid_value.ToString()));
+
+  value_pairs.emplace_back(
+      PostgresCastToExpr(pg_uuid_const),
+      zetasql::MakeResolvedLiteral(zetasql::types::UuidType(),
+                                     zetasql::Value::Uuid(uuid_value)));
+
   // numeric <-> PG.NUMERIC
   ZETASQL_ASSIGN_OR_RETURN(auto numeric_const,
                    MakeNumericConst("-13.1357315957913513502000"));

@@ -181,7 +181,7 @@ void function_data_type() :
     | <STRUCT> ( "<" struct_fields() ">" | "<>" )
     | <TIMESTAMP>
     | <INTERVAL>
-
+    | <UUID>
 }
 
 void literal_value() :
@@ -367,7 +367,7 @@ void column_type() :
   | <NUMERIC>
   | <PG> "." qualified_identifier() #pgtype
   | <JSON>
-
+  | <UUID>
   | <INTERVAL>
   | <ARRAY> "<" column_type() ">"
       [ "(" <VECTOR_LENGTH> "="">" <INTEGER_LITERAL> #vector_length ")"]

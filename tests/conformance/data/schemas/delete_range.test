@@ -1,0 +1,18 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE Users(
+  ShardID  INT64 NOT NULL,
+  UserID   INT64,
+  ClassID  STRING(MAX),
+  Name     STRING(MAX),
+  Age      INT64
+) PRIMARY KEY (ShardID, UserID DESC, ClassID);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE users(
+  ShardID  bigint NOT NULL,
+  UserID   bigint,
+  ClassID  text,
+  Name     text,
+  Age      bigint,
+  PRIMARY KEY (ShardID, UserID, ClassID)
+);

@@ -237,6 +237,7 @@ TEST_F(TestSpangresFunctionMapper, MapsMetaTypes) {
           }
           postgresql_name_paths: { name_path: "pg" name_path: "test" }
         }
+        mode: AGGREGATE
       )pb",
       &fn));
 
@@ -290,6 +291,7 @@ TEST_F(TestSpangresFunctionMapper, MapsFunctionWithMultipleSignatures) {
           }
           postgresql_name_paths: { name_path: "pg" name_path: "textregexeq" }
         }
+        mode: SCALAR
       )pb",
       &fn));
 
@@ -371,6 +373,7 @@ TEST_F(TestSpangresFunctionMapper, MapsSpannerNamespacedFunction) {
             name_path: "bit_reverse"
           }
         }
+        mode: SCALAR
       )pb",
       &fn));
 

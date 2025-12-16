@@ -146,6 +146,10 @@ testing::Matcher<const zetasql::Type*> IntervalType() {
   return Property(&zetasql::Type::IsInterval, IsTrue());
 }
 
+testing::Matcher<const zetasql::Type*> UuidType() {
+  return Property(&zetasql::Type::IsUuid, IsTrue());
+}
+
 testing::Matcher<zetasql::Value> UuidV4StringValue() {
   return Property(&zetasql::Value::string_value,
                   testing::MatchesRegex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-["
@@ -4643,7 +4647,8 @@ class DefaultKeyTest
          {zetasql::types::Int64Type(), zetasql::types::Int64Type(),
           zetasql::types::Int64Type(), zetasql::types::Int64Type()},
          {{Int64(100), Int64(1), Int64(100), Int64(0)},
-          {Int64(1), Int64(1), Int64(1), Int64(1)}}}}}};
+          {Int64(1), Int64(1), Int64(1), Int64(1)},
+          {Int64(2), Int64(2), Int64(2), NullInt64()}}}}}};
   std::unique_ptr<ActionManager> action_manager_;
 };
 
@@ -4836,6 +4841,100 @@ TEST_P(DefaultKeyTest, InsertOnConflictDoUpdateDmlDefaultKey) {
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{sql}, QueryContext{schema(), reader(), &writer}),
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 3)));
+}
+
+TEST_P(DefaultKeyTest, InsertOnConflictDoUpdateDmlWithParams) {
+  // This query updates the existing row with primary key (prefix: 1,
+  // player_id:1).
+  std::string sql;
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
+    sql =
+        "INSERT INTO players_default_key "
+        "(prefix, player_id, balance, account_id) "
+        "VALUES (@p1, @p2, @p3, @p4) "
+        "ON CONFLICT (prefix, player_id) "
+        "DO UPDATE SET balance = @p5";
+  } else {
+    sql =
+        "INSERT INTO players_default_key "
+        "(prefix, player_id, balance, account_id) "
+        "VALUES ($1, $2, $3, $4) "
+        "ON CONFLICT (prefix, player_id) "
+        "DO UPDATE SET balance = $5";
+  }
+  MockRowWriter writer;
+  EXPECT_CALL(writer,
+              Write(Property(
+                  &Mutation::ops,
+                  UnorderedElementsAre(AllOf(
+                      Field(&MutationOp::type, MutationOpType::kUpdate),
+                      Field(&MutationOp::table, "players_default_key"),
+                      Field(&MutationOp::columns,
+                            std::vector<std::string>{"prefix", "player_id",
+                                                     "balance", "account_id"}),
+                      Field(&MutationOp::rows,
+                            UnorderedElementsAre(ValueList{
+                                Int64(1), Int64(1), Int64(50), Int64(1)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{sql,
+                                      {{"p1", Int64(1)},
+                                       {"p2", Int64(1)},
+                                       {"p3", Int64(1)},
+                                       {"p4", Int64(1)},
+                                       {"p5", Int64(50)}}},
+                                QueryContext{schema(), reader(), &writer}));
+  EXPECT_EQ(result.modified_row_count, 1);
+}
+
+TEST_P(DefaultKeyTest, InsertOnConflictDoUpdateDmlDefaultKeyNullKeys) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "Index is null filtered in PostgreSQL by default that is "
+                    "not supported in Spanner yet.";
+  }
+  // Both rows trigger update action as rows with conflict target key
+  // `account_id` value `NULL` and `1` already exist.
+  // The test confirms that `NULL` key value is handled correctly as the key
+  // join predicate. The existing row is found and writes the Update mutation
+  // as expected.
+  std::string sql =
+      "INSERT INTO players_default_key (balance, account_id) "
+      "VALUES (3, NULL), (3, 1) "
+      "ON CONFLICT (account_id) "
+      "DO UPDATE SET "
+      "balance = (excluded.balance + excluded.prefix + "
+      "players_default_key.prefix) * 10";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kUpdate),
+              Field(&MutationOp::table, "players_default_key"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"prefix", "player_id", "balance",
+                                             "account_id"}),
+              Field(&MutationOp::rows,
+                    UnorderedElementsAre(
+                        // SET balance = (excluded.balance + excluded.prefix +
+                        //  players_default_key.prefix) * 10 =
+                        // (3 + 100 + 2) * 10 = 1050
+                        ValueList{Int64(2), Int64(2), Int64(1050), NullInt64()},
+                        // SET balance = (excluded.balance + excluded.prefix +
+                        //  players_default_key.prefix) * 10 =
+                        // (3 + 100 + 1) * 10 = 1040
+                        ValueList{Int64(1), Int64(1), Int64(1040),
+                                  Int64(1)})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{sql},
+                                QueryContext{schema(), reader(), &writer}));
+  EXPECT_EQ(result.modified_row_count, 2);
 }
 
 TEST_P(DefaultKeyTest, InsertOnConflictDoNothingDmlDefaultKeyUniqueIndex) {

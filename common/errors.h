@@ -107,6 +107,8 @@ absl::Status CouldNotParseStringAsTimestamp(absl::string_view str,
                                             absl::string_view error);
 absl::Status CouldNotParseStringAsInterval(absl::string_view str,
                                            absl::string_view error);
+absl::Status CouldNotParseStringAsUuid(absl::string_view str,
+                                       absl::string_view error);
 absl::Status TimestampMustBeInUTCTimeZone(absl::string_view str);
 absl::Status CouldNotParseStringAsDate(absl::string_view str);
 absl::Status InvalidDate(absl::string_view str);
@@ -746,7 +748,7 @@ absl::Status ReadOnlyTransactionDoesNotSupportReadWriteOnlyFunctions(
 absl::Status CannotInsertDuplicateKeyInsertOrUpdateDml(absl::string_view key);
 // Unsupported query shape errors.
 absl::Status UnsupportedReturnStructAsColumn();
-absl::Status UnsupportedArrayConstructorSyntaxForEmptyStructArray();
+absl::Status UnsupportedArrayConstructorSyntaxForNullValuedStructArray();
 absl::Status UnsupportedFeatureSafe(absl::string_view feature_type,
                                     absl::string_view info_message);
 absl::Status UnsupportedFunction(absl::string_view function_name);

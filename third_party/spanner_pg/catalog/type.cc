@@ -650,6 +650,61 @@ class PostgresTokenlistMapping : public PostgresTypeMapping {
   }
 };
 
+class PostgresUuidMapping : public PostgresTypeMapping {
+ public:
+  explicit PostgresUuidMapping(const zetasql::TypeFactory* factory)
+      : PostgresTypeMapping(factory, UUIDOID) {}
+
+  const zetasql::Type* mapped_type() const override {
+    return zetasql::types::UuidType();
+  }
+
+  // Mutates pg_const->constvalue to avoid creating a new copy
+  absl::StatusOr<zetasql::Value> MakeGsqlValue(
+      const Const* pg_const) const override {
+    if (pg_const->constisnull) {
+      return zetasql::Value::NullUuid();
+    }
+
+    pg_uuid_t* pg_uuid = DatumGetUUIDP(pg_const->constvalue);
+    unsigned char* bytes = pg_uuid->data;
+    absl::string_view uuid_str(reinterpret_cast<const char*>(bytes), 16);
+
+    ZETASQL_ASSIGN_OR_RETURN(zetasql::UuidValue uuid_value,
+                     zetasql::UuidValue::DeserializeFromBytes(uuid_str));
+    return zetasql::Value::Uuid(uuid_value);
+  }
+
+  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+      const absl::string_view& string_const) const override {
+    if (string_const == "null") {
+      return zetasql::Value::NullUuid();
+    }
+
+    ZETASQL_ASSIGN_OR_RETURN(zetasql::UuidValue uuid_value,
+                     zetasql::UuidValue::FromString(string_const));
+    return zetasql::Value::Uuid(uuid_value);
+  }
+
+  absl::StatusOr<Const*> MakePgConst(
+      const zetasql::Value& value) const override {
+    Const* pg_const;
+    if (value.is_null()) {
+      return CheckedPgMakeConst(
+          /*consttype=*/UUIDOID,
+          /*consttypmod=*/-1,
+          /*constcollid=*/InvalidOid,
+          /*constlen=*/sizeof(Datum),
+          /*constvalue=*/UUIDPGetDatum(&pg_const),
+          /*constisnull=*/true,
+          /*constbyval=*/false);
+    }
+
+    ZETASQL_ASSIGN_OR_RETURN(zetasql::UuidValue uuid_value, value.uuid_value());
+    return UuidStringToPgConst(uuid_value.ToString());
+  }
+};
+
 absl::StatusOr<zetasql::Value> PostgresExtendedArrayMapping::MakeGsqlValue(
     const Const* pg_const) const {
   // Technically this means we support multi-dimensional NULL arrays, but PG
@@ -907,6 +962,12 @@ const PostgresTypeMapping* PgTokenlistMapping() {
   return s_pg_tokenlist_mapping.get();
 }
 
+const PostgresTypeMapping* PgUuidMapping() {
+  static const zetasql_base::NoDestructor<PostgresUuidMapping> s_pg_uuid_mapping(
+      GetTypeFactory());
+  return s_pg_uuid_mapping.get();
+}
+
 // Supported Array Types.
 const PostgresTypeMapping* PgBoolArrayMapping() {
   static const zetasql_base::NoDestructor<PostgresExtendedArrayMapping>
@@ -1018,6 +1079,17 @@ const PostgresTypeMapping* PgTokenlistArrayMapping() {
           /*array_type_oid=*/50002,
           /*element_type=*/types::PgTokenlistMapping(),
           /*mapped_type=*/zetasql::types::TokenListArrayType(),
+          /*requires_nan_handling=*/false);
+  return s_pg_tokenlist_array_mapping.get();
+}
+
+const PostgresTypeMapping* PgUuidArrayMapping() {
+  static const zetasql_base::NoDestructor<PostgresExtendedArrayMapping>
+      s_pg_tokenlist_array_mapping(
+          /*type_factory=*/GetTypeFactory(),
+          /*array_type_oid=*/UUIDARRAYOID,
+          /*element_type=*/types::PgUuidMapping(),
+          /*mapped_type=*/zetasql::types::UuidArrayType(),
           /*requires_nan_handling=*/false);
   return s_pg_tokenlist_array_mapping.get();
 }

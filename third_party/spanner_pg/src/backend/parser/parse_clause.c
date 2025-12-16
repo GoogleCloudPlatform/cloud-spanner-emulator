@@ -21,6 +21,7 @@
 #include "access/tsmapi.h"
 #include "catalog/catalog.h"
 #include "catalog/heap.h"
+#include "catalog/namespace.h"
 #include "catalog/pg_am.h"
 #include "catalog/pg_amproc.h"
 #include "catalog/pg_collation.h"
@@ -918,24 +919,24 @@ transformRangeTableSample(ParseState *pstate, RangeTableSample *rts)
 	ListCell   *larg,
 			   *ltyp;
 
-	/*
-	 * To validate the sample method name, look up the handler function, which
-	 * has the same name, one dummy INTERNAL argument, and a result type of
-	 * tsm_handler.  (Note: tablesample method names are not schema-qualified
-	 * in the SQL standard; but since they are just functions to us, we allow
-	 * schema qualification to resolve any potential ambiguity.)
-	 */
-	funcargtypes[0] = INTERNALOID;
+  /*
+   * To validate the sample method name, look up the handler function, which
+   * has the same name, one dummy INTERNAL argument, and a result type of
+   * tsm_handler.  (Note: tablesample method names are not schema-qualified
+   * in the SQL standard; but since they are just functions to us, we allow
+   * schema qualification to resolve any potential ambiguity.)
+   */
+  funcargtypes[0] = INTERNALOID;
 
-	handlerOid = LookupFuncName(rts->method, 1, funcargtypes, true);
+  handlerOid = LookupFuncName(rts->method, 1, funcargtypes, true);
 
-	/* we want error to complain about no-such-method, not no-such-function */
-	if (!OidIsValid(handlerOid))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("tablesample method %s does not exist",
-						NameListToString(rts->method)),
-				 parser_errposition(pstate, rts->location)));
+  /* we want error to complain about no-such-method, not no-such-function */
+  if (!OidIsValid(handlerOid))
+       ereport(ERROR,
+                       (errcode(ERRCODE_UNDEFINED_OBJECT),
+                        errmsg("tablesample method %s does not exist",
+                                       NameListToString(rts->method)),
+                        parser_errposition(pstate, rts->location)));
 
 	/* check that handler has correct return type */
 	if (get_func_rettype(handlerOid) != TSM_HANDLEROID)
@@ -982,18 +983,18 @@ transformRangeTableSample(ParseState *pstate, RangeTableSample *rts)
 	tablesample->args = fargs;
 
 	/* Process REPEATABLE (seed) */
-	if (rts->repeatable != NULL)
-	{
+	if (rts->repeatable != NULL) {
 		Node	   *arg;
 
+		// TODO: b/432126919 - Remove after TABLESAMPLE is ready to launch.
 		if (!tsm->repeatable_across_queries)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("tablesample method %s does not support REPEATABLE",
 							NameListToString(rts->method)),
 					 parser_errposition(pstate, rts->location)));
-
 		arg = transformExpr(pstate, rts->repeatable, EXPR_KIND_FROM_FUNCTION);
+		// TODO: b/432126919 - Remove after TABLESAMPLE is ready to launch.
 		arg = coerce_to_specific_type(pstate, arg, FLOAT8OID, "REPEATABLE");
 		assign_expr_collations(pstate, arg);
 		tablesample->repeatable = (Expr *) arg;

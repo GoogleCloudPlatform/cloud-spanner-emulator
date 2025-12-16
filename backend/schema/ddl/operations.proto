@@ -151,6 +151,7 @@ message TypeDefinition {
     PG_JSONB = 24;
     STRUCT = 26;
     INTERVAL = 27;
+    UUID = 28;
   }
 
   optional Type type = 1;
@@ -191,6 +192,7 @@ message ColumnDefinition {
     PG_JSONB = 24;
     STRUCT = 26;
     INTERVAL = 27;
+    UUID = 28;
   }
 
   optional Type type = 2;
