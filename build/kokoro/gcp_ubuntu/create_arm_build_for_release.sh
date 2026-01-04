@@ -29,4 +29,4 @@ sudo docker cp "$container_id":gateway_main .
 sudo docker cp "$container_id":emulator_main .
 VERSION=$(curl https://api.github.com/repos/GoogleCloudPlatform/cloud-spanner-emulator/releases/latest | jq '.name'[1:])
 tar -cvf cloud-spanner-emulator_linux_arm64-${VERSION}.tar.gz emulator_main gateway_main
-gsutil cp cloud-spanner-emulator_linux_arm64-${VERSION}.tar.gz gs://cloud-spanner-emulator/releases/${VERSION}
+gcloud storage cp cloud-spanner-emulator_linux_arm64-${VERSION}.tar.gz gs://cloud-spanner-emulator/releases/${VERSION}
