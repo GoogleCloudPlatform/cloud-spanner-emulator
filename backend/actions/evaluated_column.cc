@@ -273,7 +273,7 @@ absl::Status EvaluatedColumnEffector::Effect(const ActionContext* ctx,
   }
 
   return Effect(ctx, op.key, &column_values, /*is_update_op=*/false,
-                /*apply_on_update=*/false);
+                /*apply_on_update=*/false, /*origin_is_dml=*/op.origin_is_dml);
 }
 
 absl::Status EvaluatedColumnEffector::Effect(const ActionContext* ctx,
@@ -306,13 +306,13 @@ absl::Status EvaluatedColumnEffector::Effect(const ActionContext* ctx,
     column_values[op.columns[i]->Name()] = op.values[i];
   }
   return Effect(ctx, op.key, &column_values, /*is_update_op=*/true,
-                apply_on_update);
+                apply_on_update, /*origin_is_dml=*/op.origin_is_dml);
 }
 
 absl::Status EvaluatedColumnEffector::Effect(
     const ActionContext* ctx, const Key& key,
     zetasql::ParameterValueMap* column_values, bool is_update_op,
-    bool apply_on_update) const {
+    bool apply_on_update, bool origin_is_dml) const {
   ZETASQL_RET_CHECK(for_keys_ == false);
   std::vector<zetasql::Value> evaluated_values;
   evaluated_values.reserve(evaluated_columns_.size());
@@ -339,6 +339,13 @@ absl::Status EvaluatedColumnEffector::Effect(
 
     // DEFAULT values only apply to inserts.
     if (evaluated_column->has_default_value() && is_update_op) {
+      continue;
+    }
+
+    // For DML-originated mutations, default values have already been evaluated
+    // by ZetaSQL and included in the mutation. Skip re-evaluation to avoid
+    // timestamp differences between RETURNING clause and stored values.
+    if (evaluated_column->has_default_value() && origin_is_dml) {
       continue;
     }
 
