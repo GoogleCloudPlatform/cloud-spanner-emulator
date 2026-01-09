@@ -69,6 +69,10 @@ AnalyzePostgreSQL(const std::string& sql, zetasql::EnumerableCatalog* catalog,
                   zetasql::TypeFactory* type_factory,
                   const FunctionCatalog* function_catalog);
 
+absl::StatusOr<std::unique_ptr<const zetasql::ResolvedFunctionCall>>
+BuildPendingCommitTimestampFunction(zetasql::TypeFactory& type_factory,
+                                    zetasql::Catalog& catalog);
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

@@ -128,7 +128,8 @@ void AddMathematicalFunctions(
   {
       auto extract_function =
           absl::c_find_if(functions, [](const PostgresFunctionArguments& args) {
-            return args.postgres_function_name() == "extract";
+            return (args.postgres_function_name() == "extract" &&
+                    args.postgres_namespace() == "pg_catalog");
           });
       if (extract_function == functions.end()) {
         functions.push_back({"extract",

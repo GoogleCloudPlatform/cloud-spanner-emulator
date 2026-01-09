@@ -1199,10 +1199,10 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterIndex(
       break;
     }
     case google::spanner::emulator::backend::ddl::AlterIndex::kSetOptions: {
-      alter_type = " SET LOCALITY GROUP ";
       for (const google::spanner::emulator::backend::ddl::SetOption& option :
            statement.set_options().options()) {
         if (option.option_name() == "locality_group") {
+          alter_type = " SET LOCALITY GROUP ";
           if (option.null_value()) {
             column_name = "NULL";
           } else {
@@ -1212,9 +1212,11 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterIndex(
         }
       }
       if (column_name.empty()) {
+        // TODO: b/410616675 - Alter this error message after columnar policy is
+        // allowed
         return absl::InvalidArgumentError(
-            "Locality group option not found in <ALTER INDEX ... SET LOCALITY "
-            "GROUP> statement.");
+            "Locality group option not found in <ALTER INDEX ... SET "
+            "LOCALITY GROUP> statement.");
       }
       break;
     }

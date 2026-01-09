@@ -979,6 +979,13 @@ class ForwardTransformer {
   BuildGsqlInFunctionCall(const ScalarArrayOpExpr& scalar_array,
                           ExprTransformerInfo* expr_transformer_info);
 
+  // Transform the postgres `a IS DISTINCT FROM b` expression into ZetaSQL
+  // $is_distinct_from(a, b) function call.
+  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  BuildGsqlIsDistinctFromFunctionCall(
+      const DistinctExpr& distinct_expr,
+      ExprTransformerInfo* expr_transformer_info);
+
   // Append the array expressions for the googlesql function call to the
   // argument list. Returns true if the caller should invoke ZetaSQL's
   // $in_array function instead of $in i.e., if this function appends an array

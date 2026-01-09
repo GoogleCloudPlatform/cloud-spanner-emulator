@@ -46,8 +46,11 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
+#include "absl/strings/substitute.h"
+#include "absl/types/span.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
@@ -71,6 +74,33 @@ namespace postgres_translator {
 using ::postgres_translator::internal::PostgresCastNodeTemplate;
 using ::postgres_translator::internal::PostgresCastToExpr;
 using ::postgres_translator::internal::PostgresConstCastToExpr;
+
+namespace {
+absl::StatusOr<std::string> GetInputArgumentTypesString(
+    const EngineSystemCatalog* catalog,
+    absl::Span<const zetasql::InputArgumentType> input_argument_types) {
+  std::vector<std::string> postgres_input_type_names;
+  postgres_input_type_names.reserve(input_argument_types.size());
+  for (const zetasql::InputArgumentType& input_arg : input_argument_types) {
+    const PostgresTypeMapping* pg_type =
+        catalog->GetTypeFromReverseMapping(input_arg.type());
+
+    // if we cannot reverse the input type, a null pointer is returned
+    // and we skip adding input types in the error message.
+    if (pg_type == nullptr) {
+      postgres_input_type_names.clear();
+      break;
+    } else {
+      ZETASQL_ASSIGN_OR_RETURN(const char* pg_type_name,
+                       pg_type->PostgresExternalTypeName());
+      postgres_input_type_names.push_back(pg_type_name);
+    }
+  }
+
+  return absl::StrJoin(postgres_input_type_names.begin(),
+                       postgres_input_type_names.end(), ", ");
+}
+}  // namespace
 
 absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
 ForwardTransformer::BuildGsqlFunctionArgumentList(
@@ -1515,4 +1545,51 @@ ForwardTransformer::BuildGsqlResolvedMakeArrayFunctionCall(
                                   std::move(argument_list));
 }
 
+absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+ForwardTransformer::BuildGsqlIsDistinctFromFunctionCall(
+    const DistinctExpr& distinct_expr,
+    ExprTransformerInfo* expr_transformer_info) {
+  std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list;
+
+  ZETASQL_ASSIGN_OR_RETURN(auto proc_proto, PgBootstrapCatalog::Default()->GetProcProto(
+                                        distinct_expr.opfuncid));
+  ZETASQL_RET_CHECK_EQ(distinct_expr.args->length, 2);
+  ZETASQL_ASSIGN_OR_RETURN(argument_list,
+                   BuildGsqlFunctionArgumentList(
+                       *proc_proto, distinct_expr.args, expr_transformer_info));
+  for (std::unique_ptr<zetasql::ResolvedExpr>& arg : argument_list) {
+    ZETASQL_ASSIGN_OR_RETURN(arg,
+                     catalog_adapter_->GetEngineSystemCatalog()
+                         ->GetResolvedExprForComparison(
+                             std::move(arg),
+                             catalog_adapter_->analyzer_options().language()));
+  }
+
+  std::vector<zetasql::InputArgumentType> input_argument_types =
+      GetInputArgumentTypes(argument_list);
+  ZETASQL_ASSIGN_OR_RETURN(
+      FunctionAndSignature function_and_signature,
+      catalog_adapter_->GetEngineSystemCatalog()->GetFunctionAndSignature(
+          PostgresExprIdentifier::Expr(T_DistinctExpr), input_argument_types,
+          catalog_adapter_->analyzer_options().language()));
+
+  auto* function = function_and_signature.function();
+  absl::Status status = function->CheckPostResolutionArgumentConstraints(
+      function_and_signature.signature(), input_argument_types,
+      catalog_adapter_->analyzer_options().language());
+  if (!status.ok()) {
+    if (status.code() != absl::StatusCode::kInvalidArgument) {
+      return status;
+    }
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::string arg_types,
+        GetInputArgumentTypesString(catalog_adapter_->GetEngineSystemCatalog(),
+                                    input_argument_types));
+    return absl::UnimplementedError(
+        absl::StrCat("Postgres function $is_distinct_from(", arg_types,
+                     ") is not supported"));
+  }
+  return MakeResolvedFunctionCall(function_and_signature,
+                                  std::move(argument_list));
+}
 }  // namespace postgres_translator

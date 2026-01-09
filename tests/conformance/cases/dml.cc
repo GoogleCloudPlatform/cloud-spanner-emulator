@@ -1314,6 +1314,49 @@ TEST_P(DmlTest, ReturningStructValues) {
                    "A struct value cannot be returned as a column value.")));
 }
 
+TEST_P(DmlTest, LockScannedRangesHintInInsert) {
+  PopulateDatabase();
+
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  std::string lock_hint =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "/*@lock_scanned_ranges=exclusive*/"
+          : "@{lock_scanned_ranges=EXCLUSIVE}";
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(absl::Substitute(
+      "$0INSERT INTO users(id, name, age) VALUES (5, 'Levin', 27)",
+      lock_hint))}));
+  EXPECT_THAT(Query("SELECT id, name, age FROM users WHERE id = 5"),
+              IsOkAndHoldsRows({{5, "Levin", 27}}));
+}
+
+TEST_P(DmlTest, LockScannedRangesHintInUpdate) {
+  PopulateDatabase();
+
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  std::string lock_hint =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "/*@lock_scanned_ranges=exclusive*/"
+          : "@{lock_scanned_ranges=EXCLUSIVE}";
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(absl::Substitute(
+      "$0UPDATE users SET name = 'Mark' WHERE id = 1", lock_hint))}));
+  EXPECT_THAT(Query("SELECT id, name, age FROM users WHERE id = 1"),
+              IsOkAndHoldsRows({{1, "Mark", 27}}));
+}
+
+TEST_P(DmlTest, LockScannedRangesHintInDelete) {
+  PopulateDatabase();
+
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  std::string lock_hint =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "/*@lock_scanned_ranges=exclusive*/"
+          : "@{lock_scanned_ranges=EXCLUSIVE}";
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(
+      absl::Substitute("$0DELETE FROM users WHERE id = 10", lock_hint))}));
+  EXPECT_THAT(Query("SELECT id, name, age FROM users WHERE id = 10"),
+              IsOkAndHoldsRows({}));
+}
+
 }  // namespace
 
 }  // namespace test

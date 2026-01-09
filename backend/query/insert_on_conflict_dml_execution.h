@@ -51,9 +51,12 @@ class InsertOnConflictDoUpdateRewriter
   explicit InsertOnConflictDoUpdateRewriter(
       const absl::flat_hash_map<int, std::pair<const zetasql::Type*, int>>&
           column_ids_referenced_from_insert_row,
+      const absl::flat_hash_set<int>& column_ids_with_commit_timestamp_value,
       const zetasql::ResolvedColumn* struct_column_holder)
       : column_ids_referenced_from_insert_row_(
             column_ids_referenced_from_insert_row),
+        column_ids_with_commit_timestamp_value_(
+            column_ids_with_commit_timestamp_value),
         struct_column_holder_(struct_column_holder) {}
 
   absl::Status VisitResolvedColumnRef(
@@ -67,6 +70,9 @@ class InsertOnConflictDoUpdateRewriter
   // STRUCT column `struct_column_`.
   absl::flat_hash_map<int, std::pair<const zetasql::Type*, int>>
       column_ids_referenced_from_insert_row_;
+  // Set of column ids of columns referenced from the insert row (i.e. of the
+  // form `excluded.<column_name>`) and having commit timestamp value.
+  absl::flat_hash_set<int> column_ids_with_commit_timestamp_value_;
   // Column containing the source STRUCT having the column values from the
   // insert row.
   const zetasql::ResolvedColumn* struct_column_holder_;
@@ -168,6 +174,7 @@ absl::StatusOr<std::set<Key>> GetOriginalTableRows(
 absl::StatusOr<std::unique_ptr<const zetasql::ResolvedInsertStmt>>
 BuildInsertDMLForNewRows(
     const zetasql::ResolvedInsertStmt* insert_stmt,
+    zetasql::TypeFactory& type_factory, zetasql::Catalog& catalog,
     const std::vector<Key>& new_rows,
     const std::map<Key, std::vector<zetasql::Value>>& insert_rows_map,
     const std::vector<std::string>& mutation_column_names,

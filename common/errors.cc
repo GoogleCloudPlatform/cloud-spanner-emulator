@@ -3224,13 +3224,6 @@ absl::Status NullFilteredIndexAsConflictTargetIsNotFound(
                        index_name));
 }
 
-absl::Status UnsupportedPendingCommitTimestampInInsertOnConflictDml() {
-  return absl::Status(
-      absl::StatusCode::kUnimplemented,
-      "INSERT...ON CONFLICT DML with PENDING_COMMIT_TIMESTAMP() value is not "
-      "supported in Emulator");
-}
-
 absl::Status UnsupportedGeneratedKeyWithUpsertQueries() {
   return absl::Status(
       absl::StatusCode::kUnimplemented,

@@ -238,6 +238,11 @@ zetasql::FunctionArgumentTypeOptions GetRequiredPositionalArgumentOptions(
   return options;
 }
 
+bool HasNullValue(absl::Span<const zetasql::Value> args) {
+  return absl::c_any_of(
+      args, [](const zetasql::Value& arg) { return arg.is_null(); });
+}
+
 // PG array functions
 
 // Used by both array_upper and array_length because they return the same
@@ -1037,10 +1042,8 @@ std::unique_ptr<zetasql::Function> QuoteIdentFunction(
 absl::StatusOr<zetasql::Value> EvalRegexpMatch(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2 || args.size() == 3);
-  for (auto& arg : args) {
-    if (arg.is_null()) {
-      return zetasql::Value::Null(zetasql::types::StringArrayType());
-    }
+  if (HasNullValue(args)) {
+    return zetasql::Value::Null(zetasql::types::StringArrayType());
   }
 
   std::unique_ptr<std::vector<std::optional<std::string>>> result;
@@ -1092,10 +1095,8 @@ std::unique_ptr<zetasql::Function> RegexpMatchFunction(
 absl::StatusOr<zetasql::Value> EvalRegexpSplitToArray(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2 || args.size() == 3);
-  for (auto& arg : args) {
-    if (arg.is_null()) {
+  if (HasNullValue(args)) {
       return zetasql::Value::Null(zetasql::types::StringArrayType());
-    }
   }
 
   std::unique_ptr<std::vector<std::string>> result;
@@ -1178,6 +1179,9 @@ std::unique_ptr<zetasql::Function> SubstringFunction(
 absl::StatusOr<zetasql::Value> EvalCastToDate(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 1);
+  if (args[0].is_null()) {
+    return zetasql::Value::NullDate();
+  }
 
   ZETASQL_ASSIGN_OR_RETURN(int32_t date,
                    function_evaluators::PgDateIn(args[0].string_value()));
@@ -1402,17 +1406,22 @@ std::unique_ptr<zetasql::Function> CastToTimestampFunction(
 absl::StatusOr<zetasql::Value> EvalTimestamptzAdd(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
+  if (HasNullValue(args)) {
+    return zetasql::Value::NullTimestamp();
+  }
+  auto unix_picos = args[0].ToUnixPicos();
 
   if (args[1].type_kind() == zetasql::TYPE_INTERVAL) {
     ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue interval_arg,
                      RoundPrecision(args[1].interval_value()));
     ZETASQL_ASSIGN_OR_RETURN(absl::Time time,
-                     PgTimestamptzAdd(args[0].ToTime(), interval_arg));
+                     PgTimestamptzAdd(unix_picos.ToAbslTime(), interval_arg));
     return zetasql::Value::Timestamp(time);
   }
 
   ZETASQL_ASSIGN_OR_RETURN(absl::Time time,
-                   PgTimestamptzAdd(args[0].ToTime(), args[1].string_value()));
+                   PgTimestamptzAdd(unix_picos.ToAbslTime(),
+                                    args[1].string_value()));
   return zetasql::Value::Timestamp(time);
 }
 
@@ -1442,18 +1451,23 @@ std::unique_ptr<zetasql::Function> TimestamptzAddFunction(
 absl::StatusOr<zetasql::Value> EvalTimestamptzSubtract(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
+  if (HasNullValue(args)) {
+    return zetasql::Value::NullTimestamp();
+  }
+  auto unix_picos = args[0].ToUnixPicos();
 
   if (args[1].type_kind() == zetasql::TYPE_INTERVAL) {
     ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue interval_arg,
                      RoundPrecision(args[1].interval_value()));
     ZETASQL_ASSIGN_OR_RETURN(absl::Time time,
-                     PgTimestamptzSubtract(args[0].ToTime(), interval_arg));
+                     PgTimestamptzSubtract(unix_picos.ToAbslTime(),
+                                           interval_arg));
     return zetasql::Value::Timestamp(time);
   }
 
   ZETASQL_ASSIGN_OR_RETURN(
       absl::Time time,
-      PgTimestamptzSubtract(args[0].ToTime(), args[1].string_value()));
+      PgTimestamptzSubtract(unix_picos.ToAbslTime(), args[1].string_value()));
   return zetasql::Value::Timestamp(time);
 }
 
@@ -1485,9 +1499,14 @@ std::unique_ptr<zetasql::Function> TimestamptzSubtractFunction(
 absl::StatusOr<zetasql::Value> EvalTimestamptzBin(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 3);
+  if (HasNullValue(args)) {
+    return zetasql::Value::NullTimestamp();
+  }
+
   ZETASQL_ASSIGN_OR_RETURN(absl::Time time,
-                   PgTimestamptzBin(args[0].string_value(), args[1].ToTime(),
-                                    args[2].ToTime()));
+                   PgTimestamptzBin(args[0].string_value(),
+                                    args[1].ToUnixPicos().ToAbslTime(),
+                                    args[2].ToUnixPicos().ToAbslTime()));
   return zetasql::Value::Timestamp(time);
 }
 
@@ -1513,14 +1532,20 @@ std::unique_ptr<zetasql::Function> TimestamptzBinFunction(
 absl::StatusOr<zetasql::Value> EvalTimestamptzTrunc(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2 || args.size() == 3);
+  if (HasNullValue(args)) {
+    return zetasql::Value::NullTimestamp();
+  }
+  auto unix_picos = args[1].ToUnixPicos();
   if (args.size() == 2) {
-    ZETASQL_ASSIGN_OR_RETURN(absl::Time time, PgTimestamptzTrunc(args[0].string_value(),
-                                                         args[1].ToTime()));
+    ZETASQL_ASSIGN_OR_RETURN(absl::Time time,
+                     PgTimestamptzTrunc(args[0].string_value(),
+                                        unix_picos.ToAbslTime()));
     return zetasql::Value::Timestamp(time);
   } else {
     ZETASQL_ASSIGN_OR_RETURN(
         absl::Time time,
-        PgTimestamptzTrunc(args[0].string_value(), args[1].ToTime(),
+        PgTimestamptzTrunc(args[0].string_value(),
+                           unix_picos.ToAbslTime(),
                            args[2].string_value()));
     return zetasql::Value::Timestamp(time);
   }
@@ -1690,7 +1715,8 @@ absl::StatusOr<std::string> GetStringRepresentation(
       // check is done above); hence, the following call to
       // `FormatTimestampToString` will never return an invalid timestamp error.
       ZETASQL_RETURN_IF_ERROR(zetasql::functions::FormatTimestampToString(
-          absl::RFC3339_full, absl::ToUnixMicros(value.ToTime()),
+          absl::RFC3339_full,
+          absl::ToUnixMicros(value.ToUnixPicos().ToAbslTime()),
           absl::UTCTimeZone(), {}, &timestamp_string));
       return timestamp_string;
     }
@@ -2295,11 +2321,6 @@ std::unique_ptr<zetasql::Function> JsonbBuildObjectFunction(
                     zetasql::FunctionArgumentType::REPEATED)}},
               /*context_ptr=*/nullptr)},
       function_options);
-}
-
-bool HasNullValue(absl::Span<const zetasql::Value> args) {
-  return absl::c_any_of(
-      args, [](const zetasql::Value& arg) { return arg.is_null(); });
 }
 
 absl::StatusOr<zetasql::Value> EvalJsonbDelete(
@@ -3959,76 +3980,78 @@ std::unique_ptr<zetasql::Function> JsonbFloatArrayExtractionFunction(
 
 absl::StatusOr<zetasql::Value> EvalToChar(
   absl::Span<const zetasql::Value> args) {
-static const zetasql::Type* gsql_pg_numeric =
-    spangres::datatypes::GetPgNumericType();
-ZETASQL_RET_CHECK(args.size() == 2);
-if (args[0].is_null() || args[1].is_null()) {
-  return zetasql::Value::NullString();
-}
+  static const zetasql::Type* gsql_pg_numeric =
+      spangres::datatypes::GetPgNumericType();
+  ZETASQL_RET_CHECK(args.size() == 2);
+  if (HasNullValue(args)) {
+    return zetasql::Value::NullString();
+  }
 
-switch (args[0].type_kind()) {
-  case zetasql::TYPE_INT64: {
-    ZETASQL_ASSIGN_OR_RETURN(std::string result, Int8ToChar(args[0].int64_value(),
-                                                    args[1].string_value()));
-    return zetasql::Value::String(result);
-  }
-  case zetasql::TYPE_TIMESTAMP: {
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::unique_ptr<std::string> result,
-        PgTimestampTzToChar(args[0].ToTime(), args[1].string_value()));
-    if (result == nullptr) {
-      return zetasql::Value::NullString();
-    } else {
-      return zetasql::Value::String(*result);
-    }
-  }
-  case zetasql::TYPE_DOUBLE: {
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::string result,
-        Float8ToChar(args[0].double_value(), args[1].string_value()));
-    return zetasql::Value::String(result);
-  }
-  case zetasql::TYPE_FLOAT: {
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::string result,
-        Float4ToChar(args[0].float_value(), args[1].string_value()));
-    return zetasql::Value::String(result);
-  }
-  case zetasql::TYPE_INTERVAL: {
-    std::unique_ptr<std::string> result;
-    ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue interval,
-                     RoundPrecision(args[0].interval_value()));
-    ZETASQL_ASSIGN_OR_RETURN(result,
-                     PgIntervalToChar(interval, args[1].string_value()));
-    return result == nullptr ? zetasql::Value::NullString()
-                             : zetasql::Value::String(*result);
-  }
-  case zetasql::TYPE_EXTENDED:
-    if (args[0].type()->Equals(gsql_pg_numeric)) {
-      ZETASQL_ASSIGN_OR_RETURN(absl::Cord numeric_string,
-                       GetPgNumericNormalizedValue(args[0]));
-      ZETASQL_ASSIGN_OR_RETURN(
-          std::string result,
-          NumericToChar(std::string(numeric_string), args[1].string_value()));
+  switch (args[0].type_kind()) {
+    case zetasql::TYPE_INT64: {
+      ZETASQL_ASSIGN_OR_RETURN(std::string result, Int8ToChar(args[0].int64_value(),
+                                                      args[1].string_value()));
       return zetasql::Value::String(result);
     }
-    [[fallthrough]];
-  default:
-    return absl::UnimplementedError(
-        absl::StrCat("to_char(", args[0].type()->DebugString(), ", text)"));
-}
+    case zetasql::TYPE_TIMESTAMP: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          std::unique_ptr<std::string> result,
+          PgTimestampTzToChar(args[0].ToUnixPicos().ToAbslTime(),
+                              args[1].string_value()));
+      if (result == nullptr) {
+        return zetasql::Value::NullString();
+      } else {
+        return zetasql::Value::String(*result);
+      }
+    }
+    case zetasql::TYPE_DOUBLE: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          std::string result,
+          Float8ToChar(args[0].double_value(), args[1].string_value()));
+      return zetasql::Value::String(result);
+    }
+    case zetasql::TYPE_FLOAT: {
+      ZETASQL_ASSIGN_OR_RETURN(
+          std::string result,
+          Float4ToChar(args[0].float_value(), args[1].string_value()));
+      return zetasql::Value::String(result);
+    }
+    case zetasql::TYPE_INTERVAL: {
+      std::unique_ptr<std::string> result;
+      ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue interval,
+                      RoundPrecision(args[0].interval_value()));
+      ZETASQL_ASSIGN_OR_RETURN(result,
+                      PgIntervalToChar(interval, args[1].string_value()));
+      return result == nullptr ? zetasql::Value::NullString()
+                              : zetasql::Value::String(*result);
+    }
+    case zetasql::TYPE_EXTENDED:
+      if (args[0].type()->Equals(gsql_pg_numeric)) {
+        ZETASQL_ASSIGN_OR_RETURN(absl::Cord numeric_string,
+                        GetPgNumericNormalizedValue(args[0]));
+        ZETASQL_ASSIGN_OR_RETURN(
+            std::string result,
+            NumericToChar(std::string(numeric_string), args[1].string_value()));
+        return zetasql::Value::String(result);
+      }
+      [[fallthrough]];
+    default:
+      return absl::UnimplementedError(
+          absl::StrCat("to_char(", args[0].type()->DebugString(), ", text)"));
+  }
 }
 
 absl::StatusOr<zetasql::Value> EvalExtract(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 2);
-  if (args[0].is_null() || args[1].is_null()) {
+  if (HasNullValue(args)) {
     return zetasql::Value::Null(spangres::datatypes::GetPgNumericType());
   }
   if (args[1].type_kind() == zetasql::TYPE_TIMESTAMP) {
     ZETASQL_ASSIGN_OR_RETURN(
         absl::Cord result,
-        PgTimestamptzExtract(args[0].string_value(), args[1].ToTime()));
+        PgTimestamptzExtract(args[0].string_value(),
+                             args[1].ToUnixPicos().ToAbslTime()));
     return CreatePgNumericValue(std::string(result));
   } else {
     ZETASQL_ASSIGN_OR_RETURN(absl::Cord result, PgDateExtract(args[0].string_value(),
@@ -4040,6 +4063,9 @@ absl::StatusOr<zetasql::Value> EvalExtract(
 absl::StatusOr<zetasql::Value> EvalCastToTimestamp(
     absl::Span<const zetasql::Value> args) {
   ZETASQL_RET_CHECK(args.size() == 1);
+  if (args[0].is_null()) {
+    return zetasql::Value::NullTimestamp();
+  }
 
   ZETASQL_ASSIGN_OR_RETURN(absl::Time time, function_evaluators::PgTimestamptzIn(
                                         args[0].string_value()));
@@ -4048,30 +4074,30 @@ absl::StatusOr<zetasql::Value> EvalCastToTimestamp(
 
 absl::StatusOr<zetasql::Value> EvalCastToString(
   absl::Span<const zetasql::Value> args) {
-ZETASQL_RET_CHECK(args.size() == 1);
+  ZETASQL_RET_CHECK(args.size() == 1);
 
-switch (args[0].type()->kind()) {
-  case zetasql::TYPE_INTERVAL:
-    return EvalCastIntervalToString(args);
-  case zetasql::TYPE_EXTENDED: {
-    auto type_code =
-        static_cast<const spangres::datatypes::SpannerExtendedType*>(
-            args[0].type())
-            ->code();
-    switch (type_code) {
-      case spangres::datatypes::TypeAnnotationCode::PG_NUMERIC:
-        return EvalCastNumericToString(args);
-      default:
-        return absl::InvalidArgumentError(
-            absl::StrCat("Unsupported type for CAST to text: ",
-                         args[0].type()->DebugString()));
+  switch (args[0].type()->kind()) {
+    case zetasql::TYPE_INTERVAL:
+      return EvalCastIntervalToString(args);
+    case zetasql::TYPE_EXTENDED: {
+      auto type_code =
+          static_cast<const spangres::datatypes::SpannerExtendedType*>(
+              args[0].type())
+              ->code();
+      switch (type_code) {
+        case spangres::datatypes::TypeAnnotationCode::PG_NUMERIC:
+          return EvalCastNumericToString(args);
+        default:
+          return absl::InvalidArgumentError(
+              absl::StrCat("Unsupported type for CAST to text: ",
+                          args[0].type()->DebugString()));
+      }
     }
+    default:
+      return absl::InvalidArgumentError(
+          absl::StrCat("Unsupported type for CAST to text: ",
+                      args[0].type()->DebugString()));
   }
-  default:
-    return absl::InvalidArgumentError(
-        absl::StrCat("Unsupported type for CAST to text: ",
-                     args[0].type()->DebugString()));
-}
 }
 
 absl::StatusOr<zetasql::Value> EvalCastNumericToInt64(
@@ -4499,9 +4525,11 @@ std::unique_ptr<zetasql::Function> TimestamptzSubtractTimestamptzFunction(
           return zetasql::Value::NullInterval();
         }
         absl::Time arg0 =
-            absl::FromUnixMicros(absl::ToUnixMicros(args[0].ToTime()));
+            absl::FromUnixMicros(absl::ToUnixMicros(
+              args[0].ToUnixPicos().ToAbslTime()));
         absl::Time arg1 =
-            absl::FromUnixMicros(absl::ToUnixMicros(args[1].ToTime()));
+            absl::FromUnixMicros(absl::ToUnixMicros(
+              args[1].ToUnixPicos().ToAbslTime()));
         ZETASQL_ASSIGN_OR_RETURN(
             zetasql::IntervalValue result,
             zetasql::functions::IntervalDiffTimestamps(arg0, arg1));
@@ -4615,6 +4643,11 @@ std::unique_ptr<zetasql::Function> IntervalExtract(
   function_options.set_evaluator(
       PGFunctionEvaluator([](absl::Span<const zetasql::Value> args)
                               -> absl::StatusOr<zetasql::Value> {
+        ZETASQL_RET_CHECK_EQ(args.size(), 2);
+        if (HasNullValue(args)) {
+          return zetasql::Value::Null(
+              spangres::datatypes::GetPgNumericType());
+        }
         ZETASQL_ASSIGN_OR_RETURN(zetasql::IntervalValue interval_arg,
                          RoundPrecision(args[1].interval_value()));
         ZETASQL_ASSIGN_OR_RETURN(

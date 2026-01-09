@@ -25,6 +25,7 @@
 
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
+#include "zetasql/public/function_signature.h"
 #include "zetasql/public/id_string.h"
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/type.h"
@@ -45,6 +46,7 @@
 #include "backend/query/function_catalog.h"
 #include "backend/query/query_engine_util.h"
 #include "backend/schema/catalog/table.h"
+#include "common/constants.h"
 #include "common/errors.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
@@ -58,6 +60,7 @@ constexpr char kReservedIndexNameForPrimaryKey[] = "PRIMARY_KEY";
 
 namespace {
 using InsertRow = std::vector<zetasql::Value>;
+using zetasql::MakeResolvedUpdateItem;
 using zetasql::ResolvedColumnRef;
 using zetasql::ResolvedDMLValue;
 using zetasql::ResolvedInsertStmt;
@@ -71,6 +74,15 @@ absl::Status InsertOnConflictDoUpdateRewriter::VisitResolvedColumnRef(
   if (!column_ids_referenced_from_insert_row_.contains(
           node->column().column_id())) {
     return CopyVisitResolvedColumnRef(node);
+  }
+
+  // Return error if the column reference has commit timestamp value.
+  // It is not allowed to read columns with commit timestamp value in SET or
+  // WHERE clauses (except a caveat that is already handled before calling
+  // this rewriter).
+  if (column_ids_with_commit_timestamp_value_.contains(
+          node->column().column_id())) {
+    return error::PendingCommitTimestampDmlValueOnly();
   }
 
   std::pair<const zetasql::Type*, int> column_info =
@@ -157,11 +169,21 @@ absl::Status ExtractColumnInfoAndRowsForInsertOrUpdateAction(
 
   std::set<Key> seen_keys;
   bool has_duplicate_keys = false;
+  // If a key part has commit timestamp value then that insert row is a new row
+  // and should be added to the list of new rows `new_rows` below.
+  // Note that the key part is still the commit timestamp placeholder constant
+  // that will be replaced with PENDING_COMMIT_TIMESTAMP() function eventually.
+  bool key_has_commit_timestamp_value = false;
   for (const auto& insert_row : mutation_op.rows) {
     Key insert_row_key;
     for (const auto& key_column : conflict_target_key_columns) {
-      insert_row_key.AddColumn(
-          insert_row.at(key_column_index_in_mutation.at(key_column)));
+      zetasql::Value key_column_value =
+          insert_row.at(key_column_index_in_mutation.at(key_column));
+      if (key_column_value.Equals(
+              zetasql::Value::StringValue(kCommitTimestampIdentifier))) {
+        key_has_commit_timestamp_value = true;
+      }
+      insert_row_key.AddColumn(key_column_value);
     }
     // We do not allow duplicate insert rows in INSERT ON CONFLICT DO
     // UPDATE.
@@ -177,8 +199,9 @@ absl::Status ExtractColumnInfoAndRowsForInsertOrUpdateAction(
       has_duplicate_keys = true;
     }
 
-    if (original_table_row_keys.find(insert_row_key) !=
-        original_table_row_keys.end()) {
+    if (!key_has_commit_timestamp_value &&
+        original_table_row_keys.find(insert_row_key) !=
+            original_table_row_keys.end()) {
       existing_rows->push_back(insert_row_key);
     } else {
       // Returning error on duplicate keys in ON CONFLICT DO UPDATE is handled
@@ -351,9 +374,13 @@ CopyReturningClause(const zetasql::ResolvedInsertStmt* insert_stmt) {
   if (insert_stmt->returning() == nullptr) {
     return nullptr;
   }
-  // `excluded` alias is not allowed in returning clause. Hence,
-  // `column_ids_referenced_from_insert_row` is empty.
-  InsertOnConflictDoUpdateRewriter rewriter({}, nullptr);
+  // `excluded` alias is not allowed in returning clause. It is also not allowed
+  // to return pending commit timestamp value that is already verified. All
+  // input arguments are empty.
+  InsertOnConflictDoUpdateRewriter rewriter(
+      /*column_ids_referenced_from_insert_row=*/{},
+      /*column_ids_with_commit_timestamp_value=*/{},
+      /*struct_column_holder=*/nullptr);
   ZETASQL_RETURN_IF_ERROR(insert_stmt->returning()->Accept(&rewriter));
   return rewriter.ConsumeRootNode<zetasql::ResolvedReturningClause>();
 }
@@ -363,8 +390,11 @@ inline absl::Status CopyGeneratedColumnExprs(
     std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>&
         generated_column_exprs) {
   // Columns in `excluded` alias is not referenced in generated column exprs.
-  // Hence, `column_ids_referenced_from_insert_row` is empty.
-  InsertOnConflictDoUpdateRewriter rewriter({}, nullptr);
+  // All input arguments are empty.
+  InsertOnConflictDoUpdateRewriter rewriter(
+      /*column_ids_referenced_from_insert_row=*/{},
+      /*column_ids_with_commit_timestamp_value=*/{},
+      /*struct_column_holder=*/nullptr);
   for (const auto& expr : insert_stmt->generated_column_expr_list()) {
     ZETASQL_RETURN_IF_ERROR(expr->Accept(&rewriter));
     ZETASQL_ASSIGN_OR_RETURN(auto expr_copy,
@@ -374,9 +404,26 @@ inline absl::Status CopyGeneratedColumnExprs(
   return absl::OkStatus();
 }
 
+absl::Status InsertColumnListMatches(
+    const std::vector<zetasql::ResolvedColumn>& insert_column_list,
+    const std::vector<zetasql::ResolvedColumn>& new_insert_column_list) {
+  ZETASQL_RET_CHECK_EQ(insert_column_list.size(), new_insert_column_list.size());
+  absl::flat_hash_set<std::string> insert_column_names;
+  for (const auto& column : insert_column_list) {
+    insert_column_names.insert(column.name());
+  }
+  for (const auto& column : new_insert_column_list) {
+    ZETASQL_RET_CHECK(insert_column_names.contains(column.name()))
+        << "Insert column " << column.name()
+        << " not found in original insert column list";
+  }
+  return absl::OkStatus();
+}
+
 absl::StatusOr<std::unique_ptr<const zetasql::ResolvedInsertStmt>>
 BuildInsertDMLForNewRows(
     const zetasql::ResolvedInsertStmt* insert_stmt,
+    zetasql::TypeFactory& type_factory, zetasql::Catalog& catalog,
     const std::vector<Key>& new_rows,
     const std::map<Key, InsertRow>& insert_rows_map,
     const std::vector<std::string>& mutation_column_names,
@@ -396,6 +443,11 @@ BuildInsertDMLForNewRows(
   // Build insert row list for the new INSERT statement from `new_rows`.
   std::vector<std::unique_ptr<const zetasql::ResolvedInsertRow>>
       new_insert_row_list;
+  // Re-build the insert column list to ensure that the columns and
+  // corresponding values in the insert row are in the same order.
+  // The value in `new_row` are in the natural order of columns in the table.
+  bool populate_insert_column_list = true;
+  std::vector<zetasql::ResolvedColumn> insert_column_list;
   for (const auto& new_row : new_rows) {
     ZETASQL_RET_CHECK(insert_rows_map.find(new_row) != insert_rows_map.end());
     InsertRow insert_row = insert_rows_map.at(new_row);
@@ -408,14 +460,34 @@ BuildInsertDMLForNewRows(
       }
       std::string insert_column_name = mutation_column_names[i];
       ZETASQL_RET_CHECK(insert_column_name_to_type_map.contains(insert_column_name));
-      row_values.push_back(
-          zetasql::MakeResolvedDMLValue(zetasql::MakeResolvedLiteral(
-              insert_column_name_to_type_map[insert_column_name].type(),
-              insert_row[i])));
+      if (populate_insert_column_list) {
+        insert_column_list.push_back(
+            insert_column_name_to_type_map[insert_column_name]);
+      }
+      // If the insert row value is a commit timestamp identifier, replace it
+      // with PENDING_COMMIT_TIMESTAMP() function call.
+      if (insert_row[i].Equals(
+              zetasql::Value::String(kCommitTimestampIdentifier))) {
+        ZETASQL_ASSIGN_OR_RETURN(
+            auto pending_commit_timestamp_expr,
+            BuildPendingCommitTimestampFunction(type_factory, catalog));
+        row_values.push_back(zetasql::MakeResolvedDMLValue(
+            std::move(pending_commit_timestamp_expr)));
+      } else {
+        row_values.push_back(
+            zetasql::MakeResolvedDMLValue(zetasql::MakeResolvedLiteral(
+                insert_column_name_to_type_map[insert_column_name].type(),
+                insert_row[i])));
+      }
     }
+    populate_insert_column_list = false;
     new_insert_row_list.push_back(
         zetasql::MakeResolvedInsertRow(std::move(row_values)));
   }
+  // Insert column list of the new INSERT statement must match with
+  // the insert column list in the original ON CONFLICT statement.
+  ZETASQL_RETURN_IF_ERROR(InsertColumnListMatches(insert_stmt->insert_column_list(),
+                                          insert_column_list));
 
   // Copy returning clause and generated column exprs in the new insert
   // statement.
@@ -428,8 +500,7 @@ BuildInsertDMLForNewRows(
   auto insert_stmt_copy = zetasql::MakeResolvedInsertStmt(
       std::move(table_scan_copy), insert_stmt->insert_mode(),
       /*assert_rows_modified=*/nullptr,
-      /*returning=*/std::move(returning_clause),
-      insert_stmt->insert_column_list(), {},
+      /*returning=*/std::move(returning_clause), insert_column_list, {},
       /*query=*/nullptr,
       /*query_output=*/{}, std::move(new_insert_row_list),
       /*on_conflict_clause=*/nullptr,
@@ -453,7 +524,8 @@ BuildFromArrayScanClause(
     const std::vector<std::string>& mutation_column_names,
     const absl::flat_hash_set<int>& from_array_scan_column_index_in_row,
     absl::flat_hash_map<std::string, std::pair<const zetasql::Type*, int>>&
-        struct_field_info_by_name) {
+        struct_field_info_by_name,
+    std::set<std::string>& insert_columns_with_commit_timestamp_value) {
   absl::flat_hash_map<std::string, zetasql::ResolvedColumn>
       table_scan_column_name_to_type_map;
   for (const auto& column : insert_stmt->table_scan()->column_list()) {
@@ -487,9 +559,18 @@ BuildFromArrayScanClause(
       }
       std::string column_name = mutation_column_names[i];
       ZETASQL_RET_CHECK(table_scan_column_name_to_type_map.contains(column_name));
-      field_value_exprs.push_back(zetasql::MakeResolvedLiteral(
-          table_scan_column_name_to_type_map[column_name].type(),
-          insert_row[i]));
+      if (insert_row[i].Equals(
+              zetasql::Value::String(kCommitTimestampIdentifier))) {
+        insert_columns_with_commit_timestamp_value.insert(column_name);
+        ZETASQL_ASSIGN_OR_RETURN(
+            auto pending_commit_timestamp_expr,
+            BuildPendingCommitTimestampFunction(type_factory, catalog));
+        field_value_exprs.push_back(std::move(pending_commit_timestamp_expr));
+      } else {
+        field_value_exprs.push_back(zetasql::MakeResolvedLiteral(
+            table_scan_column_name_to_type_map[column_name].type(),
+            insert_row[i]));
+      }
     }
     array_elements.push_back(zetasql::MakeResolvedMakeStruct(
         struct_type, std::move(field_value_exprs)));
@@ -565,11 +646,13 @@ BuildUpdateDMLForExistingRows(
   // statement.
   absl::flat_hash_map<std::string, std::pair<const zetasql::Type*, int>>
       struct_field_info_by_name;
+  std::set<std::string> insert_columns_with_commit_timestamp_value;
   ZETASQL_ASSIGN_OR_RETURN(auto from_array_scan,
                    BuildFromArrayScanClause(
                        type_factory, catalog, insert_stmt, existing_rows,
                        insert_rows_map, mutation_column_names,
-                       insert_column_index_in_row, struct_field_info_by_name));
+                       insert_column_index_in_row, struct_field_info_by_name,
+                       insert_columns_with_commit_timestamp_value));
   ZETASQL_RET_CHECK(from_array_scan != nullptr);
   ZETASQL_RET_CHECK_EQ(from_array_scan->element_column_list_size(), 1);
   const zetasql::ResolvedColumn& array_element_column =
@@ -583,11 +666,24 @@ BuildUpdateDMLForExistingRows(
   // column expression from FROM clause.
   absl::flat_hash_map<int, std::pair<const zetasql::Type*, int>>
       excluded_alias_column_ids;
+  // Set of column ids of columns referenced from the insert row (i.e. of the
+  // form `excluded.<column_name>`) and having commit timestamp value.
+  // Used to either disallow column access if it is used in
+  // SET value expression/WHERE clause expression or rewrite it to
+  // PENDING_COMMIT_TIMESTAMP() function call if set directly as column
+  // reference in SET clause.
+  absl::flat_hash_set<int>
+      excluded_alias_column_ids_with_commit_timestamp_value;
   if (insert_stmt->on_conflict_clause()->insert_row_scan() != nullptr) {
     for (const auto& column :
          insert_stmt->on_conflict_clause()->insert_row_scan()->column_list()) {
       excluded_alias_column_ids[column.column_id()] =
           struct_field_info_by_name[column.name()];
+      if (insert_columns_with_commit_timestamp_value.find(column.name()) !=
+          insert_columns_with_commit_timestamp_value.end()) {
+        excluded_alias_column_ids_with_commit_timestamp_value.insert(
+            column.column_id());
+      }
     }
   }
 
@@ -645,8 +741,10 @@ BuildUpdateDMLForExistingRows(
   // If ON CONFLICT DO UPDATE WHERE is present, add the condition to the
   // predicate list.
   if (insert_stmt->on_conflict_clause()->update_where_expression() != nullptr) {
-    InsertOnConflictDoUpdateRewriter rewriter(excluded_alias_column_ids,
-                                              &array_element_column);
+    InsertOnConflictDoUpdateRewriter rewriter(
+        excluded_alias_column_ids,
+        excluded_alias_column_ids_with_commit_timestamp_value,
+        &array_element_column);
     ZETASQL_RETURN_IF_ERROR(
         insert_stmt->on_conflict_clause()->update_where_expression()->Accept(
             &rewriter));
@@ -671,13 +769,66 @@ BuildUpdateDMLForExistingRows(
       rewritten_update_item_list;
   for (const auto& update_item :
        insert_stmt->on_conflict_clause()->update_item_list()) {
-    InsertOnConflictDoUpdateRewriter rewriter(excluded_alias_column_ids,
-                                              &array_element_column);
-    ZETASQL_RETURN_IF_ERROR(update_item->Accept(&rewriter));
-    ZETASQL_ASSIGN_OR_RETURN(auto new_update_item,
-                     rewriter.ConsumeRootNode<zetasql::ResolvedUpdateItem>());
-    ZETASQL_VLOG(1) << "Output UPDATE SET item: " << new_update_item->DebugString();
-    rewritten_update_item_list.push_back(std::move(new_update_item));
+    bool set_value_is_column_ref =
+        update_item->set_value()->Is<ResolvedDMLValue>() &&
+        update_item->set_value()
+            ->GetAs<ResolvedDMLValue>()
+            ->value()
+            ->Is<ResolvedColumnRef>();
+    bool column_references_commit_timestamp_value =
+        set_value_is_column_ref &&
+        excluded_alias_column_ids_with_commit_timestamp_value.contains(
+            update_item->set_value()
+                ->GetAs<ResolvedDMLValue>()
+                ->value()
+                ->GetAs<ResolvedColumnRef>()
+                ->column()
+                .column_id());
+    // Typically, the update items are validated to ensure that it contains only
+    // non-pending commit timestamp columns references and is then rewritten to
+    // replace column references with excluded alias with actual column values.
+    // This is done by using `InsertOnConflictDoUpdateRewriter` rewriter.
+    //
+    // However, if the SET value is a column reference with commit timestamp
+    // value, then we can skip the rewriter and directly rewrite it to
+    // PENDING_COMMIT_TIMESTAMP() function call, because it is a valid SET
+    // value. E.g. Below DML
+    // INSERT INTO T(k, ts_col) VALUES (1, PENDING_COMMIT_TIMESTAMP())
+    // ON CONFLICT(k) DO UPDATE SET ts_col = excluded.ts_col`
+    // is rewritten to
+    // INSERT INTO T(k, ts_col) VALUES (1, PENDING_COMMIT_TIMESTAMP())
+    // ON CONFLICT(k) DO UPDATE SET ts_col = PENDING_COMMIT_TIMESTAMP()`
+    if (!column_references_commit_timestamp_value) {
+      InsertOnConflictDoUpdateRewriter rewriter(
+          excluded_alias_column_ids,
+          excluded_alias_column_ids_with_commit_timestamp_value,
+          &array_element_column);
+      ZETASQL_RETURN_IF_ERROR(update_item->Accept(&rewriter));
+      ZETASQL_ASSIGN_OR_RETURN(
+          auto new_update_item,
+          rewriter.ConsumeRootNode<zetasql::ResolvedUpdateItem>());
+      ZETASQL_VLOG(1) << "Output UPDATE SET item: " << new_update_item->DebugString();
+      rewritten_update_item_list.push_back(std::move(new_update_item));
+    } else {
+      const zetasql::Type* timestamp_type = zetasql::types::TimestampType();
+      ZETASQL_ASSIGN_OR_RETURN(
+          auto pct_function_call,
+          BuildPendingCommitTimestampFunction(type_factory, catalog));
+      auto update_item_with_pct_function_call = MakeResolvedUpdateItem(
+          zetasql::MakeResolvedColumnRef(
+              timestamp_type,
+              update_item->target()
+                  ->GetAs<zetasql::ResolvedColumnRef>()
+                  ->column(),
+              false),
+          zetasql::MakeResolvedDMLValue(std::move(pct_function_call)),
+          /*element_column=*/nullptr, /*array_update_list=*/{},
+          /*delete_list=*/{}, /*update_list=*/{}, /*insert_list=*/{});
+      ZETASQL_VLOG(1) << "Output UPDATE SET item: "
+              << update_item_with_pct_function_call->DebugString();
+      rewritten_update_item_list.push_back(
+          std::move(update_item_with_pct_function_call));
+    }
   }
 
   ZETASQL_ASSIGN_OR_RETURN(auto table_scan_copy,
@@ -702,6 +853,7 @@ BuildUpdateDMLForExistingRows(
       update_stmt->table_scan()->column_list().size(),
       zetasql::ResolvedStatement::READ_WRITE);
   update_stmt->set_column_access_list(object_access);
+  ZETASQL_VLOG(1) << "Output UPDATE statement: " << update_stmt->DebugString();
 
   return std::move(update_stmt);
 }

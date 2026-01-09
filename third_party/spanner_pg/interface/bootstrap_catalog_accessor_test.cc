@@ -112,6 +112,9 @@ INSTANTIATE_TEST_SUITE_P(PgNamespaceDataTestData, PgNamespaceDataTest,
                              )pb",
                              R"pb(
                                oid: 50080 nspname: "ai"
+                             )pb",
+                             R"pb(
+                               oid: 50088 nspname: "hll_count"
                              )pb"));
 
 TEST_P(PgProcDataTest, GetPgProcDataFromBootstrapOidSuccess) {

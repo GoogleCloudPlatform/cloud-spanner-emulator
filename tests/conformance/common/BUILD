@@ -71,6 +71,7 @@ cc_library(
     hdrs = ["query_translator.h"],
     deps = [
         "//third_party/spanner_pg/interface:bootstrap_catalog_accessor",
+        "@com_google_absl//absl/log",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_googlesource_code_re2//:re2",

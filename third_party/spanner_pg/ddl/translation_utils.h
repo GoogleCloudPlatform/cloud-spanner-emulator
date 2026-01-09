@@ -149,7 +149,7 @@ struct PostgreSQLConstants {
       "partition_mode";
   static constexpr char kInternalLocalityGroupStorageOptionName[] = "inflash";
   static constexpr char kInternalLocalityGroupSpillTimeSpanOptionName[] =
-    "age_based_spill_policy";
+      "age_based_spill_policy";
   // TODO: expose when queue is implemented.
   static constexpr absl::string_view kSpangresDefaultSequenceKindOptionName =
       "spanner.default_sequence_kind";
@@ -162,7 +162,7 @@ struct PostgreSQLConstants {
       kInternalDatabaseDefaultTimeZoneOptionName =
           "spanner.internal.cloud_default_time_zone";
   static constexpr absl::string_view kInternalDatabaseDefaultLeaderOptionName =
-    "spanner.internal.cloud_default_leader";
+      "spanner.internal.cloud_default_leader";
   static constexpr absl::string_view
       kInternalDatabaseWitnessLocationOptionName =
           "spanner.internal.cloud_witness_location";

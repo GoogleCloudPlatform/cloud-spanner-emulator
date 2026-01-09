@@ -36,6 +36,8 @@
 
 namespace spangres {
 namespace error {
+constexpr absl::string_view kPgErrorInfoTypeUrl =
+    "types.googleapis.com/spangres.error.PgErrorInfo";
 
 // Converts a PostgreSQL error code to a absl::StatusCode.
 absl::StatusCode CanonicalCode(int pg_error_code);

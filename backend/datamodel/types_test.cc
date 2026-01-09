@@ -23,6 +23,11 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+
+using ::postgres_translator::spangres::datatypes::GetPgJsonbType;
+using ::postgres_translator::spangres::datatypes::GetPgNumericType;
 
 namespace google {
 namespace spanner {
@@ -55,6 +60,24 @@ class TypesTest : public ::testing::Test {
     return unsupported_types;
   }
 
+  std::vector<const zetasql::Type*> supported_key_types() {
+    return {
+        type_factory_.get_int64(),     type_factory_.get_bool(),
+        type_factory_.get_double(),    type_factory_.get_string(),
+        type_factory_.get_bytes(),     type_factory_.get_date(),
+        type_factory_.get_timestamp(), type_factory_.get_numeric(),
+        type_factory_.get_uuid(),
+    };
+  }
+
+  std::vector<const zetasql::Type*> unsupported_key_types() {
+    return {
+        type_factory_.get_float(), type_factory_.get_tokenlist(),
+        type_factory_.get_json(),  GetPgJsonbType(),
+        GetPgNumericType(),
+    };
+  }
+
  protected:
   zetasql::TypeFactory type_factory_;
 };
@@ -72,17 +95,22 @@ TEST_F(TypesTest, SupportedColumnType) {
   }
 }
 
-TEST_F(TypesTest, SupportedKeyColumnType) {
-  for (const zetasql::Type* type : supported_types()) {
-    if (type->IsJson() || type->IsTokenList()) {
-      EXPECT_FALSE(IsSupportedKeyColumnType(type));
-    } else {
-      EXPECT_TRUE(IsSupportedKeyColumnType(type));
-    }
+void TestArrayTypesForSupportedKeyColumnType(
+    zetasql::TypeFactory* type_factory, const zetasql::Type* type) {
+  const zetasql::ArrayType* array_type;
+  ZETASQL_ASSERT_OK(type_factory->MakeArrayType(type, &array_type));
+  EXPECT_FALSE(IsSupportedKeyColumnType(array_type));
+}
 
-    const zetasql::ArrayType* array_type;
-    ZETASQL_ASSERT_OK(type_factory_.MakeArrayType(type, &array_type));
-    EXPECT_FALSE(IsSupportedKeyColumnType(array_type));
+TEST_F(TypesTest, SupportedKeyColumnType) {
+  for (const zetasql::Type* type : supported_key_types()) {
+    EXPECT_TRUE(IsSupportedKeyColumnType(type));
+    TestArrayTypesForSupportedKeyColumnType(&type_factory_, type);
+  }
+
+  for (const zetasql::Type* type : unsupported_key_types()) {
+    EXPECT_FALSE(IsSupportedKeyColumnType(type));
+    TestArrayTypesForSupportedKeyColumnType(&type_factory_, type);
   }
 }
 }  // namespace

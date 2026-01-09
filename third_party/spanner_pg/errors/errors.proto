@@ -209,3 +209,12 @@ message ParamTypeProto {
   }
   repeated Field field = 8;
 }
+
+message PgErrorInfo {
+
+  // A PG error code that can indicate the actual reason for an error
+  optional int32 pg_error_code = 1;
+  // The unpacked version of the PG error code, e.g., "22023" for
+  // "ERRCODE_INVALID_PARAMETER_VALUE".
+  optional string unpacked_sql_state = 2;
+}

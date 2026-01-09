@@ -18,12 +18,19 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
+#include "zetasql/analyzer/function_signature_matcher.h"
 #include "zetasql/public/analyzer.h"
 #include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
+#include "zetasql/public/coercer.h"
+#include "zetasql/public/function_signature.h"
+#include "zetasql/public/input_argument_type.h"
 #include "zetasql/public/options.pb.h"
+#include "zetasql/public/signature_match_result.h"
 #include "zetasql/public/type.h"
+#include "zetasql/resolved_ast/resolved_ast.h"
 #include "absl/status/statusor.h"
 #include "backend/query/function_catalog.h"
 #include "common/errors.h"
@@ -31,6 +38,7 @@
 #include "third_party/spanner_pg/interface/emulator_parser.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
+#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -80,6 +88,35 @@ AnalyzePostgreSQL(const std::string& sql, zetasql::EnumerableCatalog* catalog,
           type_factory,
           /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
           /*schema=*/function_catalog->GetLatestSchema()));
+}
+
+absl::StatusOr<std::unique_ptr<const zetasql::ResolvedFunctionCall>>
+BuildPendingCommitTimestampFunction(zetasql::TypeFactory& type_factory,
+                                    zetasql::Catalog& catalog) {
+  const zetasql::Function* pct_function = nullptr;
+  ZETASQL_RETURN_IF_ERROR(
+      catalog.FindFunction({"pending_commit_timestamp"}, &pct_function));
+  ZETASQL_RET_CHECK(pct_function != nullptr);
+  ZETASQL_RET_CHECK_EQ(pct_function->signatures().size(), 1);
+  std::vector<zetasql::InputArgumentType> input_argument_types;
+  zetasql::LanguageOptions language_options;
+  zetasql::Coercer coercer(&type_factory, &language_options);
+  std::unique_ptr<zetasql::FunctionSignature> result_signature;
+  zetasql::SignatureMatchResult signature_match_result;
+  ZETASQL_ASSIGN_OR_RETURN(
+      bool function_signature_matches,
+      zetasql::FunctionSignatureMatchesWithStatus(
+          language_options, coercer, /*arg_ast_nodes=*/{}, input_argument_types,
+          pct_function->signatures().at(0),
+          /*allow_argument_coercion=*/false, &type_factory,
+          /*resolve_lambda_callback=*/nullptr, &result_signature,
+          &signature_match_result,
+          /*arg_index_mapping=*/nullptr, /*arg_overrides=*/nullptr));
+  ZETASQL_RET_CHECK(result_signature->IsConcrete());
+  ZETASQL_RET_CHECK(function_signature_matches);
+  return zetasql::MakeResolvedFunctionCall(
+      result_signature->result_type().type(), pct_function, *result_signature,
+      {}, zetasql::ResolvedFunctionCall::DEFAULT_ERROR_MODE);
 }
 
 }  // namespace backend

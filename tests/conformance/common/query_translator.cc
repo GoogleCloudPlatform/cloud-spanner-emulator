@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/log/log.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
@@ -33,7 +34,8 @@ namespace {
 constexpr LazyRE2 kHintSyntaxRegex = {"@{(.+?)}"};
 constexpr LazyRE2 kArgumentStringSingleQuoteRegex = {"(\'.*?\')([,)\\]])"};
 constexpr LazyRE2 kArgumentStringDoubleQuoteRegex = {"\"(.*?)\"([,)\\]])"};
-constexpr LazyRE2 kFunctionCallRegex = {"([a-zA-Z0-9_]+)\\("};
+constexpr LazyRE2 kFunctionCallRegex = {
+    "(?:([a-zA-Z0-9_]+)\\.)?([a-zA-Z0-9_]+)\\("};
 
 constexpr int kSpannerNamespace = 50000;
 
@@ -65,23 +67,35 @@ void ReplaceStringArrayLiterals(std::string& query) {
 }
 
 void ReplaceNamespacedFunctions(std::string& query) {
-  std::string function_name;
+  std::string schema_name, function_name;
   auto bootstrap_catalog = postgres_translator::GetPgBootstrapCatalog();
 
   // Need to copy the query string to a string_view to use
   // RE2::FindAndConsume.
   std::string initial_query = query;
   absl::string_view query_view(initial_query);
-  while (
-      RE2::FindAndConsume(&query_view, *kFunctionCallRegex, &function_name)) {
+  while (RE2::FindAndConsume(&query_view, *kFunctionCallRegex, &schema_name,
+                             &function_name)) {
+    if (!schema_name.empty()) {
+      // Explicit schema name, do nothing.
+      continue;
+    }
+
     absl::StatusOr<std::vector<postgres_translator::PgProcData>> procs_data =
         postgres_translator::GetPgProcDataFromBootstrap(
             bootstrap_catalog, absl::AsciiStrToLower(function_name));
-    if (procs_data.ok() && !procs_data->empty() &&
-        procs_data->at(0).has_pronamespace() &&
-        procs_data->at(0).pronamespace() == kSpannerNamespace) {
-      RE2::Replace(&query, RE2(function_name),
-                   absl::StrCat("spanner.", function_name));
+    if (!procs_data.ok()) {
+      ABSL_LOG(WARNING) << "Could not replace namespace for function "
+                   << function_name << " due to error: " << procs_data.status();
+      continue;
+    }
+
+    for (const auto& proc_data : *procs_data) {
+      if (proc_data.pronamespace() == kSpannerNamespace) {
+        RE2::Replace(&query, RE2(function_name),
+                     absl::StrCat("spanner.", function_name));
+        break;
+      }
     }
   }
 }

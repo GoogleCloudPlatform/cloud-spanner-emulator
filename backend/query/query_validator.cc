@@ -107,9 +107,9 @@ constexpr absl::string_view kUseAdditionalParallelism =
     "use_additional_parallelism";
 
 // Lock scanned ranges
-constexpr absl::string_view kHintLockScannedRange = "lock_scanned_ranges";
-constexpr absl::string_view kHintLockScannedRangeShared = "shared";
-constexpr absl::string_view kHintLockScannedRangeExclusive = "exclusive";
+constexpr absl::string_view kHintLockScannedRanges = "lock_scanned_ranges";
+constexpr absl::string_view kHintLockScannedRangesShared = "shared";
+constexpr absl::string_view kHintLockScannedRangesExclusive = "exclusive";
 
 constexpr absl::string_view kHintGroupTypeDeprecated = "group_type";
 
@@ -231,6 +231,12 @@ absl::Status QueryValidator::CheckSpannerHintName(
       {zetasql::RESOLVED_ARRAY_SCAN,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
         kHintJoinBatch, kHintJoinForceOrder}},
+      {zetasql::RESOLVED_INSERT_STMT, {kHintLockScannedRanges}},
+      {zetasql::RESOLVED_UPDATE_STMT,
+       {
+           kHintLockScannedRanges,
+       }},
+      {zetasql::RESOLVED_DELETE_STMT, {kHintLockScannedRanges}},
       {zetasql::RESOLVED_QUERY_STMT,
        {
            kHintForceIndex,
@@ -242,7 +248,7 @@ absl::Status QueryValidator::CheckSpannerHintName(
            kHintConstantFolding,
            kUseAdditionalParallelism,
            kHintEnableAdaptivePlans,
-           kHintLockScannedRange,
+           kHintLockScannedRanges,
            kHintParameterSensitive,
            kHashJoinExecution,
            kHintAllowSearchIndexesInTransaction,
@@ -302,7 +308,7 @@ absl::Status QueryValidator::CheckHintValue(
           {kHintGroupMethod, zetasql::types::StringType()},
           {kHintForceIndex, zetasql::types::StringType()},
           {kUseAdditionalParallelism, zetasql::types::BoolType()},
-          {kHintLockScannedRange, zetasql::types::StringType()},
+          {kHintLockScannedRanges, zetasql::types::StringType()},
           {kHintConstantFolding, zetasql::types::BoolType()},
           {kHintTableScanGroupByScanOptimization, zetasql::types::BoolType()},
           {kHintEnableAdaptivePlans, zetasql::types::BoolType()},
@@ -394,11 +400,11 @@ absl::Status QueryValidator::CheckHintValue(
           absl::EqualsIgnoreCase(string_value, kHintGroupMethodStream))) {
       return error::InvalidHintValue(name, value.DebugString());
     }
-  } else if (absl::EqualsIgnoreCase(name, kHintLockScannedRange)) {
+  } else if (absl::EqualsIgnoreCase(name, kHintLockScannedRanges)) {
     const std::string& string_value = value.string_value();
     if (!(absl::EqualsIgnoreCase(string_value,
-                                 kHintLockScannedRangeExclusive) ||
-          absl::EqualsIgnoreCase(string_value, kHintLockScannedRangeShared))) {
+                                 kHintLockScannedRangesExclusive) ||
+          absl::EqualsIgnoreCase(string_value, kHintLockScannedRangesShared))) {
       return error::InvalidHintValue(name, value.DebugString());
     }
   } else if (absl::EqualsIgnoreCase(name, kHintIndexStrategy)) {
@@ -432,7 +438,7 @@ absl::Status QueryValidator::ExtractSpannerOptionsForNode(
       extracted_options_->allow_search_indexes_in_transaction =
           hint_value.bool_value();
     }
-    if (absl::EqualsIgnoreCase(hint_name, kHintLockScannedRange)) {
+    if (absl::EqualsIgnoreCase(hint_name, kHintLockScannedRanges)) {
       // We already checked the hint type in CheckHintValue.
       query_features_.has_lock_scanned_ranges = true;
     }

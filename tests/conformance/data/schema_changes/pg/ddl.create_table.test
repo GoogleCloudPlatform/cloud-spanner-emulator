@@ -77,7 +77,8 @@ CREATE TABLE Users(id bigint PRIMARY KEY) TABLESPACE TestSpace;
 --
 ERROR: <TABLESPACE> clause is not supported in <CREATE TABLE> statement.
 ==
-
+# TODO: Once the support is added to the emulator, re-enable this test.
+# --skip_prod_env
 CREATE TABLE Users(id bigint);
 --
 ERROR: Primary key must be defined for table "users".
