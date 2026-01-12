@@ -71,6 +71,7 @@
 #include "third_party/spanner_pg/catalog/engine_user_catalog.h"
 #include "third_party/spanner_pg/catalog/function.h"
 #include "third_party/spanner_pg/catalog/table_name.h"
+#include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/transformer/expr_transformer_helper.h"
 #include "third_party/spanner_pg/transformer/forward_transformer.h"
@@ -3418,6 +3419,11 @@ absl::Status ForwardTransformer::CheckForUnsupportedFeatures(
   if (query.override != OVERRIDING_NOT_SET) {
     return absl::UnimplementedError(
         "Statements with OVERRIDING clauses are not supported");
+  }
+
+  if (query.limitOption == LIMIT_OPTION_WITH_TIES) {
+    return absl::UnimplementedError(
+        "Statements with FETCH WITH TIES are not supported");
   }
 
   if (query.commandType == CMD_SELECT) {

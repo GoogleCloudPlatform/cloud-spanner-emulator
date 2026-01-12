@@ -2109,6 +2109,18 @@ TEST_F(SchemaTest, PrintDDLStatementsTestUDFsWithDependencies) {
           "V1")));
 }
 
+TEST_F(SchemaTest, PrintDDLStatementsTestNamedSchemas) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {R"(CREATE SCHEMA s1)", R"(CREATE SCHEMA s2)", R"(DROP SCHEMA s1)"},
+          type_factory_.get()));
+  absl::StatusOr<std::vector<std::string>> statements =
+      PrintDDLStatements(schema.get());
+
+  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(R"(CREATE SCHEMA s2)")));
+}
+
 }  // namespace
 }  // namespace backend
 }  // namespace emulator

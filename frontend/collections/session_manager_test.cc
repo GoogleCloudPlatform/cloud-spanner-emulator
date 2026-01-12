@@ -196,6 +196,23 @@ TEST_F(SessionManagerTest, ListSessionsReturnsMultiplexedSessions) {
 }
 
 TEST_F(SessionManagerTest,
+       ListSessionsReturnsMultiplexedSessionsAfterGcDuration) {
+  std::shared_ptr<Session> expected;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      expected, session_manager_.CreateSession(test_labels_,
+                                               /*multiplexed=*/true, database_,
+                                               /*mux_txn_manager=*/nullptr));
+  // Set the approximate_last_use_time to earlier than multiplexed session gc
+  // duration.
+  expected->set_approximate_last_use_time(absl::Now() - absl::Minutes(90));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<std::shared_ptr<Session>> actual,
+      session_manager_.ListSessions(database_->database_uri(),
+                                    /*include_multiplex_sessions=*/true));
+  EXPECT_EQ(actual.size(), 1);
+}
+
+TEST_F(SessionManagerTest,
        DeleteSessionIncludesMultiplexedFlagAndDropMultiplexSessionsIsTrue) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> expected,

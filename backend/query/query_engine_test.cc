@@ -82,6 +82,7 @@ using zetasql::values::Date;
 using zetasql::values::Enum;
 using zetasql::values::Int64;
 using zetasql::values::NullInt64;
+using zetasql::values::NullTimestamp;
 using zetasql::values::Numeric;
 using zetasql::values::Proto;
 using zetasql::values::String;
@@ -4519,6 +4520,51 @@ TEST_P(QueryEngineTest, ForUpdateQueriesInvalid) {
                          "lock hints")));
 }
 
+TEST_P(QueryEngineTest, QueriesWithLockScannedRanges) {
+  std::string lock_hint =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "/*@lock_scanned_ranges=exclusive*/"
+          : "@{lock_scanned_ranges=EXCLUSIVE}";
+  ZETASQL_EXPECT_OK(query_engine().ExecuteSql(
+      Query{absl::Substitute("$0SELECT string_col FROM test_table", lock_hint)},
+      QueryContext{
+          .schema = schema(), .reader = reader(), .is_read_only_txn = false}));
+}
+
+TEST_P(QueryEngineTest, DMLWithLockScannedRanges) {
+  MockRowWriter writer;
+  std::string lock_hint =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "/*@lock_scanned_ranges=exclusive*/"
+          : "@{lock_scanned_ranges=EXCLUSIVE}";
+  ZETASQL_EXPECT_OK(query_engine().ExecuteSql(
+      Query{absl::Substitute(
+          R"($0INSERT INTO test_table (int64_col, string_col)
+                 VALUES (1991, 'year'))",
+          lock_hint)},
+      QueryContext{.schema = schema(),
+                   .reader = reader(),
+                   .writer = &writer,
+                   .is_read_only_txn = false}));
+  ZETASQL_EXPECT_OK(query_engine().ExecuteSql(Query{absl::Substitute(
+                                          R"($0UPDATE test_table
+                 SET string_col = 'new year'
+                 WHERE int64_col = 1991)",
+                                          lock_hint)},
+                                      QueryContext{.schema = schema(),
+                                                   .reader = reader(),
+                                                   .writer = &writer,
+                                                   .is_read_only_txn = false}));
+  ZETASQL_EXPECT_OK(query_engine().ExecuteSql(Query{absl::Substitute(
+                                          R"($0DELETE FROM test_table
+                 WHERE int64_col = 1991)",
+                                          lock_hint)},
+                                      QueryContext{.schema = schema(),
+                                                   .reader = reader(),
+                                                   .writer = &writer,
+                                                   .is_read_only_txn = false}));
+}
+
 class DefaultValuesTest : public QueryEngineTest {
  public:
   const Schema* schema() { return dvschema_.get(); }
@@ -4760,8 +4806,8 @@ TEST_P(DefaultKeyTest, InsertOnConflictDoNothingDmlDefaultKey) {
   // The insert statement inserts 2 new rows and the existing row with primary
   // key (prefix: 100, player_id:1) is ignored.
   std::string sql =
-      "INSERT INTO players_default_key (player_id, balance) "
-      "VALUES (3, 30), (1, 10), (2, 20) "
+      "INSERT INTO players_default_key (balance, player_id) "
+      "VALUES (30, 3), (10, 1), (20, 2) "
       "ON CONFLICT (prefix, player_id) DO NOTHING";
   MockRowWriter writer;
   EXPECT_CALL(
@@ -4785,8 +4831,8 @@ TEST_P(DefaultKeyTest, InsertOnConflictDoNothingDmlDefaultKey) {
 
   // Test same input with INSERT...SELECT
   sql =
-      "INSERT INTO players_default_key (player_id, balance) "
-      "(SELECT 3, 30 UNION ALL SELECT 1, 10 UNION ALL SELECT 2, 20) "
+      "INSERT INTO players_default_key (balance, player_id) "
+      "(SELECT 30, 3 UNION ALL SELECT 10, 1 UNION ALL SELECT 20, 2) "
       "ON CONFLICT (prefix, player_id) DO NOTHING";
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{sql}, QueryContext{schema(), reader(), &writer}),
@@ -5632,11 +5678,15 @@ class TimestampKeyTest
   std::unique_ptr<const Schema> tsschema_;
   test::TestRowReader reader_{
       {{"timestamp_key_table",
-        {{"k", "ts", "val"},
+        {{"k", "ts", "val", "ts_val"},
          {zetasql::types::Int64Type(), zetasql::types::TimestampType(),
-          zetasql::types::Int64Type()},
-         {{Int64(1), TimestampFromUnixMicros(1), Int64(1)},
-          {Int64(2), TimestampFromUnixMicros(2), Int64(2)}}}}}};
+          zetasql::types::Int64Type(), zetasql::types::Int64Type()},
+         {{Int64(1), TimestampFromUnixMicros(1), Int64(1),
+           TimestampFromUnixMicros(1)},
+          {Int64(2), TimestampFromUnixMicros(2), Int64(2),
+           TimestampFromUnixMicros(2)},
+          {Int64(1), zetasql::Value::NullTimestamp(), Int64(1),
+           TimestampFromUnixMicros(1)}}}}}};
   std::unique_ptr<ActionManager> action_manager_;
 };
 
@@ -5723,36 +5773,275 @@ TEST_P(TimestampKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
                     "{Int64(1), String(\"spanner.commit_timestamp()\")}")));
 }
 
-TEST_P(TimestampKeyTest, InsertOnConflictWithPendingCommitTimestamp) {
+TEST_P(TimestampKeyTest, OnConflictDoNothingWithPendingCommitTimestampKey) {
   std::string pct_function =
       GetParam() == database_api::DatabaseDialect::POSTGRESQL
           ? "SPANNER.PENDING_COMMIT_TIMESTAMP"
           : "PENDING_COMMIT_TIMESTAMP";
   MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "timestamp_key_table"),
+              Field(&MutationOp::columns, std::vector<std::string>{"k", "ts"}),
+              Field(
+                  &MutationOp::rows,
+                  UnorderedElementsAre(
+                      ValueList{Int64(1), String("spanner.commit_timestamp()")},
+                      ValueList{Int64(2),
+                                String("spanner.commit_timestamp()")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  ZETASQL_EXPECT_OK(query_engine().ExecuteSql(
+      Query{absl::Substitute("INSERT INTO timestamp_key_table (k, ts) "
+                             "VALUES(1, $0()), (2, $0()) "
+                             "ON CONFLICT(k, ts) DO NOTHING",
+                             pct_function)},
+      QueryContext{schema(), reader(), &writer}));
+}
+
+TEST_P(TimestampKeyTest, OnConflictDoUpdateWithPendingCommitTimestampKey) {
+  std::string pct_function =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "SPANNER.PENDING_COMMIT_TIMESTAMP"
+          : "PENDING_COMMIT_TIMESTAMP";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "timestamp_key_table"),
+              Field(&MutationOp::columns, std::vector<std::string>{"k", "ts"}),
+              Field(
+                  &MutationOp::rows,
+                  UnorderedElementsAre(
+                      ValueList{Int64(1), String("spanner.commit_timestamp()")},
+                      ValueList{Int64(2),
+                                String("spanner.commit_timestamp()")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+  ZETASQL_EXPECT_OK(query_engine().ExecuteSql(
+      Query{absl::Substitute("INSERT INTO timestamp_key_table (k, ts) "
+                             "VALUES(1, $0()), (2, $0()) "
+                             "ON CONFLICT(k, ts) DO UPDATE "
+                             "SET ts = excluded.ts",
+                             pct_function)},
+      QueryContext{schema(), reader(), &writer}));
+}
+
+TEST_P(TimestampKeyTest, OnConflictDoUpdateCannotReadCommitTimestampValue) {
+  std::string pct_function =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "SPANNER.PENDING_COMMIT_TIMESTAMP"
+          : "PENDING_COMMIT_TIMESTAMP";
+  std::string timestamp_add_interval =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "excluded.ts_val + INTERVAL '1 SECOND'"
+          : "TIMESTAMP_ADD(excluded.ts_val, INTERVAL 1 SECOND)";
+  MockRowWriter writer;
+  // Cannot reference the commit timestamp value in expressions in SET clause.
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{absl::Substitute("INSERT INTO timestamp_key_table (k, ts_val) "
+                                 "VALUES(1, $0()) "
+                                 "ON CONFLICT(k, ts) "
+                                 "DO UPDATE "
+                                 "SET ts_val = $1",
+                                 pct_function, timestamp_add_interval)},
+          QueryContext{schema(), reader(), &writer}),
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          HasSubstr(
+              "The PENDING_COMMIT_TIMESTAMP() function may only be used as a "
+              "value for INSERT or UPDATE of an appropriately typed column. It "
+              "cannot be used in SELECT, or as the input to any other scalar "
+              "expression.")));
+
+  // Cannot reference the commit timestamp value in WHERE clause.
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{absl::Substitute("INSERT INTO timestamp_key_table (k, ts_val) "
+                                 "VALUES(1, $0()) "
+                                 "ON CONFLICT(k, ts) "
+                                 "DO UPDATE "
+                                 "SET ts_val = '2025-01-01' "
+                                 "WHERE excluded.ts_val IS NOT NULL",
+                                 pct_function)},
+          QueryContext{schema(), reader(), &writer}),
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          HasSubstr(
+              "The PENDING_COMMIT_TIMESTAMP() function may only be used as a "
+              "value for INSERT or UPDATE of an appropriately typed column. It "
+              "cannot be used in SELECT, or as the input to any other scalar "
+              "expression.")));
+}
+
+TEST_P(TimestampKeyTest, OnConflictDoUpdateSetPCTValueIsAllowed) {
+  std::string pct_function =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "SPANNER.PENDING_COMMIT_TIMESTAMP"
+          : "PENDING_COMMIT_TIMESTAMP";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(
+              AllOf(Field(&MutationOp::type, MutationOpType::kUpdate),
+                    Field(&MutationOp::table, "timestamp_key_table"),
+                    Field(&MutationOp::columns,
+                          std::vector<std::string>{"k", "ts", "val", "ts_val"}),
+                    Field(&MutationOp::rows,
+                          UnorderedElementsAre(ValueList{
+                              Int64(1), NullTimestamp(), Int64(1),
+                              String("spanner.commit_timestamp()")})))))))
+      .Times(2)
+      .WillOnce(Return(absl::OkStatus()));
+
+  // Set commit timestamp value by PENDING_COMMIT_TIMESTAMP() function call.
+  {
+    EXPECT_THAT(query_engine().ExecuteSql(
+                    Query{absl::Substitute(
+                        "INSERT INTO timestamp_key_table (k, ts, ts_val) "
+                        "VALUES(1, NULL, $0()) "
+                        "ON CONFLICT(k, ts) DO UPDATE "
+                        "SET ts_val = $1()",
+                        pct_function, pct_function)},
+                    QueryContext{schema(), reader(), &writer}),
+                IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+  }
+
+  // Set commit timestamp value using column reference from excluded alias
+  // i.e. from insert row such as `excluded.<>`.
+  {
+    EXPECT_THAT(query_engine().ExecuteSql(
+                    Query{absl::Substitute(
+                        "INSERT INTO timestamp_key_table (k, ts, ts_val) "
+                        "VALUES(1, NULL, $0()) "
+                        "ON CONFLICT(k, ts) DO UPDATE "
+                        "SET ts_val = excluded.ts_val",
+                        pct_function)},
+                    QueryContext{schema(), reader(), &writer}),
+                IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+  }
+}
+
+TEST_P(TimestampKeyTest, OnConflictDoUpdateWithReadNonPCTValues) {
+  std::string pct_function =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "SPANNER.PENDING_COMMIT_TIMESTAMP"
+          : "PENDING_COMMIT_TIMESTAMP";
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kUpdate),
+              Field(&MutationOp::table, "timestamp_key_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"k", "ts", "val", "ts_val"}),
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(1), NullTimestamp(), Int64(1),
+                                           TimestampFromUnixMicros(1)})))))))
+      .Times(2)
+      .WillOnce(Return(absl::OkStatus()));
+  {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(QueryResult result,
+                         query_engine().ExecuteSql(
+                             Query{absl::Substitute(
+                                 "INSERT INTO timestamp_key_table (k, ts_val) "
+                                 "VALUES(1, $0()) "
+                                 "ON CONFLICT(k, ts) "
+                                 "DO UPDATE "
+                                 "SET ts_val = '1970-01-01 00:00:00.000001+00'",
+                                 pct_function)},
+                             QueryContext{schema(), reader(), &writer}));
+    EXPECT_EQ(result.modified_row_count, 1);
+  }
+  {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(QueryResult result,
+                         query_engine().ExecuteSql(
+                             Query{absl::Substitute(
+                                 "INSERT INTO timestamp_key_table (k, ts_val) "
+                                 "VALUES(1, $0()) "
+                                 "ON CONFLICT(k, ts) "
+                                 "DO UPDATE "
+                                 "SET ts_val = timestamp_key_table.ts_val",
+                                 pct_function)},
+                             QueryContext{schema(), reader(), &writer}));
+    EXPECT_EQ(result.modified_row_count, 1);
+  }
+}
+
+TEST_P(TimestampKeyTest, OnConflictReturningCommitTimestampValueIsNotAllowed) {
+  std::string pct_function =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "SPANNER.PENDING_COMMIT_TIMESTAMP"
+          : "PENDING_COMMIT_TIMESTAMP";
+  std::string return_clause =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "RETURNING"
+                                                              : "THEN RETURN";
+
+  // Returning column with pending commit timestamp value is not allowed.
+  MockRowWriter writer;
   EXPECT_THAT(
       query_engine().ExecuteSql(
           Query{absl::Substitute("INSERT INTO timestamp_key_table (k, ts) "
-                                 "VALUES(1, $0()) "
-                                 "ON CONFLICT(k, ts) DO NOTHING",
-                                 pct_function)},
+                                 "VALUES(1, $0()), (2, $0()) "
+                                 "ON CONFLICT(k, ts) DO NOTHING "
+                                 "$1 ts",
+                                 pct_function, return_clause)},
           QueryContext{schema(), reader(), &writer}),
-      StatusIs(StatusCode::kUnimplemented,
-               HasSubstr("INSERT...ON CONFLICT DML with "
-                         "PENDING_COMMIT_TIMESTAMP() value is not "
-                         "supported in Emulator")));
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          HasSubstr(
+              "The PENDING_COMMIT_TIMESTAMP() function may only be used as a "
+              "value for INSERT or UPDATE of an appropriately typed column. It "
+              "cannot be used in SELECT, or as the input to any other scalar "
+              "expression.")));
 
   EXPECT_THAT(
       query_engine().ExecuteSql(
-          Query{absl::Substitute("INSERT INTO timestamp_key_table (k, ts) "
+          Query{absl::Substitute("INSERT INTO timestamp_key_table (k, ts_val) "
                                  "VALUES(1, $0()) "
                                  "ON CONFLICT(k, ts) "
-                                 "DO UPDATE SET ts = $0()",
-                                 pct_function)},
+                                 "DO UPDATE "
+                                 "SET ts_val = excluded.ts_val "
+                                 "$1 ts_val",
+                                 pct_function, return_clause)},
           QueryContext{schema(), reader(), &writer}),
-      StatusIs(StatusCode::kUnimplemented,
-               HasSubstr("INSERT...ON CONFLICT DML with "
-                         "PENDING_COMMIT_TIMESTAMP() value is not "
-                         "supported in Emulator")));
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          HasSubstr(
+              "The PENDING_COMMIT_TIMESTAMP() function may only be used as a "
+              "value for INSERT or UPDATE of an appropriately typed column. It "
+              "cannot be used in SELECT, or as the input to any other scalar "
+              "expression.")));
+
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{absl::Substitute("INSERT INTO timestamp_key_table (k, ts_val) "
+                                 "VALUES(1, $0()) "
+                                 "ON CONFLICT(k, ts) "
+                                 "DO UPDATE "
+                                 "SET ts_val = timestamp_key_table.ts_val "
+                                 "$1 ts_val",
+                                 pct_function, return_clause)},
+          QueryContext{schema(), reader(), &writer}),
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          HasSubstr(
+              "The PENDING_COMMIT_TIMESTAMP() function may only be used as a "
+              "value for INSERT or UPDATE of an appropriately typed column. It "
+              "cannot be used in SELECT, or as the input to any other scalar "
+              "expression.")));
 }
 
 }  // namespace

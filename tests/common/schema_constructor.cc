@@ -461,6 +461,7 @@ std::unique_ptr<const backend::Schema> CreateSimpleTimestampKeySchema(
               k INT64 NOT NULL,
               ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
               val INT64,
+              ts_val TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
             ) PRIMARY KEY(k, ts)
           )sql";
 
@@ -470,6 +471,7 @@ std::unique_ptr<const backend::Schema> CreateSimpleTimestampKeySchema(
               k bigint NOT NULL,
               ts spanner.commit_timestamp,
               val bigint,
+              ts_val spanner.commit_timestamp,
               PRIMARY KEY(k, ts)
             )
           )sql";

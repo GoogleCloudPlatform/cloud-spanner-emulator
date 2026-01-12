@@ -60,6 +60,8 @@ TEST(QueryTranslatorTest, NamespacedFunctions) {
   QueryTranslator translator = QueryTranslator().UsesNamespacedFunctions();
   EXPECT_EQ(translator.Translate("SELECT pending_commit_timestamp()"),
             "SELECT spanner.pending_commit_timestamp()");
+  EXPECT_EQ(translator.Translate("SELECT spanner.pending_commit_timestamp()"),
+            "SELECT spanner.pending_commit_timestamp()");
   EXPECT_EQ(translator.Translate("SELECT unmapped_function()"),
             "SELECT unmapped_function()");
 }

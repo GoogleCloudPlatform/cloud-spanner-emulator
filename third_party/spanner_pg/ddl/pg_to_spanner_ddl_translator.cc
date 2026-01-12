@@ -2057,8 +2057,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
   }
 
   if (out.primary_key_size() == 0) {
-    return UnsupportedTranslationError(absl::StrCat(
-        "Primary key must be defined for table \"", table_name, "\"."));
+      return UnsupportedTranslationError(absl::StrCat(
+          "Primary key must be defined for table \"", table_name, "\"."));
   }
 
   return absl::OkStatus();

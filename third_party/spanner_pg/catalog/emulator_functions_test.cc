@@ -322,11 +322,37 @@ INSTANTIATE_TEST_SUITE_P(
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzAddFunctionName,
+            {zetasql::values::NullTimestamp(),
+             zetasql::values::String("3 months 8 days 20 seconds")},
+            zetasql::values::NullTimestamp(),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzAddFunctionName,
+            {zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
+             zetasql::values::NullString()},
+            zetasql::values::NullTimestamp(),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzAddFunctionName,
             {zetasql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
              CreateIntervalValue("0-3 8 0:0:20")},
             zetasql::values::Timestamp(absl::FromCivil(
                 absl::CivilSecond(2005, 4, 10, 3, 4, 25), timezone)),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzAddFunctionName,
+            {zetasql::values::NullTimestamp(),
+             CreateIntervalValue("0-3 8 0:0:20")},
+            zetasql::values::NullTimestamp(),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzAddFunctionName,
+            {zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
+             zetasql::values::NullInterval()},
+            zetasql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractFunctionName,
@@ -338,11 +364,37 @@ INSTANTIATE_TEST_SUITE_P(
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractFunctionName,
+            {zetasql::values::NullTimestamp(),
+             zetasql::values::String("2 years 1 hour")},
+            zetasql::values::NullTimestamp(),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractFunctionName,
+            {zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
+             zetasql::values::NullString()},
+            zetasql::values::NullTimestamp(),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractFunctionName,
             {zetasql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
              CreateIntervalValue("2-0 0 1:0:0")},
             zetasql::values::Timestamp(absl::FromCivil(
                 absl::CivilSecond(2003, 1, 2, 2, 4, 5), timezone)),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractFunctionName,
+            {zetasql::values::NullTimestamp(),
+             CreateIntervalValue("2-0 0 1:0:0")},
+            zetasql::values::NullTimestamp(),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzSubtractFunctionName,
+            {zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
+             zetasql::values::NullInterval()},
+            zetasql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzBinFunctionName,
@@ -355,6 +407,31 @@ INSTANTIATE_TEST_SUITE_P(
                 absl::CivilSecond(2020, 2, 11, 15, 44, 10), timezone)),
         },
         PGScalarFunctionTestCase{
+            kPGTimestamptzBinFunctionName,
+            {zetasql::values::NullString(),
+             zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone)),
+             zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2001, 1, 1, 0, 0, 0), timezone))},
+            zetasql::values::NullTimestamp(),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzBinFunctionName,
+            {zetasql::values::String("10 seconds"),
+             zetasql::values::NullTimestamp(),
+             zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2001, 1, 1, 0, 0, 0), timezone))},
+            zetasql::values::NullTimestamp(),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzBinFunctionName,
+            {zetasql::values::String("10 seconds"),
+             zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone)),
+             zetasql::values::NullTimestamp()},
+            zetasql::values::NullTimestamp(),
+        },
+        PGScalarFunctionTestCase{
             kPGTimestamptzTruncFunctionName,
             {zetasql::values::String("day"),
              zetasql::values::Timestamp(absl::FromCivil(
@@ -364,12 +441,48 @@ INSTANTIATE_TEST_SUITE_P(
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzTruncFunctionName,
+            {zetasql::values::NullString(),
+             zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone))},
+            zetasql::values::NullTimestamp(),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzTruncFunctionName,
+            {zetasql::values::String("day"),
+             zetasql::values::NullTimestamp()},
+            zetasql::values::NullTimestamp(),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzTruncFunctionName,
             {zetasql::values::String("day"),
              zetasql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone)),
              zetasql::values::String("Australia/Sydney")},
             zetasql::values::Timestamp(absl::FromCivil(
                 absl::CivilSecond(2020, 2, 11, 5, 0, 0), timezone)),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzTruncFunctionName,
+            {zetasql::values::NullString(),
+             zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone)),
+             zetasql::values::String("Australia/Sydney")},
+            zetasql::values::NullTimestamp(),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzTruncFunctionName,
+            {zetasql::values::String("day"),
+             zetasql::values::NullTimestamp(),
+             zetasql::values::String("Australia/Sydney")},
+            zetasql::values::NullTimestamp(),
+        },
+        PGScalarFunctionTestCase{
+            kPGTimestamptzTruncFunctionName,
+            {zetasql::values::String("day"),
+             zetasql::values::Timestamp(absl::FromCivil(
+                 absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone)),
+             zetasql::values::NullString()},
+            zetasql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGExtractFunctionName,
@@ -2138,6 +2251,18 @@ INSTANTIATE_TEST_SUITE_P(
             {zetasql::values::String("years"),
              CreateIntervalValue("1-1 8 1:1:1.123456")},
             *CreatePgNumericValueWithMemoryContext("1"),
+        },
+        PGScalarFunctionTestCase{
+            kPGIntervalExtractFunctionName,
+            {kNullStringValue,
+             CreateIntervalValue("1-1 8 1:1:1.123456")},
+            kNullPGNumericValue,
+        },
+        PGScalarFunctionTestCase{
+            kPGIntervalExtractFunctionName,
+            {zetasql::values::String("abc"),
+             kNullIntervalValue},
+            kNullPGNumericValue,
         },
         PGScalarFunctionTestCase{
             kPGIntervalExtractFunctionName,
@@ -4438,6 +4563,12 @@ TEST_F(EvalCastToDateTest, SuccessfulCast) {
                   absl::CivilDay(1999, 1, 8) - absl::CivilDay(1970, 1, 1))));
 }
 
+TEST_F(EvalCastToDateTest, NullValue) {
+  auto arg = zetasql::Value::MakeNull<std::string>();
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({arg})),
+              zetasql_base::testing::IsOkAndHolds(zetasql::Value::NullDate()));
+}
+
 TEST_F(EvalCastToDateTest, UnsupportedDate) {
   std::vector<zetasql::Value> args = {
       zetasql::values::String("January 8 04:05:06 1999 PST")};
@@ -4474,6 +4605,13 @@ TEST_F(EvalCastToTimestampTest, SuccessfulCast) {
               zetasql_base::testing::IsOkAndHolds(zetasql::values::Timestamp(
                   absl::FromCivil(absl::CivilSecond(1999, 1, 8, 4, 5, 6),
                                   default_timezone_))));
+}
+
+TEST_F(EvalCastToTimestampTest, NullValue) {
+  std::vector<zetasql::Value> args = {
+      zetasql::values::NullString()};
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
+              zetasql_base::testing::IsOkAndHolds(zetasql::Value::NullTimestamp()));
 }
 
 TEST_F(EvalCastToTimestampTest, UnsupportedTime) {

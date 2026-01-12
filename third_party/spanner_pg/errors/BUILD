@@ -106,6 +106,7 @@ cc_library(
     name = "errors",
     srcs = ["errors.cc"],
     hdrs = ["errors.h"],
+    visibility = ["//:__subpackages__"],
     deps = [
         ":errors_cc_proto",
         "//third_party/spanner_pg/postgres_includes",

@@ -82,8 +82,9 @@ bool IsSupportedColumnType(const zetasql::Type* type) {
 
 bool IsSupportedKeyColumnType(const zetasql::Type* type,
                               bool is_vector_index) {
-  // According to https://cloud.google.com/spanner/docs/data-types
-  if (type->IsJson()) {
+  // According to
+  // https://docs.cloud.google.com/spanner/docs/reference/standard-sql/data-types#valid_key_column_types
+  if (type->IsJson() || type->IsFloat()) {
     return false;
   }
   if (type->IsArray() && !is_vector_index) {

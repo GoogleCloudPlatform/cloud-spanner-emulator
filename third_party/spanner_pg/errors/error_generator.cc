@@ -606,6 +606,14 @@ void WriteSource(FILE* f, const ErrorFile& file, const std::string& h_filename,
             "absl::Status(spangres::error::CanonicalCode(%s%s), %s);\n",
             kPGErrorCodePrefix, absl::AsciiStrToUpper(msg.code).c_str(),
             msg_expr.c_str());
+    fprintf(f, "  spangres::error::PgErrorInfo pg_error_info;\n");
+    fprintf(f, "  pg_error_info.set_pg_error_code(%s%s);\n", kPGErrorCodePrefix,
+            absl::AsciiStrToUpper(msg.code).c_str());
+    fprintf(f,
+            "  pg_error_info.set_unpacked_sql_state(unpack_sql_state(%s%s));\n",
+            kPGErrorCodePrefix, absl::AsciiStrToUpper(msg.code).c_str());
+    fprintf(f, "  err.SetPayload(spangres::error::kPgErrorInfoTypeUrl,"
+               "    pg_error_info.SerializeAsCord());\n");
 
     fprintf(f, "  return err;\n");
     fprintf(f, "}\n\n");

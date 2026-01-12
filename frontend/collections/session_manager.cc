@@ -93,9 +93,12 @@ SessionManager::ListSessions(const std::string& database_uri,
         // default.
         continue;
       }
+      // Multiplexed session doesn't have expiration duration, so we don't check
+      // for expiration here.
       absl::Duration expiration_duration = absl::Hours(1);
-      if (clock_->Now() - session->approximate_last_use_time() <=
-          expiration_duration) {
+      if ((clock_->Now() - session->approximate_last_use_time() <=
+           expiration_duration) ||
+          (session->multiplexed() && include_multiplex_sessions)) {
         sessions.push_back(session);
       }
     } else {

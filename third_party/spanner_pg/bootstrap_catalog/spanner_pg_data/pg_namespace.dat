@@ -5,4 +5,6 @@
   nspacl => '_null_' },
 { oid => '50080', oid_symbol => 'SPANNER_AI_NSP', nspname => 'ai',
   nspacl => '_null_' },
+{ oid => '50088', oid_symbol => 'SPANNER_HLL_NSP', nspname => 'hll_count',
+  nspacl => '_null_' },
 ]

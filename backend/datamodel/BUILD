@@ -119,6 +119,9 @@ cc_test(
     deps = [
         ":types",
         "//tests/common:proto_matchers",
+        "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
+        "//third_party/spanner_pg/datatypes/extended:pg_numeric_type",
+        "//third_party/spanner_pg/test_catalog",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",

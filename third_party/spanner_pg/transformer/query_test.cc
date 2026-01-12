@@ -1704,6 +1704,20 @@ TEST_F(QueryTransformerTest, UnsupportedQueryFields) {
   query->distinctClause = nullptr;
   query->hasDistinctOn = false;
 
+  // FETCH WITH TIES.
+  query->limitCount = PostgresCastToNode(
+      makeConst(INT8OID, -1, InvalidOid, 8, Int64GetDatum(1), false, true));
+  query->limitOffset = PostgresCastToNode(
+      makeConst(INT8OID, -1, InvalidOid, 8, Int64GetDatum(1), false, true));
+  query->limitOption = LIMIT_OPTION_WITH_TIES;
+  EXPECT_THAT(transformer->BuildGsqlResolvedStatement(*query),
+              StatusIs(absl::StatusCode::kUnimplemented,
+                       HasSubstr("Statements with FETCH WITH TIES are not "
+                                 "supported")));
+  query->limitOption = LIMIT_OPTION_DEFAULT;
+  query->limitOffset = nullptr;
+  query->limitCount = nullptr;
+
   // ROW MARK clause with unsupported lock strength.
   auto row_mark_clause = makeNode(RowMarkClause);
   row_mark_clause->strength = LockClauseStrength::LCS_FORKEYSHARE;

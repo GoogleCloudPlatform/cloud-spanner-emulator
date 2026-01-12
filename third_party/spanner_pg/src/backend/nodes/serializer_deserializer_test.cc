@@ -3,6 +3,7 @@
 #include "zetasql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/util/postgres.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
+#include "third_party/spanner_pg/src/include/nodes/parsenodes.h"
 
 namespace postgres_translator::test {
 namespace {
@@ -562,6 +563,16 @@ TEST_F(SerializationDeserializationTest, AlterTableCmd) {
   alter_table_cmd->behavior = DROP_RESTRICT;
   alter_table_cmd->missing_ok = true;
   alter_table_cmd->locality_group_name = makeNode(LocalityGroupOption);
+
+  EXPECT_THAT(alter_table_cmd, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, AlterTableCmdSetColumnarPolicy) {
+  AlterTableCmd* alter_table_cmd = makeNode(AlterTableCmd);
+
+  alter_table_cmd->subtype = AT_SetColumnarPolicy;
+  alter_table_cmd->columnar_policy_name = makeNode(ColumnarPolicyOption);
+  alter_table_cmd->columnar_policy_name->value = pstrdup("enabled");
 
   EXPECT_THAT(alter_table_cmd, CanSerializeAndDeserialize());
 }

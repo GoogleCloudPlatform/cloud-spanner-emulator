@@ -599,6 +599,136 @@ TEST_F(CommitTimestamps, CannotUpdateMultipleRowsWithIndexedTimestampInDml) {
       StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
+TEST_F(CommitTimestamps, InsertOnConflictDoNothingCommitTsPKColumn) {
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("CommitTimestampKeyTable", {"ID", "CommitTS"}, 1,
+                 kCommitTimestampSentinel),
+      MakeInsert("CommitTimestampKeyTable", {"ID", "CommitTS"}, 2,
+                 kCommitTimestampSentinel),
+  }));
+  ZETASQL_ASSERT_OK(CommitDml(
+      {SqlStatement("INSERT INTO CommitTimestampKeyTable (ID, CommitTS) "
+                    "VALUES (1, PENDING_COMMIT_TIMESTAMP()), "
+                    "(2, PENDING_COMMIT_TIMESTAMP()) "
+                    "ON CONFLICT(ID, CommitTS) DO NOTHING")}));
+  auto txn = Transaction(Transaction::ReadOnlyOptions());
+  EXPECT_THAT(QueryTransaction(std::move(txn),
+                               "SELECT COUNT(*) FROM CommitTimestampKeyTable "
+                               "WHERE CommitTS IS NOT NULL"),
+              IsOkAndHoldsRows({{4}}));
+}
+
+TEST_F(CommitTimestamps, InsertOnConflictDoNothingCommitTsUniqueIndexColumn) {
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 1,
+                 kCommitTimestampSentinel, "A"),
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 2,
+                 kCommitTimestampSentinel, "B"),
+  }));
+  // Two new rows are inserted.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      CommitResult result,
+      CommitDml({SqlStatement("INSERT INTO CommitTimestampIndexTable "
+                              "(ID, Name, CommitTS) "
+                              "VALUES (10, 'A', PENDING_COMMIT_TIMESTAMP()), "
+                              "(20, 'B', PENDING_COMMIT_TIMESTAMP()) "
+                              "ON CONFLICT "
+                              "ON UNIQUE CONSTRAINT CommitTimestampUniqueIndex "
+                              "DO NOTHING")}));
+  // Confirm the new rows were inserted.
+  auto txn = Transaction(Transaction::ReadOnlyOptions());
+  EXPECT_THAT(
+      QueryTransaction(
+          std::move(txn),
+          "SELECT ID, CommitTS FROM CommitTimestampIndexTable WHERE ID > 2"),
+      IsOkAndHoldsUnorderedRows(
+          {{10, result.commit_timestamp}, {20, result.commit_timestamp}}));
+}
+
+TEST_F(CommitTimestamps, InsertOnConflictDoUpdateCommitTsPKColumn) {
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("CommitTimestampTable", {"ID"}, 1),
+      MakeInsert("CommitTimestampTable", {"ID"}, 2),
+  }));
+
+  // Both rows have NULL CommitTS.
+  {
+    auto txn = Transaction(Transaction::ReadOnlyOptions());
+    EXPECT_THAT(
+        QueryTransaction(
+            std::move(txn),
+            "SELECT COUNT(*) FROM CommitTimestampTable WHERE CommitTS IS NULL"),
+        IsOkAndHoldsRows({{2}}));
+  }
+  // CommitTS is updated to commit timestamp value by SET clause.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      CommitResult result,
+      CommitDml({SqlStatement("INSERT INTO CommitTimestampTable (ID, CommitTS) "
+                              "VALUES (1, PENDING_COMMIT_TIMESTAMP()), "
+                              "(2, PENDING_COMMIT_TIMESTAMP()) "
+                              "ON CONFLICT(ID) "
+                              "DO UPDATE SET CommitTS = excluded.CommitTS")}));
+  auto txn = Transaction(Transaction::ReadOnlyOptions());
+  EXPECT_THAT(QueryTransaction(std::move(txn),
+                               "SELECT ID, CommitTS FROM CommitTimestampTable"),
+              IsOkAndHoldsUnorderedRows({{1, result.commit_timestamp},
+                                         {2, result.commit_timestamp}}));
+}
+
+TEST_F(CommitTimestamps, InsertOnConflictDoUpdateCommitTsUniqueIndexColumn) {
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("CommitTimestampIndexTable", {"ID"}, 1),
+  }));
+
+  {
+    auto txn = Transaction(Transaction::ReadOnlyOptions());
+    EXPECT_THAT(
+        QueryTransaction(std::move(txn),
+                         "SELECT count(*) FROM CommitTimestampIndexTable WHERE "
+                         "CommitTS IS NULL"),
+        IsOkAndHoldsRows({{1}}));
+  }
+  // CommitTS is updated to commit timestamp value by SET clause.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      CommitResult result,
+      CommitDml({SqlStatement(
+          "INSERT INTO CommitTimestampIndexTable (ID) "
+          "VALUES (1) "
+          "ON CONFLICT ON UNIQUE CONSTRAINT CommitTimestampUniqueIndex "
+          "DO UPDATE SET CommitTS = PENDING_COMMIT_TIMESTAMP()")}));
+  {
+    auto txn = Transaction(Transaction::ReadOnlyOptions());
+    EXPECT_THAT(
+        QueryTransaction(std::move(txn),
+                         "SELECT ID, CommitTS FROM CommitTimestampIndexTable"),
+        IsOkAndHoldsRows({{1, result.commit_timestamp}}));
+  }
+}
+
+TEST_F(CommitTimestamps,
+       InsertOnConflictCannotReadCommitTsColumnInSetClauseExpressions) {
+  ZETASQL_ASSERT_OK(Commit({
+      MakeInsert("CommitTimestampTable", {"ID"}, 1),
+  }));
+
+  ASSERT_THAT(
+      ExecuteDml({SqlStatement(
+          "INSERT INTO CommitTimestampTable (ID, CommitTS) "
+          "VALUES (1, PENDING_COMMIT_TIMESTAMP()) "
+          "ON CONFLICT(ID) "
+          "DO UPDATE SET "
+          "CommitTS = TIMESTAMP_ADD(excluded.CommitTS, INTERVAL 1 DAY)")}),
+      StatusIs(absl::StatusCode::kInvalidArgument));
+
+  ASSERT_THAT(ExecuteDml({SqlStatement(
+                  "INSERT INTO CommitTimestampTable (ID, CommitTS) "
+                  "VALUES (1, PENDING_COMMIT_TIMESTAMP()) "
+                  "ON CONFLICT(ID) "
+                  "DO UPDATE SET CommitTS = PENDING_COMMIT_TIMESTAMP() "
+                  "WHERE excluded.CommitTS IS NOT NULL")}),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
 TEST_F(CommitTimestamps, CanUpdateMultipleRowsWithIndexedTimestampInSingleDml) {
   ZETASQL_ASSERT_OK(Commit({
       MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 0,

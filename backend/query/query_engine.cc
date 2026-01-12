@@ -351,10 +351,6 @@ absl::StatusOr<std::tuple<Mutation, int64_t, bool>> BuildInsert(
       zetasql::Value column_value = iterator->GetColumnValue(i);
       const auto& column_name = table->GetColumn(i)->Name();
       if (pending_ts_columns.find(column_name) != pending_ts_columns.end()) {
-        if (include_all_returned_columns) {
-          return error::
-              UnsupportedPendingCommitTimestampInInsertOnConflictDml();
-        }
         column_value =
             zetasql::Value::StringValue(kCommitTimestampIdentifier);
       }
@@ -1140,8 +1136,8 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteInsertOnConflictDml(
   if (!new_rows.empty()) {
     ZETASQL_ASSIGN_OR_RETURN(
         auto insert_new_rows_stmt,
-        BuildInsertDMLForNewRows(insert_statement, new_rows, insert_row_map,
-                                 columns_in_mutation,
+        BuildInsertDMLForNewRows(insert_statement, *type_factory_, catalog,
+                                 new_rows, insert_row_map, columns_in_mutation,
                                  insert_column_index_in_mutation_for_insert));
 
     ZETASQL_ASSIGN_OR_RETURN(

@@ -994,6 +994,21 @@ TEST_P(QueryTest, LimitInAggregate) {
       Query("SELECT STRING_AGG(name, ', ' ORDER BY name LIMIT 2) FROM users"),
       IsOkAndHoldsRow("Douglas Adams, J.R.R. Tolkien"));
 }
+
+TEST_P(QueryTest, LockScannedRangesHintInQuery) {
+  PopulateDatabase();
+
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  std::string lock_hint =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "/*@lock_scanned_ranges=exclusive*/"
+          : "@{lock_scanned_ranges=EXCLUSIVE}";
+  EXPECT_THAT(
+      QueryTransaction(
+          txn, absl::Substitute("$0SELECT age FROM users WHERE user_id = 2",
+                                lock_hint)),
+      IsOkAndHoldsRows({{61}}));
+}
 }  // namespace
 
 }  // namespace test

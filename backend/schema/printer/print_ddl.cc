@@ -653,6 +653,11 @@ void TopologicalOrderSchemaNodes(
       property_graph != nullptr) {
     statements->push_back(PrintPropertyGraph(property_graph));
   }
+
+  if (const NamedSchema* named_schema = node->As<const NamedSchema>();
+      named_schema != nullptr) {
+    statements->push_back(PrintNamedSchema(named_schema));
+  }
 }
 
 std::string PrintCheckConstraint(const CheckConstraint* check_constraint) {
@@ -858,6 +863,9 @@ absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
 
   // Print schema nodes while ensuring that dependencies are printed first.
   absl::flat_hash_set<const SchemaNode*> visited;
+  for (const NamedSchema* named_schema : schema->named_schemas()) {
+    TopologicalOrderSchemaNodes(named_schema, &visited, &statements);
+  }
   for (const Placement* placement : schema->placements()) {
     TopologicalOrderSchemaNodes(placement, &visited, &statements);
   }

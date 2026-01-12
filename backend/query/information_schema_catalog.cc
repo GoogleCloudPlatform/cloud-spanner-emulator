@@ -165,6 +165,7 @@ static constexpr char kDescNullsLast[] = "DESC NULLS LAST";
 static constexpr char kAllowCommitTimestamp[] = "allow_commit_timestamp";
 static constexpr char kSpannerCommitTimestamp[] = "spanner.commit_timestamp";
 static constexpr char kBool[] = "BOOL";
+static constexpr char kBoolean[] = "boolean";
 static constexpr char kTrue[] = "TRUE";
 static constexpr char kFalse[] = "FALSE";
 static constexpr char kConstraintType[] = "CONSTRAINT_TYPE";
@@ -1416,45 +1417,56 @@ void InformationSchemaCatalog::FillColumnOptionsTable() {
       tables_by_name_.at(GetNameForDialect(kColumnOptions)).get();
 
   std::vector<std::vector<zetasql::Value>> rows;
-
-  // Only add rows for ZetaSQL dialect as the PostgreSQL dialect doesn't have
-  // rows in this table by default.
-  if (dialect_ == DatabaseDialect::POSTGRESQL) {
-    column_options->SetContents(rows);
-    return;
-  }
-
   for (const Table* table : default_schema_->tables()) {
     const auto& [schema_part, table_name_part] =
         GetSchemaAndNameForInformationSchema(table->Name());
     for (const Column* column : table->columns()) {
       if (column->allows_commit_timestamp()) {
-        rows.push_back({// table_catalog
-                        DialectTableCatalog(),
-                        // table_schema
-                        String(schema_part),
-                        // table_name
-                        String(table_name_part),
-                        // column_name
-                        String(column->Name()),
-                        // option_name
-                        String(kAllowCommitTimestamp), String(kBool),
-                        // option_value
-                        String(kTrue)});
+        std::vector<zetasql::Value> row = {
+            // table_catalog
+            DialectTableCatalog(),
+            // table_schema
+            String(schema_part),
+            // table_name
+            String(table_name_part),
+            // column_name
+            String(column->Name()),
+            // option_name
+            String(kAllowCommitTimestamp),
+            // option_type
+            (dialect_ == DatabaseDialect::POSTGRESQL) ? String(kBoolean)
+                                                      : String(kBool),
+            // option_value
+            String(kTrue)};
+        if (dialect_ == DatabaseDialect::POSTGRESQL) {
+          // Swap option_type and option_value as the order is different.
+          std::swap(row[5], row[6]);
+        }
+        rows.push_back(std::move(row));
       }
       if (column->locality_group()) {
-        rows.push_back({// table_catalog
-                        DialectTableCatalog(),
-                        // table_schema
-                        String(""),
-                        // table_name
-                        String(table->Name()),
-                        // column_name
-                        String(column->Name()),
-                        // option_name
-                        String(kLocalityGroup), String(kString),
-                        // option_value
-                        String(column->locality_group()->Name())});
+        std::vector<zetasql::Value> row = {
+            // table_catalog
+            DialectTableCatalog(),
+            // table_schema
+            String(schema_part),
+            // table_name
+            String(table_name_part),
+            // column_name
+            String(column->Name()),
+            // option_name
+            String(kLocalityGroup),
+            // option_type
+            (dialect_ == DatabaseDialect::POSTGRESQL)
+                ? String(kCharacterVarying)
+                : String(kString),
+            // option_value
+            String(column->locality_group()->Name())};
+        if (dialect_ == DatabaseDialect::POSTGRESQL) {
+          // Swap option_type and option_value as the order is different.
+          std::swap(row[5], row[6]);
+        }
+        rows.push_back(std::move(row));
       }
     }
   }

@@ -2703,6 +2703,8 @@ TEST_P(InformationSchemaTest, IdentityColumns) {
 }
 
 TEST_P(InformationSchemaTest, DefaultColumnOptions) {
+  std::string catalog = TableCatalogForDialect();
+  std::string schema = GetParam() == POSTGRESQL ? "public" : "";
   auto results = Query(R"(
       select
         t.table_catalog,
@@ -2715,27 +2717,19 @@ TEST_P(InformationSchemaTest, DefaultColumnOptions) {
       from
         information_schema.column_options AS t
       where
-        t.table_catalog = ''
-        and t.table_schema = ''
-        and t.option_value != 'default'
+        t.option_value != 'default'
       order by
         t.table_name,
         t.column_name,
         t.option_name
     )");
   LogResults(results);
-  if (GetParam() == POSTGRESQL) {
-    // A PG database doesn't store values in this table.
-    auto expected = std::vector<ValueRow>({});
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
-  } else {
-    // clang-format off
-    auto expected = std::vector<ValueRow>({
-      {"", "", "base", "timestamp_value", "allow_commit_timestamp", "BOOL", "TRUE"},  // NOLINT
-    });
-    // clang-format on
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
-  }
+  auto expected = std::vector<ValueRow>({
+      {catalog, schema, "base", "timestamp_value", "allow_commit_timestamp",
+       GetParam() == POSTGRESQL ? "boolean" : "BOOL", "TRUE"},  // NOLINT
+  });
+  // clang-format on
+  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
 TEST_P(InformationSchemaTest, DefaultTableConstraints) {

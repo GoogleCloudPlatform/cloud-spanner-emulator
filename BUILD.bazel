@@ -1,6 +1,7 @@
 load("@bazel_gazelle//:def.bzl", "gazelle")
 
 package(
+    default_applicable_licenses = [":license"],  # copybara:strip(google3-only)
     default_visibility = [":__subpackages__"],
 )
 
