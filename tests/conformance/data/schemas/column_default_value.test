@@ -30,6 +30,10 @@ CREATE TABLE udf_table (
   int64_col INT64 DEFAULT(udf_default_value()),
   string_col STRING(MAX),
 ) PRIMARY KEY (string_col);
+CREATE TABLE timestamp_table (
+  id INT64,
+  created_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP()),
+) PRIMARY KEY (id);
 ===
 @Dialect=POSTGRESQL
 CREATE TABLE t(
@@ -57,4 +61,9 @@ CREATE TABLE fk(
   d bigint DEFAULT (3::bigint),
   FOREIGN KEY (d) REFERENCES t(d2),
   PRIMARY KEY (k)
+);
+CREATE TABLE timestamp_table (
+  id bigint,
+  created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
 );

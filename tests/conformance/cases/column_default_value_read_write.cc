@@ -441,6 +441,29 @@ TEST_P(ColumnDefaultValueReadWriteTest, DefaultValueWithUDF) {
       IsOkAndHoldsRows({{42, "abc"}, {42, "def"}, {42, "ghi"}, {42, "jkl"}}));
 }
 
+TEST_P(ColumnDefaultValueReadWriteTest, InsertReturningWithCurrentTimestamp) {
+  // Test for issue #295: Verify that INSERT...RETURNING returns the same
+  // timestamp that gets stored when using CURRENT_TIMESTAMP() as a default.
+  auto result = Query(
+      "INSERT INTO timestamp_table (id) VALUES (1) THEN RETURN created_at");
+  ZETASQL_ASSERT_OK(result);
+  ASSERT_EQ(result->rows.size(), 1);
+
+  // Get the timestamp from RETURNING clause
+  auto returning_timestamp = result->rows[0].values()[0];
+
+  // SELECT the same row to get the stored timestamp
+  auto select_result = Query("SELECT created_at FROM timestamp_table WHERE id = 1");
+  ZETASQL_ASSERT_OK(select_result);
+  ASSERT_EQ(select_result->rows.size(), 1);
+
+  // Get the timestamp from SELECT
+  auto stored_timestamp = select_result->rows[0].values()[0];
+
+  // They should be identical - no time difference between RETURNING and storage
+  EXPECT_EQ(returning_timestamp, stored_timestamp);
+}
+
 class DefaultPrimaryKeyReadWriteTest
     : public DatabaseTest,
       public testing::WithParamInterface<database_api::DatabaseDialect> {

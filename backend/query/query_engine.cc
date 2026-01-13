@@ -216,6 +216,10 @@ bool IsGenerated(const zetasql::Column* column) {
   return column->GetAs<QueryableColumn>()->wrapped_column()->is_generated();
 }
 
+bool HasDefaultValue(const zetasql::Column* column) {
+  return column->GetAs<QueryableColumn>()->wrapped_column()->has_default_value();
+}
+
 // Simple visitor to traverse an expression and check if it references
 // a pending commit timestamp value column (that is, a column set to
 // PENDING_COMMIT_TIMESTAMP() in this DML). Used to validate THEN RETURN.
@@ -332,7 +336,10 @@ absl::StatusOr<std::tuple<Mutation, int64_t, bool>> BuildInsert(
       }
       continue;
     }
-    if (!insert_column_names.contains(column_name) && !is_key) {
+    // Don't exclude columns with default values - ZetaSQL has already evaluated
+    // them and we need to include those evaluated values in the mutation.
+    bool has_default = HasDefaultValue(table->GetColumn(i));
+    if (!insert_column_names.contains(column_name) && !is_key && !has_default) {
       excluded_column_idx.insert(i);
       continue;
     }
