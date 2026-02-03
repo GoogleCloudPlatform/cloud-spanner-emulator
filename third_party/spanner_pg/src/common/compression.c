@@ -31,7 +31,9 @@
 #include <zstd.h>
 #endif
 #ifdef HAVE_LIBZ
+// SPANGRES BEGIN
 #include <zlib.h>
+// SPANGRES END
 #endif
 
 #include "common/compression.h"

@@ -39,7 +39,7 @@ TEST(EmulatorFeatureFlags, Basic) {
       features.flags().enable_bit_reversed_positive_sequences_postgresql);
   EXPECT_TRUE(features.flags().enable_upsert_queries);
   EXPECT_TRUE(features.flags().enable_upsert_queries_with_returning);
-  EXPECT_FALSE(features.flags().enable_user_defined_functions);
+  EXPECT_TRUE(features.flags().enable_user_defined_functions);
   EXPECT_TRUE(features.flags().enable_fk_enforcement_option);
   EXPECT_TRUE(features.flags().enable_interleave_in);
   EXPECT_TRUE(features.flags().enable_insert_on_conflict_dml);

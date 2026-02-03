@@ -167,6 +167,10 @@ TEST(GlobalSchemaNames, ValidateSchemaName) {
   std::string long_name(limits::kMaxSchemaIdentifierLength + 1, 'x');
   EXPECT_THAT(GlobalSchemaNames::ValidateSchemaName("Table", long_name),
               Eq(error::InvalidSchemaName("Table", long_name)));
+
+  EXPECT_THAT(
+      GlobalSchemaNames::ValidateSchemaName("Table", "hte_isdirtytest$y"),
+      Eq(error::InvalidSchemaName("Table", "hte_isdirtytest$y")));
 }
 
 TEST(GlobalSchemaNames, ValidateConstraintName) {

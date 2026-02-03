@@ -68,8 +68,10 @@ absl::Status AnalyzeViewDefinition(
 // the analyzed UDF's signature in `function_signature`.
 absl::Status AnalyzeUdfDefinition(
     absl::string_view udf_name, absl::string_view param_list,
-    absl::string_view udf_definition, const Schema* schema,
-    zetasql::TypeFactory* type_factory,
+    absl::string_view udf_definition, std::optional<absl::string_view> endpoint,
+    std::optional<int> max_batching_rows, bool is_remote,
+    bool is_language_remote, absl::string_view return_type,
+    const Schema* schema, zetasql::TypeFactory* type_factory,
     absl::flat_hash_set<const SchemaNode*>* dependencies,
     std::unique_ptr<zetasql::FunctionSignature>* function_signature,
     Udf::Determinism* determinism_level);

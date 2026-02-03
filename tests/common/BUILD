@@ -69,8 +69,6 @@ cc_library(
         "//frontend/common:uris",
         "//frontend/server",
         "@com_github_grpc_grpc//:grpc++",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -81,7 +79,6 @@ cc_library(
         "@com_google_googleapis//google/spanner/admin/instance/v1:instance_cc_grpc",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

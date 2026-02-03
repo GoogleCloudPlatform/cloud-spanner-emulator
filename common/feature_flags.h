@@ -45,7 +45,7 @@ class EmulatorFeatureFlags {
     bool enable_upsert_queries_with_returning = true;
     bool enable_identity_columns = true;
     bool enable_serial_auto_increment = true;
-    bool enable_user_defined_functions = false;
+    bool enable_user_defined_functions = true;
     bool enable_fk_enforcement_option = true;
     bool enable_search_index = true;
     bool enable_hidden_column = true;

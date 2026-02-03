@@ -123,9 +123,12 @@ cc_library(
     ],
     deps = [
         "//common:limits",
+        "//third_party/spanner_pg/errors",  # buildcleaner: keep
+        "//third_party/spanner_pg/errors:errors_cc_proto",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings:cord",
+        "@com_google_googleapis//google/rpc:error_details_cc_proto",
         "@com_google_googleapis//google/rpc:status_cc_proto",
         "@com_google_protobuf//:cc_wkt_protos",
     ],

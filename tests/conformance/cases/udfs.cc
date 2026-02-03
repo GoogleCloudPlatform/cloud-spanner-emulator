@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -68,10 +69,96 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(UDFsTest, SimpleUdf) {
   ZETASQL_ASSERT_OK(UpdateSchema({
       R"SQL(
-      CREATE FUNCTION inc_udf(x INT64) RETURNS INT64 SQL SECURITY INVOKER
+      CREATE FUNCTION inc_udf(x INT64) RETURNS INT64
       AS (x + 1)
     )SQL"}));
   EXPECT_THAT(Query("SELECT inc_udf(1)"), IsOkAndHoldsUnorderedRows({{2}}));
+}
+
+TEST_P(UDFsTest, UdfWithInvokerSecurity) {
+  ZETASQL_ASSERT_OK(UpdateSchema({
+      R"SQL(
+      CREATE FUNCTION get_table_name() RETURNS STRING SQL SECURITY INVOKER
+      AS ("test")
+    )SQL"}));
+  EXPECT_THAT(Query("SELECT get_table_name()"),
+              IsOkAndHoldsUnorderedRows({{"test"}}));
+}
+
+TEST_P(UDFsTest, UdfNullSemantics) {
+  ZETASQL_ASSERT_OK(UpdateSchema({
+      R"SQL(
+      CREATE FUNCTION inc_udf(x INT64) RETURNS INT64 AS (x + 1)
+    )SQL"}));
+  EXPECT_THAT(Query("SELECT inc_udf(NULL)"),
+              IsOkAndHoldsUnorderedRows({{Ni()}}));
+}
+
+TEST_P(UDFsTest, UdfVariousTypes) {
+  ZETASQL_ASSERT_OK(UpdateSchema({
+      R"SQL(
+      CREATE FUNCTION my_lower(s STRING) RETURNS STRING AS (LOWER(s))
+    )SQL",
+      R"SQL(
+      CREATE FUNCTION my_not(b BOOL) RETURNS BOOL AS (NOT b)
+    )SQL"}));
+  EXPECT_THAT(Query("SELECT my_lower('HI'), my_not(TRUE)"),
+              IsOkAndHoldsUnorderedRows({{"hi", false}}));
+  EXPECT_THAT(Query("SELECT my_lower(NULL), my_not(NULL)"),
+              IsOkAndHoldsUnorderedRows({{Ns(), Null<bool>()}}));
+}
+
+TEST_P(UDFsTest, UdfMultipleDefinitions) {
+  ZETASQL_ASSERT_OK(UpdateSchema({
+      R"SQL(
+      CREATE FUNCTION inc_udf(x INT64) RETURNS INT64 AS (x + 1)
+    )SQL",
+      R"SQL(
+      CREATE FUNCTION dec_udf(x INT64) RETURNS INT64 AS (x - 1)
+    )SQL"}));
+  EXPECT_THAT(Query("SELECT inc_udf(1), dec_udf(1)"),
+              IsOkAndHoldsUnorderedRows({{2, 0}}));
+}
+
+TEST_P(UDFsTest, UdfCallingOtherUdf) {
+  ZETASQL_ASSERT_OK(UpdateSchema({
+      R"SQL(
+      CREATE FUNCTION inc_udf(x INT64) RETURNS INT64 AS (x + 1)
+    )SQL",
+      R"SQL(
+      CREATE FUNCTION inc_udf2(x INT64) RETURNS INT64 AS (inc_udf(inc_udf(x)))
+    )SQL"}));
+  EXPECT_THAT(Query("SELECT inc_udf2(1)"), IsOkAndHoldsUnorderedRows({{3}}));
+}
+
+TEST_P(UDFsTest, UdfWithQueryExpression) {
+  ZETASQL_ASSERT_OK(UpdateSchema({R"SQL(
+      CREATE FUNCTION get_v() RETURNS STRING AS (
+        (SELECT "v")
+      )
+    )SQL"}));
+  EXPECT_THAT(Query("SELECT get_v()"), IsOkAndHoldsUnorderedRows({{"v"}}));
+}
+
+TEST_P(UDFsTest, ArrayDefaultParam) {
+  ZETASQL_ASSERT_OK(UpdateSchema({
+      R"SQL(
+      CREATE FUNCTION test_udf(x ARRAY<INT64> DEFAULT [1]) RETURNS ARRAY<INT64> AS (x)
+    )SQL"}));
+  EXPECT_THAT(Query("SELECT test_udf()"),
+              IsOkAndHoldsUnorderedRows(
+                  {{cloud::spanner::Value(std::vector<std::int64_t>{1})}}));
+}
+
+TEST_P(UDFsTest, IntervalDefaultParam) {
+  EXPECT_THAT(UpdateSchema({
+                  R"SQL(
+      CREATE FUNCTION test_udf(x INTERVAL DEFAULT INTERVAL 1 DAY) RETURNS INTERVAL AS (x)
+    )SQL"}),
+              zetasql_base::testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  testing::HasSubstr(
+                      "Function parameter default value must be a literal")));
 }
 
 }  // namespace

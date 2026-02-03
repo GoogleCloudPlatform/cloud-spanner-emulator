@@ -421,8 +421,7 @@ absl::Status Transaction::GuardedCall(OpType op,
     status_ = call_status;
   }
 
-  // Strip payload from return status.
-  return absl::Status(call_status.code(), call_status.message());
+  return call_status;
 }
 
 bool ShouldReturnTransaction(

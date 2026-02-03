@@ -66,3 +66,39 @@ message PartitionToken {
     bool empty_query_partition = 6;
   }
 }
+
+// Partition token returned in StreamingPartitionQuery.
+// Only for testing purposes.
+message StreamingPartitionToken {
+  oneof partition {
+    // Internal representation of the partition that should be read.
+    google.spanner.v1.KeySet partitioned_key_set = 1;
+
+    // True if query using partition token should return an empty result set.
+    bool empty_query_partition = 2;
+  }
+}
+
+// Partition token metadata returned in StreamingPartitionQuery.
+// Only for testing purposes.
+message StreamingPartitionTokenMetadata {
+  // Session in which this partition token was created.
+  optional string session = 1;
+
+  // Id of the transaction in which this partition token was created.
+  optional bytes transaction_id = 2;
+
+  // Query fingerprint.
+  optional int64 query_fingerprint = 3;
+
+  // Query id.
+  optional int64 query_id = 4;
+
+  message QueryParams {
+    optional string sql = 1;
+    optional google.protobuf.Struct params = 2;
+    map<string, google.spanner.v1.Type> param_types = 3;
+  }
+
+  optional QueryParams query_params = 5;
+}

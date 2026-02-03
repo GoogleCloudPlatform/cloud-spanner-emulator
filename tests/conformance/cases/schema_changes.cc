@@ -72,6 +72,7 @@ const absl::string_view kSchemaChangeTestFiles[] = {
     "change_streams.test",
     "check_constraint.test",
     "column_default_values.test",
+    "column_on_update.test",
     "combined.test",
     "foreign_key.test",
     "generated_column.test",

@@ -227,6 +227,7 @@ ForwardTransformer::BuildGsqlResolvedTableScan(
                          table->Name(), column->Name(),
                          column->GetType(), column->GetTypeAnnotationMap()));
     column_list.push_back(resolved_column);
+    output_scope->MapCatalogColumnToResolvedColumn(*column, resolved_column);
 
     // Add each column to the var_index_scope.
     // Fail if the entry already exists.

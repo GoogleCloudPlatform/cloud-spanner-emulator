@@ -447,6 +447,10 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       const Constraint& column_default, const TranslationOptions& options,
       google::spanner::emulator::backend::ddl::ColumnDefinition& out) const;
 
+  absl::Status TranslateColumnOnUpdate(
+      const Constraint& column_on_update, const TranslationOptions& options,
+      google::spanner::emulator::backend::ddl::ColumnDefinition& out) const;
+
   absl::Status TranslateVectorLength(
       const Constraint& vector_length, const TranslationOptions& options,
       google::spanner::emulator::backend::ddl::ColumnDefinition& out) const;
@@ -1065,6 +1069,17 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
       return absl::OkStatus();
     }
 
+    case CONSTR_ON_UPDATE: {
+      if (target_column->has_identity_column()) {
+        return UnsupportedTranslationError(absl::StrFormat(
+            "Both identity and on update specified for column \"%s\"",
+            target_column->column_name()));
+      }
+      ZETASQL_RETURN_IF_ERROR(
+          TranslateColumnOnUpdate(constraint, options, *target_column));
+      return absl::OkStatus();
+    }
+
     case CONSTR_VECTOR_LENGTH: {
       // VECTOR LENGTH can be defined only as column constraint.
       ZETASQL_RET_CHECK_NE(target_column, nullptr);
@@ -1304,6 +1319,32 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateColumnDefault(
     expression_origin->set_original_expression(
         column_default.constraint_expr_string);
   }
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateColumnOnUpdate(
+    const Constraint& column_on_update, const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::ColumnDefinition& out) const {
+  ZETASQL_RET_CHECK_EQ(column_on_update.contype, CONSTR_ON_UPDATE);
+  ZETASQL_RET_CHECK_NE(column_on_update.raw_expr, nullptr)
+      << "parse tree must be present for column ON UPDATE constraints.";
+
+  google::spanner::emulator::backend::ddl::ColumnDefinition::ColumnOnUpdateDefinition*
+      column_on_update_def = out.mutable_column_on_update();
+
+  google::spanner::emulator::backend::ddl::SQLExpressionOrigin* expression_origin =
+      column_on_update_def->mutable_expression_origin();
+
+  ZETASQL_ASSIGN_OR_RETURN(std::string serialized_expression,
+                   CheckedPgNodeToString(column_on_update.raw_expr));
+  expression_origin->set_serialized_parse_tree(serialized_expression);
+  if (options.enable_expression_string) {
+    expression_origin->set_original_expression(
+        column_on_update.constraint_expr_string);
+  }
+  // Note: ColumnOnUpdateDefinition::expression() is intentionally not set here.
+  // Column expression fields are set in a second pass over the output SDL in
+  // DdlTestHelper::TranslateExpressions.
   return absl::OkStatus();
 }
 

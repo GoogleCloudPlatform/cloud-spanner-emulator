@@ -185,6 +185,12 @@ std::string PrintColumn(const Column* column) {
     absl::StrAppend(
         &ddl_string,
         absl::Substitute(" DEFAULT ($0)", column->expression().value()));
+    // ON UPDATE is required to have an identical DEFAULT value expression.
+    if (column->has_on_update()) {
+      absl::StrAppend(
+          &ddl_string,
+          absl::Substitute(" ON UPDATE ($0)", column->expression().value()));
+    }
   }
   if (column->GetType()->IsTimestamp() &&
       column->has_allows_commit_timestamp()) {
@@ -768,11 +774,37 @@ std::string PrintUdf(const Udf* udf) {
         signature->result_type().type()->TypeName(zetasql::PRODUCT_EXTERNAL));
   }
 
+  if (udf->language() == Udf::Language::REMOTE) {
+    absl::StrAppend(&udf_string, " LANGUAGE REMOTE");
+  }
+  if (udf->is_remote()) {
+    absl::StrAppend(&udf_string, " REMOTE");
+  }
+
   if (udf->security() == Udf::SqlSecurity::INVOKER) {
     absl::StrAppend(&udf_string, " SQL SECURITY INVOKER");
   }
 
-  absl::StrAppend(&udf_string, " AS (", udf->body(), ")");
+  if (!udf->body().empty()) {
+    absl::StrAppend(&udf_string, " AS (", udf->body(), ")");
+    return udf_string;
+  }
+
+  std::string options = "";
+  if (udf->endpoint().has_value()) {
+    absl::StrAppend(&options, "endpoint='", *udf->endpoint(), "'");
+  }
+  if (udf->max_batching_rows().has_value()) {
+    if (!options.empty()) {
+      absl::StrAppend(&options, ", ");
+    }
+    absl::StrAppend(&options, "max_batching_rows=", *udf->max_batching_rows());
+  }
+
+  if (!options.empty()) {
+    absl::StrAppend(&udf_string, " OPTIONS (", options, ")");
+  }
+
   return udf_string;
 }
 

@@ -63,6 +63,26 @@ class Udf::Builder {
     return *this;
   }
 
+  Builder& set_language(Udf::Language language) {
+    instance_->language_ = language;
+    return *this;
+  }
+
+  Builder& set_is_remote(bool is_remote) {
+    instance_->is_remote_ = is_remote;
+    return *this;
+  }
+
+  Builder& set_endpoint(absl::string_view endpoint) {
+    instance_->endpoint_ = endpoint;
+    return *this;
+  }
+
+  Builder& set_max_batching_rows(int64_t max_batching_rows) {
+    instance_->max_batching_rows_ = max_batching_rows;
+    return *this;
+  }
+
   Builder& add_dependency(const SchemaNode* dependency) {
     instance_->dependencies_.push_back(dependency);
     return *this;

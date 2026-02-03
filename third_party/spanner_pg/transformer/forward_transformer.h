@@ -276,6 +276,15 @@ class ForwardTransformer {
   absl::StatusOr<std::unique_ptr<zetasql::ResolvedStatement>>
   BuildGsqlResolvedStatement(const Query& query);
 
+  // Builds a list of generated column expressions rewritten to replace the
+  // ResolvedExpressionColumns to corresponding ResolvedColumnRefs.
+  // This is modeled after the ZetaSQL function
+  // RewriteGeneratedColumnExpressions.
+  absl::StatusOr<std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>>
+  BuildRewrittenGsqlGeneratedColumnResolvedExprList(
+      const zetasql::Table& table, const VarIndexScope& target_table_scope,
+      std::vector<int>* out_generated_column_ids);
+
   // Returns an unimplemented error if a query feature is not yet supported.
   // Query features that are partially supported are handled seperately.
   absl::Status CheckForUnsupportedFeatures(const Query& query,

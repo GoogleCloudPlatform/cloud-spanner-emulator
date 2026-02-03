@@ -325,29 +325,43 @@ CREATE TABLE T (
 --
 Cannot use non-scalar expressions inside column default
 ==
-# allow_commit_timestamp not allowed on column with default value.
-# --regex
+# allow_commit_timestamp must be paired with PENDING_COMMIT_TIMESTAMP
 CREATE TABLE T(
   id INT64,
   ts TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true)
 ) PRIMARY KEY(id);
 --
-ERROR:.* Cannot use commit timestamp column `ts` as a column with default value.
+The only default value expression permitted for commit timestamp column `ts` is PENDING_COMMIT_TIMESTAMP().
 ==
-# SET DEFAULT: allow_commit_timestamp not allowed on column with default value.
-# --regex
+# SET DEFAULT: allow_commit_timestamp must be paired with PENDING_COMMIT_TIMESTAMP
 CREATE TABLE T(
   id INT64,
   ts TIMESTAMP OPTIONS (allow_commit_timestamp = true)
 ) PRIMARY KEY(id);
 ALTER TABLE T ALTER ts SET DEFAULT (CURRENT_TIMESTAMP());
 --
-ERROR:.* Cannot use commit timestamp column `ts` as a column with default value.
+The only default value expression permitted for commit timestamp column `ts` is PENDING_COMMIT_TIMESTAMP().
 ==
-# PENDING_COMMIT_TIMESTAMP not allowed on column with default value.
+# allow_commit_timestamp must be paired with PENDING_COMMIT_TIMESTAMP
 CREATE TABLE T (
   id INT64,
   ts TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP()),
 ) PRIMARY KEY(id);
 --
-The PENDING_COMMIT_TIMESTAMP() function may only be used as a value for INSERT or UPDATE of an appropriately typed column. It cannot be used in SELECT, or as the input to any other scalar expression.
+Cannot use default value expression PENDING_COMMIT_TIMESTAMP() on column `ts` without the allow_commit_timestamp column option.
+==
+CREATE TABLE T (
+  id INT64,
+  ts TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP()) OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(id);
+==
+CREATE TABLE T (
+  id INT64,
+  ts TIMESTAMP OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(id);
+ALTER TABLE T ALTER ts SET DEFAULT (PENDING_COMMIT_TIMESTAMP());
+--
+CREATE TABLE T (
+  id INT64,
+  ts TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP()) OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(id);

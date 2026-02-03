@@ -40,7 +40,6 @@
 #include "frontend/common/uris.h"
 #include "frontend/server/server.h"
 #include "tests/common/proto_matchers.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

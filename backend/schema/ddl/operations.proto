@@ -263,6 +263,17 @@ message ColumnDefinition {
 
   optional IdentityColumnDefinition identity_column = 17;
 
+  message ColumnOnUpdateDefinition {
+    // GoogleSQL string for the update expression.
+    optional string expression = 1;
+
+    // Information about SQL expression in its original dialect, e.g.,
+    // PostgreSQL (before translation into GoogleSQL). GoogleSQL is not using
+    // this field.
+    optional SQLExpressionOrigin expression_origin = 2;
+  }
+
+  optional ColumnOnUpdateDefinition column_on_update = 18;
 }
 
 // Used for CREATE TABLE and CREATE INDEX
@@ -614,6 +625,8 @@ message AlterTable {
       SET_NOT_NULL = 3;
       DROP_NOT_NULL = 4;
       ALTER_IDENTITY = 5;
+      SET_ON_UPDATE = 8;
+      DROP_ON_UPDATE = 9;
     }
     // Defines the specific alter operation on the column.
     optional AlterColumnOp operation = 2;

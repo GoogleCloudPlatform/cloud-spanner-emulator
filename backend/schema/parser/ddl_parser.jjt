@@ -193,6 +193,7 @@ void literal_value() :
     | <TRUEE>
     | <FALSEE>
     | <TIMESTAMP> any_string_literal()
+    | interval_expression()
     | "[" [ literal_value() ( "," literal_value() )* ] "]"
     | <ARRAY> [ "<" function_data_type() ">" ] "[" [ literal_value() ( "," literal_value() )* ] "]"
     | "(" expression() ")"
@@ -277,6 +278,7 @@ void table_element() #void :
 {}
 {
     LOOKAHEAD(3) foreign_key()
+  | LOOKAHEAD(3) primary_key()
   | LOOKAHEAD(3) check_constraint()
   | LOOKAHEAD(3) synonym_clause()
   | column_def()
@@ -289,6 +291,8 @@ void column_def() :
   column_type()
   [ <NOT> <NULLL> #not_null ]
   [ generation_clause()
+  | LOOKAHEAD (column_default_clause() column_on_update_clause()) column_default_clause() column_on_update_clause()
+  | LOOKAHEAD (column_on_update_clause() column_default_clause()) column_on_update_clause() column_default_clause()
   | column_default_clause()
   | identity_column_clause()
   | <AUTO_INCREMENT> #auto_increment
@@ -325,6 +329,8 @@ void column_def_alter_attrs() :
   column_type()
   [ <NOT> <NULLL> #not_null ]
   [ generation_clause()
+  | LOOKAHEAD (column_default_clause() column_on_update_clause()) column_default_clause() column_on_update_clause()
+  | LOOKAHEAD (column_on_update_clause() column_default_clause()) column_on_update_clause() column_default_clause()
   | column_default_clause()
   | identity_column_clause()
   ]
@@ -336,7 +342,7 @@ void column_def_alter() :
 {
     LOOKAHEAD(2) <SET> ( options_clause()
                          | column_default_clause()
-
+                         | column_on_update_clause()
                          | (<NOT> <NULLL> #set_not_null )
                          | (<PLACEMENT> <KEY> #set_placement_key )
                        )
@@ -344,7 +350,7 @@ void column_def_alter() :
                           | ( <NOT> <NULLL> #drop_not_null )
                           | (<PLACEMENT> <KEY> #drop_placement_key )
                         )
-
+  | LOOKAHEAD(2) <DROP> <ON> <UPDATE> #drop_column_on_update
   | <ALTER> <IDENTITY> ( <RESTART> <COUNTER> <WITH> int_value() #restart_counter
                          | <SET> ( <SKIPP> <RANGE> int_value() #skip_range_min
                                                "," int_value() #skip_range_max
@@ -407,6 +413,11 @@ void column_default_clause() :
   <DEFAULTT> "(" expression() #column_default_expression ")"
 }
 
+void column_on_update_clause() :
+{}
+{
+  <ON> <UPDATE> "(" expression() #column_on_update_expression ")"
+}
 
 void primary_key() #void :
 {}

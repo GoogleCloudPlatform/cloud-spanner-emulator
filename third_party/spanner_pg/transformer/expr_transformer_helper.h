@@ -34,10 +34,12 @@
 
 #include <memory>
 
+#include "zetasql/public/catalog.h"
 #include "zetasql/public/id_string.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
 #include "zetasql/resolved_ast/resolved_column.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_map.h"
 #include "absl/hash/hash.h"
 #include "absl/strings/str_format.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
@@ -56,6 +58,9 @@ typedef std::map<zetasql::ResolvedColumn, bool> CorrelatedColumnsSet;
 // while looking up a name.  The sets are ordered from child scopes to
 // parent scopes; i.e. the outermost query's VarIndexScope is last.
 typedef std::vector<CorrelatedColumnsSet*> CorrelatedColumnsSetList;
+
+typedef absl::node_hash_map<const zetasql::Column*, zetasql::ResolvedColumn>
+    ColumnMap;
 
 // The index of a Postgres `Var` (i.e. a column).
 struct VarIndex {
@@ -324,6 +329,17 @@ class VarIndexScope {
     return MapVarIndexToTarget(var_index, {column}, allow_override);
   }
 
+  void MapCatalogColumnToResolvedColumn(
+      const zetasql::Column& catalog_column,
+      const zetasql::ResolvedColumn& resolved_column) {
+    if (catalog_columns_to_resolved_columns_map_.contains(&catalog_column)) {
+      // Column already mapped, so skip. Otherwise, invalid column references
+      // are used in the forward transformation which will error at validation.
+      return;
+    }
+    catalog_columns_to_resolved_columns_map_[&catalog_column] = resolved_column;
+  }
+
   void MergeFrom(const VarIndexScope& other) {
     for (const auto& kv : other.var_index_map()) {
       MapVarIndexToTarget(kv.first, kv.second, /*allow_override=*/true);
@@ -362,6 +378,10 @@ class VarIndexScope {
 
   const VarIndexMap& var_index_map() const { return var_index_map_; }
 
+  const ColumnMap& catalog_columns_to_resolved_columns_map() const {
+    return catalog_columns_to_resolved_columns_map_;
+  }
+
  private:
   const VarIndexScope* const previous_scope_ = nullptr;  // may be NULL
   VarIndexMap var_index_map_;
@@ -371,6 +391,10 @@ class VarIndexScope {
   // If this is non-NULL, this set pointer is returned from LookupVarIndex, and
   // any referenced columns should be added to it by the caller.
   CorrelatedColumnsSet* correlated_columns_set_ = nullptr;  // Not owned.
+
+  // Map used to link catalog columns to resolved columns. This is used to
+  // resolve ExpressionColumns when returning generated column values in DML.
+  ColumnMap catalog_columns_to_resolved_columns_map_;
 };
 
 // ExprTransformerInfo is used to transform and validate an expression.

@@ -65,6 +65,13 @@ absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateQueryInView(
     std::unique_ptr<google::spanner::emulator::backend::FunctionCatalog>
         emulator_function_catalog);
 
+absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateFunctionBody(
+    absl::string_view query, zetasql::EnumerableCatalog& catalog,
+    const zetasql::AnalyzerOptions& analyzer_options,
+    zetasql::TypeFactory* type_factory,
+    std::unique_ptr<google::spanner::emulator::backend::FunctionCatalog>
+        emulator_function_catalog);
+
 }  // namespace spangres
 }  // namespace postgres_translator
 

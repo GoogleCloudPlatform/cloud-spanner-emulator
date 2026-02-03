@@ -21,19 +21,18 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/base/logging.h"
 #include "google/longrunning/operations.grpc.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.grpc.pb.h"
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.grpc.pb.h"
 #include "google/spanner/v1/spanner.grpc.pb.h"
-#include "absl/flags/flag.h"
-#include "absl/memory/memory.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "frontend/server/server.h"
 #include "grpcpp/channel.h"
+#include "grpcpp/client_context.h"
 #include "grpcpp/create_channel.h"
 #include "grpcpp/security/credentials.h"
-#include "absl/status/status.h"
+#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {

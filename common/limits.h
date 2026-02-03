@@ -145,6 +145,11 @@ constexpr int kColumnExpressionMaxDepth = 20;
 // value range.
 constexpr int kMaxGetSequenceValueAttempt = 2000;
 
+// Maximum size of a Value in bytes.
+// This needs to be at least 10 MB to allow for the max possible size of a
+// value: a 10 MB BYTES column.
+constexpr int kMaxValueSizeBytes = kMaxBytesColumnLength;
+
 }  // namespace limits
 }  // namespace emulator
 }  // namespace spanner

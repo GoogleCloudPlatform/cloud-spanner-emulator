@@ -30,6 +30,12 @@ CREATE TABLE udf_table (
   int64_col INT64 DEFAULT(udf_default_value()),
   string_col STRING(MAX),
 ) PRIMARY KEY (string_col);
+CREATE TABLE default_pct(
+  k INT64,
+  ts TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+  ts_default TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS (allow_commit_timestamp = true),
+) PRIMARY KEY (k);
 ===
 @Dialect=POSTGRESQL
 CREATE TABLE t(
@@ -56,5 +62,11 @@ CREATE TABLE fk(
   k bigint,
   d bigint DEFAULT (3::bigint),
   FOREIGN KEY (d) REFERENCES t(d2),
+  PRIMARY KEY (k)
+);
+CREATE TABLE default_pct(
+  k bigint,
+  ts SPANNER.COMMIT_TIMESTAMP,
+  ts_default SPANNER.COMMIT_TIMESTAMP DEFAULT SPANNER.PENDING_COMMIT_TIMESTAMP(),
   PRIMARY KEY (k)
 );

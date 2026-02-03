@@ -123,6 +123,7 @@ cc_library(
         "@com_google_absl//absl/cleanup",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/container:node_hash_map",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/hash",
         "@com_google_absl//absl/log",
@@ -151,6 +152,7 @@ cc_library(
         "@com_google_zetasql//zetasql/public:value",
         "@com_google_zetasql//zetasql/resolved_ast",
         "@com_google_zetasql//zetasql/resolved_ast:resolved_ast_enums_cc_proto",
+        "@com_google_zetasql//zetasql/resolved_ast:resolved_ast_rewrite_visitor",
         "@com_google_zetasql//zetasql/resolved_ast:resolved_node_kind_cc_proto",
     ],
 )

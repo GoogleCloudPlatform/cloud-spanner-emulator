@@ -128,6 +128,13 @@ class Column : public SchemaNode {
   // Returns whether the column has a default value.
   bool has_default_value() const { return has_default_value_; }
 
+  // Returns whether the column expression is PENDING_COMMIT_TIMESTAMP.
+  bool is_pending_commit_timestamp() const {
+    return is_pending_commit_timestamp_;
+  }
+  // Returns whether the column has an ON UPDATE expression.
+  bool has_on_update() const { return has_on_update_; }
+
   // Returns the expression if the column is an evaluated column.
   const std::optional<std::string>& expression() const { return expression_; }
 
@@ -268,6 +275,12 @@ class Column : public SchemaNode {
 
   // Whether the column has a default value.
   bool has_default_value_ = false;
+
+  // Whether the column expression is PENDING_COMMIT_TIMESTAMP
+  bool is_pending_commit_timestamp_ = false;
+
+  // Whether the column has an ON UPDATE expression.
+  bool has_on_update_ = false;
 
   // Whether the column is an identity column.
   bool is_identity_column_ = false;

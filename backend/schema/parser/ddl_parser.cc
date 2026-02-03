@@ -354,6 +354,30 @@ std::string CheckOptionKeyValNodeAndGetName(const SimpleNode* node) {
   return key->image();
 }
 
+void VisitStringOrNullOptionValNode(const SimpleNode* value_node,
+                                    SetOption* option,
+                                    std::vector<std::string>* errors) {
+  if (value_node->getId() == JJTNULLL) {
+    option->set_null_value(true);
+    return;
+  }
+  if (value_node->getId() != JJTSTR_VAL ||
+      !ValidateStringLiteralImage(value_node->image(), /*force=*/true, nullptr)
+           .ok()) {
+    errors->push_back(
+        absl::StrCat("Unexpected value for option: ", option->option_name(),
+                     ". Supported option values are strings and NULL."));
+    return;
+  }
+  std::string string_value;
+  std::string error = "";
+  if (!UnescapeStringLiteral(value_node->image(), &string_value, &error)) {
+    errors->push_back(error);
+    return;
+  }
+  option->set_string_value(string_value);
+}
+
 void VisitLocalityGroupName(const SimpleNode* node, OptionList* options,
                             std::vector<std::string>* errors) {
   std::string option_name = kLocalityGroupOptionName;
@@ -386,14 +410,12 @@ void VisitTableOptionKeyValNode(const SimpleNode* node, OptionList* options,
                                 std::vector<std::string>* errors) {
   const std::string option_name = CheckOptionKeyValNodeAndGetName(node);
 
-  // If this is an invalid option, return error.
-  if (option_name != kLocalityGroupOptionName) {
-    errors->push_back(
-        absl::StrCat("Option: ", option_name, " is unknown in Table Options."));
-    return;
-  }
   if (option_name == kLocalityGroupOptionName) {
     VisitLocalityGroupName(node, options, errors);
+  } else {
+    // If this is an invalid option, return error.
+    errors->push_back(
+        absl::StrCat("Option: ", option_name, " is unknown in Table Options."));
   }
 }
 
@@ -412,14 +434,12 @@ void VisitIndexOptionKeyValNode(const SimpleNode* node, OptionList* options,
                                 std::vector<std::string>* errors) {
   const std::string option_name = CheckOptionKeyValNodeAndGetName(node);
 
-  // If this is an invalid option, return error.
-  if (option_name != kLocalityGroupOptionName) {
-    errors->push_back(
-        absl::StrCat("Option: ", option_name, " is unknown in Index Options."));
-    return;
-  }
   if (option_name == kLocalityGroupOptionName) {
     VisitLocalityGroupName(node, options, errors);
+  } else {
+    // If this is an invalid option, return error.
+    errors->push_back(
+        absl::StrCat("Option: ", option_name, " is unknown in Index Options."));
   }
 }
 
@@ -967,6 +987,19 @@ void VisitColumnDefaultClauseNode(const SimpleNode* node,
       absl::StrCat(ExtractTextForNode(child, ddl_text)));
 }
 
+void VisitColumnOnUpdateClauseNode(const SimpleNode* node,
+                                   ColumnDefinition* column,
+                                   absl::string_view ddl_text) {
+  CheckNode(node, JJTCOLUMN_ON_UPDATE_CLAUSE);
+
+  ABSL_DCHECK_EQ(node->jjtGetNumChildren(), 1);
+
+  SimpleNode* child = GetChildNode(node, 0, JJTCOLUMN_ON_UPDATE_EXPRESSION);
+
+  column->mutable_column_on_update()->set_expression(
+      ExtractTextForNode(child, ddl_text));
+}
+
 // If containing_table is not null, then we support parsing a PRIMARY KEY clause
 // attached to this column; if present, this column's name will be set as the
 // sole primary key component in the containing table, or a syntax error will be
@@ -1013,6 +1046,9 @@ void VisitColumnNode(const SimpleNode* node, absl::string_view ddl_text,
       case JJTCOLUMN_DEFAULT_CLAUSE:
         VisitColumnDefaultClauseNode(child, column, ddl_text);
         break;
+      case JJTCOLUMN_ON_UPDATE_CLAUSE:
+        VisitColumnOnUpdateClauseNode(child, column, ddl_text);
+        break;
       case JJTIDENTITY_COLUMN_CLAUSE:
         VisitIdentityColumnClauseNode(child, column, errors);
         break;
@@ -1058,6 +1094,9 @@ void VisitColumnNodeAlterAttrs(const SimpleNode* node,
         break;
       case JJTCOLUMN_DEFAULT_CLAUSE:
         VisitColumnDefaultClauseNode(child, column, ddl_text);
+        break;
+      case JJTCOLUMN_ON_UPDATE_CLAUSE:
+        VisitColumnOnUpdateClauseNode(child, column, ddl_text);
         break;
       case JJTIDENTITY_COLUMN_CLAUSE:
         VisitIdentityColumnClauseNode(child, column, errors);
@@ -1119,6 +1158,20 @@ void VisitColumnNodeAlter(const std::string& table_name,
       // NOT NULL attributes.
       alter_column->set_operation(AlterTable::AlterColumn::DROP_DEFAULT);
       column->clear_column_default();
+      break;
+    }
+    case JJTCOLUMN_ON_UPDATE_CLAUSE: {
+      // "ALTER COLUMN c SET ON UPDATE " does not contain the column TYPE or
+      // NOT NULL attributes.
+      alter_column->set_operation(AlterTable::AlterColumn::SET_ON_UPDATE);
+      VisitColumnOnUpdateClauseNode(child, column, ddl_text);
+      break;
+    }
+    case JJTDROP_COLUMN_ON_UPDATE: {
+      // "ALTER COLUMN c DROP ON UPDATE " does not contain the column TYPE or
+      // NOT NULL attributes.
+      alter_column->set_operation(AlterTable::AlterColumn::DROP_ON_UPDATE);
+      column->clear_column_on_update();
       break;
     }
     case JJTSET_NOT_NULL: {
@@ -1341,7 +1394,7 @@ void VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
         if (table->primary_key().empty()) {
           VisitKeyNode(child, table->mutable_primary_key(), errors);
         } else {
-          errors->push_back("Cannot specify both table and column PRIMARY KEY");
+          errors->push_back("Can only specify PRIMARY KEY once.");
         }
         has_primary_key = true;
         break;
@@ -2143,30 +2196,6 @@ void VisitAlterDatabaseNode(const SimpleNode* node, AlterDatabase* database,
   VisitDatabaseOptionListNode(
       GetChildNode(node, 1, JJTOPTIONS_CLAUSE), /*option_list_offset=*/0,
       database->mutable_set_options()->mutable_options(), errors);
-}
-
-void VisitStringOrNullOptionValNode(const SimpleNode* value_node,
-                                    SetOption* option,
-                                    std::vector<std::string>* errors) {
-  if (value_node->getId() == JJTNULLL) {
-    option->set_null_value(true);
-    return;
-  }
-  if (value_node->getId() != JJTSTR_VAL ||
-      !ValidateStringLiteralImage(value_node->image(), /*force=*/true, nullptr)
-           .ok()) {
-    errors->push_back(
-        absl::StrCat("Unexpected value for option: ", option->option_name(),
-                     ". Supported option values are strings and NULL."));
-    return;
-  }
-  std::string string_value;
-  std::string error = "";
-  if (!UnescapeStringLiteral(value_node->image(), &string_value, &error)) {
-    errors->push_back(error);
-    return;
-  }
-  option->set_string_value(string_value);
 }
 
 void VisitStringArrayOrNullOptionValNode(const SimpleNode* value_node,

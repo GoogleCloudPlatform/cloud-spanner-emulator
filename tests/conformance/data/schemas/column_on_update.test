@@ -1,0 +1,21 @@
+# Note that PG databases by default have lower case table and column names. To
+# use uppercase names, you have to quote them. But the GSQL and PG quoting
+# syntax is incompatible so we use lower-case names in both schemas to avoid
+# having to maintain two copies of each query.
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE on_update(
+  k INT64 PRIMARY KEY,
+  ts TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+  ts_on_update TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    ON UPDATE (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS (allow_commit_timestamp = true),
+);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE on_update(
+  k bigint PRIMARY KEY,
+  ts SPANNER.COMMIT_TIMESTAMP,
+  ts_on_update SPANNER.COMMIT_TIMESTAMP
+    DEFAULT SPANNER.PENDING_COMMIT_TIMESTAMP()
+    ON UPDATE SPANNER.PENDING_COMMIT_TIMESTAMP()
+);

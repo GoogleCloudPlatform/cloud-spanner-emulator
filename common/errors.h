@@ -708,8 +708,16 @@ absl::Status DefaultExpressionWithColumnDependency(
 absl::Status ColumnDefaultValueParseError(absl::string_view table_name,
                                           absl::string_view column_name,
                                           absl::string_view message);
+absl::Status OnUpdateWithoutDefaultValue(absl::string_view column_name);
+absl::Status OnUpdateDefaultValueMismatch(absl::string_view column_name);
+absl::Status OnUpdateExpressionMustBePendingCommitTimestamp();
+absl::Status ColumnWithOnUpdateUsedInPrimaryKey(absl::string_view table_name,
+                                                absl::string_view column_name);
 absl::Status CannotUseCommitTimestampWithColumnDefaultValue(
     absl::string_view column_name);
+absl::Status OtherCannotUseCommitTimestampWithColumnDefaultValue(
+    absl::string_view column_name);
+absl::Status DefaultCommitTimestampWithoutOption(absl::string_view column_name);
 absl::Status DefaultPKNeedsExplicitValue(absl::string_view column_name,
                                          absl::string_view op_name);
 absl::Status GeneratedPKNeedsExplicitValue(absl::string_view column_name);
@@ -795,10 +803,13 @@ absl::Status QueryStringTooLong(int query_length, int max_length);
 absl::Status InvalidBytesPerBatch(absl::string_view message_name);
 absl::Status InvalidMaxPartitionCount(absl::string_view message_name);
 absl::Status InvalidPartitionToken();
+absl::Status InvalidStreamingPartitionToken();
+absl::Status InvalidStreamingPartitionTokenMetadata();
 absl::Status ReadFromDifferentSession();
 absl::Status ReadFromDifferentTransaction();
 absl::Status ReadFromDifferentParameters();
 absl::Status InvalidPartitionedQueryMode();
+absl::Status InvalidTargetPartitionSizeBytes(absl::string_view message_name);
 
 // Row Deletion Policy errors.
 absl::Status RowDeletionPolicyDoesNotExist(absl::string_view table_name);
@@ -982,7 +993,7 @@ absl::Status InvalidDropDependentViews(absl::string_view type_kind,
 absl::Status WithViewsAreNotSupported();
 
 // Function errors.
-absl::Status FunctionRequiresInvokerSecurity(absl::string_view function_name);
+absl::Status FunctionDefinerSecurityError(absl::string_view function_name);
 absl::Status FunctionReplaceError(absl::string_view function_name,
                                   absl::string_view error);
 absl::Status FunctionBodyAnalysisError(absl::string_view function_name,
@@ -1002,7 +1013,11 @@ absl::Status InvalidDropDependentFunction(absl::string_view type_kind,
                                           absl::string_view dependency_name,
                                           absl::string_view dependent_function);
 absl::Status FunctionNotFound(absl::string_view function_name);
-
+absl::Status InvalidOptionForFunction(absl::string_view option_name,
+                                      absl::string_view function_name);
+absl::Status InvalidOptionValueForFunction(absl::string_view option_value,
+                                           absl::string_view option_name,
+                                           absl::string_view function_name);
 // Sequence-related errors
 absl::Status SequenceNotSupportedInPostgreSQL();
 

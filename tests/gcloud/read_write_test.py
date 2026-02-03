@@ -16,6 +16,8 @@
 
 """Tests for Cloud Spanner gcloud command execute-sql and rows."""
 
+import subprocess
+
 from tests.gcloud import emulator
 
 
@@ -305,6 +307,48 @@ class GCloudReadWriteTest(emulator.TestCase):
         '--ddl=ALTER DATABASE `test-database` SET OPTIONS ('
         " version_retention_period = '7d' )",
     )
+
+  def testPGError(self):
+    # Create an instance.
+    self.RunGCloud(
+        'spanner',
+        'instances',
+        'create',
+        'test-instance',
+        '--config=emulator-config',
+        '--description=Test Instance',
+        '--nodes',
+        '3',
+    )
+    # Create the PG database.
+    self.assertEqual(
+        self.RunGCloud(
+            'spanner',
+            'databases',
+            'create',
+            'test-database',
+            '--instance=test-instance',
+            '--database-dialect=POSTGRESQL',
+        ),
+        self.JoinLines(''),
+    )
+    # Expect an error.
+    try:
+      self.RunGCloud(
+          'spanner',
+          'databases',
+          'execute-sql',
+          'test-database',
+          '--instance=test-instance',
+          '--sql=SELECT CAST(1 AS PG.NUMERIC)',
+      )
+      self.fail('Expected an error')
+    except subprocess.CalledProcessError as err:
+      e = err
+    self.assertIsNotNone(e)
+    self.assertIn('type \\"pg.numeric\\" does not exist', e.stderr)
+    # Check if the PG error code is attached.
+    self.assertIn('"metadata":{"pg_sqlerrcode":"42704"}', e.stderr)
 
 
 if __name__ == '__main__':

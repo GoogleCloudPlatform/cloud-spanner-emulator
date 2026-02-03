@@ -45,6 +45,8 @@
 #include "tests/conformance/common/environment.h"
 #include "absl/status/status.h"
 
+ABSL_DECLARE_FLAG(int64_t, spanner_enable_default_commit_timestamp_version);
+
 namespace google {
 namespace spanner {
 namespace emulator {

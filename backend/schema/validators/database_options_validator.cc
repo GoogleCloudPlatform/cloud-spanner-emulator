@@ -35,7 +35,7 @@ absl::Status DatabaseOptionsValidator::Validate(
     const DatabaseOptions* database_options, SchemaValidationContext* context) {
   ZETASQL_RET_CHECK(!database_options->database_name_.empty());
   ZETASQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName(
-      "Database Options", database_options->database_name_));
+      "Database", database_options->database_name_));
   return absl::OkStatus();
 }
 

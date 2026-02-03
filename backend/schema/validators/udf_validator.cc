@@ -60,8 +60,14 @@ absl::Status ValidateUdfSignatureChange(absl::string_view modify_action,
   Udf::Determinism determinism_level =
       Udf::Determinism::DETERMINISM_UNSPECIFIED;
   auto status = AnalyzeUdfDefinition(
-      dependent_udf->Name(), param_list, dependent_udf->body(), temp_new_schema,
-      type_factory, &unused_new_deps, &unused_signature, &determinism_level);
+      dependent_udf->Name(), param_list, dependent_udf->body(),
+      dependent_udf->endpoint(), dependent_udf->max_batching_rows(),
+      dependent_udf->is_remote(),
+      dependent_udf->language() == Udf::Language::REMOTE,
+      dependent_udf->signature()->result_type().type()->TypeName(
+          zetasql::PRODUCT_EXTERNAL),
+      temp_new_schema, type_factory, &unused_new_deps, &unused_signature,
+      &determinism_level);
   if (!status.ok()) {
     return error::DependentFunctionBecomesInvalid(
         modify_action, dependency_name, dependent_udf->Name(),
@@ -76,7 +82,6 @@ absl::Status ValidateUdfSignatureChange(absl::string_view modify_action,
 absl::Status UdfValidator::Validate(const Udf* udf,
                                     SchemaValidationContext* context) {
   ZETASQL_RET_CHECK(!udf->name_.empty());
-  ZETASQL_RET_CHECK(!udf->body_.empty());
   if (context->is_postgresql_dialect()) {
     ZETASQL_RET_CHECK(udf->postgresql_oid().has_value());
   } else {
@@ -88,6 +93,26 @@ absl::Status UdfValidator::Validate(const Udf* udf,
 
   for (const SchemaNode* dependency : udf->dependencies()) {
     ZETASQL_RET_CHECK(!dependency->is_deleted());
+  }
+
+  if (udf->is_remote()) {
+    ZETASQL_RET_CHECK_EQ(udf->language(), Udf::Language::LANGUAGE_UNSPECIFIED);
+  }
+
+  bool remote_udf =
+      udf->language() == Udf::Language::REMOTE || udf->is_remote();
+  if (remote_udf) {
+    ZETASQL_RET_CHECK(udf->body_.empty());
+    ZETASQL_RET_CHECK(udf->endpoint_.has_value());
+    if (udf->max_batching_rows_.has_value()) {
+      ZETASQL_RET_CHECK_GE(*udf->max_batching_rows_, 0);
+    }
+  } else {
+    ZETASQL_RET_CHECK(udf->language() == Udf::Language::SQL ||
+              udf->language() == Udf::Language::LANGUAGE_UNSPECIFIED);
+    ZETASQL_RET_CHECK(!udf->body_.empty());
+    ZETASQL_RET_CHECK(!udf->endpoint_.has_value()) << *udf->endpoint_;
+    ZETASQL_RET_CHECK(!udf->max_batching_rows_.has_value()) << *udf->max_batching_rows_;
   }
 
   return absl::OkStatus();
