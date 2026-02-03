@@ -534,6 +534,18 @@ index a432666c..6b17e767 100644
  
   private:
    const Type* type_;
+diff --git a/zetasql/resolved_ast/BUILD b/zetasql/resolved_ast/BUILD
+index 37aa9deb..e464d85a 100644
+--- a/zetasql/resolved_ast/BUILD
++++ b/zetasql/resolved_ast/BUILD
+@@ -209,6 +209,7 @@ cc_library(
+         "-O3",
+         "-Wframe-larger-than=4000",
+     ],
++    visibility = ["//visibility:public"],
+     deps = [
+         ":resolved_ast",
+         ":resolved_ast_builder",
 diff --git a/zetasql/resolved_ast/resolved_column.h b/zetasql/resolved_ast/resolved_column.h
 index d5e484b8..dc9c7eca 100644
 --- a/zetasql/resolved_ast/resolved_column.h

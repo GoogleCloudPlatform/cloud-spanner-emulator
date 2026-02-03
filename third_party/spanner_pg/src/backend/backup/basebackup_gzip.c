@@ -13,7 +13,9 @@
 #include "postgres.h"
 
 #ifdef HAVE_LIBZ
+// SPANGRES BEGIN
 #include <zlib.h>
+// SPANGRES END
 #endif
 
 #include "backup/basebackup_sink.h"

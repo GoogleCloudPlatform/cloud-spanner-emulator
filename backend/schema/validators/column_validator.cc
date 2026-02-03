@@ -269,9 +269,14 @@ absl::Status ColumnValidator::Validate(const Column* column,
   }
 
   if (column->has_default_value()) {
-    if (column->allows_commit_timestamp()) {
-      return error::CannotUseCommitTimestampWithColumnDefaultValue(
+    if (column->allows_commit_timestamp() &&
+        !column->is_pending_commit_timestamp()) {
+      return error::OtherCannotUseCommitTimestampWithColumnDefaultValue(
           column->Name());
+    }
+    if (!column->allows_commit_timestamp() &&
+        column->is_pending_commit_timestamp()) {
+      return error::DefaultCommitTimestampWithoutOption(column->Name());
     }
     if (context->is_postgresql_dialect()) {
       ZETASQL_RET_CHECK(column->postgresql_oid().has_value());

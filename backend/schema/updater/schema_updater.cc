@@ -324,8 +324,7 @@ class SchemaUpdaterImpl {
                                    const Table* table,
                                    const ddl::CreateTable* ddl_create_table,
                                    const database_api::DatabaseDialect& dialect,
-                                   bool is_alter,
-                                   ColumnDefModifier* modifier);
+                                   bool is_alter, ColumnDefModifier* modifier);
 
   absl::Status AlterColumnDefinition(
       const ddl::ColumnDefinition& ddl_column, const Table* table,
@@ -335,6 +334,10 @@ class SchemaUpdaterImpl {
       const ddl::AlterTable::AlterColumn& alter_column, const Table* table,
       const Column* column, const database_api::DatabaseDialect& dialect,
       Column::Editor* editor);
+
+  absl::Status AlterColumnSetDropOnUpdate(
+      const ddl::AlterTable::AlterColumn& alter_column, const Table* table,
+      const Column* column, Column::Editor* editor);
 
   absl::StatusOr<const Column*> CreateColumn(
       const ddl::ColumnDefinition& ddl_column, const Table* table,
@@ -1482,6 +1485,7 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
     editor->set_expression(expression);
     editor->set_has_default_value(true);
     editor->set_udf_dependencies(udf_dependencies);
+    editor->set_is_pending_commit_timestamp(is_pending_commit_timestamp);
     const Column* existing_column =
         table->FindColumn(alter_column.column().column_name());
     if (existing_column == nullptr) {
@@ -1508,6 +1512,10 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
     if (!column->has_default_value() || column->is_identity_column()) {
       return absl::OkStatus();
     }
+    if (column->has_on_update()) {
+      return error::OnUpdateWithoutDefaultValue(
+          alter_column.column().column_name());
+    }
     editor->clear_expression();
     editor->clear_original_expression();
     editor->set_has_default_value(false);
@@ -1519,6 +1527,42 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
   }
   // Clear all the old sequence dependencies and set the new ones
   editor->set_sequences_used(dependent_sequences);
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::AlterColumnSetDropOnUpdate(
+    const ddl::AlterTable::AlterColumn& alter_column, const Table* table,
+    const Column* column, Column::Editor* editor) {
+  const ddl::AlterTable::AlterColumn::AlterColumnOp type =
+      alter_column.operation();
+  ZETASQL_RET_CHECK(type == ddl::AlterTable::AlterColumn::SET_ON_UPDATE ||
+            type == ddl::AlterTable::AlterColumn::DROP_ON_UPDATE);
+
+  const ddl::ColumnDefinition& new_column_def = alter_column.column();
+  if (type == ddl::AlterTable::AlterColumn::SET_ON_UPDATE) {
+    if (!column->has_default_value()) {
+      return error::OnUpdateWithoutDefaultValue(
+          alter_column.column().column_name());
+    }
+    if (column->expression() !=
+        new_column_def.column_on_update().expression()) {
+      return error::OnUpdateDefaultValueMismatch(
+          alter_column.column().column_name());
+    }
+    if (!column->is_pending_commit_timestamp()) {
+      return error::OnUpdateExpressionMustBePendingCommitTimestamp();
+    }
+    if (table->FindKeyColumn(alter_column.column().column_name())) {
+      return error::ColumnWithOnUpdateUsedInPrimaryKey(
+          table->Name(), alter_column.column().column_name());
+    }
+    editor->set_has_on_update(true);
+  } else {
+    if (!column->has_on_update()) {
+      return absl::OkStatus();
+    }
+    editor->set_has_on_update(false);
+  }
   return absl::OkStatus();
 }
 
@@ -1821,6 +1865,34 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     modifier->set_stored(ddl_column.generated_column().stored());
   }
 
+  // ON UPDATE is only allowed for non-key columns with identical DEFAULT value
+  // expressions.
+  bool has_on_update = false;
+  if (ddl_column.has_column_on_update()) {
+    if (table->FindKeyColumn(ddl_column.column_name())) {
+      return error::ColumnWithOnUpdateUsedInPrimaryKey(
+          table->Name(), ddl_column.column_name());
+    }
+    if (!has_default_value) {
+      return error::OnUpdateWithoutDefaultValue(ddl_column.column_name());
+    }
+    std::string on_update_expression =
+        ddl_column.column_on_update().expression();
+    if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+      ZETASQL_ASSIGN_OR_RETURN(
+          on_update_expression,
+          TranslatePGExpression(ddl_column.column_on_update(), table,
+                                ddl_create_table, *modifier));
+    }
+    if (default_value_expression != on_update_expression) {
+      return error::OnUpdateDefaultValueMismatch(ddl_column.column_name());
+    }
+    if (!is_pending_commit_timestamp) {
+      return error::OnUpdateExpressionMustBePendingCommitTimestamp();
+    }
+    has_on_update = true;
+  }
+
   if (!is_generated && !has_default_value) {
     // Altering a generated column to a non-generated column is disallowed. In
     // that case, the expression is cleared here and later validation at
@@ -1832,6 +1904,8 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
 
   modifier->set_is_identity_column(is_identity_column);
   modifier->set_has_default_value(has_default_value);
+  modifier->set_is_pending_commit_timestamp(is_pending_commit_timestamp);
+  modifier->set_has_on_update(has_on_update);
   // Set the default values for nullability and length.
   modifier->set_nullable(!ddl_column.not_null());
   modifier->set_declared_max_length(std::nullopt);
@@ -2362,6 +2436,10 @@ absl::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColumn(
   if (column == nullptr) {
     return error::NonExistentKeyColumn(
         OwningObjectType(table), OwningObjectName(table), key_column_name);
+  }
+  if (column->has_on_update()) {
+    return error::ColumnWithOnUpdateUsedInPrimaryKey(table->Name(),
+                                                     key_column_name);
   }
   builder->set_column(column);
   // TODO: Specifying NULLS FIRST/LAST is unsupported in the
@@ -4162,10 +4240,25 @@ absl::Status SchemaUpdaterImpl::AnalyzeFunctionDefinition(
       param_list += ", ";
     }
   }
-  auto status = AnalyzeUdfDefinition(ddl_function.function_name(), param_list,
-                                     ddl_function.sql_body(), latest_schema_,
-                                     type_factory_, dependencies,
-                                     function_signature, determinism_level);
+  std::optional<std::string> endpoint;
+  std::optional<int> max_batching_rows;
+  if (ddl_function.is_remote() ||
+      ddl_function.language() == ddl::Function::REMOTE) {
+    for (const auto& option : ddl_function.options()) {
+      if (option.option_name() == "endpoint") {
+        endpoint = option.string_value();
+      }
+      if (option.option_name() == "max_batching_rows") {
+        max_batching_rows = option.int64_value();
+      }
+    }
+  }
+  auto status = AnalyzeUdfDefinition(
+      ddl_function.function_name(), param_list, ddl_function.sql_body(),
+      endpoint, max_batching_rows, ddl_function.is_remote(),
+      ddl_function.language() == ddl::Function::REMOTE,
+      ddl_function.return_typename(), latest_schema_, type_factory_,
+      dependencies, function_signature, determinism_level);
 
   if (!status.ok()) {
     return replace ? error::FunctionReplaceError(ddl_function.function_name(),
@@ -4205,6 +4298,10 @@ absl::StatusOr<Udf::Builder> SchemaUpdaterImpl::CreateFunctionBuilder(
             << ddl_function.function_name();
   }
   builder.set_name(ddl_function.function_name())
+      .set_language(ddl_function.language() == ddl::Function::REMOTE
+                        ? Udf::Language::REMOTE
+                        : Udf::Language::SQL)
+      .set_is_remote(ddl_function.is_remote())
       .set_sql_body(ddl_function.sql_body())
       .set_sql_security([&]() {
         switch (ddl_function.sql_security()) {
@@ -4235,6 +4332,22 @@ absl::StatusOr<Udf::Builder> SchemaUpdaterImpl::CreateFunctionBuilder(
 
   for (auto dependency : dependencies) {
     builder.add_dependency(dependency);
+  }
+
+  for (const auto& option : ddl_function.options()) {
+    if (option.option_name() == "max_batching_rows") {
+      if (!option.has_int64_value()) {
+        return error::InvalidOptionValueForFunction(
+            option.DebugString(), option.option_name(),
+            ddl_function.function_name());
+      }
+      builder.set_max_batching_rows(option.int64_value());
+    } else if (option.option_name() == "endpoint") {
+      builder.set_endpoint(option.string_value());
+    } else {
+      return error::InvalidOptionForFunction(option.option_name(),
+                                             ddl_function.function_name());
+    }
   }
 
   return builder;
@@ -4286,13 +4399,17 @@ absl::Status SchemaUpdaterImpl::CreateFunction(
                                           limits::kMaxViewsPerDatabase);
   }
 
-  if (!ddl_function.has_sql_security() ||
+  bool is_remote = (ddl_function.language() == ddl::Function::REMOTE ||
+                    ddl_function.is_remote());
+  if (!is_remote && ddl_function.function_kind() == ddl::Function::FUNCTION &&
+      ddl_function.has_sql_security() &&
       ddl_function.sql_security() != ddl::Function::INVOKER) {
-    return ddl_function.function_kind() == ddl::Function::FUNCTION
-               ? error::FunctionRequiresInvokerSecurity(
-                     ddl_function.function_name())
-               : error::ViewRequiresInvokerSecurity(
-                     ddl_function.function_name());
+    return error::FunctionDefinerSecurityError(ddl_function.function_name());
+  }
+  // TODO: update this to allow definer views.
+  if (ddl_function.function_kind() == ddl::Function::VIEW &&
+      ddl_function.sql_security() != ddl::Function::INVOKER) {
+    return error::ViewRequiresInvokerSecurity(ddl_function.function_name());
   }
 
   bool replace = false;
@@ -5165,6 +5282,17 @@ absl::Status SchemaUpdaterImpl::AlterTable(
             }
           }
           ZETASQL_RETURN_IF_ERROR(AlterSequence(alter_sequence, sequence));
+        } else if (alter_column.operation() ==
+                       ddl::AlterTable::AlterColumn::SET_ON_UPDATE ||
+                   alter_column.operation() ==
+                       ddl::AlterTable::AlterColumn::DROP_ON_UPDATE) {
+          ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
+              column,
+              [this, &alter_column, &column,
+               &table](Column::Editor* editor) -> absl::Status {
+                return AlterColumnSetDropOnUpdate(alter_column, table, column,
+                                                  editor);
+              }));
         } else {
           ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
               column,

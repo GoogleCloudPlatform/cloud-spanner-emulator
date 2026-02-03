@@ -427,6 +427,27 @@ TEST(ParseCreateTable, CanParseCreateTableWithPrimaryKeyOnAColumn) {
           )pb")));
 }
 
+TEST(ParseCreateTable, CanParseCreateTableWithPrimaryKeyConstraint) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
+                    CREATE TABLE Users (
+                      UserId INT64 NOT NULL,
+                      Name STRING(MAX),
+                      PRIMARY KEY (UserId)
+                    )
+                  )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Users"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              column { column_name: "Name" type: STRING }
+              primary_key { key_name: "UserId" }
+            }
+          )pb")));
+}
+
 TEST(ParseCreateTable, CannotParseCreateTablePrimaryKeyOnTwoColumns) {
   EXPECT_THAT(ParseDDLStatement(
                   R"sql(
@@ -440,16 +461,42 @@ TEST(ParseCreateTable, CannotParseCreateTablePrimaryKeyOnTwoColumns) {
 }
 
 TEST(ParseCreateTable, CannotParseCreateTablePrimaryKeyInColumnAndInTable) {
-  EXPECT_THAT(
-      ParseDDLStatement(
-          R"sql(
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
                     CREATE TABLE Users (
                       UserId INT64 NOT NULL PRIMARY KEY,
                       Name STRING(MAX)
                     ) PRIMARY KEY (UserId)
                     )sql"),
-      StatusIs(StatusCode::kInvalidArgument,
-               HasSubstr("Cannot specify both table and column PRIMARY KEY")));
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Can only specify PRIMARY KEY once.")));
+}
+
+TEST(ParseCreateTable,
+     CannotParseCreateTablePrimaryKeyInColumnAndAsConstraint) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE TABLE Users (
+                      UserId INT64 NOT NULL PRIMARY KEY,
+                      Name STRING(MAX),
+                      PRIMARY KEY (UserId)
+                    )
+                    )sql"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Can only specify PRIMARY KEY once.")));
+}
+
+TEST(ParseCreateTable, CannotParseCreateTablePrimaryKeyInTableAndAsConstraint) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(
+                    CREATE TABLE Users (
+                      UserId INT64 NOT NULL,
+                      Name STRING(MAX),
+                      PRIMARY KEY (UserId)
+                    ) PRIMARY KEY (UserId)
+                    )sql"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Can only specify PRIMARY KEY once.")));
 }
 
 TEST(ParseCreateTable, CannotParseAlterTableWithPrimaryKeyInAddColumn) {
@@ -7038,14 +7085,6 @@ TEST_F(IdentityColumn, AutoIncrementFlagDisabled) {
                        HasSubstr("AUTO_INCREMENT is not supported")));
 }
 
-TEST(UserDefinedFunction, CreateFunctionBasicFlagDisabled) {
-  EXPECT_THAT(
-      ParseDDLStatement("CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL "
-                        "SECURITY INVOKER AS (x+1)"),
-      StatusIs(StatusCode::kInvalidArgument,
-               HasSubstr("User defined functions are not supported.")));
-}
-
 TEST(UserDefinedFunction, CreateFunctionBasic) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_user_defined_functions = true;
@@ -8121,6 +8160,80 @@ TEST(CassandraType, SupportCassandraType) {
                   )pb")));
 }
 
+TEST(OnUpdate, OnUpdateCreateTable) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE TABLE T (
+      A INT64 NOT NULL,
+      B TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+          ON UPDATE (PENDING_COMMIT_TIMESTAMP())
+          OPTIONS (allow_commit_timestamp = true),
+      C TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+          OPTIONS (allow_commit_timestamp = true),
+    ) PRIMARY KEY(A)
+  )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "T"
+              column { column_name: "A" type: INT64 not_null: true }
+              column {
+                column_name: "B"
+                type: TIMESTAMP
+                set_options {
+                  option_name: "allow_commit_timestamp"
+                  bool_value: true
+                }
+                column_default { expression: "PENDING_COMMIT_TIMESTAMP()" }
+                column_on_update { expression: "PENDING_COMMIT_TIMESTAMP()" }
+              }
+              column {
+                column_name: "C"
+                type: TIMESTAMP
+                set_options {
+                  option_name: "allow_commit_timestamp"
+                  bool_value: true
+                }
+                column_default { expression: "PENDING_COMMIT_TIMESTAMP()" }
+              }
+              primary_key { key_name: "A" }
+            }
+          )pb")));
+}
+
+TEST(OnUpdate, OnUpdateAlterColumn) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    ALTER TABLE T ALTER COLUMN C SET ON UPDATE (PENDING_COMMIT_TIMESTAMP())
+  )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            alter_table {
+              table_name: "T"
+              alter_column {
+                column {
+                  column_name: "C"
+                  type: NONE
+                  column_on_update { expression: "PENDING_COMMIT_TIMESTAMP()" }
+                }
+                operation: SET_ON_UPDATE
+              }
+            }
+          )pb")));
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER TABLE T ALTER COLUMN C DROP ON UPDATE
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_table {
+                      table_name: "T"
+                      alter_column {
+                        column { column_name: "C" type: NONE }
+                        operation: DROP_ON_UPDATE
+                      }
+                    }
+                  )pb")));
+}
 }  // namespace
 
 }  // namespace ddl

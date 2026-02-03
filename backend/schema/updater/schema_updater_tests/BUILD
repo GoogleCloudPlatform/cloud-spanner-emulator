@@ -65,6 +65,7 @@ cc_library(
         "change_stream_test.cc",
         "check_constraint.cc",
         "column_default_values.cc",
+        "column_on_update.cc",
         "common.cc",
         "database_option.cc",
         "foreign_key.cc",

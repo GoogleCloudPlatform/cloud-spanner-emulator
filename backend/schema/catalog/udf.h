@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_UDF_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_CATALOG_UDF_H_
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -44,6 +45,12 @@ class Udf : public SchemaNode {
   enum SqlSecurity {
     SQL_SECURITY_UNSPECIFIED,
     INVOKER,
+  };
+
+  enum Language {
+    LANGUAGE_UNSPECIFIED,
+    SQL,
+    REMOTE,
   };
 
   enum Determinism {
@@ -80,6 +87,16 @@ class Udf : public SchemaNode {
 
   SqlSecurity security() const { return security_; }
 
+  Language language() const { return language_; }
+
+  bool is_remote() const { return is_remote_; }
+
+  std::optional<absl::string_view> endpoint() const { return endpoint_; }
+
+  std::optional<int64_t> max_batching_rows() const {
+    return max_batching_rows_;
+  }
+
   // SchemaNode interface implementation.
   // ------------------------------------
 
@@ -110,7 +127,14 @@ class Udf : public SchemaNode {
   // Constructors are private and only friend classes are able to build /
   // modify.
   Udf(const ValidationFn& validate, const UpdateValidationFn& validate_update)
-      : validate_(validate), validate_update_(validate_update) {}
+      : validate_(validate),
+        validate_update_(validate_update),
+        security_(SQL_SECURITY_UNSPECIFIED),
+        determinism_level_(DETERMINISM_UNSPECIFIED),
+        language_(LANGUAGE_UNSPECIFIED),
+        is_remote_(false),
+        endpoint_(std::nullopt),
+        max_batching_rows_(std::nullopt) {}
   Udf(const Udf& other)
       : validate_(other.validate_),
         validate_update_(other.validate_update_),
@@ -124,7 +148,11 @@ class Udf : public SchemaNode {
                        ? absl::make_unique<zetasql::FunctionSignature>(
                              *other.signature_)
                        : nullptr),
-        determinism_level_(other.determinism_level_) {}
+        determinism_level_(other.determinism_level_),
+        language_(other.language_),
+        is_remote_(other.is_remote_),
+        endpoint_(other.endpoint_),
+        max_batching_rows_(other.max_batching_rows_) {}
 
   std::unique_ptr<SchemaNode> ShallowClone() const override {
     return absl::WrapUnique(new Udf(*this));
@@ -161,6 +189,18 @@ class Udf : public SchemaNode {
 
   // The determinism level of the UDF.
   Determinism determinism_level_;
+
+  // The language of the UDF.
+  Language language_;
+
+  // Whether the UDF is a remote function.
+  bool is_remote_;
+
+  // The endpoint for a remote UDF.
+  std::optional<std::string> endpoint_;
+
+  // The maximum batching rows for a remote UDF.
+  std::optional<int64_t> max_batching_rows_;
 };
 
 }  // namespace backend

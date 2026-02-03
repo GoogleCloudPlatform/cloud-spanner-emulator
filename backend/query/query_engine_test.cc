@@ -2266,7 +2266,10 @@ TEST_P(QueryEngineTest, TestPropertyGraphBasicQuery) {
                                                     property_graph_reader()}));
 
   ASSERT_NE(result.rows, nullptr);
-  EXPECT_EQ(ToString(result), R"(node_id(INT64) : 2,1,4,)");
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(2)),
+                                                ElementsAre(Int64(1)),
+                                                ElementsAre(Int64(4)))));
 }
 
 TEST_P(QueryEngineTest, TestPropertyGraphBasicQueryWithDynamicLabel) {
@@ -2284,7 +2287,10 @@ TEST_P(QueryEngineTest, TestPropertyGraphBasicQueryWithDynamicLabel) {
                                 QueryContext{dynamic_property_graph_schema(),
                                              dynamic_property_graph_reader()}));
   ASSERT_NE(result.rows, nullptr);
-  EXPECT_EQ(ToString(result), R"(node_id(INT64) : 1,2,4,1,)");
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(
+                  ElementsAre(Int64(2)), ElementsAre(Int64(1)),
+                  ElementsAre(Int64(4)), ElementsAre(Int64(1)))));
 }
 
 TEST_P(QueryEngineTest,
@@ -2321,7 +2327,10 @@ TEST_P(QueryEngineTest, TestSQLPGQBasicQuery) {
       query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
                                                     property_graph_reader()}));
   ASSERT_NE(result.rows, nullptr);
-  EXPECT_EQ(ToString(result), R"(node_id(INT64) : 2,1,4,)");
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(2)),
+                                                ElementsAre(Int64(1)),
+                                                ElementsAre(Int64(4)))));
 }
 
 TEST_P(QueryEngineTest, TestPropertyGraphPathAggQuery) {
@@ -2339,8 +2348,11 @@ TEST_P(QueryEngineTest, TestPropertyGraphPathAggQuery) {
                                                     property_graph_reader()}));
 
   ASSERT_NE(result.rows, nullptr);
-  EXPECT_EQ(ToString(result),
-            R"(start_node,paths_from_start(INT64,INT64) : 2,1,1,2,4,1,)");
+  EXPECT_THAT(
+      GetAllColumnValues(std::move(result.rows)),
+      IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(2), Int64(1)),
+                                        ElementsAre(Int64(1), Int64(2)),
+                                        ElementsAre(Int64(4), Int64(1)))));
 }
 
 TEST_P(QueryEngineTest, TestPropertyGraphPathFilterQuery) {
@@ -2358,7 +2370,10 @@ TEST_P(QueryEngineTest, TestPropertyGraphPathFilterQuery) {
                                                     property_graph_reader()}));
 
   ASSERT_NE(result.rows, nullptr);
-  EXPECT_EQ(ToString(result), R"(start_node(INT64) : 1,1,2,)");
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(1)),
+                                                ElementsAre(Int64(1)),
+                                                ElementsAre(Int64(2)))));
 }
 
 TEST_P(QueryEngineTest,
@@ -2376,9 +2391,12 @@ TEST_P(QueryEngineTest,
                                                     property_graph_reader()}));
 
   ASSERT_NE(result.rows, nullptr);
-  EXPECT_EQ(
-      ToString(result),
-      R"(start_node,paths_from_start(INT64,INT64) : 2,2,1,2,4,2,1,2,4,2,)");
+  EXPECT_THAT(
+      GetAllColumnValues(std::move(result.rows)),
+      IsOkAndHolds(UnorderedElementsAre(
+          ElementsAre(Int64(2), Int64(2)), ElementsAre(Int64(1), Int64(2)),
+          ElementsAre(Int64(4), Int64(2)), ElementsAre(Int64(1), Int64(2)),
+          ElementsAre(Int64(4), Int64(2)))));
 }
 
 TEST_P(QueryEngineTest, TestJsonbArrayElements) {

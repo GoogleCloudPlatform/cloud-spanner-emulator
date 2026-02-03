@@ -441,6 +441,141 @@ TEST_P(ColumnDefaultValueReadWriteTest, DefaultValueWithUDF) {
       IsOkAndHoldsRows({{42, "abc"}, {42, "def"}, {42, "ghi"}, {42, "jkl"}}));
 }
 
+TEST_P(ColumnDefaultValueReadWriteTest, MutationPCT) {
+  // Insert two rows. One with a user provided value for ts_default and one
+  // that depends on the DEFAULT value.
+  ZETASQL_EXPECT_OK(Insert(
+      "default_pct", {"k", "ts", "ts_default"},
+      {1, cloud::spanner::MakeTimestamp(absl::FromUnixMillis(10)).value(),
+       cloud::spanner::MakeTimestamp(absl::FromUnixMillis(10)).value()}));
+  ZETASQL_EXPECT_OK(
+      Insert("default_pct", {"k", "ts"}, {2, "spanner.commit_timestamp()"}));
+  EXPECT_THAT(
+      Query("SELECT k from default_pct WHERE ts = ts_default ORDER BY k ASC"),
+      IsOkAndHoldsRows({{1}, {2}}));
+
+  // Use InsertOrUpdate to insert a new row.
+  ZETASQL_EXPECT_OK(InsertOrUpdate("default_pct", {"k", "ts"},
+                           {3, "spanner.commit_timestamp()"}));
+  EXPECT_THAT(
+      Query("SELECT k from default_pct WHERE ts = ts_default ORDER BY k ASC"),
+      IsOkAndHoldsRows({{1}, {2}, {3}}));
+
+  // InsertOrUpdate for an existing row should not trigger DEFAULT.
+  ZETASQL_EXPECT_OK(InsertOrUpdate("default_pct", {"k"}, {1}));
+  EXPECT_THAT(
+      Query("SELECT k, ts, ts_default FROM default_pct WHERE k = 1"),
+      IsOkAndHoldsRows(
+          {{1, cloud::spanner::MakeTimestamp(absl::FromUnixMillis(10)).value(),
+            cloud::spanner::MakeTimestamp(absl::FromUnixMillis(10)).value()}}));
+}
+
+TEST_P(ColumnDefaultValueReadWriteTest, DMLsWithPCT) {
+  std::string pct_function =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "SPANNER.PENDING_COMMIT_TIMESTAMP"
+          : "PENDING_COMMIT_TIMESTAMP";
+  std::string timestamp_function =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "TO_TIMESTAMP"
+          : "TIMESTAMP_SECONDS";
+
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(
+      absl::Substitute("INSERT INTO default_pct(k, ts, ts_default) VALUES (1, "
+                       "$0(10), $0(10))",
+                       timestamp_function))}));
+
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(absl::Substitute(
+      "INSERT INTO default_pct(k, ts) VALUES (2, $0())", pct_function))}));
+
+  std::string sql = "INSERT $0 INTO default_pct(k, ts) VALUES (3, $1()) $2";
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql = absl::Substitute(
+        sql, "", pct_function,
+        "ON CONFLICT(k) DO UPDATE SET k = excluded.k, ts = excluded.ts");
+  } else {
+    sql = absl::Substitute(sql, "OR UPDATE", pct_function, "");
+  }
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(sql)}));
+
+  sql =
+      "INSERT $0 INTO default_pct(k, ts, ts_default) "
+      "VALUES (4, $1(), DEFAULT) $2";
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql = absl::Substitute(sql, "", pct_function,
+                           "ON CONFLICT(k) DO UPDATE SET k = excluded.k, ts = "
+                           "excluded.ts, ts_default = excluded.ts_default");
+  } else {
+    sql = absl::Substitute(sql, "OR UPDATE", pct_function, "");
+  }
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(sql)}));
+  EXPECT_THAT(
+      Query("SELECT k from default_pct WHERE ts = ts_default ORDER BY k ASC"),
+      IsOkAndHoldsRows({{1}, {2}, {3}, {4}}));
+
+  // InsertOrUpdate for an existing row should not trigger DEFAULT.
+  sql = "INSERT $0 INTO default_pct(k) VALUES (1) $1";
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    sql = absl::Substitute(sql, "",
+                           "ON CONFLICT(k) DO UPDATE SET k = excluded.k");
+  } else {
+    sql = absl::Substitute(sql, "OR UPDATE", "");
+  }
+  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(sql)}));
+  EXPECT_THAT(
+      Query("SELECT k, ts, ts_default FROM default_pct WHERE k = 1"),
+      IsOkAndHoldsRows(
+          {{1, cloud::spanner::MakeTimestamp(absl::FromUnixSeconds(10)).value(),
+            cloud::spanner::MakeTimestamp(absl::FromUnixSeconds(10))
+                .value()}}));
+
+  // Explicitly set row 1 to have different ts and ts_default values.
+  ZETASQL_ASSERT_OK(CommitDml(
+      {SqlStatement(absl::Substitute("UPDATE default_pct SET ts=$0(0), "
+                                     "ts_default=$0(100) WHERE k=1",
+                                     timestamp_function))}));
+  EXPECT_THAT(
+      Query("SELECT k from default_pct WHERE ts = ts_default ORDER BY k ASC"),
+      IsOkAndHoldsRows({{2}, {3}, {4}}));
+
+  // Use the DEFAULT keyword to set them to the same value again.
+  ZETASQL_ASSERT_OK(CommitDml(
+      {SqlStatement(absl::Substitute("UPDATE default_pct SET ts=$0(), "
+                                     "ts_default = DEFAULT WHERE k=1",
+                                     pct_function))}));
+  EXPECT_THAT(
+      Query("SELECT k from default_pct WHERE ts = ts_default ORDER BY k ASC"),
+      IsOkAndHoldsRows({{1}, {2}, {3}, {4}}));
+}
+
+TEST_P(ColumnDefaultValueReadWriteTest, ReturningPCT) {
+  std::string returning =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "RETURNING"
+                                                              : "THEN RETURN";
+  // Returning a PCT value via an explicit DEFAULT is not allowed.
+  std::vector<ValueRow> result;
+  EXPECT_THAT(CommitDmlReturning({SqlStatement(absl::Substitute(
+                                     "INSERT INTO default_pct(k, ts_default) "
+                                     "VALUES (2, DEFAULT) $0 ts_default",
+                                     returning))},
+                                 result),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr(
+                           "The PENDING_COMMIT_TIMESTAMP() function may only "
+                           "be used as a value for INSERT or UPDATE")));
+
+  // Returning a PCT value via an implicit DEFAULT is not allowed.
+  EXPECT_THAT(CommitDmlReturning(
+                  {SqlStatement(absl::Substitute(
+                      "INSERT INTO default_pct(k) VALUES (3) $0 ts_default",
+                      returning))},
+                  result),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr(
+                           "The PENDING_COMMIT_TIMESTAMP() function may only "
+                           "be used as a value for INSERT or UPDATE")));
+}
+
 class DefaultPrimaryKeyReadWriteTest
     : public DatabaseTest,
       public testing::WithParamInterface<database_api::DatabaseDialect> {

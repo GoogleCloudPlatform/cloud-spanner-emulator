@@ -17,7 +17,10 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_PARTITION_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_PARTITION_H_
 
+#include <string>
+
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "frontend/proto/partition_token.pb.h"
 
 namespace google {
@@ -31,7 +34,23 @@ absl::StatusOr<std::string> PartitionTokenToString(
 
 // Converts a byte string into a partition token.
 absl::StatusOr<PartitionToken> PartitionTokenFromString(
-    const std::string& token);
+    absl::string_view token);
+
+// Converts a streaming partition token into a byte string.
+absl::StatusOr<std::string> StreamingPartitionTokenToString(
+    const StreamingPartitionToken& partition_token);
+
+// Converts a byte string into a streaming partition token.
+absl::StatusOr<StreamingPartitionToken> StreamingPartitionTokenFromString(
+    absl::string_view token);
+
+// Converts a streaming partition token metadata into a byte string.
+absl::StatusOr<std::string> StreamingPartitionTokenMetadataToString(
+    const StreamingPartitionTokenMetadata& partition_token_metadata);
+
+// Converts a byte string into a streaming partition token metadata.
+absl::StatusOr<StreamingPartitionTokenMetadata>
+StreamingPartitionTokenMetadataFromString(absl::string_view token);
 
 }  // namespace frontend
 }  // namespace emulator

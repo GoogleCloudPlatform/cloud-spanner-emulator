@@ -161,6 +161,9 @@ EvaluatedColumnEffector::ComputeEvaluatedColumnValue(
   ZETASQL_RET_CHECK(evaluated_column != nullptr &&
             (evaluated_column->is_generated() ||
              evaluated_column->has_default_value()));
+  if (evaluated_column->is_pending_commit_timestamp()) {
+    return zetasql::values::Timestamp(kCommitTimestampValueSentinel);
+  }
   ZETASQL_ASSIGN_OR_RETURN(
       zetasql::Value value,
       expressions_.at(evaluated_column)->Execute(row_column_values));
@@ -285,6 +288,7 @@ absl::Status EvaluatedColumnEffector::Effect(const ActionContext* ctx,
     // needed because user-generated updates are expected to include key values,
     // including generated ones.
     if (!IsKeyColumn(column)) {
+      apply_on_update = true;
       if (column->is_generated()) {
         return absl::OkStatus();
       }
@@ -338,7 +342,11 @@ absl::Status EvaluatedColumnEffector::Effect(
     }
 
     // DEFAULT values only apply to inserts.
-    if (evaluated_column->has_default_value() && is_update_op) {
+    // If this is an UPDATE, ON UPDATE columns are only computed if
+    // `apply_on_update` is true. Columns with DEFAULT but not ON UPDATE are
+    // skipped.
+    if (evaluated_column->has_default_value() && is_update_op &&
+        (!apply_on_update || !evaluated_column->has_on_update())) {
       continue;
     }
 

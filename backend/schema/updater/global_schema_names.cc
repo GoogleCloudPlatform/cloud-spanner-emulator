@@ -22,6 +22,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
@@ -164,12 +165,42 @@ absl::Status GlobalSchemaNames::ValidateSchemaName(absl::string_view type,
       return error::SchemaObjectTypeUnsupportedInNamedSchema(type, name);
     }
   }
+  // Database IDs have different validation rules.
+  if (type == "Database") {
+    // Must start with a lowercase letter.
+    if (!absl::ascii_islower(name_part[0])) {
+      return error::InvalidSchemaName(type, name);
+    }
+    // Can be between 2-30 characters long.
+    if (name_part.length() > limits::kMaxDatabaseNameLength) {
+      return error::InvalidSchemaName(type, name);
+    }
+    // Can contain lowercase letters, numbers, underscores, and hyphens, but not
+    // uppercase letters.
+    for (char c : name_part) {
+      if (!absl::ascii_islower(c) && !absl::ascii_isdigit(c) && c != '_' &&
+          c != '-') {
+        return error::InvalidSchemaName(type, name);
+      }
+    }
+    // Cannot end with an underscore or hyphen.
+    if (name_part[name_part.length() - 1] == '_' ||
+        name_part[name_part.length() - 1] == '-') {
+      return error::InvalidSchemaName(type, name);
+    }
+    return absl::OkStatus();
+  }
 
-  if (name[0] == '_') {
+  if (!absl::ascii_isalpha(name_part[0])) {
     return error::InvalidSchemaName(type, name);
   }
-  if (name.length() > limits::kMaxSchemaIdentifierLength) {
+  if (name_part.length() > limits::kMaxSchemaIdentifierLength) {
     return error::InvalidSchemaName(type, name);
+  }
+  for (char c : name_part) {
+    if (!absl::ascii_isalnum(c) && c != '_') {
+      return error::InvalidSchemaName(type, name);
+    }
   }
   return absl::OkStatus();
 }

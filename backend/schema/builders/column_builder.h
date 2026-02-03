@@ -93,6 +93,16 @@ class Column::Builder {
     return *this;
   }
 
+  Builder& set_is_pending_commit_timestamp(bool is_pending_commit_timestamp) {
+    instance_->is_pending_commit_timestamp_ = is_pending_commit_timestamp;
+    return *this;
+  }
+
+  Builder& set_has_on_update(bool has_on_update) {
+    instance_->has_on_update_ = has_on_update;
+    return *this;
+  }
+
   Builder& set_is_identity_column(bool is_identity_column) {
     instance_->is_identity_column_ = is_identity_column;
     return *this;
@@ -215,6 +225,16 @@ class Column::Editor {
 
   Editor& set_has_default_value(bool has_default_value) {
     instance_->has_default_value_ = has_default_value;
+    return *this;
+  }
+
+  Editor& set_is_pending_commit_timestamp(bool is_pending_commit_timestamp) {
+    instance_->is_pending_commit_timestamp_ = is_pending_commit_timestamp;
+    return *this;
+  }
+
+  Editor& set_has_on_update(bool has_on_update) {
+    instance_->has_on_update_ = has_on_update;
     return *this;
   }
 

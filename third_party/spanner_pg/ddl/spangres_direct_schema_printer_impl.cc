@@ -432,8 +432,10 @@ SpangresSchemaPrinterImpl::PrintAlterDatabase(
 
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
     const google::spanner::emulator::backend::ddl::AlterTable& statement) const {
+  std::string existence_modifier_str = "";
   std::string alter_table =
-      StrCat("ALTER TABLE ", QuoteQualifiedIdentifier(statement.table_name()));
+      StrCat("ALTER TABLE ", existence_modifier_str,
+             QuoteQualifiedIdentifier(statement.table_name()));
 
   switch (statement.alter_type_case()) {
     case google::spanner::emulator::backend::ddl::AlterTable::kAddColumn: {
@@ -509,6 +511,21 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
               return absl::InvalidArgumentError(
                   "Invalid options for <ALTER COLUMN> on identity column.");
             }
+          }
+          case google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::DROP_ON_UPDATE: {
+            return StrCat(alter_table, " ", alter_column, " DROP ON UPDATE");
+          }
+          case google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::SET_ON_UPDATE: {
+            ZETASQL_RET_CHECK(column.has_column_on_update());
+            ZETASQL_RET_CHECK(column.column_on_update().has_expression_origin());
+            google::spanner::emulator::backend::ddl::SQLExpressionOrigin expression_origin =
+                column.column_on_update().expression_origin();
+            const std::string expression_output =
+                expression_origin.has_original_expression()
+                    ? StrCat(" ", expression_origin.original_expression())
+                    : "";
+            return StrCat(alter_table, " ", alter_column, " SET ON UPDATE",
+                          expression_output);
           }
           default: {
             // We need this here to allow us to add the SET_NOT_NULL and
@@ -1585,19 +1602,22 @@ SpangresSchemaPrinterImpl::PrintRowDeletionPolicyForEmulator(
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintColumn(
     const google::spanner::emulator::backend::ddl::ColumnDefinition& column) const {
   std::string constraint;
+  if (column.has_vector_length()) {
+    const int64_t vector_length = column.vector_length();
+    constraint = absl::Substitute(" VECTOR LENGTH $0", vector_length);
+  }
+
   if (column.has_generated_column()) {
     ZETASQL_RET_CHECK(column.generated_column().has_expression_origin());
     const google::spanner::emulator::backend::ddl::SQLExpressionOrigin& generated_column =
         column.generated_column().expression_origin();
     if (column.generated_column().has_stored() &&
         column.generated_column().stored()) {
-      constraint =
-        StrCat(" GENERATED ALWAYS AS (",
-               generated_column.original_expression(), ")", " STORED");
+      StrAppend(&constraint, " GENERATED ALWAYS AS (",
+                generated_column.original_expression(), ")", " STORED");
     } else {
-      constraint =
-        StrCat(" GENERATED ALWAYS AS (",
-               generated_column.original_expression(), ")", " VIRTUAL");
+      StrAppend(&constraint, " GENERATED ALWAYS AS (",
+                generated_column.original_expression(), ")", " VIRTUAL");
     }
   }
 
@@ -1609,7 +1629,18 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintColumn(
         default_column.has_original_expression()
             ? StrCat(" ", default_column.original_expression())
             : "";
-    constraint = StrCat(" DEFAULT", expression_output);
+    StrAppend(&constraint, " DEFAULT", expression_output);
+  }
+
+  if (column.has_column_on_update()) {
+    ZETASQL_RET_CHECK(column.column_on_update().has_expression_origin());
+    const google::spanner::emulator::backend::ddl::SQLExpressionOrigin& on_update =
+        column.column_on_update().expression_origin();
+    const std::string expression_output =
+        on_update.has_original_expression()
+            ? StrCat(" ", on_update.original_expression())
+            : "";
+    StrAppend(&constraint, " ON UPDATE", expression_output);
   }
 
   if (column.has_identity_column()) {
@@ -1641,11 +1672,6 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintColumn(
                 ")");
     }
     // Ignore NO MINVALUE | NO MAXVALUE | NO CYCLE
-  }
-
-  if (column.has_vector_length()) {
-    const int64_t vector_length = column.vector_length();
-      constraint = absl::Substitute(" VECTOR LENGTH $0", vector_length);
   }
 
   StrAppend(&constraint, column.not_null() ? " NOT NULL" : "");

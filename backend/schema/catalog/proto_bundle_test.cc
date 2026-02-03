@@ -21,7 +21,6 @@
 #include <vector>
 
 #include "google/protobuf/descriptor.pb.h"
-#include "google/protobuf/descriptor.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
@@ -33,6 +32,7 @@
 #include "tests/common/proto_matchers.h"
 #include "tests/common/test.pb.h"
 #include "tests/common/test_2.pb.h"
+#include "google/protobuf/descriptor.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {

@@ -119,5 +119,23 @@ absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateQueryInView(
           .Build());
 }
 
+absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateFunctionBody(
+    absl::string_view query, zetasql::EnumerableCatalog& catalog,
+    const zetasql::AnalyzerOptions& analyzer_options,
+    zetasql::TypeFactory* type_factory,
+    std::unique_ptr<FunctionCatalog> emulator_function_catalog) {
+  ZETASQL_ASSIGN_OR_RETURN(ParserOutput parser_output,
+                   CheckedPgRawParserFullOutput(std::string(query).c_str()));
+
+  return SpangresTranslatorFactory::Create()->TranslateParsedFunctionBody(
+      TranslateParsedQueryParamsBuilder(
+          std::move(parser_output), query, &catalog,
+          std::make_unique<EmulatorBuiltinFunctionCatalog>(
+              std::move(emulator_function_catalog)))
+          .SetAnalyzerOptions(analyzer_options)
+          .SetTypeFactory(type_factory)
+          .Build());
+}
+
 }  // namespace spangres
 }  // namespace postgres_translator

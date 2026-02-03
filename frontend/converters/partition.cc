@@ -19,7 +19,9 @@
 #include <string>
 
 #include "absl/status/statusor.h"
-#include "absl/strings/substitute.h"
+#include "absl/strings/escaping.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "common/errors.h"
 #include "zetasql/base/ret_check.h"
 
@@ -32,13 +34,13 @@ absl::StatusOr<std::string> PartitionTokenToString(
     const PartitionToken& partition_token) {
   std::string binary_string, token_string;
   ZETASQL_RET_CHECK(partition_token.SerializeToString(&binary_string))
-      << "Failed to serialize proto: " << partition_token.ShortDebugString();
+      << "Failed to serialize proto: " << absl::StrCat(partition_token);
   absl::WebSafeBase64Escape(binary_string, &token_string);
   return token_string;
 }
 
 absl::StatusOr<PartitionToken> PartitionTokenFromString(
-    const std::string& token) {
+    absl::string_view token) {
   std::string binary_string;
   if (!absl::WebSafeBase64Unescape(token, &binary_string)) {
     return error::InvalidPartitionToken();
@@ -49,6 +51,53 @@ absl::StatusOr<PartitionToken> PartitionTokenFromString(
     return error::InvalidPartitionToken();
   }
   return partition_token;
+}
+
+absl::StatusOr<std::string> StreamingPartitionTokenToString(
+    const StreamingPartitionToken& partition_token) {
+  std::string binary_string, token_string;
+  ZETASQL_RET_CHECK(partition_token.SerializeToString(&binary_string))
+      << "Failed to serialize proto: " << absl::StrCat(partition_token);
+  absl::WebSafeBase64Escape(binary_string, &token_string);
+  return token_string;
+}
+
+absl::StatusOr<StreamingPartitionToken> StreamingPartitionTokenFromString(
+    absl::string_view token) {
+  std::string binary_string;
+  if (!absl::WebSafeBase64Unescape(token, &binary_string)) {
+    return error::InvalidStreamingPartitionToken();
+  }
+
+  StreamingPartitionToken partition_token;
+  if (!partition_token.ParseFromString(binary_string)) {
+    return error::InvalidStreamingPartitionToken();
+  }
+  return partition_token;
+}
+
+absl::StatusOr<std::string> StreamingPartitionTokenMetadataToString(
+    const StreamingPartitionTokenMetadata& partition_token_metadata) {
+  std::string binary_string, token_string;
+  ZETASQL_RET_CHECK(partition_token_metadata.SerializeToString(&binary_string))
+      << "Failed to serialize proto: "
+      << absl::StrCat(partition_token_metadata);
+  absl::WebSafeBase64Escape(binary_string, &token_string);
+  return token_string;
+}
+
+absl::StatusOr<StreamingPartitionTokenMetadata>
+StreamingPartitionTokenMetadataFromString(absl::string_view token) {
+  std::string binary_string;
+  if (!absl::WebSafeBase64Unescape(token, &binary_string)) {
+    return error::InvalidStreamingPartitionTokenMetadata();
+  }
+
+  StreamingPartitionTokenMetadata partition_token_metadata;
+  if (!partition_token_metadata.ParseFromString(binary_string)) {
+    return error::InvalidStreamingPartitionTokenMetadata();
+  }
+  return partition_token_metadata;
 }
 
 }  // namespace frontend

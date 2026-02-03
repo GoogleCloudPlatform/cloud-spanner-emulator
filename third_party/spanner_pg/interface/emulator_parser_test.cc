@@ -137,6 +137,19 @@ TEST_F(PGEmulatorParserTest, TranslateQueryInView) {
               schema_.get())));
 }
 
+TEST_F(PGEmulatorParserTest, TranslateFunctionBody) {
+  zetasql::SimpleCatalog catalog("pg simple catalog");
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      postgres_translator::interfaces::ExpressionTranslateResult result,
+      TranslateFunctionBody(
+          R"(CREATE FUNCTION foo() RETURNS INT RETURN 1)", catalog,
+          analyzer_options_, type_factory_.get(),
+          std::make_unique<FunctionCatalog>(
+              type_factory_.get(), kCloudSpannerEmulatorFunctionCatalogName,
+              schema_.get())));
+}
+
 }  // namespace
 
 }  // namespace spangres

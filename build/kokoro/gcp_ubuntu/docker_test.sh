@@ -16,7 +16,7 @@
 
 #!/bin/bash
 base_SHA=a8d48f66704638a6af2798fb81a5a6690fe05137039b8315b29d738d1cbde032
-cpp_SHA=d461425d4ccc3ae980c501eea1c3d60429386acf1346ce5fc251ac19b01f9919
+cpp_SHA=904b562ea6c1a75892a34fbabed2ae25f130a375826e5aebedc226e1315697b8
 csharp_SHA=3f9108c182b5d67b9ed0f40ff69a367ad0cbacf1b66aad47914206574fb2ef1f
 go_SHA=1b445f62611768ddee91891fed36b630461a7145643616e1145dcb6ff8e8be74
 java_SHA=ace2f1de1da9de4a555d16494bf14aca67c085a701841ef1fa8cf521953b3bc2
@@ -111,6 +111,7 @@ docker start -a "$container_id"
 docker wait "$container_id"
 docker cp "$container_id":/src/bazel-bin/binaries/gateway_main_/gateway_main ${SRC_DIR}
 docker cp "$container_id":/src/bazel-bin/binaries/emulator_main ${SRC_DIR}
+docker cp "$container_id":/usr/lib/x86_64-linux-gnu/libstdc++.so.6 ${SRC_DIR}
 docker rm "$container_id"
 fi
 

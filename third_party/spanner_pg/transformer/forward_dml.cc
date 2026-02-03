@@ -30,6 +30,7 @@
 //------------------------------------------------------------------------------
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -39,10 +40,14 @@
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
+#include "zetasql/resolved_ast/resolved_ast_deep_copy_visitor.h"
+#include "zetasql/resolved_ast/resolved_ast_rewrite_visitor.h"
 #include "zetasql/resolved_ast/resolved_column.h"
+#include "zetasql/resolved_ast/resolved_node.h"
 #include "zetasql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/container/node_hash_map.h"
 #include "absl/flags/flag.h"
 #include "absl/meta/type_traits.h"
 #include "absl/status/status.h"
@@ -436,6 +441,119 @@ static bool IsZetaSQLInsertOnConflictClauseEnabled(
       zetasql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
 }
 
+namespace {
+
+// Visitor to rewrite ResolvedExpressionColumn to the appropriate
+// ResolvedColumnRef.
+class ResolvedExpressionColumnRewriter
+    : public zetasql::ResolvedASTRewriteVisitor {
+ public:
+  ResolvedExpressionColumnRewriter(
+      const zetasql::Table* table,
+      const absl::node_hash_map<const zetasql::Column*,
+                                zetasql::ResolvedColumn>&
+          catalog_columns_to_resolved_columns_map,
+      std::function<std::unique_ptr<zetasql::ResolvedColumnRef>(
+          const zetasql::ResolvedColumn&)>
+          make_column_ref)
+      : table_(table),
+        catalog_columns_to_resolved_columns_map_(
+            catalog_columns_to_resolved_columns_map),
+        make_column_ref_(make_column_ref) {}
+
+  // This function rewrites the generated column expressions
+  // (original_value_expr) to replace the ResolvedExpressionColumns to
+  // corresponding ResolvedColumnRef and returns the rewritten expression.
+  // ResolvedExpressionColumns were created as a placeholder earlier as there
+  // were no ResolvedColumns at the point.
+  // catalog_columns_to_resolved_columns_map is a map of Catalog Column vs
+  // the corresponding ResolvedColumn. This is in context of the target table
+  // scan and not the entire query. make_column_ref is a lamda function which
+  // calls Resolver::MakeColumnRef to make corresponding ResolvedColumnRef and
+  // record the column access.
+  static absl::StatusOr<std::unique_ptr<const zetasql::ResolvedExpr>>
+  RewriteValueExpression(
+      const zetasql::ResolvedExpr* original_value_expr,
+      const zetasql::Table* table,
+      const absl::node_hash_map<const zetasql::Column*,
+                                zetasql::ResolvedColumn>&
+          catalog_columns_to_resolved_columns_map,
+      std::function<std::unique_ptr<zetasql::ResolvedColumnRef>(
+          const zetasql::ResolvedColumn&)>
+          make_column_ref) {
+    ResolvedExpressionColumnRewriter rewriter(
+        table, catalog_columns_to_resolved_columns_map, make_column_ref);
+    // We copied the <original_value_expr> (instead of directly rewrite it)
+    // because <original_value_expr> is owned by the Column
+    // catalog object.
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<const zetasql::ResolvedExpr> copied_node,
+        zetasql::ResolvedASTDeepCopyVisitor::Copy(original_value_expr));
+    return rewriter.VisitAll<zetasql::ResolvedExpr>(std::move(copied_node));
+  }
+
+ private:
+  absl::StatusOr<std::unique_ptr<const zetasql::ResolvedNode>>
+  PostVisitResolvedExpressionColumn(
+      std::unique_ptr<const zetasql::ResolvedExpressionColumn> ref) override {
+    const zetasql::Column* column = table_->FindColumnByName(ref->name());
+    ZETASQL_RET_CHECK(column != nullptr);
+    auto itr = catalog_columns_to_resolved_columns_map_.find(column);
+    ZETASQL_RET_CHECK(itr != catalog_columns_to_resolved_columns_map_.end());
+    // Resolver::MakeColumnRef also records the referenced column access.
+    return make_column_ref_(itr->second);
+  }
+
+ private:
+  const zetasql::Table* table_;
+  const absl::node_hash_map<const zetasql::Column*,
+                            zetasql::ResolvedColumn>&
+      catalog_columns_to_resolved_columns_map_;
+  std::function<std::unique_ptr<zetasql::ResolvedColumnRef>(
+      const zetasql::ResolvedColumn&)>
+      make_column_ref_;
+};
+
+}  // namespace
+
+absl::StatusOr<std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>>
+ForwardTransformer::BuildRewrittenGsqlGeneratedColumnResolvedExprList(
+    const zetasql::Table& table, const VarIndexScope& target_table_scope,
+    std::vector<int>* out_generated_column_ids) {
+  std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>
+      out_generated_column_expr_list;
+  out_generated_column_expr_list.reserve(
+      target_table_scope.catalog_columns_to_resolved_columns_map().size());
+  out_generated_column_ids->reserve(
+      target_table_scope.catalog_columns_to_resolved_columns_map().size());
+  for (const auto& [catalog_column, resolved_column] :
+       target_table_scope.catalog_columns_to_resolved_columns_map()) {
+    ZETASQL_RET_CHECK(catalog_column != nullptr);
+    if (!catalog_column->HasGeneratedExpression()) {
+      continue;
+    }
+    const zetasql::ResolvedExpr* resolved_expr =
+        catalog_column->GetExpression()->GetResolvedExpression();
+    ZETASQL_RET_CHECK(resolved_expr != nullptr);
+    ZETASQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<const zetasql::ResolvedExpr> rewritten_expr,
+        ResolvedExpressionColumnRewriter::RewriteValueExpression(
+            resolved_expr, &table,
+            target_table_scope.catalog_columns_to_resolved_columns_map(),
+            [this](const zetasql::ResolvedColumn& c) {
+              RecordColumnAccess(c, zetasql::ResolvedStatement::READ);
+              std::unique_ptr<zetasql::ResolvedColumnRef> resolved_node =
+                  MakeResolvedColumnRef(c.type(), c, false);
+              // No annotation propagation needed as the only annotations,
+              // if there are, from TOKENLIST cannot be returned as a value.
+              return resolved_node;
+            }));
+    out_generated_column_expr_list.push_back(std::move(rewritten_expr));
+    out_generated_column_ids->push_back(resolved_column.column_id());
+  }
+  return std::move(out_generated_column_expr_list);
+}
+
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedInsertStmt>>
 ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
   zetasql::ResolvedInsertStmt::InsertMode insert_mode =
@@ -680,6 +798,13 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
                    BuildGsqlReturningClauseForDML(
                        query.returningList, table_alias, &target_table_scope));
 
+  std::vector<int> out_generated_column_ids;
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>
+          out_generated_column_expr_list,
+      BuildRewrittenGsqlGeneratedColumnResolvedExprList(
+          *table_scan->table(), target_table_scope, &out_generated_column_ids));
+
   // Construct the ResolvedInsertStmt.
   // insert_mode is OR_ERROR because we don't support ON CONFLICT.
   // assert_rows_modified is not a supported feature in PostgreSQL.
@@ -690,7 +815,8 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
       /*assert_rows_modified=*/nullptr, std::move(returning_clause),
       insert_column_list, std::move(query_parameter_list),
       std::move(insert_select_query), query_output_column_list,
-      std::move(row_list), std::move(on_conflict_clause));
+      std::move(row_list), std::move(on_conflict_clause),
+      out_generated_column_ids, std::move(out_generated_column_expr_list));
 }
 
 absl::StatusOr<std::unique_ptr<zetasql::ResolvedUpdateStmt>>
@@ -738,12 +864,20 @@ ForwardTransformer::BuildPartialGsqlResolvedUpdateStmt(const Query& query) {
                    BuildGsqlReturningClauseForDML(
                        query.returningList, table_alias, &target_table_scope));
 
+  std::vector<int> out_generated_column_ids;
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>
+          out_generated_column_expr_list,
+      BuildRewrittenGsqlGeneratedColumnResolvedExprList(
+          *table_scan->table(), target_table_scope, &out_generated_column_ids));
+
   // Construct a ResolvedUpdateStmt.
   return MakeResolvedUpdateStmt(
       std::move(table_scan), /*assert_rows_modified=*/nullptr,
       std::move(returning_clause), /*array_offset_column=*/nullptr,
       std::move(gsql_where_expr), std::move(update_item_list),
-      /*from_scan=*/nullptr);
+      /*from_scan=*/nullptr, out_generated_column_ids,
+      std::move(out_generated_column_expr_list));
 }
 
 absl::StatusOr<std::unique_ptr<const zetasql::ResolvedExpr>>

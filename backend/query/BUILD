@@ -137,6 +137,7 @@ cc_library(
         "//common:constants",
         "//common:errors",
         "//common:feature_flags",
+        "//common:limits",
         "//frontend/converters:values",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",

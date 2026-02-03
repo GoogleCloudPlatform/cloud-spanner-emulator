@@ -114,6 +114,87 @@ TEST_P(SchemaUpdaterTest, CreateUDF_Basic) {
             zetasql::Value::Int64(1));
 }
 
+TEST_P(SchemaUpdaterTest, CreateRemoteUDF_Basic) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const Schema> schema,
+      CreateSchema(
+          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
+            OPTIONS (endpoint = 'https://www.google.com', max_batching_rows = 10))"}));
+
+  const Udf* udf = schema->FindUdf("udf_1");
+  ASSERT_NE(udf, nullptr);
+  EXPECT_EQ(udf->Name(), "udf_1");
+  EXPECT_EQ(udf->body(), "");
+  EXPECT_EQ(*udf->endpoint(), "https://www.google.com");
+  EXPECT_EQ(udf->language(), Udf::Language::REMOTE);
+  EXPECT_FALSE(udf->is_remote());
+  EXPECT_EQ(*udf->max_batching_rows(), 10);
+  const absl::Span<const Udf* const> udfs = schema->udfs();
+  ASSERT_EQ(udfs.size(), 1);
+  EXPECT_EQ(udfs[0]->Name(), "udf_1");
+  EXPECT_EQ(udfs[0]->body(), "");
+  EXPECT_EQ(udfs[0]->endpoint(), "https://www.google.com");
+  EXPECT_EQ(udfs[0]->language(), Udf::Language::REMOTE);
+  EXPECT_FALSE(udfs[0]->is_remote());
+  EXPECT_EQ(udfs[0]->max_batching_rows(), 10);
+  EXPECT_EQ(udf->signature()->DebugString(), "(INT64 x) -> INT64");
+}
+
+TEST_P(SchemaUpdaterTest, CreateRemoteUDF_Error) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  // No endpoint set.
+  EXPECT_THAT(
+      CreateSchema(
+          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
+            OPTIONS (max_batching_rows = 10))"}),
+      ::zetasql_base::testing::StatusIs(absl::StatusCode::kInternal,
+                                  HasSubstr("udf->endpoint_.has_value()")));
+
+  // Both REMOTE and LANGUAGE REMOTE are set.
+  EXPECT_THAT(
+      CreateSchema(
+          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC REMOTE LANGUAGE REMOTE
+            OPTIONS (endpoint = 'https://www.google.com'))"}),
+      ::zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Encountered 'LANGUAGE' while parsing: "
+                    "create_function_statement")));
+
+  // Negative max batching size.
+  EXPECT_THAT(
+      CreateSchema(
+          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
+            OPTIONS (endpoint = 'https://www.google.com', max_batching_rows = -1))"}),
+      ::zetasql_base::testing::StatusIs(absl::StatusCode::kInternal,
+                                  HasSubstr("udf->max_batching_rows_ >= 0")));
+
+  // Unknown option.
+  EXPECT_THAT(
+      CreateSchema(
+          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
+            OPTIONS (unknown_option = 'abcd'))"}),
+      ::zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Invalid option unknown_option for remote UDF udf_1")));
+
+  // No determinism level set.
+  EXPECT_THAT(
+      CreateSchema(
+          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 LANGUAGE REMOTE
+            OPTIONS (unknown_option = 'abcd'))"}),
+      ::zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Invalid option unknown_option for remote UDF udf_1")));
+
+  // Language SQL set.
+  EXPECT_THAT(
+      CreateSchema({R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 LANGUAGE SQL
+            OPTIONS (endpoint = 'https://www.google.com'))"}),
+      ::zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
+                                  HasSubstr("Syntax error: Unexpected \")\"")));
+}
+
 TEST_P(SchemaUpdaterTest, CreateUDF_ParameterizedTypes) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
@@ -123,12 +204,17 @@ TEST_P(SchemaUpdaterTest, CreateUDF_ParameterizedTypes) {
       ::zetasql_base::testing::StatusIs(
           StatusCode::kInvalidArgument,
           HasSubstr(
+              "Error analyzing the definition of function `func`: "
               "Parameterized types are not supported in function arguments")));
 
   EXPECT_THAT(
       CreateSchema({R"(CREATE FUNCTION func(a STRING) RETURNS STRING(10)
                          SQL SECURITY INVOKER AS (SUBSTR(a, 1, 10)))"}),
-      StatusIs(error::FunctionTypeMismatch("func", "STRING(10)", "STRING")));
+      ::zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr(
+              "Error analyzing the definition of function `func`: "
+              "Parameterized types are not supported in function signatures")));
 
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
@@ -181,7 +267,11 @@ TEST_P(SchemaUpdaterTest, CreateUDF_FunctionTypeMismatch) {
       CreateSchema({
           R"(CREATE FUNCTION udf_1(x INT64) RETURNS STRING(MAX) SQL SECURITY INVOKER
             AS (x+1))"}),
-      StatusIs(error::FunctionTypeMismatch("udf_1", "STRING(MAX)", "INT64")));
+      ::zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr(
+              "Error analyzing the definition of function `udf_1`: "
+              "Parameterized types are not supported in function signatures")));
 }
 
 TEST_P(SchemaUpdaterTest, CreateUDF_ReplaceBuiltInFunction) {
@@ -746,7 +836,11 @@ TEST_P(SchemaUpdaterTest, CreateUDF_TransitiveFunctionDeterminism) {
             AS (EXTRACT(YEAR from CURRENT_TIMESTAMP())))",
            R"(CREATE FUNCTION udf_2(x INT64) RETURNS INT64 SQL SECURITY INVOKER
             AS ((SELECT APPROX_DOT_PRODUCT([100, 10], [200, 6]) AS results) + udf_1(x)))"}),
-      StatusIs(error::FunctionTypeMismatch("udf_2", "INT64", "FLOAT64")));
+      ::zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Error analyzing the definition of function `udf_2`: "
+                    "Function declared to return INT64 but the function body "
+                    "produces incompatible type FLOAT64")));
 }
 
 TEST_P(SchemaUpdaterTest, CreateUDF_CyclicDependencyOnViewFails) {

@@ -89,6 +89,7 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
+#include "common/limits.h"
 #include "frontend/converters/values.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
@@ -152,6 +153,7 @@ zetasql::EvaluatorOptions CommonEvaluatorOptions(
   options.scramble_undefined_orderings = true;
   options.return_all_insert_rows_insert_ignore_dml =
       return_all_insert_rows_insert_ignore_dml;
+  options.max_value_byte_size = limits::kMaxValueSizeBytes;
   return options;
 }
 
@@ -214,6 +216,22 @@ absl::Status MaybeTransformZetaSQLDMLError(absl::Status error) {
 
 bool IsGenerated(const zetasql::Column* column) {
   return column->GetAs<QueryableColumn>()->wrapped_column()->is_generated();
+}
+
+bool IsPendingCommitTimestampColumn(const zetasql::Column* column) {
+  return column->GetAs<QueryableColumn>()
+      ->wrapped_column()
+      ->is_pending_commit_timestamp();
+}
+
+bool IsOnUpdateColumn(const zetasql::Column* column) {
+  return column->GetAs<QueryableColumn>()->wrapped_column()->has_on_update();
+}
+
+bool IsKeyColumn(const zetasql::Table* table,
+                 const std::string& column_name) {
+  return table->GetAs<QueryableTable>()->wrapped_table()->FindKeyColumn(
+             column_name) != nullptr;
 }
 
 // Simple visitor to traverse an expression and check if it references
@@ -500,24 +518,56 @@ absl::StatusOr<CaseInsensitiveStringSet> PendingCommitTimestampColumnsInInsert(
     const std::vector<zetasql::ResolvedColumn>& insert_columns,
     const std::vector<std::unique_ptr<const zetasql::ResolvedInsertRow>>&
         insert_rows) {
-  int64_t num_columns = insert_columns.size();
-  CaseInsensitiveStringSet pending_ts_columns;
-  for (const auto& insert_row : insert_rows) {
-    for (int i = 0; i < num_columns; ++i) {
-      if (IsPendingCommitTimestamp(*insert_row->value_list()[i])) {
-        pending_ts_columns.insert(insert_columns.at(i).name());
-      }
+  CaseInsensitiveStringSet default_pct_cols;
+  for (int i = 0; i < table->NumColumns(); ++i) {
+    const zetasql::Column* gsql_column = table->GetColumn(i);
+    if (IsPendingCommitTimestampColumn(gsql_column)) {
+      default_pct_cols.insert(gsql_column->Name());
     }
   }
 
+  // Collect the insert columns that are set to PENDING_COMMIT_TIMESTAMP() by:
+  // 1. explicitly set to PENDING_COMMIT_TIMESTAMP()
+  // 2. set to DEFAULT + the column's default value is PENDING_COMMIT_TIMESTAMP.
+  //
+  // We do not collect DEFAULT PCT columns that are not in the insert column
+  // list. They will be set when the INSERT mutation is processed.
+  int64_t num_columns = insert_columns.size();
+  CaseInsensitiveStringSet insert_column_names;
+  CaseInsensitiveStringSet pending_ts_columns;
   for (const auto& insert_row : insert_rows) {
     for (int i = 0; i < num_columns; ++i) {
       const auto& dml_value = insert_row->value_list()[i];
       const auto& column_name = insert_columns.at(i).name();
-      if (pending_ts_columns.find(column_name) != pending_ts_columns.end() &&
-          !IsPendingCommitTimestamp(*dml_value)) {
+      insert_column_names.insert(column_name);
+      if (IsPendingCommitTimestamp(*dml_value) ||
+          (default_pct_cols.contains(column_name) &&
+           IsDefaultValue(*dml_value))) {
+        pending_ts_columns.insert(column_name);
+      }
+    }
+  }
+
+  // Validate that the columns either have PENDING_COMMIT_TIMESTAMP for every
+  // row or for none of the rows.
+  for (const auto& insert_row : insert_rows) {
+    for (int i = 0; i < num_columns; ++i) {
+      const auto& dml_value = insert_row->value_list()[i];
+      const auto& column_name = insert_columns.at(i).name();
+      if (pending_ts_columns.contains(column_name) &&
+          !IsPendingCommitTimestamp(*dml_value) &&
+          !(default_pct_cols.contains(column_name) &&
+            IsDefaultValue(*dml_value))) {
         return error::PendingCommitTimestampAllOrNone(i + 1);
       }
+    }
+  }
+
+  // Add DEFAULT PENDING_COMMIT_TIMESTAMP columns that are not in the insert
+  // column list.
+  for (const auto& default_pct_col : default_pct_cols) {
+    if (!insert_column_names.contains(default_pct_col)) {
+      pending_ts_columns.insert(default_pct_col);
     }
   }
   return pending_ts_columns;
@@ -527,15 +577,52 @@ absl::StatusOr<CaseInsensitiveStringSet> PendingCommitTimestampColumnsInUpdate(
     const zetasql::Table* table,
     const std::vector<std::unique_ptr<const zetasql::ResolvedUpdateItem>>&
         update_item_list) {
+  CaseInsensitiveStringSet default_pct_cols;
+  CaseInsensitiveStringSet on_update_pct_cols;
+  for (int i = 0; i < table->NumColumns(); ++i) {
+    const zetasql::Column* gsql_column = table->GetColumn(i);
+    if (IsPendingCommitTimestampColumn(gsql_column)) {
+      default_pct_cols.insert(gsql_column->Name());
+      if (IsOnUpdateColumn(gsql_column)) {
+        on_update_pct_cols.insert(gsql_column->Name());
+      }
+    }
+  }
+
+  // Collect the update columns that are set to PENDING_COMMIT_TIMESTAMP() by:
+  // 1. explicitly set to PENDING_COMMIT_TIMESTAMP()
+  // 2. set to DEFAULT + the column's default value is PENDING_COMMIT_TIMESTAMP.
+  // 3. not set, the column has ON UPDATE, and ON UPDATE was triggered.
+  CaseInsensitiveStringSet columns_with_values;
   CaseInsensitiveStringSet pending_ts_columns;
+  bool apply_on_update = false;
   for (const auto& update_item : update_item_list) {
-    if (update_item->set_value() &&
-        IsPendingCommitTimestamp(*update_item->set_value())) {
-      std::string column_name = update_item->target()
-                                    ->GetAs<zetasql::ResolvedColumnRef>()
-                                    ->column()
-                                    .name();
+    if (!update_item->set_value() ||
+        !update_item->target()->Is<zetasql::ResolvedColumnRef>()) {
+      continue;
+    }
+    const auto& dml_value = update_item->set_value();
+    std::string column_name = update_item->target()
+                                  ->GetAs<zetasql::ResolvedColumnRef>()
+                                  ->column()
+                                  .name();
+    columns_with_values.insert(column_name);
+
+    if (IsPendingCommitTimestamp(*dml_value) ||
+        (default_pct_cols.contains(column_name) &&
+         IsDefaultValue(*dml_value))) {
       pending_ts_columns.insert(column_name);
+    }
+    if (!apply_on_update && !IsKeyColumn(table, column_name)) {
+      apply_on_update = true;
+    }
+  }
+
+  if (apply_on_update) {
+    for (const auto& col_name : on_update_pct_cols) {
+      if (!columns_with_values.contains(col_name)) {
+        pending_ts_columns.insert(col_name);
+      }
     }
   }
   return pending_ts_columns;

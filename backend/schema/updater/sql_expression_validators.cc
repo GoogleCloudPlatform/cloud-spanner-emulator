@@ -15,6 +15,7 @@
 //
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -91,6 +92,20 @@ Udf::Determinism ReduceToLeastDeterministic(Udf::Determinism determinism_1,
     }
   };
   return determinism_1;
+}
+
+// Returns true if the ResolvedExpr is a call to PENDING_COMMIT_TIMESTAMP()
+bool isPendingCommitTimestamp(const zetasql::ResolvedExpr& expr) {
+  if (expr.node_kind() == zetasql::RESOLVED_FUNCTION_CALL) {
+    const zetasql::ResolvedFunctionCall* fn =
+        expr.GetAs<zetasql::ResolvedFunctionCall>();
+    if (fn->function()->Name() == "pending_commit_timestamp") {
+      // Touch the argument list so that the ResolvedAST code does not claim we
+      // missed it.
+      return fn->argument_list().empty();
+    }
+  }
+  return false;
 }
 
 }  // namespace
@@ -378,6 +393,15 @@ absl::Status AnalyzeColumnExpression(
 
   ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeExpressionForAssignmentToType(
       expression, options, &catalog, type_factory, target_type, &output));
+  // If this is an allowed PENDING_COMMIT_TIMESTAMP expression, skip the typical
+  // validation.
+  if (is_pending_commit_timestamp != nullptr) {
+    if (isPendingCommitTimestamp(*output->resolved_expr())) {
+      *is_pending_commit_timestamp = true;
+      return absl::OkStatus();
+    }
+    *is_pending_commit_timestamp = false;
+  }
   ColumnExpressionValidator validator(
       schema, &simple_table, expression_use, dependent_column_names,
       allow_volatile_expression, udf_dependencies);
@@ -436,14 +460,44 @@ absl::Status AnalyzeViewDefinition(
 
 absl::Status AnalyzeUdfDefinition(
     absl::string_view udf_name, absl::string_view param_list,
-    absl::string_view udf_definition, const Schema* schema,
-    zetasql::TypeFactory* type_factory,
+    absl::string_view udf_definition, std::optional<absl::string_view> endpoint,
+    std::optional<int> max_batching_rows, bool is_remote,
+    bool is_language_remote, absl::string_view return_type,
+    const Schema* schema, zetasql::TypeFactory* type_factory,
     absl::flat_hash_set<const SchemaNode*>* dependencies,
     std::unique_ptr<zetasql::FunctionSignature>* function_signature,
     Udf::Determinism* determinism_level) {
-  auto body =
-      absl::Substitute("CREATE FUNCTION `$0`($1) SQL SECURITY INVOKER AS ($2)",
-                       udf_name, param_list, udf_definition);
+  std::string body;
+  if (is_remote || is_language_remote) {
+    std::string language = is_language_remote ? "LANGUAGE REMOTE" : "REMOTE";
+    std::string endpoint_str =
+        endpoint.has_value() ? absl::Substitute("endpoint = '$0'", *endpoint)
+                             : "";
+    std::string max_batching_rows_str =
+        max_batching_rows.has_value()
+            ? absl::Substitute("max_batching_rows = $0", *max_batching_rows)
+            : "";
+    std::string options;
+    if (!endpoint_str.empty() || !max_batching_rows_str.empty()) {
+      if (!endpoint_str.empty()) {
+        options += endpoint_str;
+      }
+      if (!max_batching_rows_str.empty()) {
+        if (!endpoint_str.empty()) {
+          options += ", ";
+        }
+        options += max_batching_rows_str;
+      }
+    }
+
+    body =
+        absl::Substitute("CREATE FUNCTION `$0`($1) RETURNS $2 $3 OPTIONS ($4) ",
+                         udf_name, param_list, return_type, language, options);
+  } else {
+    body = absl::Substitute(
+        "CREATE FUNCTION `$0`($1) RETURNS $2 SQL SECURITY INVOKER AS ($3)",
+        udf_name, param_list, return_type, udf_definition);
+  }
   // Analyze the udf definition.
   auto analyzer_options = MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
       schema->default_time_zone(), schema->dialect());
@@ -462,8 +516,11 @@ absl::Status AnalyzeUdfDefinition(
 
   UdfDefinitionValidator validator(schema, analyzer_options.language(),
                                    dependencies, determinism_level);
-  ZETASQL_RETURN_IF_ERROR(
-      create_function_stmt->function_expression()->Accept(&validator));
+  if (create_function_stmt->function_expression() != nullptr) {
+    // Only SQL UDFs have an expression body. Remote UDFs don't.
+    ZETASQL_RETURN_IF_ERROR(
+        create_function_stmt->function_expression()->Accept(&validator));
+  }
   for (const SchemaNode* sequence : validator.dependent_sequences()) {
     dependencies->insert(sequence);
   }

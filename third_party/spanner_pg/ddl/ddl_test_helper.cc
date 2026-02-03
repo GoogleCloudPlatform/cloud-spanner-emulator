@@ -46,7 +46,7 @@
 #include "third_party/spanner_pg/interface/parser_output.h"
 #include "third_party/spanner_pg/interface/parser_without_serialization.h"
 // clang-format on
-#include "absl/status/status.h"
+#include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
 namespace postgres_translator::spangres {

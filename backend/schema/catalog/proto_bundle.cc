@@ -22,8 +22,6 @@
 #include <vector>
 
 #include "google/protobuf/descriptor.pb.h"
-#include "google/protobuf/descriptor.h"
-#include "google/protobuf/descriptor_database.h"
 #include "zetasql/public/types/proto_type.h"
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_set.h"
@@ -34,6 +32,7 @@
 #include "absl/types/span.h"
 #include "common/errors.h"
 #include "google/protobuf/descriptor.h"
+#include "google/protobuf/descriptor_database.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 

@@ -223,10 +223,11 @@ absl::Status DeleteInstance(RequestContext* ctx,
   for (const auto& database : databases) {
     ZETASQL_ASSIGN_OR_RETURN(
         std::vector<std::shared_ptr<Session>> sessions,
-        ctx->env()->session_manager()->ListSessions(database->database_uri()));
+        ctx->env()->session_manager()->ListSessions(
+            database->database_uri(), /*include_multiplex_sessions=*/true));
     for (const auto& session : sessions) {
-      ZETASQL_RETURN_IF_ERROR(
-          ctx->env()->session_manager()->DeleteSession(session->session_uri()));
+      ZETASQL_RETURN_IF_ERROR(ctx->env()->session_manager()->DeleteSession(
+          session->session_uri(), /*delete_multiplex_sessions=*/true));
     }
     ZETASQL_RETURN_IF_ERROR(ctx->env()->database_manager()->DeleteDatabase(
         database->database_uri()));

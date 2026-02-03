@@ -545,16 +545,24 @@ TEST_F(SchemaTest, SequenceBuilderInvalid) {
 }
 
 TEST_F(SchemaTest, DatabaseOptionsBuilderValid) {
-  auto c = database_options_builder("C").build();
+  auto c = database_options_builder("c").build();
   ZETASQL_EXPECT_OK(c->Validate(&context_));
 }
 
-TEST_F(SchemaTest, DatabaseOptionsBuilderInvalid) {
-  DatabaseOptions::Builder cs = database_options_builder("C1");
-  const std::string database_name(130, 'C');
+TEST_F(SchemaTest, DatabaseOptionsBuilderInvalidLength) {
+  DatabaseOptions::Builder cs = database_options_builder("c1");
+  const std::string database_name(130, 'c');
   auto invalid_cs = database_options_builder(database_name).build();
   EXPECT_EQ(invalid_cs->Validate(&context_),
-            error::InvalidSchemaName("Database Options", database_name));
+            error::InvalidSchemaName("Database", database_name));
+}
+
+TEST_F(SchemaTest, DatabaseOptionsBuilderInvalidStartingWithUppercase) {
+  DatabaseOptions::Builder cs = database_options_builder("c1");
+  const std::string database_name(20, 'C');
+  auto invalid_cs = database_options_builder(database_name).build();
+  EXPECT_EQ(invalid_cs->Validate(&context_),
+            error::InvalidSchemaName("Database", database_name));
 }
 
 TEST_F(SchemaTest, LocalityGroupBuilderValid) {
@@ -865,15 +873,102 @@ TEST_F(SchemaTest, UdfBuilder) {
   ZETASQL_EXPECT_OK(udf_reserved_keyword->Validate(&context_));
   EXPECT_EQ(udf_reserved_keyword->Name(), "function");
 
-  // UDF with name starting with a number, needs to be quoted
+  // Remote UDF
+  Udf::Builder udf_builder_remote;
+  udf_builder_remote.set_name("udf_remote");
+  udf_builder_remote.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote.set_language(Udf::Language::REMOTE);
+  udf_builder_remote.set_endpoint("https://www.google.com");
+  udf_builder_remote.set_max_batching_rows(10);
+  auto udf_remote = udf_builder_remote.build();
+  ZETASQL_EXPECT_OK(udf_remote->Validate(&context_));
+  EXPECT_EQ(udf_remote->Name(), "udf_remote");
+  EXPECT_EQ(udf_remote->language(), Udf::Language::REMOTE);
+  EXPECT_EQ(udf_remote->endpoint(), "https://www.google.com");
+  EXPECT_EQ(udf_remote->max_batching_rows(), 10);
+
+  // Remote UDF with is_remote set to true
+  Udf::Builder udf_builder_remote_is_remote;
+  udf_builder_remote_is_remote.set_name("udf_remote");
+  udf_builder_remote_is_remote.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_is_remote.set_is_remote(true);
+  udf_builder_remote_is_remote.set_endpoint("https://www.google.com");
+  udf_builder_remote_is_remote.set_max_batching_rows(10);
+  auto udf_remote_is_remote = udf_builder_remote_is_remote.build();
+  ZETASQL_EXPECT_OK(udf_remote_is_remote->Validate(&context_));
+  EXPECT_EQ(udf_remote_is_remote->Name(), "udf_remote");
+  EXPECT_EQ(udf_remote_is_remote->language(),
+            Udf::Language::LANGUAGE_UNSPECIFIED);
+  EXPECT_EQ(*udf_remote_is_remote->endpoint(), "https://www.google.com");
+  EXPECT_EQ(*udf_remote_is_remote->max_batching_rows(), 10);
+
+  // Remote UDF with SQL body (should fail validation)
+  Udf::Builder udf_builder_remote_with_sql_body;
+  udf_builder_remote_with_sql_body.set_name("udf_remote_with_sql_body");
+  udf_builder_remote_with_sql_body.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_with_sql_body.set_language(Udf::Language::REMOTE);
+  udf_builder_remote_with_sql_body.set_endpoint("https://www.google.com");
+  udf_builder_remote_with_sql_body.set_sql_body(
+      "CREATE FUNCTION udf_remote_with_sql_body(a INT64) RETURNS INT64 AS (a "
+      "+ 1)");
+  auto udf_remote_with_sql_body = udf_builder_remote_with_sql_body.build();
+  EXPECT_THAT(
+      udf_remote_with_sql_body->Validate(&context_),
+      StatusIs(StatusCode::kInternal, testing::HasSubstr("RET_CHECK failure")));
+
+  // Remote UDF with no endpoint (should fail validation)
+  Udf::Builder udf_builder_remote_no_endpoint;
+  udf_builder_remote_no_endpoint.set_name("udf_remote_no_endpoint");
+  udf_builder_remote_no_endpoint.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_no_endpoint.set_language(Udf::Language::REMOTE);
+  auto udf_remote_no_endpoint = udf_builder_remote_no_endpoint.build();
+  EXPECT_THAT(udf_remote_no_endpoint->Validate(&context_),
+              StatusIs(StatusCode::kInternal,
+                       testing::HasSubstr("udf->endpoint_.has_value()")));
+
+  // Remote UDF with negative max batching size (should fail validation)
+  Udf::Builder udf_builder_remote_negative_max_batching_rows;
+  udf_builder_remote_negative_max_batching_rows.set_name(
+      "udf_remote_negative_max_batching_rows");
+  udf_builder_remote_negative_max_batching_rows.set_sql_security(
+      Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_negative_max_batching_rows.set_language(
+      Udf::Language::REMOTE);
+  udf_builder_remote_negative_max_batching_rows.set_endpoint(
+      "https://www.google.com");
+  udf_builder_remote_negative_max_batching_rows.set_max_batching_rows(-1);
+  auto udf_remote_negative_max_batching_rows =
+      udf_builder_remote_negative_max_batching_rows.build();
+  EXPECT_THAT(udf_remote_negative_max_batching_rows->Validate(&context_),
+              StatusIs(StatusCode::kInternal,
+                       testing::HasSubstr("udf->max_batching_rows_ >= 0")));
+
+  // Remote UDF with Language SQL (should fail validation)
+  Udf::Builder udf_builder_remote_with_language_sql;
+  udf_builder_remote_with_language_sql.set_name("udf_remote_with_language_sql");
+  udf_builder_remote_with_language_sql.set_sql_security(
+      Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_with_language_sql.set_is_remote(true);
+  udf_builder_remote_with_language_sql.set_language(Udf::Language::SQL);
+  udf_builder_remote_with_language_sql.set_endpoint("https://www.google.com");
+  auto udf_remote_with_language_sql =
+      udf_builder_remote_with_language_sql.build();
+  EXPECT_THAT(
+      udf_remote_with_language_sql->Validate(&context_),
+      StatusIs(StatusCode::kInternal,
+               testing::HasSubstr(
+                   "udf->language() == Udf::Language::LANGUAGE_UNSPECIFIED")));
+
+  // UDF with name starting with a number, invalid even when quoted.
   Udf::Builder udf_builder_number_start;
   udf_builder_number_start.set_name("1udf");
   udf_builder_number_start.set_sql_security(Udf::SqlSecurity::INVOKER);
   udf_builder_number_start.set_sql_body(
       "CREATE FUNCTION `1udf`(a INT64) RETURNS INT64 AS (a + 1)");
   auto udf_number_start = udf_builder_number_start.build();
-  ZETASQL_EXPECT_OK(udf_number_start->Validate(&context_));
-  EXPECT_EQ(udf_number_start->Name(), "1udf");
+  EXPECT_THAT(udf_number_start->Validate(&context_),
+              StatusIs(StatusCode::kInvalidArgument,
+                       testing::HasSubstr("Udf name not valid: 1udf")));
 
   // UDF with uppercase name
   Udf::Builder udf_builder_uppercase;
@@ -2080,9 +2175,10 @@ TEST_F(SchemaTest, PrintDDLStatementsTestUDFsWithDependencies) {
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(CREATE FUNCTION udf_base(x INT64 DEFAULT 1) RETURNS INT64 SQL SECURITY INVOKER AS (x + 1))",
+           R"(CREATE FUNCTION remote_udf_base(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://example.com/myfunc', max_batching_rows = 10))",
            R"(CREATE FUNCTION udf_increment(x INT64) RETURNS INT64 SQL SECURITY INVOKER AS (udf_base(x) * 2))",
            R"(CREATE TABLE T1 (id INT64 NOT NULL, val INT64, val_generated INT64 AS (udf_increment(val)) STORED) PRIMARY KEY(id))",
-           R"(CREATE FUNCTION udf_complex(x INT64 DEFAULT NULL) RETURNS INT64 SQL SECURITY INVOKER AS (udf_increment(x) + 3))",
+           R"(CREATE FUNCTION udf_complex(x INT64 DEFAULT NULL) RETURNS INT64 SQL SECURITY INVOKER AS (udf_increment(x) + 3 + remote_udf_base(x)))",
            R"(CREATE TABLE T2 (id INT64 NOT NULL, val INT64 DEFAULT (udf_complex(5))) PRIMARY KEY(id))",
            R"(CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT T1.id, udf_base(T1.val) AS val_plus_one FROM T1)",
            R"(CREATE VIEW V2 SQL SECURITY INVOKER AS SELECT V1.id, V1.val_plus_one, udf_complex(V1.val_plus_one) AS complex_val FROM V1)"},
@@ -2098,8 +2194,11 @@ TEST_F(SchemaTest, PrintDDLStatementsTestUDFsWithDependencies) {
           "CREATE TABLE T1 (\n  id INT64 NOT NULL,\n  val INT64,\n  "
           "val_generated INT64 AS (udf_increment(val)) STORED,\n) PRIMARY "
           "KEY(id)",
+          "CREATE FUNCTION remote_udf_base(x INT64) RETURNS INT64 LANGUAGE "
+          "REMOTE OPTIONS (endpoint='https://example.com/myfunc', "
+          "max_batching_rows=10)",
           "CREATE FUNCTION udf_complex(x INT64 DEFAULT NULL) RETURNS INT64 SQL "
-          "SECURITY INVOKER AS (udf_increment(x) + 3)",
+          "SECURITY INVOKER AS (udf_increment(x) + 3 + remote_udf_base(x))",
           "CREATE TABLE T2 (\n  id INT64 NOT NULL,\n  val INT64 DEFAULT "
           "(udf_complex(5)),\n) PRIMARY KEY(id)",
           "CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT T1.id, "

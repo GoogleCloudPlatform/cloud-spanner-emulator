@@ -1,0 +1,138 @@
+CREATE TABLE T (
+  key INT64 NOT NULL,
+  def TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    ON UPDATE (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(key);
+==
+CREATE TABLE T (
+  key INT64 NOT NULL,
+) PRIMARY KEY(key);
+ALTER TABLE T ADD COLUMN def TIMESTAMP ON UPDATE (PENDING_COMMIT_TIMESTAMP())
+  DEFAULT (PENDING_COMMIT_TIMESTAMP())
+  OPTIONS ( allow_commit_timestamp = true );
+--
+CREATE TABLE T (
+  key INT64 NOT NULL,
+  def TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    ON UPDATE (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(key);
+==
+CREATE TABLE T (
+  key INT64 NOT NULL,
+  def TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(key);
+ALTER TABLE T ALTER COLUMN def SET ON UPDATE (PENDING_COMMIT_TIMESTAMP());
+--
+CREATE TABLE T (
+  key INT64 NOT NULL,
+  def TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    ON UPDATE (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(key);
+==
+CREATE TABLE T (
+  key INT64 NOT NULL,
+  def TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(key);
+ALTER TABLE T ALTER COLUMN def TIMESTAMP ON UPDATE (PENDING_COMMIT_TIMESTAMP())
+  DEFAULT (PENDING_COMMIT_TIMESTAMP());
+--
+CREATE TABLE T (
+  key INT64 NOT NULL,
+  def TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    ON UPDATE (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(key);
+==
+CREATE TABLE T (
+  key INT64 NOT NULL,
+  def TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    ON UPDATE (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(key);
+ALTER TABLE T ALTER COLUMN def DROP ON UPDATE;
+--
+CREATE TABLE T (
+  key INT64 NOT NULL,
+  def TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(key);
+==
+CREATE TABLE T (
+  key INT64 NOT NULL,
+  def TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    ON UPDATE (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(key);
+ALTER TABLE T ALTER COLUMN def TIMESTAMP;
+--
+CREATE TABLE T (
+  key INT64 NOT NULL,
+  def TIMESTAMP OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(key);
+==
+# ON UPDATE without DEFAULT value is unsupported
+CREATE TABLE T (
+  key INT64 NOT NULL,
+  def TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    ON UPDATE (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(key);
+ALTER TABLE T ALTER COLUMN def DROP DEFAULT;
+--
+Column `def` with an ON UPDATE expression must have an identical DEFAULT value expression.
+==
+# ON UPDATE with a non-identical DEFAULT value is unsupported
+CREATE TABLE T (
+  key INT64 NOT NULL,
+  def TIMESTAMP DEFAULT (pending_commit_timestamp())
+    ON UPDATE (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(key);
+--
+The ON UPDATE expression of column `def` does not match the DEFAULT value expression.
+==
+# ON UPDATE expression must be PENDING_COMMIT_TIMESTAMP()
+# --regex
+CREATE TABLE T (
+  key INT64 NOT NULL,
+  def TIMESTAMP DEFAULT (CURRENT_TIMESTAMP())
+    ON UPDATE (CURRENT_TIMESTAMP())
+) PRIMARY KEY(key);
+--
+.*PENDING_COMMIT_TIMESTAMP.*only supported ON UPDATE expression.*
+==
+# ON UPDATE cannot be set on a key column
+# --regex
+CREATE TABLE T (
+  key INT64 NOT NULL,
+  col TIMESTAMP ON UPDATE (PENDING_COMMIT_TIMESTAMP())
+    DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS ( allow_commit_timestamp = true ),
+) PRIMARY KEY(key, col);
+--
+.*Column T.col with ON UPDATE cannot be a part of or the whole primary key.
+==
+# --regex
+CREATE TABLE T (
+  key TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS ( allow_commit_timestamp = true ),
+  a INT64,
+) PRIMARY KEY(key);
+ALTER TABLE T ALTER COLUMN key SET ON UPDATE (PENDING_COMMIT_TIMESTAMP());
+--
+.*Column T.key with ON UPDATE cannot be a part of or the whole primary key.
+==
+# --regex
+CREATE TABLE T (
+  key TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
+    OPTIONS ( allow_commit_timestamp = true ),
+  a INT64,
+) PRIMARY KEY(key);
+ALTER TABLE T ALTER COLUMN key TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP()) ON UPDATE (PENDING_COMMIT_TIMESTAMP());
+--
+.*Column T.key with ON UPDATE cannot be a part of or the whole primary key.

@@ -136,6 +136,7 @@ absl::Status RewriteSimpleSrfInSelect(Query* pg_query) {
   ZETASQL_ASSIGN_OR_RETURN(rte->eref, CheckedPgMakeNode(Alias));
   // To simplify, we'll always use `$array` as the alias.
   ZETASQL_ASSIGN_OR_RETURN(rte->eref->aliasname, CheckedPgPstrdup("$array"));
+  ZETASQL_RET_CHECK(target_entry->resname != nullptr) << "Unexpected return statement";
   ZETASQL_ASSIGN_OR_RETURN(char* resname_val, CheckedPgPstrdup(target_entry->resname));
   ZETASQL_ASSIGN_OR_RETURN(String * resname_str, CheckedPgMakeString(resname_val));
   ZETASQL_ASSIGN_OR_RETURN(rte->eref->colnames,
@@ -422,12 +423,18 @@ SpangresTranslator::TranslateParsedTree(
     ZETASQL_RETURN_IF_ERROR(query_deparser_callback(pg_query));
   }
 
+  bool is_create_function_stmt = IsA(raw_stmt->stmt, CreateFunctionStmt);
+
   // Perform a rewrite for simple SRF in SELECT cases.
   if (IsSimpleSrfInSelect(pg_query)) {
+    if (is_create_function_stmt) {
+      return absl::UnimplementedError(
+          "Set returning expressions in CREATE FUNCTION statements are not "
+          "supported.");
+    }
     ZETASQL_RETURN_IF_ERROR(RewriteSimpleSrfInSelect(pg_query));
   }
 
-  bool is_create_function_stmt = IsA(raw_stmt->stmt, CreateFunctionStmt);
   auto transformer = std::make_unique<postgres_translator::ForwardTransformer>(
       catalog_adapter_holder->ReleaseCatalogAdapter(), input_arguments,
       is_create_function_stmt);

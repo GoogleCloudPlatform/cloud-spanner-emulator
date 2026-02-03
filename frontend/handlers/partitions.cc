@@ -16,23 +16,29 @@
 
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/keys.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
 #include "google/spanner/v1/type.pb.h"
+#include "absl/random/random.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
+#include "backend/common/ids.h"
+#include "backend/query/query_context.h"
 #include "backend/query/query_engine.h"
-#include "common/config.h"
 #include "common/errors.h"
 #include "frontend/converters/partition.h"
 #include "frontend/converters/query.h"
-#include "frontend/converters/reads.h"
 #include "frontend/entities/session.h"
+#include "frontend/entities/transaction.h"
 #include "frontend/proto/partition_token.pb.h"
 #include "frontend/server/handler.h"
+#include "frontend/server/request_context.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -40,7 +46,19 @@ namespace spanner {
 namespace emulator {
 namespace frontend {
 
+namespace spanner_api = ::google::spanner::v1;
+
 namespace {
+
+struct SessionAndTransaction {
+  std::shared_ptr<Session> session;
+  std::shared_ptr<Transaction> transaction;
+};
+
+// The number of empty partitions to generate for StreamingPartitionQuery.
+// This is to simulate production behavior where some partitions may be empty.
+// The number 5 is chosen arbitrarily to generate a few empty partitions.
+const int kNumEmptyPartitions = 5;
 
 absl::Status ValidateTransactionSelectorForPartitionRead(
     const spanner_api::TransactionSelector& selector) {
@@ -72,6 +90,28 @@ absl::Status ValidatePartitionOptions(
     return error::InvalidMaxPartitionCount("partition_options");
   }
   return absl::OkStatus();
+}
+
+// Set Session and Transaction for PartitionQuery/StreamingPartitionQuery.
+absl::StatusOr<SessionAndTransaction> SetBasePartitionOptions(
+    RequestContext* ctx,
+    const ::google::spanner::v1::TransactionSelector& transaction,
+    const std::string& session_name) {
+  // Take shared ownerships of session and transaction so that they will keep
+  // valid throughout this function.
+  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+                   GetSession(ctx, session_name));
+
+  // Get underlying transaction.
+  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForPartitionRead(transaction));
+  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
+                   session->FindOrInitTransaction(transaction));
+  if (!txn->IsReadOnly()) {
+    return error::PartitionReadNeedsReadOnlyTxn();
+  }
+
+  return SessionAndTransaction{.session = std::move(session),
+                               .transaction = std::move(txn)};
 }
 
 // Create a partition token for the given partition read request and partitioned
@@ -112,6 +152,19 @@ absl::StatusOr<PartitionToken> CreatePartitionTokenForQuery(
 
   partition_token.set_empty_query_partition(empty_partition);
   return partition_token;
+}
+
+absl::StatusOr<spanner_api::Partition> CreateStreamingPartitionTokenForQuery(
+    bool empty_partition) {
+  StreamingPartitionToken partition_token;
+  if (empty_partition) {
+    partition_token.set_empty_query_partition(true);
+  }
+
+  spanner_api::Partition partition;
+  ZETASQL_ASSIGN_OR_RETURN(*partition.mutable_partition_token(),
+                   StreamingPartitionTokenToString(partition_token));
+  return partition;
 }
 
 }  //  namespace
@@ -169,19 +222,11 @@ REGISTER_GRPC_HANDLER(Spanner, PartitionRead);
 absl::Status PartitionQuery(RequestContext* ctx,
                             const spanner_api::PartitionQueryRequest* request,
                             spanner_api::PartitionResponse* response) {
-  // Take shared ownerships of session and transaction so that they will keep
-  // valid throughout this function.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
-                   GetSession(ctx, request->session()));
-
-  // Get underlying transaction.
-  ZETASQL_RETURN_IF_ERROR(
-      ValidateTransactionSelectorForPartitionRead(request->transaction()));
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
-                   session->FindOrInitTransaction(request->transaction()));
-  if (!txn->IsReadOnly()) {
-    return error::PartitionReadNeedsReadOnlyTxn();
-  }
+  ZETASQL_ASSIGN_OR_RETURN(
+      SessionAndTransaction session_and_txn,
+      SetBasePartitionOptions(ctx, request->transaction(), request->session()));
+  auto session = session_and_txn.session;
+  auto txn = session_and_txn.transaction;
 
   if (request->has_partition_options()) {
     ZETASQL_RETURN_IF_ERROR(ValidatePartitionOptions(request->partition_options()));
@@ -207,7 +252,7 @@ absl::Status PartitionQuery(RequestContext* ctx,
   // Add two partitions to result set, with first partition being empty.
   ZETASQL_ASSIGN_OR_RETURN(auto empty_partition_token,
                    CreatePartitionTokenForQuery(*request, txn->id(),
-                                                /*empty_partition =*/true));
+                                                /*empty_partition=*/true));
   spanner_api::Partition empty_partition;
   ZETASQL_ASSIGN_OR_RETURN(*empty_partition.mutable_partition_token(),
                    PartitionTokenToString(empty_partition_token));
@@ -215,7 +260,7 @@ absl::Status PartitionQuery(RequestContext* ctx,
   // Second partition contains full result set for requested query.
   ZETASQL_ASSIGN_OR_RETURN(auto full_partition_token,
                    CreatePartitionTokenForQuery(*request, txn->id(),
-                                                /*empty_partition =*/false));
+                                                /*empty_partition=*/false));
   spanner_api::Partition full_partition;
   ZETASQL_ASSIGN_OR_RETURN(*full_partition.mutable_partition_token(),
                    PartitionTokenToString(full_partition_token));

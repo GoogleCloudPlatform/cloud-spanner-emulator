@@ -2929,6 +2929,36 @@ absl::Status ColumnDefaultValueParseError(absl::string_view table_name,
           column_name, message));
 }
 
+absl::Status OnUpdateWithoutDefaultValue(absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Column `$0` with an ON UPDATE expression must have "
+                       "an identical DEFAULT value expression.",
+                       column_name));
+}
+
+absl::Status OnUpdateDefaultValueMismatch(absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("The ON UPDATE expression of column `$0` does not match "
+                       "the DEFAULT value expression.",
+                       column_name));
+}
+
+absl::Status OnUpdateExpressionMustBePendingCommitTimestamp() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "PENDING_COMMIT_TIMESTAMP() is the only supported ON UPDATE expression.");
+}
+
+absl::Status ColumnWithOnUpdateUsedInPrimaryKey(absl::string_view table_name,
+                                                absl::string_view column_name) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("Column $0.$1 with ON UPDATE cannot "
+                                       "be a part of or the whole primary key.",
+                                       table_name, column_name));
+}
+
 absl::Status CannotUseCommitTimestampWithColumnDefaultValue(
     absl::string_view column_name) {
   return absl::Status(
@@ -2936,6 +2966,25 @@ absl::Status CannotUseCommitTimestampWithColumnDefaultValue(
       absl::Substitute("Cannot use commit timestamp column `$0` as a column "
                        "with default value.",
                        column_name));
+}
+
+absl::Status OtherCannotUseCommitTimestampWithColumnDefaultValue(
+    absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("The only default value expression permitted for commit "
+                       "timestamp column `$0` is PENDING_COMMIT_TIMESTAMP().",
+                       column_name));
+}
+
+absl::Status DefaultCommitTimestampWithoutOption(
+    absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot use default value expression PENDING_COMMIT_TIMESTAMP() on "
+          "column `$0` without the allow_commit_timestamp column option.",
+          column_name));
 }
 
 absl::Status DefaultPKNeedsExplicitValue(absl::string_view column_name,
@@ -3408,9 +3457,27 @@ absl::Status InvalidMaxPartitionCount(absl::string_view message_name) {
           message_name));
 }
 
+absl::Status InvalidTargetPartitionSizeBytes(absl::string_view message_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Invalid $0: target partition size bytes must be greater than zero.",
+          message_name));
+}
+
 absl::Status InvalidPartitionToken() {
   return absl::Status(absl::StatusCode::kInvalidArgument,
                       "Invalid partition token.");
+}
+
+absl::Status InvalidStreamingPartitionToken() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "Invalid streaming partition token.");
+}
+
+absl::Status InvalidStreamingPartitionTokenMetadata() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "Invalid streaming partition token metadata.");
 }
 
 absl::Status ReadFromDifferentSession() {
@@ -4073,11 +4140,29 @@ absl::Status WithViewsAreNotSupported() {
 }
 
 // Function errors
-absl::Status FunctionRequiresInvokerSecurity(absl::string_view function_name) {
+absl::Status FunctionDefinerSecurityError(absl::string_view function_name) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
-      absl::Substitute("Function `$0` is missing the SQL SECURITY clause.",
-                       function_name));
+      absl::Substitute(
+          "Function `$0` uses unsupported SQL SECURITY DEFINER clause.",
+          function_name));
+}
+
+absl::Status InvalidOptionForFunction(absl::string_view option_name,
+                                      absl::string_view function_name) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("Invalid option $0 for remote UDF $1.",
+                                       option_name, function_name));
+}
+
+absl::Status InvalidOptionValueForFunction(absl::string_view option_value,
+                                           absl::string_view option_name,
+                                           absl::string_view function_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Invalid option value $0 for option $1 of remote UDF $2.",
+          option_value, option_name, function_name));
 }
 
 absl::Status FunctionReplaceError(absl::string_view function_name,
@@ -4471,9 +4556,9 @@ absl::Status VectorIndexesUnusable(absl::string_view distance_type_name,
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
       absl::Substitute(
-          "No usable vector index can be found for this query: $0.",
-          absl::StrCat("a vector index with distance type ", distance_type_name,
-                       " must be defined on column ", ann_func_column_name,
+          "No usable vector index can be found for this query $0.",
+          absl::StrCat("that supports ", distance_type_name,
+                       " distance type on column ", ann_func_column_name,
                        " for function ", absl::AsciiStrToUpper(ann_func_name),
                        "; also make sure that the vector index is not in "
                        "backfilling, and the "

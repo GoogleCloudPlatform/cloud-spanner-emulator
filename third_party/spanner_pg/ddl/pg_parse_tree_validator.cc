@@ -904,11 +904,11 @@ absl::Status ValidateParseTreeNode(const AlterTableStmt& node,
         "Object type is not supported in <ALTER> statement.");
   }
 
-  // `missing_ok` is set if IF EXISTS/IF NOT EXISTS clause is present. Not
-  // supported.
+  // `missing_ok` is set if IF EXISTS/IF NOT EXISTS clause is present. We are
+  // supporting IF EXISTS only for ALTER TABLE statements.
   if (node.missing_ok) {
-    return UnsupportedTranslationError(
-        "<IF [NOT] EXISTS> is not supported in <ALTER> statement.");
+      return UnsupportedTranslationError(
+          "<IF [NOT] EXISTS> is not supported in <ALTER> statement.");
   }
 
   return absl::OkStatus();
@@ -2320,8 +2320,8 @@ absl::Status ValidateParseTreeNode(const IndexElem& node) {
   // `expr` defines the expressions applied to the column. e.g.
   // CREATE INDEX ON films ((lower(title))); This is not supported.
   if (node.expr != nullptr) {
-    return UnsupportedTranslationError(
-        "Expressions are not supported in <CREATE INDEX> statement.");
+   return UnsupportedTranslationError(
+       "Expressions are not supported in <CREATE INDEX> statement.");
   }
 
   // `indexcolname` defines the name of the index when the index is created

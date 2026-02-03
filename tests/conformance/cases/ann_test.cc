@@ -187,26 +187,30 @@ TEST_F(ANNTest, ANNQueryWrongDistanceType) {
           LIMIT 2)sql"),
       error::VectorIndexesUnusableForceIndexWrongDistanceType(
           "vec_index", "COSINE", "APPROX_EUCLIDEAN_DISTANCE", "Embedding"));
-  EXPECT_THAT(Query(
-                  R"sql(
+  EXPECT_THAT(
+      Query(
+          R"sql(
           SELECT b.MyKey FROM Base b
           WHERE b.Embedding IS NOT NULL
           ORDER BY APPROX_EUCLIDEAN_DISTANCE(
             b.Embedding, ARRAY<FLOAT32>[1.0, 0.1],
             options => JSON '{"num_leaves_to_search": 1}')
           LIMIT 2)sql"),
-              error::VectorIndexesUnusable("EUCLIDEAN", "Embedding",
-                                           "approx_euclidean_distance"));
-  EXPECT_THAT(Query(
-                  R"sql(
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               testing::HasSubstr(
+                   "No usable vector index can be found for this query")));
+  EXPECT_THAT(
+      Query(
+          R"sql(
           SELECT b.MyKey FROM Base b
           WHERE b.Embedding2 IS NOT NULL
           ORDER BY APPROX_DOT_PRODUCT(
             b.Embedding2, ARRAY<FLOAT32>[1.0, 0.1],
             options => JSON '{"num_leaves_to_search": 1}')
           LIMIT 2)sql"),
-              error::VectorIndexesUnusable("DOT_PRODUCT", "Embedding2",
-                                           "approx_dot_product"));
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               testing::HasSubstr(
+                   "No usable vector index can be found for this query")));
   EXPECT_THAT(Query(
                   R"sql(
           SELECT b.MyKey FROM Base@{FORCE_INDEX=index2} b
@@ -256,8 +260,7 @@ TEST_F(ANNTest, ANNQueryWrongOptions) {
       StatusIs(absl::StatusCode::kInvalidArgument,
                testing::ContainsRegex(
                    "Argument `options` of function APPROX_COSINE_DISTANCE is "
-                   "invalid. It must have a .*`num_leaves_to_search` "
-                   "field with an unsigned integer value.*")));
+                   "invalid.")));
 }
 
 TEST_F(ANNTest, ANNQueryInvalidNumLeavesToSearch) {
@@ -273,8 +276,7 @@ TEST_F(ANNTest, ANNQueryInvalidNumLeavesToSearch) {
       StatusIs(absl::StatusCode::kInvalidArgument,
                testing::ContainsRegex(
                    "Argument `options` of function APPROX_COSINE_DISTANCE is "
-                   "invalid. It must have a .*`num_leaves_to_search` "
-                   "field with an unsigned integer value.*")));
+                   "invalid.")));
 }
 
 TEST_F(ANNTest, ANNQueryNegativeNumLeavesToSearch) {
@@ -290,8 +292,7 @@ TEST_F(ANNTest, ANNQueryNegativeNumLeavesToSearch) {
       StatusIs(absl::StatusCode::kInvalidArgument,
                testing::ContainsRegex(
                    "Argument `options` of function APPROX_COSINE_DISTANCE is "
-                   "invalid. It must have a .*`num_leaves_to_search` "
-                   "field with an unsigned integer value.*")));
+                   "invalid.")));
 }
 
 TEST_F(ANNTest, ANNQueryNoOrderBy) {

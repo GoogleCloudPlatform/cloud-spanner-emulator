@@ -14,14 +14,22 @@
 // limitations under the License.
 //
 
+#include "common/limits.h"
+
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "zetasql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "google/cloud/spanner/bytes.h"
 #include "tests/conformance/common/database_test_base.h"
+#include "tests/conformance/common/environment.h"
 
 namespace google {
 namespace spanner {
@@ -433,6 +441,40 @@ TEST_F(LimitsTest, MaxTableInterleavingDepth) {
                   "(ID), INTERLEAVE IN PARENT table_%d",
                   i, (i - 1))}),
               StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
+TEST_F(LimitsTest, MaxValueSize) {
+  std::vector<std::string> statements = {R"(
+     CREATE TABLE max_value_size_test_table (
+       int64_col INT64 NOT NULL,
+       bytes_col BYTES(MAX),
+     ) PRIMARY KEY(int64_col)
+  )"};
+  ZETASQL_EXPECT_OK(UpdateSchema({statements}));
+
+  auto bytes_col_value = google::spanner::emulator::test::ToUtilStatusOr(
+      cloud::spanner_internal::BytesFromBase64(
+          std::string(limits::kMaxBytesColumnLength, 'a')));
+  ZETASQL_ASSERT_OK(bytes_col_value);
+
+  ZETASQL_EXPECT_OK(Insert("max_value_size_test_table", {"int64_col", "bytes_col"},
+                   {1, *bytes_col_value}));
+
+  // Construct a struct object with a field value of 10MB.
+  // This is the maximum size that can be inserted into a bytes column.
+  auto result = Query(
+      absl::StrFormat("SELECT ARRAY(SELECT AS STRUCT bytes_col as bytes_col "
+                      "FROM max_value_size_test_table);"));
+  ZETASQL_ASSERT_OK(result);
+  ASSERT_EQ(result->size(), 1);
+  ASSERT_EQ(result->at(0).values().size(), 1);
+  Value array_value = result->at(0).values()[0];
+  auto struct_array = google::spanner::emulator::test::ToUtilStatusOr(
+      array_value.get<std::vector<std::tuple<Bytes>>>());
+  ZETASQL_ASSERT_OK(struct_array);
+  ASSERT_EQ(struct_array->size(), 1);
+  auto struct_value = struct_array->at(0);
+  ASSERT_EQ(std::get<0>(struct_value), *bytes_col_value);
 }
 
 }  // namespace
