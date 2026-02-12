@@ -51,8 +51,7 @@ QueryableUdf::QueryableUdf(const backend::Udf* backend_udf,
                            zetasql::TypeFactory* type_factory)
     : zetasql::Function(
           absl::StrSplit(backend_udf->Name(), '.'),
-          /*catalog_name=*/
-          kCloudSpannerEmulatorFunctionCatalogName, zetasql::Function::SCALAR,
+          /*group=*/kSqlUdfGroup, zetasql::Function::SCALAR,
           std::vector<zetasql::FunctionSignature>{*backend_udf->signature()},
           CreateFunctionOptions(backend_udf, default_time_zone, catalog,
                                 type_factory)),

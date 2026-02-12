@@ -260,9 +260,9 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
   std::string PrintCreateLocalityGroup(
       const google::spanner::emulator::backend::ddl::CreateLocalityGroup& statement) const;
   void PrintStorageOption(const google::spanner::emulator::backend::ddl::SetOption& option,
-                                 std::string& out) const;
+                          std::string& out) const;
   void PrintSpillTimespanOption(const google::spanner::emulator::backend::ddl::SetOption& option,
-                                       std::string& out) const;
+                                std::string& out) const;
   std::string PrintAlterLocalityGroup(
       const google::spanner::emulator::backend::ddl::AlterLocalityGroup& statement) const;
   absl::StatusOr<std::string> PrintDropLocalityGroup(
@@ -605,8 +605,9 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
     }
 
     case google::spanner::emulator::backend::ddl::AlterTable::kRenameTo: {
-      std::string rename_clause = statement.rename_to().has_synonym() ?
-          " RENAME WITH SYNONYM TO " : " RENAME TO ";
+      std::string rename_clause = statement.rename_to().has_synonym()
+                                      ? " RENAME WITH SYNONYM TO "
+                                      : " RENAME TO ";
       return StrCat(alter_table, rename_clause,
                     QuoteQualifiedIdentifier(statement.rename_to().name()));
     }
@@ -699,16 +700,6 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateTable(
   output.push_back(absl::StrJoin(create_table_entries, ",\n"));
 
   std::string after_create = ")";
-  if (statement.has_interleave_clause()) {
-    ZETASQL_ASSIGN_OR_RETURN(std::string interleave_in_string,
-                     PrintInterleaveClause(statement.interleave_clause()));
-    StrAppend(&after_create, " ", interleave_in_string);
-  }
-
-  if (statement.has_row_deletion_policy()) {
-    StrAppend(&after_create, " TTL INTERVAL ",
-              RowDeletionPolicyToInterval(statement.row_deletion_policy()));
-  }
 
   std::string locality_group = "";
   for (const google::spanner::emulator::backend::ddl::SetOption& option : statement.set_options()) {
@@ -722,6 +713,17 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateTable(
     }
   }
   StrAppend(&after_create, locality_group);
+
+  if (statement.has_interleave_clause()) {
+    ZETASQL_ASSIGN_OR_RETURN(std::string interleave_in_string,
+                     PrintInterleaveClause(statement.interleave_clause()));
+    StrAppend(&after_create, " ", interleave_in_string);
+  }
+
+  if (statement.has_row_deletion_policy()) {
+    StrAppend(&after_create, " TTL INTERVAL ",
+              RowDeletionPolicyToInterval(statement.row_deletion_policy()));
+  }
 
   output.push_back(std::move(after_create));
   return absl::StrJoin(output, "\n");
@@ -1338,8 +1340,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSchema(
           StrCat("CREATE SCHEMA existence modifier ",
                  statement.existence_modifier(), " not supported."));
   }
-  create_schema_clauses.push_back(
-      QuoteIdentifier(statement.schema_name()));
+  create_schema_clauses.push_back(QuoteIdentifier(statement.schema_name()));
   return absl::StrJoin(create_schema_clauses, " ");
 }
 
@@ -1384,8 +1385,8 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterSequence(
   std::vector<std::string> alter_statement_clauses;
   alter_statement_clauses.push_back("ALTER SEQUENCE");
   const bool if_exists = statement.has_existence_modifier() &&
-                        statement.existence_modifier() ==
-                            google::spanner::emulator::backend::ddl::ExistenceModifier::IF_EXISTS;
+                         statement.existence_modifier() ==
+                             google::spanner::emulator::backend::ddl::ExistenceModifier::IF_EXISTS;
   if (if_exists) {
     alter_statement_clauses.push_back("IF EXISTS");
   }
@@ -1519,10 +1520,9 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintType(
   auto type_name_it = kTypeMap.find(type);
   if (type_name_it == kTypeMap.end()) {
     // type not found -> schema is not a valid Spangres schema
-    return StatementTranslationError(
-        StrCat("Spanner type <",
-               google::spanner::emulator::backend::ddl::ColumnDefinition::Type_Name(type),
-               "> is not supported."));
+    return StatementTranslationError(StrCat(
+        "Spanner type <", google::spanner::emulator::backend::ddl::ColumnDefinition::Type_Name(type),
+        "> is not supported."));
   }
   absl::string_view type_name = type_name_it->second;
   std::string type_modifiers = "";

@@ -80,6 +80,7 @@ const absl::string_view kSchemaChangeTestFiles[] = {
     "models.test",
     "search.test",
     "views.test",
+    "ann.test",
 };
 
 const absl::string_view kPgDdlTestFiles[] = {

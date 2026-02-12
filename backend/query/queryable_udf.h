@@ -21,12 +21,15 @@
 
 #include "zetasql/public/function.h"
 #include "zetasql/public/types/type_factory.h"
+#include "absl/strings/string_view.h"
 #include "backend/schema/catalog/udf.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
+
+constexpr absl::string_view kSqlUdfGroup = "SQL_UDF";
 
 // A wrapper over Udf class which implements zetasql::Function.
 // QueryableUdf has a reference to the backend Udf.

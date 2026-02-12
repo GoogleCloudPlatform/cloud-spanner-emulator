@@ -1,0 +1,26 @@
+CREATE TABLE Base (
+  MyKey INT64 NOT NULL,
+  MyData STRING(MAX),
+  Embedding ARRAY<FLOAT32>(vector_length=>4),
+  Embedding2 ARRAY<FLOAT32>(vector_length=>4),
+  Embedding3 ARRAY<FLOAT64>(vector_length=>4),
+) PRIMARY KEY(MyKey);
+CREATE VECTOR INDEX vec_index ON Base(Embedding) WHERE Embedding IS NOT NULL OPTIONS (tree_depth = 2, distance_type = 'COSINE');
+CREATE VECTOR INDEX vec_index_dot_product ON Base(Embedding) WHERE Embedding IS NOT NULL OPTIONS (tree_depth = 3, distance_type = 'DOT_PRODUCT');
+CREATE VECTOR INDEX vec_index_double ON Base(Embedding3) WHERE Embedding3 IS NOT NULL OPTIONS (tree_depth = 2, distance_type = 'COSINE');
+CREATE VECTOR INDEX vec_index_euclidean ON Base(Embedding2) WHERE Embedding2 IS NOT NULL OPTIONS (tree_depth = 2, distance_type = 'EUCLIDEAN');
+CREATE VECTOR INDEX vec_index_everything ON Base(Embedding) STORING (MyData) WHERE Embedding IS NOT NULL OPTIONS (tree_depth = 3, distance_type = 'COSINE', leaf_scatter_factor = 16, num_branches = 10, num_leaves = 1000, min_branch_splits = 2, min_leaf_splits = 10);
+--
+CREATE TABLE Base (
+  MyKey INT64 NOT NULL,
+  MyData STRING(MAX),
+  Embedding ARRAY<FLOAT32>(vector_length=>4),
+  Embedding2 ARRAY<FLOAT32>(vector_length=>4),
+  Embedding3 ARRAY<FLOAT64>(vector_length=>4),
+) PRIMARY KEY(MyKey);
+CREATE VECTOR INDEX vec_index ON Base(Embedding) WHERE Embedding IS NOT NULL OPTIONS ( tree_depth = 2, distance_type = 'COSINE' );
+CREATE VECTOR INDEX vec_index_dot_product ON Base(Embedding) WHERE Embedding IS NOT NULL OPTIONS ( tree_depth = 3, distance_type = 'DOT_PRODUCT' );
+CREATE VECTOR INDEX vec_index_double ON Base(Embedding3) WHERE Embedding3 IS NOT NULL OPTIONS ( tree_depth = 2, distance_type = 'COSINE' );
+CREATE VECTOR INDEX vec_index_euclidean ON Base(Embedding2) WHERE Embedding2 IS NOT NULL OPTIONS ( tree_depth = 2, distance_type = 'EUCLIDEAN' );
+CREATE VECTOR INDEX vec_index_everything ON Base(Embedding) STORING (MyData) WHERE Embedding IS NOT NULL OPTIONS ( tree_depth = 3, num_leaves = 1000, num_branches = 10, distance_type = 'COSINE', leaf_scatter_factor = 16, min_branch_splits = 2, min_leaf_splits = 10 );
+==

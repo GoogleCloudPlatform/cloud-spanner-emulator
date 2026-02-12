@@ -1136,7 +1136,7 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteInsertOnConflictDml(
       resolved_statement->GetAs<zetasql::ResolvedInsertStmt>();
   const auto& on_conflict_clause = insert_statement->on_conflict_clause();
   const Table* table = context.schema->FindTable(
-      insert_statement->table_scan()->table()->Name());
+      insert_statement->table_scan()->table()->FullName());
   if (table == nullptr) {
     return error::TableNotFound(
         insert_statement->table_scan()->table()->Name());
@@ -1289,26 +1289,31 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
   analyzer_options.set_prune_unused_columns(true);
 
   QueryEvaluatorForEngine view_evaluator(*this, context);
-  Catalog catalog{
-      context.schema,
-      &function_catalog_,
-      type_factory_,
-      analyzer_options,
-      context.reader,
-      &view_evaluator,
-      query.change_stream_internal_lookup,
-  };
+  auto catalog = std::make_unique<Catalog>(
+      context.schema, &function_catalog_, type_factory_, analyzer_options,
+      context.reader, &view_evaluator, query.change_stream_internal_lookup);
 
   std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
   if (context.schema->dialect() == database_api::DatabaseDialect::POSTGRESQL &&
       !query.change_stream_internal_lookup.has_value()) {
-    ZETASQL_ASSIGN_OR_RETURN(analyzer_output,
-                     AnalyzePostgreSQL(query.sql, &catalog, analyzer_options,
-                                       type_factory_, &function_catalog_));
+    ZETASQL_ASSIGN_OR_RETURN(
+        analyzer_output,
+        AnalyzePostgreSQL(query.sql, catalog.get(), analyzer_options,
+                          type_factory_, &function_catalog_));
 
   } else {
-    ZETASQL_ASSIGN_OR_RETURN(analyzer_output, Analyze(query.sql, &catalog,
+    ZETASQL_ASSIGN_OR_RETURN(analyzer_output, Analyze(query.sql, catalog.get(),
                                               analyzer_options, type_factory_));
+
+    if (analyzer_output->has_graph_references()) {
+      analyzer_options.set_prune_unused_columns(false);
+      catalog = std::make_unique<Catalog>(
+          context.schema, &function_catalog_, type_factory_, analyzer_options,
+          context.reader, &view_evaluator, query.change_stream_internal_lookup);
+      ZETASQL_ASSIGN_OR_RETURN(
+          analyzer_output,
+          Analyze(query.sql, catalog.get(), analyzer_options, type_factory_));
+    }
   }
 
   ZETASQL_ASSIGN_OR_RETURN(auto params,
@@ -1344,13 +1349,14 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
     analyzer_options.set_prune_unused_columns(false);
     if (context.schema->dialect() ==
         database_api::DatabaseDialect::POSTGRESQL) {
-      ZETASQL_ASSIGN_OR_RETURN(analyzer_output,
-                       AnalyzePostgreSQL(query.sql, &catalog, analyzer_options,
-                                         type_factory_, &function_catalog_));
+      ZETASQL_ASSIGN_OR_RETURN(
+          analyzer_output,
+          AnalyzePostgreSQL(query.sql, catalog.get(), analyzer_options,
+                            type_factory_, &function_catalog_));
     } else {
       ZETASQL_ASSIGN_OR_RETURN(
           analyzer_output,
-          Analyze(query.sql, &catalog, analyzer_options, type_factory_));
+          Analyze(query.sql, catalog.get(), analyzer_options, type_factory_));
     }
     ZETASQL_ASSIGN_OR_RETURN(resolved_statement,
                      ExtractValidatedResolvedStatementAndOptions(
@@ -1365,7 +1371,7 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
       if (!is_insert_on_conflict_stmt) {
         ZETASQL_ASSIGN_OR_RETURN(
             auto execute_update_result,
-            EvaluateUpdate(resolved_statement.get(), &catalog, params,
+            EvaluateUpdate(resolved_statement.get(), catalog.get(), params,
                            type_factory_, context.schema->dialect(),
                            context.schema,
                            GetTimeZone(function_catalog_.GetLatestSchema())));
@@ -1385,7 +1391,7 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
         }
         ZETASQL_ASSIGN_OR_RETURN(result, ExecuteInsertOnConflictDml(
                                      query, resolved_statement.get(), params,
-                                     catalog, analyzer_options, context));
+                                     *catalog, analyzer_options, context));
       }
     } else {
       // Add the columns and types of the returning clause to the result.
