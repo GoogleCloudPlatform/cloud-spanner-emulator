@@ -259,8 +259,8 @@ absl::Status ResolveConflictTarget(
   }
 
   if (!on_conflict_clause->unique_constraint_name().empty()) {
-    const Index* index =
-        table->FindIndex(on_conflict_clause->unique_constraint_name());
+    const Index* index = table->FindIndex(table->FindIndexQualifiedName(
+        on_conflict_clause->unique_constraint_name()));
     if (index == nullptr) {
       return error::IndexNotFound(on_conflict_clause->unique_constraint_name(),
                                   table->Name());

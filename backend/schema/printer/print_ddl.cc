@@ -147,6 +147,10 @@ std::string PrintColumn(const Column* column) {
   absl::StrAppend(
       &ddl_string, " ",
       ColumnTypeToString(column->GetType(), column->declared_max_length()));
+  if (column->vector_length().has_value()) {
+    absl::StrAppend(&ddl_string, "(vector_length=>",
+                    column->vector_length().value(), ")");
+  }
   if (!column->is_nullable()) {
     absl::StrAppend(&ddl_string, " NOT NULL");
   }
@@ -213,6 +217,7 @@ std::string PrintIndex(const Index* index) {
   std::string ddl_string;
   absl::StrAppend(&ddl_string, "CREATE", (index->is_unique() ? " UNIQUE" : ""),
                   (index->is_search_index() ? " SEARCH" : ""),
+                  (index->is_vector_index() ? " VECTOR" : ""),
                   (index->is_null_filtered() ? " NULL_FILTERED" : ""),
                   " INDEX ", PrintName(index->Name()), " ON ",
                   PrintName(index->indexed_table()->Name()), "(");
@@ -275,6 +280,58 @@ std::string PrintIndex(const Index* index) {
     if (!options_str.empty()) {
       absl::StrAppend(&ddl_string, " OPTIONS (",
                       absl::StrJoin(options_str, ", "), ")");
+    }
+  }
+
+  if (index->is_vector_index()) {
+    if (!index->null_filtered_columns().empty()) {
+      absl::StrAppend(&ddl_string, " WHERE ",
+                      absl::StrJoin(index->null_filtered_columns(), " AND ",
+                                    [](std::string* out, const Column* column) {
+                                      absl::StrAppend(
+                                          out, PrintName(column->Name()));
+                                      absl::StrAppend(out, " IS NOT NULL");
+                                    }));
+    }
+    ddl::VectorIndexOptionsProto options = index->vector_index_options();
+    std::vector<std::string> options_str;
+    if (options.has_tree_depth()) {
+      options_str.push_back(
+          absl::StrCat("tree_depth = ", options.tree_depth()));
+    }
+    if (options.has_num_leaves()) {
+      options_str.push_back(
+          absl::StrCat("num_leaves = ", options.num_leaves()));
+    }
+    if (options.has_num_branches()) {
+      options_str.push_back(
+          absl::StrCat("num_branches = ", options.num_branches()));
+    }
+    if (options.has_distance_type()) {
+      options_str.push_back(absl::StrCat(
+          "distance_type = ",
+          zetasql::ToSingleQuotedStringLiteral(options.distance_type())));
+    }
+    if (options.has_leaf_scatter_factor()) {
+      options_str.push_back(absl::StrCat("leaf_scatter_factor = ",
+                                         options.leaf_scatter_factor()));
+    }
+    if (options.has_min_branch_splits()) {
+      options_str.push_back(
+          absl::StrCat("min_branch_splits = ", options.min_branch_splits()));
+    }
+    if (options.has_min_leaf_splits()) {
+      options_str.push_back(
+          absl::StrCat("min_leaf_splits = ", options.min_leaf_splits()));
+    }
+    if (options.has_locality_group()) {
+      options_str.push_back(absl::StrCat(
+          "locality_group = ",
+          zetasql::ToSingleQuotedStringLiteral(options.locality_group())));
+    }
+    if (!options_str.empty()) {
+      absl::StrAppend(&ddl_string, " OPTIONS ( ",
+                      absl::StrJoin(options_str, ", "), " )");
     }
   }
 

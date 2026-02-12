@@ -1022,6 +1022,58 @@ TEST_P(DmlTest, InsertOnConflictDmlOnUniqueIndexAsConflictTarget) {
                                          {1, 10, 11, "updated_A", "UPDATE"}}));
 }
 
+TEST_P(DmlTest, DISABLED_InsertOnConflictDmlNamedSchema) {
+  // Skip the test in PG since we cannot create a non null filtered unique index
+  // in PG.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
+
+  ZETASQL_ASSERT_OK(UpdateSchema(
+      {"CREATE SCHEMA s1",
+       "CREATE TABLE s1.TestTable (K INT64, Val INT64) PRIMARY KEY(K)",
+       "CREATE UNIQUE INDEX s1.TestIndex ON s1.TestTable(Val)"}));
+  // Load data
+  ZETASQL_EXPECT_OK(Insert("s1.TestTable", {"K", "Val"}, {1, 1}));
+
+  std::vector<ValueRow> returning_rows;
+  // INSERT ON CONFLICT DO NOTHING DML.
+  // 1st row is ignored because K:1 already exists.
+  // 2nd row is a new row and is inserted.
+  std::string sql =
+      "INSERT INTO s1.TestTable(K, Val) "
+      "VALUES (1, 1), (2, 2) "
+      "ON CONFLICT(K) DO NOTHING "
+      "THEN RETURN K, Val";
+  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  absl::StatusOr<std::vector<ValueRow>> rows_or = returning_rows;
+  EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows({{2, 2}}));
+
+  // INSERT ON CONFLICT DO UPDATE DML.
+  // Insert a new row in the table and index.
+  returning_rows.clear();
+  sql =
+      "INSERT INTO s1.TestTable(K, Val) "
+      "VALUES (3, 3)  "
+      "ON CONFLICT ON UNIQUE CONSTRAINT TestIndex "
+      "DO UPDATE SET Val = excluded.Val "
+      "THEN RETURN K, Val";
+  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  rows_or = returning_rows;
+  EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows({{3, 3}}));
+
+  returning_rows.clear();
+  // INSERT ON CONFLICT DO UPDATE DML.
+  // The row is updated because Val already exists in the index.
+  sql =
+      "INSERT INTO s1.TestTable(K, Val) "
+      "VALUES (3, 3) "
+      "ON CONFLICT ON UNIQUE CONSTRAINT TestIndex "
+      "DO UPDATE SET TestTable.Val = excluded.Val + 1 "
+      "THEN RETURN WITH ACTION AS action K, Val";
+  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  rows_or = returning_rows;
+  EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows({{3, 4, "UPDATE"}}));
+}
+
 TEST_P(DmlTest, UpsertDmlGeneratedColumnTable) {
   // Populate `tablegen` table
   ZETASQL_EXPECT_OK(CommitDml(

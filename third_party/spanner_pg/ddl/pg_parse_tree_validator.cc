@@ -1369,8 +1369,8 @@ absl::Status ValidateParseTreeNode(const RenameStmt& node,
    // `missing_ok` is set if IF EXISTS/IF NOT EXISTS clause is present.
   // TODO: Add support for IF EXISTS
   if (node.missing_ok) {
-    return UnsupportedTranslationError(
-        "<IF EXISTS> clause is not supported in <RENAME TO> statement.");
+      return UnsupportedTranslationError(
+          "<IF EXISTS> clause is not supported in <RENAME TO> statement.");
   }
 
   // `addSynonym` defines whether to additionally create a synonym.

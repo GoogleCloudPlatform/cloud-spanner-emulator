@@ -5050,6 +5050,35 @@ functions {
     }
     arguments {
       type {
+        oid: 1028
+        name: "_oid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_values"
+    }
+    arguments {
+      type {
+        oid: 1028
+        name: "_oid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "arraycontained"
+    }
+    deprecated: false
+  }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
         oid: 1016
         name: "_int8"
       }
@@ -5304,6 +5333,35 @@ functions {
       type {
         oid: 1231
         name: "_numeric"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_values"
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "arraycontains"
+    }
+    deprecated: false
+  }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
+        oid: 1028
+        name: "_oid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    arguments {
+      type {
+        oid: 1028
+        name: "_oid"
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
@@ -5611,6 +5669,33 @@ functions {
     }
     arguments {
       type {
+        oid: 3807
+        name: "_jsonb"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+        name: "int8"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "array_length"
+    }
+    deprecated: false
+  }
+  signatures {
+    return_type {
+      oid: 20
+      name: "int8"
+    }
+    arguments {
+      type {
         oid: 1231
         name: "_numeric"
       }
@@ -5638,8 +5723,8 @@ functions {
     }
     arguments {
       type {
-        oid: 3807
-        name: "_jsonb"
+        oid: 1028
+        name: "_oid"
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
@@ -5721,6 +5806,33 @@ functions {
       type {
         oid: 1185
         name: "_timestamptz"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+        name: "int8"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "array_length"
+    }
+    deprecated: false
+  }
+  signatures {
+    return_type {
+      oid: 20
+      name: "int8"
+    }
+    arguments {
+      type {
+        oid: 50002
+        name: "_tokenlist"
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
@@ -5911,6 +6023,35 @@ functions {
       type {
         oid: 1231
         name: "_numeric"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "search_values"
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "arrayoverlap"
+    }
+    deprecated: false
+  }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
+        oid: 1028
+        name: "_oid"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+      name: "array_to_search"
+    }
+    arguments {
+      type {
+        oid: 1028
+        name: "_oid"
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
@@ -6267,6 +6408,33 @@ functions {
     }
     arguments {
       type {
+        oid: 3807
+        name: "_jsonb"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+        name: "int8"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "array_upper"
+    }
+    deprecated: false
+  }
+  signatures {
+    return_type {
+      oid: 20
+      name: "int8"
+    }
+    arguments {
+      type {
         oid: 1231
         name: "_numeric"
       }
@@ -6294,8 +6462,8 @@ functions {
     }
     arguments {
       type {
-        oid: 3807
-        name: "_jsonb"
+        oid: 1028
+        name: "_oid"
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY
@@ -6377,6 +6545,33 @@ functions {
       type {
         oid: 1185
         name: "_timestamptz"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 20
+        name: "int8"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "array_upper"
+    }
+    deprecated: false
+  }
+  signatures {
+    return_type {
+      oid: 20
+      name: "int8"
+    }
+    arguments {
+      type {
+        oid: 50002
+        name: "_tokenlist"
       }
       cardinality: REQUIRED
       named_argument_kind: POSITIONAL_ONLY

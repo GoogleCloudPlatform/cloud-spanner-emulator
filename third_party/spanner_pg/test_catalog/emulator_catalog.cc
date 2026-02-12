@@ -31,35 +31,52 @@
 
 #include "third_party/spanner_pg/test_catalog/emulator_catalog.h"
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "zetasql/public/analyzer_options.h"
 #include "zetasql/public/catalog.h"
+#include "zetasql/public/function_signature.h"
 #include "zetasql/public/options.pb.h"
 #include "zetasql/public/type.h"
+#include "zetasql/public/value.h"
 #include "zetasql/base/no_destructor.h"
+#include "absl/log/check.h"
+#include "absl/status/statusor.h"
+#include "absl/time/time.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
 #include "backend/schema/builders/change_stream_builder.h"
 #include "backend/schema/builders/column_builder.h"
+#include "backend/schema/builders/named_schema_builder.h"
 #include "backend/schema/builders/table_builder.h"
+#include "backend/schema/builders/udf_builder.h"
+#include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/udf.h"
 #include "backend/schema/graph/schema_graph.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/catalog/type.h"
+#include "zetasql/base/status_macros.h"
 
 using google::spanner::emulator::backend::Catalog;
 using google::spanner::emulator::backend::ChangeStream;
 using google::spanner::emulator::backend::Column;
 using google::spanner::emulator::backend::FunctionCatalog;
+using google::spanner::emulator::backend::
+    kCloudSpannerEmulatorFunctionCatalogName;
 using google::spanner::emulator::backend::KeyColumn;
+using google::spanner::emulator::backend::NamedSchema;
 using google::spanner::emulator::backend::OwningSchema;
 using google::spanner::emulator::backend::SchemaGraph;
 using google::spanner::emulator::backend::Table;
-using google::spanner::emulator::backend::
-    kCloudSpannerEmulatorFunctionCatalogName;
+using google::spanner::emulator::backend::Udf;
 
 namespace postgres_translator::spangres::test {
 
@@ -82,6 +99,12 @@ ChangeStream::Builder change_stream_builder(const std::string& name) {
   ChangeStream::Builder c;
   c.set_name(name).set_id(name);
   return c;
+}
+
+NamedSchema::Builder named_schema_builder(const std::string& name) {
+  NamedSchema::Builder b;
+  b.set_name(name).set_id(name);
+  return b;
 }
 
 // Gets the array type given the element type in the array. Since the types in
@@ -475,6 +498,133 @@ void create_change_stream(zetasql::TypeFactory& type_factory,
   graph->Add(std::move(change_stream));
 }
 
+void create_udf(zetasql::TypeFactory& type_factory, SchemaGraph* graph) {
+  // R"(
+  //     CREATE FUNCTION foo_udf() RETURNS INT64 AS (1);
+  //   )",
+  {
+    auto function_signature = std::make_unique<zetasql::FunctionSignature>(
+        type_factory.get_int64(),
+        std::vector<zetasql::FunctionArgumentType>{},
+        /*context_id=*/-1);
+    Udf::Builder builder;
+    std::unique_ptr<const Udf> function =
+        builder.set_name("foo_udf")
+            .set_signature(std::move(function_signature))
+            .set_body_origin("1")
+            .build();
+    graph->Add(std::move(function));
+  }
+  // R"(
+  //     CREATE FUNCTION udf_schema.bar_udf() RETURNS INT64 AS (2);
+  //   )",
+  {
+    std::unique_ptr<const NamedSchema> udf_schema =
+        named_schema_builder("udf_schema").build();
+    graph->Add(std::move(udf_schema));
+
+    auto function_signature = std::make_unique<zetasql::FunctionSignature>(
+        type_factory.get_int64(),
+        std::vector<zetasql::FunctionArgumentType>{},
+        /*context_id=*/-1);
+    Udf::Builder builder;
+    std::unique_ptr<const Udf> function =
+        builder.set_name("udf_schema.bar_udf")
+            .set_signature(std::move(function_signature))
+            .set_body_origin("2")
+            .build();
+    graph->Add(std::move(function));
+  }
+  // R"(
+  // CREATE FUNCTION foo_udf_with_inputs(a INT64, b INT64)
+  // RETURNS INT64 AS (a + b);
+  //   )",
+  {
+    auto function_signature = std::make_unique<zetasql::FunctionSignature>(
+        type_factory.get_int64(),
+        std::vector<zetasql::FunctionArgumentType>{
+            zetasql::FunctionArgumentType(
+                type_factory.get_int64(),
+                zetasql::FunctionArgumentTypeOptions().set_argument_name(
+                    "a", zetasql::kPositionalOrNamed)),
+            zetasql::FunctionArgumentType(
+                type_factory.get_int64(),
+                zetasql::FunctionArgumentTypeOptions().set_argument_name(
+                    "b", zetasql::kPositionalOrNamed))},
+        /*context_id=*/-1);
+    Udf::Builder builder;
+    std::unique_ptr<const Udf> function =
+        builder.set_name("foo_udf_with_inputs")
+            .set_signature(std::move(function_signature))
+            .set_body_origin("a + b")
+            .build();
+    graph->Add(std::move(function));
+  }
+  // R"(
+  // CREATE FUNCTION foo_udf_with_default_args(a INT64 DEFAULT 1, b
+  // INT64 DEFAULT 2) RETURNS INT64 AS (a + b);
+  //   )",
+  {
+    auto function_signature = std::make_unique<zetasql::FunctionSignature>(
+        type_factory.get_int64(),
+        std::vector<zetasql::FunctionArgumentType>{
+            zetasql::FunctionArgumentType(
+                type_factory.get_int64(),
+                zetasql::FunctionArgumentTypeOptions()
+                    .set_argument_name("a", zetasql::kPositionalOrNamed)
+                    .set_cardinality(zetasql::FunctionEnums::OPTIONAL)
+                    .set_default(zetasql::values::Int64(1))),
+            zetasql::FunctionArgumentType(
+                type_factory.get_int64(),
+                zetasql::FunctionArgumentTypeOptions()
+                    .set_argument_name("b", zetasql::kPositionalOrNamed)
+                    .set_cardinality(zetasql::FunctionEnums::OPTIONAL)
+                    .set_default(zetasql::values::Int64(2)))},
+        /*context_id=*/-1);
+    Udf::Builder builder;
+    std::unique_ptr<const Udf> function =
+        builder.set_name("foo_udf_with_default_args")
+            .set_signature(std::move(function_signature))
+            .set_body_origin("a + b")
+            .build();
+    graph->Add(std::move(function));
+  }
+  // R"(
+  // CREATE FUNCTION generate_array_udf(`start_v` INT64 DEFAULT 1,
+  // `end_v` INT64 DEFAULT 10) RETURNS ARRAY<INT64> AS (
+  //   (SELECT ARRAY_AGG(a_1) AS a_2 FROM UNNEST(PG.GENERATE_ARRAY(start_v,
+  //   end_v)) a_1)
+  // );
+  //   )",
+  {
+    auto function_signature = std::make_unique<zetasql::FunctionSignature>(
+        get_array_type(type_factory, type_factory.get_int64()).value(),
+        std::vector<zetasql::FunctionArgumentType>{
+            zetasql::FunctionArgumentType(
+                type_factory.get_int64(),
+                zetasql::FunctionArgumentTypeOptions()
+                    .set_argument_name("start_v", zetasql::kPositionalOrNamed)
+                    .set_cardinality(zetasql::FunctionEnums::OPTIONAL)
+                    .set_default(zetasql::values::Int64(1))),
+            zetasql::FunctionArgumentType(
+                type_factory.get_int64(),
+                zetasql::FunctionArgumentTypeOptions()
+                    .set_argument_name("end_v", zetasql::kPositionalOrNamed)
+                    .set_cardinality(zetasql::FunctionEnums::OPTIONAL)
+                    .set_default(zetasql::values::Int64(10)))},
+        /*context_id=*/-1);
+    Udf::Builder builder;
+    std::unique_ptr<const Udf> function =
+        builder.set_name("generate_array_udf")
+            .set_signature(std::move(function_signature))
+            .set_body_origin(
+                "(SELECT ARRAY_AGG(a_1) AS a_2 FROM UNNEST(PG.GENERATE_ARRAY("
+                "start_v, end_v)) a_1)")
+            .build();
+    graph->Add(std::move(function));
+  }
+}
+
 std::unique_ptr<const OwningSchema> CreateSchema(
     zetasql::TypeFactory& type_factory) {
   auto graph = std::make_unique<SchemaGraph>();
@@ -565,6 +715,9 @@ std::unique_ptr<const OwningSchema> CreateSchema(
 
   // Simple change stream over keyvalue for TVF testing.
   create_change_stream(type_factory, graph.get());
+
+  // Simple UDF
+  create_udf(type_factory, graph.get());
 
   return std::make_unique<const OwningSchema>(
       std::move(graph),

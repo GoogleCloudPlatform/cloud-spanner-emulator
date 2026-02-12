@@ -2080,6 +2080,137 @@ TEST_P(QueryEngineTest, InsertOnConflictDoUpdateDuplicateInputRowsReturnError) {
                                  "{Int64(10)}")));
 }
 
+TEST_P(QueryEngineTest, InsertOnConflictDoNothingNamedSchema) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        test::CreateSchemaFromDDL(
+            {R"(CREATE SCHEMA test_schema)",
+             R"(CREATE TABLE test_schema.test_table (int64_col bigint primary key,
+            string_col varchar))",
+             R"(CREATE UNIQUE INDEX test_index ON
+           test_schema.test_table (string_col))"},
+            type_factory(), /*proto_descriptor_bytes=*/"",
+            /*dialect=*/POSTGRESQL));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema, test::CreateSchemaFromDDL(
+                    {R"(CREATE SCHEMA test_schema)",
+                     R"(CREATE TABLE test_schema.test_table (int64_col INT64,
+              string_col STRING(MAX)) PRIMARY KEY (int64_col))",
+                     R"(CREATE UNIQUE INDEX test_schema.test_index ON
+              test_schema.test_table (string_col))"},
+                    type_factory(), /*proto_descriptor_bytes=*/""));
+  }
+  test::TestRowReader reader{
+      {{"test_schema.test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {}}}}};
+
+  MockRowWriter writer;
+  QueryResult result;
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_schema.test_table (int64_col, string_col) "
+                "VALUES (1, 'one'), (2, 'two'), (4, 'four') "
+                "ON CONFLICT (int64_col) DO NOTHING"},
+          QueryContext{schema.get(), &reader, &writer}),
+      IsOkAndHolds(Field(&QueryResult::modified_row_count, 3)));
+
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT INTO test_schema.test_table (int64_col, string_col) "
+                  "VALUES (1, 'one'), (2, 'two'), (3, 'three') "
+                  "ON CONFLICT (string_col) DO NOTHING"},
+            QueryContext{schema.get(), &reader, &writer}),
+        IsOkAndHolds(Field(&QueryResult::modified_row_count, 3)));
+  } else {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT INTO test_schema.test_table (int64_col, string_col) "
+                  "VALUES (1, 'one'), (2, 'two'), (3, 'three') "
+                  "ON CONFLICT (string_col) DO NOTHING"},
+            QueryContext{schema.get(), &reader, &writer}),
+        StatusIs(StatusCode::kUnimplemented,
+                 HasSubstr(
+                     "Null filtered index as conflict target is not supported: "
+                     "test_schema.test_index")));
+  }
+
+  // ON UNIQUE CONSTRAINT syntax is only supported in GSQL dialect.
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT INTO test_schema.test_table "
+                  "(int64_col, string_col) VALUES (5, 'five') "
+                  "ON CONFLICT ON UNIQUE CONSTRAINT test_index DO NOTHING"},
+            QueryContext{schema.get(), &reader, &writer}),
+        IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+  }
+}
+
+TEST_P(QueryEngineTest, InsertOnConflictDoUpdateNamedSchema) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        test::CreateSchemaFromDDL(
+            {R"(CREATE SCHEMA test_schema)",
+             R"(CREATE TABLE test_schema.test_table(int64_col bigint primary key,
+            string_col varchar))",
+             R"(CREATE UNIQUE INDEX test_index
+            ON test_schema.test_table (string_col))"},
+            type_factory(), /*proto_descriptor_bytes=*/"",
+            /*dialect=*/POSTGRESQL));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(
+        schema, test::CreateSchemaFromDDL(
+                    {R"(CREATE SCHEMA test_schema)",
+                     R"(CREATE TABLE test_schema.test_table (int64_col INT64,
+            string_col STRING(MAX)) PRIMARY KEY (int64_col))",
+                     R"(CREATE UNIQUE INDEX test_schema.test_index
+            ON test_schema.test_table (string_col))"},
+                    type_factory(), /*proto_descriptor_bytes=*/""));
+  }
+  test::TestRowReader reader{
+      {{"test_schema.test_table",
+        {{"int64_col", "string_col"},
+         {zetasql::types::Int64Type(), zetasql::types::StringType()},
+         {}}}}};
+
+  MockRowWriter writer;
+  QueryResult result;
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_schema.test_table (int64_col, string_col) "
+                "VALUES (1, 'one'), (2, 'two'), (4, 'four') "
+                "ON CONFLICT (int64_col) DO UPDATE SET string_col = 'updated'"},
+          QueryContext{schema.get(), &reader, &writer}),
+      IsOkAndHolds(Field(&QueryResult::modified_row_count, 3)));
+
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT INTO test_schema.test_table (int64_col, string_col) "
+                  "VALUES (1, 'one'), (2, 'two'), (3, 'three') "
+                  "ON CONFLICT (string_col) "
+                  "DO UPDATE SET string_col = 'updated'"},
+            QueryContext{schema.get(), &reader, &writer}),
+        IsOkAndHolds(Field(&QueryResult::modified_row_count, 3)));
+
+    EXPECT_THAT(query_engine().ExecuteSql(
+                    Query{"INSERT INTO test_schema.test_table "
+                          "(int64_col, string_col) VALUES (5, 'five') "
+                          "ON CONFLICT ON UNIQUE CONSTRAINT test_index "
+                          "DO UPDATE SET string_col = 'updated'"},
+                    QueryContext{schema.get(), &reader, &writer}),
+                IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
+  }
+}
+
 TEST_P(QueryEngineTest, TestGetValidChangeStreamMetadataFromChangeStreamQuery) {
   Query query;
   absl::Time start_time = absl::Now();
@@ -2397,6 +2528,115 @@ TEST_P(QueryEngineTest,
           ElementsAre(Int64(2), Int64(2)), ElementsAre(Int64(1), Int64(2)),
           ElementsAre(Int64(4), Int64(2)), ElementsAre(Int64(1), Int64(2)),
           ElementsAre(Int64(4), Int64(2)))));
+}
+
+TEST_P(QueryEngineTest, TestGraphQuantifiedTraversalSingleBound) {
+  // Graph is not supported in PostgreSQL dialect.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      "GRAPH test_graph "
+      "MATCH (src)((a)-[e]->(b) WHERE a != b){2}(n)"
+      "RETURN n.id AS id ORDER BY id DESC"};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), R"(id(INT64) : 4,1,4,2,1,)");
+}
+
+TEST_P(QueryEngineTest, TestGraphQuantifiedTraversalSameBounds) {
+  // Graph is not supported in PostgreSQL dialect.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      "GRAPH test_graph "
+      "MATCH (src)((a)-[e]->(b) WHERE a != b){1,1}(n)"
+      "RETURN n.id AS id ORDER BY id DESC"};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), R"(id(INT64) : 4,1,4,2,)");
+}
+
+TEST_P(QueryEngineTest, TestGraphQuantifiedTraversalLowerAndUpperBounds) {
+  // Graph is not supported in PostgreSQL dialect.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      "GRAPH test_graph "
+      "MATCH (src)((a)-[e]->(b) WHERE a != b){1,3}(n)"
+      "RETURN n.id AS id ORDER BY id DESC"};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result),
+            R"(id(INT64) : 4,4,4,2,2,1,1,1,4,4,4,4,2,2,1,1,)");
+}
+
+TEST_P(QueryEngineTest, TestGraphQuantifiedAnyTraversalSingleBound) {
+  // Graph is not supported in PostgreSQL dialect.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      "GRAPH test_graph "
+      "MATCH ANY (src)((a)-[e]->(b) WHERE a != b){2}(n)"
+      "RETURN n.id AS id ORDER BY id DESC"};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), R"(id(INT64) : 4,1,4,2,1,)");
+}
+
+TEST_P(QueryEngineTest, TestGraphQuantifiedAnyTraversalSameBounds) {
+  // Graph is not supported in PostgreSQL dialect.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      "GRAPH test_graph "
+      "MATCH ANY (src)((a)-[e]->(b) WHERE a != b){1,1}(n)"
+      "RETURN n.id AS id ORDER BY id DESC"};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), R"(id(INT64) : 4,1,4,2,)");
+}
+
+TEST_P(QueryEngineTest, TestGraphQuantifiedAnyTraversalLowerAndUpperBounds) {
+  // Graph is not supported in PostgreSQL dialect.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      "GRAPH test_graph "
+      "MATCH ANY (src)((a)-[e]->(b) WHERE a != b){1,3}(n)"
+      "RETURN n.id AS id ORDER BY id DESC"};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), R"(id(INT64) : 4,2,2,1,4,4,2,1,1,)");
 }
 
 TEST_P(QueryEngineTest, TestJsonbArrayElements) {
@@ -3315,6 +3555,31 @@ TEST_P(QueryEngineTest, JsonbFunctions) {
         << test_case.name
         << " failed with function call: " << test_case.function_call;
   }
+}
+
+// Reproduce b/469669667.
+TEST_P(QueryEngineTest, CastJsonbToTimestamp) {
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
+    return;
+  }
+  QueryResult result;
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      result, query_engine().ExecuteSql(Query{"SELECT '{}'::jsonb ->>'ts';"},
+                                        QueryContext{schema(), reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(
+      GetAllColumnValues(std::move(result.rows)),
+      IsOkAndHolds(ElementsAre(ElementsAre(zetasql::values::NullString()))));
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      result,
+      query_engine().ExecuteSql(
+          Query{"SELECT CAST('{}'::jsonb ->>'ts' AS TIMESTAMP WITH TIME ZONE)"},
+          QueryContext{schema(), reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre(
+                  ElementsAre(zetasql::values::NullTimestamp()))));
 }
 
 TEST_P(QueryEngineTest, QueryingOnViews) {
