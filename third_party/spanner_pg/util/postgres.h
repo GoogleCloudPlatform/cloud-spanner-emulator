@@ -266,10 +266,6 @@ std::string PostgresJoinTypeToString(JoinType join_type);
 // the other variants (for record or range).
 absl::StatusOr<Oid> GetArrayUnnestProcOid();
 
-// Helper function to check if the function call is a Vector Search ANN
-// function.
-absl::StatusOr<bool> IsAnnFunction(FuncExpr* func_expr);
-
 // For converting unnamed function parameters to named parameters.
 inline constexpr absl::string_view kUnnamedFunctionParameterPrefix = "$";
 

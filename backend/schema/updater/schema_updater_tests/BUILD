@@ -62,6 +62,7 @@ cc_library(
     name = "schema_updater_tests",
     testonly = 1,
     srcs = [
+        "alter_table_if_exists.cc",
         "change_stream_test.cc",
         "check_constraint.cc",
         "column_default_values.cc",

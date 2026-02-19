@@ -169,6 +169,7 @@ class SchemaUpdaterTest
             .enable_search_index = true,
             .enable_default_time_zone = true,
             .enable_interleave_in = true,
+            .enable_alter_table_if_exists = true,
         }) {}
   absl::StatusOr<std::unique_ptr<const Schema>> CreateSchema(
       absl::Span<const std::string> statements,

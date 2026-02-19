@@ -30,7 +30,6 @@
 //------------------------------------------------------------------------------
 
 #include "third_party/spanner_pg/util/postgres.h"
-#include <stdbool.h>
 
 #include <string>
 
@@ -709,22 +708,6 @@ absl::StatusOr<Oid> GetArrayUnnestProcOid() {
   return PgBootstrapCatalog::Default()->GetProcOid(pg_catalog_namespace_name,
                                                    kUnnestName,
                                                    {ANYARRAYOID});
-}
-
-absl::StatusOr<bool> IsAnnFunction(FuncExpr* func_expr) {
-  constexpr absl::string_view kAnnFunctionNames[] = {
-      "approx_cosine_distance", "approx_euclidean_distance",
-      "approx_dot_product"};
-  std::string proc_name;
-  ZETASQL_ASSIGN_OR_RETURN(proc_name,
-                   PgBootstrapCatalog::Default()->GetProcName(
-                       func_expr->funcid));
-  for (const absl::string_view ann_function_name : kAnnFunctionNames) {
-    if (proc_name == ann_function_name) {
-      return true;
-    }
-  }
-  return false;
 }
 
 }  // namespace internal

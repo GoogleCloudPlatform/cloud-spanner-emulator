@@ -87,7 +87,7 @@ std::string gen_random(const int len) {
   for (int i = 0; i < len; ++i) {
     tmp_s += alphanum[rand() % (sizeof(alphanum) - 1)];
   }
-  absl::WebSafeBase64Escape(tmp_s, &token_string);
+  token_string = absl::WebSafeBase64Escape(tmp_s);
   return token_string;
 }
 

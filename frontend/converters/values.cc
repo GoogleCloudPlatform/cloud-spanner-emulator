@@ -548,7 +548,8 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
     }
 
     case zetasql::TypeKind::TYPE_BYTES: {
-      absl::Base64Escape(value.bytes_value(), value_pb.mutable_string_value());
+      *value_pb.mutable_string_value() =
+          absl::Base64Escape(value.bytes_value());
       break;
     }
 
@@ -560,13 +561,13 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
     case zetasql::TypeKind::TYPE_PROTO: {
       std::string strvalue;
       absl::CopyCordToString(value.ToCord(), &strvalue);
-      absl::Base64Escape(strvalue, value_pb.mutable_string_value());
+      *value_pb.mutable_string_value() = absl::Base64Escape(strvalue);
       break;
     }
 
     case zetasql::TYPE_TOKENLIST: {
-      absl::Base64Escape(value.tokenlist_value().GetBytes(),
-                         value_pb.mutable_string_value());
+      *value_pb.mutable_string_value() =
+          absl::Base64Escape(value.tokenlist_value().GetBytes());
       break;
     }
 

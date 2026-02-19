@@ -332,17 +332,6 @@ absl::StatusOr<std::tuple<Mutation, int64_t, bool>> BuildInsert(
                       key_offsets->end();
     const auto& column_name = table->GetColumn(i)->Name();
     if (IsGenerated(table->GetColumn(i))) {
-      if (is_key) {
-        // TODO: b/310194797 - GSQL reference implementation returns NULL for
-        // generated keys or columns in POSTGRES dialect. GSQL AST constructed
-        // from Spangres transformer does not contain nodes to compute the
-        // generated columns unlike when ZetaSQL Analyzer is used for
-        // ZetaSQL queries.
-        if (database_dialect == DatabaseDialect::POSTGRESQL &&
-            is_upsert_query) {
-          return error::UnsupportedGeneratedKeyWithUpsertQueries();
-        }
-      }
       if (include_all_returned_columns) {
         column_names.push_back(column_name);
       } else {

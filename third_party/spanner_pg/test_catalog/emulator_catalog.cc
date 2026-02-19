@@ -82,9 +82,14 @@ namespace postgres_translator::spangres::test {
 
 namespace {
 
+int kNextPostgresOid = 10000;
+
 Table::Builder table_builder(const std::string& name) {
   Table::Builder b;
-  b.set_name(name).set_id(name);
+  b.set_name(name)
+    .set_id(name)
+    .set_postgresql_oid(kNextPostgresOid++)
+    .set_primary_key_index_postgresql_oid(kNextPostgresOid++);
   return b;
 }
 
@@ -95,15 +100,21 @@ Column::Builder column_builder(const std::string& name, const Table* table,
   return c;
 }
 
+KeyColumn::Builder key_column_builder(const Column* column) {
+  KeyColumn::Builder c;
+  c.set_column(column).set_postgresql_oid(kNextPostgresOid++);
+  return c;
+}
+
 ChangeStream::Builder change_stream_builder(const std::string& name) {
   ChangeStream::Builder c;
-  c.set_name(name).set_id(name);
+  c.set_name(name).set_id(name).set_tvf_postgresql_oid(kNextPostgresOid++);
   return c;
 }
 
 NamedSchema::Builder named_schema_builder(const std::string& name) {
   NamedSchema::Builder b;
-  b.set_name(name).set_id(name);
+  b.set_name(name).set_id(name).set_postgresql_oid(kNextPostgresOid++);
   return b;
 }
 
@@ -136,7 +147,7 @@ void create_key_value_table(const std::string table_name,
   std::unique_ptr<const Column> key_column =
       column_builder(key_column_name, tb.get(), key_column_type).build();
   std::unique_ptr<const KeyColumn> key_column_constraint =
-      KeyColumn::Builder().set_column(key_column.get()).build();
+      key_column_builder(key_column.get()).build();
   std::unique_ptr<const Column> value_column =
       column_builder(value_column_name, tb.get(), value_column_type)
           .set_declared_max_length(value_column_max_length)
@@ -217,7 +228,7 @@ void create_primitive_types_table(zetasql::TypeFactory& type_factory,
       column_builder("uuid_value", tb.get(), type_factory.get_uuid()).build();
 
   std::unique_ptr<const KeyColumn> int64_value_primary =
-      KeyColumn::Builder().set_column(int64_value.get()).build();
+      key_column_builder(int64_value.get()).build();
 
   std::unique_ptr<const Table> table =
       tb.add_column(int64_value.get())
@@ -337,7 +348,7 @@ void create_array_types_table(zetasql::TypeFactory& type_factory,
       column_builder("uuid_array", tb.get(), uuid_array_type).build();
 
   std::unique_ptr<const KeyColumn> primary_key_constraint =
-      KeyColumn::Builder().set_column(key_column.get()).build();
+      key_column_builder(key_column.get()).build();
   std::unique_ptr<const Table> table =
       tb.add_column(key_column.get())
           .add_column(bool_array.get())
@@ -385,7 +396,7 @@ void create_withpseudo_table(zetasql::TypeFactory& type_factory,
   std::unique_ptr<const Column> key_column =
       column_builder("key", tb.get(), type_factory.get_int64()).build();
   std::unique_ptr<const KeyColumn> primary_key_constraint =
-      KeyColumn::Builder().set_column(key_column.get()).build();
+      key_column_builder(key_column.get()).build();
   std::unique_ptr<const Column> hidden1_column =
       column_builder("hidden1", tb.get(), type_factory.get_int64())
           .set_hidden(true)
@@ -423,12 +434,13 @@ void create_generated_columns_table(zetasql::TypeFactory& type_factory,
   std::unique_ptr<const Column> key_column =
       column_builder("a", tb.get(), type_factory.get_int64()).build();
   std::unique_ptr<const KeyColumn> primary_key_constraint =
-      KeyColumn::Builder().set_column(key_column.get()).build();
+      key_column_builder(key_column.get()).build();
   std::unique_ptr<const Column> value_column =
       column_builder("b", tb.get(), type_factory.get_int64())
           .set_expression("(a * 2)")
           .set_original_expression("(a * 2)")
           .add_dependent_column_name("a")
+          .set_postgresql_oid(kNextPostgresOid++)
           .build();
   std::unique_ptr<const Table> table =
       tb.add_column(key_column.get())
@@ -467,7 +479,7 @@ void create_many_columns_table(const std::string table_name,
   std::unique_ptr<const Column> five_column =
       column_builder("five", tb.get(), type_factory.get_int64()).build();
   std::unique_ptr<const KeyColumn> primary_key_constraint =
-      KeyColumn::Builder().set_column(one_column.get()).build();
+      key_column_builder(one_column.get()).build();
   std::unique_ptr<const Table> table =
       tb.add_column(one_column.get())
           .add_column(two_column.get())
@@ -482,6 +494,47 @@ void create_many_columns_table(const std::string table_name,
   graph->Add(std::move(three_column));
   graph->Add(std::move(four_column));
   graph->Add(std::move(five_column));
+  graph->Add(std::move(table));
+}
+
+void create_ann_vector_base_table(zetasql::TypeFactory& type_factory,
+                                  SchemaGraph* graph) {
+  // R"(
+  //    CREATE TABLE annvectorbase (
+  //      primary_key INT64 NOT NULL,
+  //      a1 INT64,
+  //      a2 INT64,
+  //      embedding ARRAY<FLOAT>(vector_length=>128),
+  //    ) PRIMARY KEY(primary_key);
+  Table::Builder tb = table_builder("annvectorbase");
+  std::unique_ptr<const Column> primary_key_column =
+      column_builder("primary_key", tb.get(), type_factory.get_int64())
+          .set_nullable(false)
+          .build();
+  std::unique_ptr<const KeyColumn> primary_key_constraint =
+      key_column_builder(primary_key_column.get()).build();
+  std::unique_ptr<const Column> a1_column =
+      column_builder("a1", tb.get(), type_factory.get_int64()).build();
+  std::unique_ptr<const Column> a2_column =
+      column_builder("a2", tb.get(), type_factory.get_int64()).build();
+  const zetasql::Type* float_array_type =
+      get_array_type(type_factory, type_factory.get_float()).value();
+  std::unique_ptr<const Column> embedding_column =
+      column_builder("embedding", tb.get(), float_array_type)
+          .set_vector_length(128)
+          .build();
+  std::unique_ptr<const Table> table =
+      tb.add_column(primary_key_column.get())
+          .add_column(a1_column.get())
+          .add_column(a2_column.get())
+          .add_column(embedding_column.get())
+          .add_key_column(primary_key_constraint.get())
+          .build();
+  graph->Add(std::move(primary_key_column));
+  graph->Add(std::move(a1_column));
+  graph->Add(std::move(a2_column));
+  graph->Add(std::move(embedding_column));
+  graph->Add(std::move(primary_key_constraint));
   graph->Add(std::move(table));
 }
 
@@ -718,6 +771,8 @@ std::unique_ptr<const OwningSchema> CreateSchema(
 
   // Simple UDF
   create_udf(type_factory, graph.get());
+
+  create_ann_vector_base_table(type_factory, graph.get());
 
   return std::make_unique<const OwningSchema>(
       std::move(graph),

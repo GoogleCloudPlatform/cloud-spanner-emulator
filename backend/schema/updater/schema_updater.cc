@@ -5156,6 +5156,9 @@ absl::Status SchemaUpdaterImpl::AlterTable(
   const Table* table =
       latest_schema_->FindTableCaseSensitive(alter_table.table_name());
   if (table == nullptr) {
+    if (alter_table.existence_modifier() == ddl::ExistenceModifier::IF_EXISTS) {
+      return absl::OkStatus();
+    }
     return error::TableNotFound(alter_table.table_name());
   }
 
@@ -6757,6 +6760,7 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
                                    .flags()
                                    .enable_serial_auto_increment,
         .enable_uuid_type = true,
+        // TODO: Remove this tag after the feature is enabled.
     };
     ZETASQL_ASSIGN_OR_RETURN(ddl::DDLStatementList ddl_statement_list,
                      translator->TranslateForEmulator(parser_output, options));
