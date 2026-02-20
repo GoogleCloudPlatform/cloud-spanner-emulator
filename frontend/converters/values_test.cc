@@ -206,7 +206,7 @@ TEST_F(ValueProtos, ConvertsBasicTypesBetweenValuesAndProtos) {
   ::emulator::tests::common::Simple simple_proto;
   simple_proto.set_field("ProtoValue");
   std::string encoded_field;
-  absl::Base64Escape(simple_proto.SerializeAsString(), &encoded_field);
+  encoded_field = absl::Base64Escape(simple_proto.SerializeAsString());
 
   std::vector<std::pair<zetasql::Value, std::string>> test_cases{
       {Null(StringType()), "null_value: NULL_VALUE"},
@@ -522,7 +522,7 @@ TEST_F(ValueProtos, DoesNotParseInvalidProtoAndEnum) {
               StatusIs(absl::StatusCode::kFailedPrecondition));
 
   std::string encoded_field;
-  absl::Base64Escape("invalid_field : random bytes", &encoded_field);
+  encoded_field = absl::Base64Escape("invalid_field : random bytes");
   EXPECT_EQ("Proto<emulator.tests.common.Simple>{<unparseable>}",
             ValueFromProto(
                 PARSE_TEXT_PROTO("string_value: \"" + encoded_field + "\""),

@@ -6,6 +6,9 @@ build --host_cxxopt=-std=c++17
 # flag enabled gRPC workarounds for building under bazel.
 build --copt -DGRPC_BAZEL_BUILD
 
+# Disable debug symbols for release builds.
+build --copt -DNDEBUG
+
 # Required for python test runner to find gcloud binary.
 test --test_env GCLOUD_DIR
 

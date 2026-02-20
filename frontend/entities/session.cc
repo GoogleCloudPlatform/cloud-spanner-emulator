@@ -23,10 +23,9 @@
 
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
-#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
 #include "backend/transaction/options.h"
@@ -38,7 +37,6 @@
 #include "frontend/converters/reads.h"
 #include "frontend/converters/time.h"
 #include "frontend/entities/transaction.h"
-#include "absl/status/status.h"
 #include "zetasql/base/status_macros.h"
 
 namespace google {
@@ -147,7 +145,8 @@ absl::StatusOr<std::shared_ptr<Transaction>> Session::CreateMultiUseTransaction(
       return error::Internal(
           "Transaction manager is null on a multiplexed session");
     }
-    ZETASQL_RETURN_IF_ERROR(mux_txn_manager_->AddToCurrentTransactions(txn, txn->id()));
+    ZETASQL_RETURN_IF_ERROR(mux_txn_manager_->AddToCurrentTransactions(
+        txn, database_->database_uri(), txn->id()));
     // If the last clear time is older than staleness duration, clear the txn
     // map.
     mux_txn_manager_->MaybeClearOldTransactions();
@@ -242,7 +241,8 @@ absl::StatusOr<std::shared_ptr<Transaction>> Session::FindAndUseTransaction(
   const backend::TransactionID& id = TransactionIDFromProto(bytes);
   absl::MutexLock lock(&mu_);
   if (multiplexed_) {
-    return mux_txn_manager_->GetCurrentTransactionOnMultiplexedSession(id);
+    return mux_txn_manager_->GetCurrentTransactionOnMultiplexedSession(
+        database_->database_uri(), id);
   }
   if (id == backend::kInvalidTransactionID) {
     return error::InvalidTransactionID(backend::kInvalidTransactionID);

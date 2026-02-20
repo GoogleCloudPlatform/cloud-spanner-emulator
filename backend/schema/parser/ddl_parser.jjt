@@ -918,7 +918,7 @@ void alter_database_statement() :
 void alter_table_statement() :
 {}
 {
-  <TABLE> (qualified_identifier() #table_name)
+  <TABLE> [ if_exists() ] (qualified_identifier() #table_name)
   (   LOOKAHEAD(3) <DROP> <CONSTRAINT> #drop_constraint identifier() #constraint_name
     | LOOKAHEAD(3) <DROP> <ROW> <DELETION> <POLICY> #drop_row_deletion_policy
     | LOOKAHEAD(3) <DROP> <SYNONYM> qualified_identifier() #drop_synonym

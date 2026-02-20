@@ -3273,13 +3273,6 @@ absl::Status NullFilteredIndexAsConflictTargetIsNotFound(
                        index_name));
 }
 
-absl::Status UnsupportedGeneratedKeyWithUpsertQueries() {
-  return absl::Status(
-      absl::StatusCode::kUnimplemented,
-      absl::Substitute("Insert query with ON CONFLICT clause on table with "
-                       "generated key is not supported in Emulator"));
-}
-
 absl::Status NoFeatureSupportDifferentTypeArrayCasts(
     absl::string_view from_type, absl::string_view to_type) {
   return absl::Status(

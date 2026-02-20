@@ -774,7 +774,6 @@ absl::Status UnsupportedReturningWithUpsertQueries(
 absl::Status ConflictTargetNotFound();
 absl::Status NullFilteredIndexAsConflictTargetIsNotFound(
     absl::string_view index_name);
-absl::Status UnsupportedGeneratedKeyWithUpsertQueries();
 absl::Status NoFeatureSupportDifferentTypeArrayCasts(
     absl::string_view from_type, absl::string_view to_type);
 absl::Status UnsupportedTablesampleRepeatable();

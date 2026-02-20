@@ -3954,32 +3954,6 @@ TEST_P(QueryEngineTest, UpsertDMLWithReturningAction) {
                   ValueList{Int64(10), String("ten"), String("INSERT")})));
 }
 
-TEST_P(QueryEngineTest, UpsertPGqueryWithGeneratedKeyUnsupported) {
-  if (GetParam() == GOOGLE_STANDARD_SQL) {
-    GTEST_SKIP();
-  }
-
-  MockRowWriter writer;
-  EXPECT_THAT(
-      query_engine().ExecuteSql(
-          Query{"INSERT INTO test_table(k1_pk, k2, k4) VALUES(1, 1, 1) "
-                "ON CONFLICT(k1_pk, k3gen_storedpk) DO NOTHING"},
-          QueryContext{gpk_schema(), gpk_table_reader(), &writer}),
-      StatusIs(StatusCode::kUnimplemented,
-               HasSubstr("ON CONFLICT clause on table with generated key is "
-                         "not supported in Emulator")));
-
-  EXPECT_THAT(
-      query_engine().ExecuteSql(
-          Query{"INSERT INTO test_table(k1_pk, k2, k4) VALUES(1, 1, 1) "
-                "ON CONFLICT(k1_pk,k3gen_storedpk) DO UPDATE SET "
-                "k1_pk = excluded.k1_pk, k2 = excluded.k2, k4 = excluded.k4"},
-          QueryContext{gpk_schema(), gpk_table_reader(), &writer}),
-      StatusIs(StatusCode::kUnimplemented,
-               HasSubstr("ON CONFLICT clause on table with generated key is "
-                         "not supported in Emulator")));
-}
-
 TEST_P(QueryEngineTest, BitReverseUnsupportedWhenFlagIsOff) {
   std::string spanner_prefix = "";
   if (GetParam() == POSTGRESQL) {
@@ -5395,7 +5369,8 @@ class GeneratedPrimaryKeyTest : public QueryEngineTest {
   RowReader* reader() { return &reader_; }
   void SetUp() override {
     ZETASQL_ASSERT_OK_AND_ASSIGN(gpkschema_,
-                         test::CreateGpkSchemaWithOneTable(type_factory()));
+                         test::CreateGpkSchemaWithOneTable(
+                             type_factory(), /* dialect */ GetParam()));
     query_engine_ =
         std::make_unique<QueryEngine>(type_factory(), gpkschema_.get());
     action_manager_ = std::make_unique<ActionManager>();
@@ -5419,7 +5394,14 @@ class GeneratedPrimaryKeyTest : public QueryEngineTest {
   std::unique_ptr<ActionManager> action_manager_;
 };
 
-TEST_F(GeneratedPrimaryKeyTest, ExecuteInsertsTwoRows) {
+INSTANTIATE_TEST_SUITE_P(
+    GeneratedPrimaryKeyPerDialectTests, GeneratedPrimaryKeyTest,
+    testing::Values(GOOGLE_STANDARD_SQL, POSTGRESQL),
+    [](const testing::TestParamInfo<QueryEngineTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(GeneratedPrimaryKeyTest, ExecuteInsertsTwoRows) {
   MockRowWriter writer;
   EXPECT_CALL(writer,
               Write(Property(
@@ -5443,7 +5425,7 @@ TEST_F(GeneratedPrimaryKeyTest, ExecuteInsertsTwoRows) {
   EXPECT_EQ(result.modified_row_count, 2);
 }
 
-TEST_F(GeneratedPrimaryKeyTest, FailsExecuteInsertsTwoRowsIfGpkDisabled) {
+TEST_P(GeneratedPrimaryKeyTest, FailsExecuteInsertsTwoRowsIfGpkDisabled) {
   test::ScopedEmulatorFeatureFlagsSetter setter({.enable_generated_pk = false});
   MockRowWriter writer;
   EXPECT_THAT(
@@ -5455,7 +5437,7 @@ TEST_F(GeneratedPrimaryKeyTest, FailsExecuteInsertsTwoRowsIfGpkDisabled) {
                          "({pk#k1_pk:3, pk#k3gen_storedpk:NULL})")));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, ExecuteSqlDeleteRows) {
+TEST_P(GeneratedPrimaryKeyTest, ExecuteSqlDeleteRows) {
   MockRowWriter writer;
   EXPECT_CALL(
       writer,
@@ -5477,7 +5459,7 @@ TEST_F(GeneratedPrimaryKeyTest, ExecuteSqlDeleteRows) {
       IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, ExecuteSqlUpdatesRows) {
+TEST_P(GeneratedPrimaryKeyTest, ExecuteSqlUpdatesRows) {
   MockRowWriter writer;
   EXPECT_CALL(writer,
               Write(Property(
@@ -5500,7 +5482,7 @@ TEST_F(GeneratedPrimaryKeyTest, ExecuteSqlUpdatesRows) {
       IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, CannotInsertDuplicateValuesForPrimaryKey) {
+TEST_P(GeneratedPrimaryKeyTest, CannotInsertDuplicateValuesForPrimaryKey) {
   MockRowWriter writer;
   EXPECT_THAT(
       query_engine().ExecuteSql(Query{"INSERT INTO test_table (k1_pk,k2,k4) "
@@ -5511,20 +5493,18 @@ TEST_F(GeneratedPrimaryKeyTest, CannotInsertDuplicateValuesForPrimaryKey) {
                          "({pk#k1_pk:2, pk#k3gen_storedpk:2})")));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, CannotUpdatePrimaryKey) {
+TEST_P(GeneratedPrimaryKeyTest, CannotUpdatePrimaryKey) {
   MockRowWriter writer;
   EXPECT_THAT(
       query_engine().ExecuteSql(
           Query{
               "UPDATE test_table SET k3gen_storedpk=5 WHERE k3gen_storedpk=2"},
           QueryContext{schema(), reader(), &writer}),
-      StatusIs(
-          StatusCode::kInvalidArgument,
-          HasSubstr(
-              "Cannot UPDATE value on non-writable column: k3gen_storedpk")));
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Cannot UPDATE value on non-writable column")));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, ExecuteInsertWithReturning) {
+TEST_P(GeneratedPrimaryKeyTest, ExecuteInsertWithReturning) {
   MockRowWriter writer;
   EXPECT_CALL(writer,
               Write(Property(
@@ -5541,13 +5521,15 @@ TEST_F(GeneratedPrimaryKeyTest, ExecuteInsertWithReturning) {
       .Times(1)
       .WillOnce(Return(absl::OkStatus()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      QueryResult result,
-      query_engine().ExecuteSql(
-          Query{absl::StrCat("INSERT INTO test_table (k1_pk,k2,k4) "
-                             "VALUES(3,3,4), (3,4,5) ",
-                             "THEN RETURN k2, k3gen_storedpk, k5")},
-          QueryContext{schema(), reader(), &writer}));
+  Query query{
+      absl::StrCat("INSERT INTO test_table (k1_pk,k2,k4) "
+                   "VALUES(3,3,4), (3,4,5) ",
+                   GetParam() == POSTGRESQL ? "RETURNING" : "THEN RETURN",
+                   " k2, k3gen_storedpk, k5")};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(QueryResult result,
+                       query_engine().ExecuteSql(
+                           query, QueryContext{schema(), reader(), &writer}));
   ASSERT_NE(result.rows, nullptr);
   EXPECT_EQ(result.modified_row_count, 2);
   EXPECT_THAT(GetColumnNames(*result.rows),
@@ -5560,7 +5542,7 @@ TEST_F(GeneratedPrimaryKeyTest, ExecuteInsertWithReturning) {
                   ValueList{Int64(4), Int64(4), Int64(6)})));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, ExecuteUpdateWithReturning) {
+TEST_P(GeneratedPrimaryKeyTest, ExecuteUpdateWithReturning) {
   MockRowWriter writer;
   EXPECT_CALL(writer,
               Write(Property(
@@ -5576,12 +5558,15 @@ TEST_F(GeneratedPrimaryKeyTest, ExecuteUpdateWithReturning) {
                                 ValueList{Int64(4), Int64(4), Int64(8)})))))))
       .Times(1)
       .WillOnce(Return(absl::OkStatus()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      QueryResult result,
-      query_engine().ExecuteSql(Query{"UPDATE test_table "
-                                      "SET k4 = 8 WHERE k3gen_storedpk > 1 "
-                                      "THEN RETURN k2, k3gen_storedpk, k5"},
-                                QueryContext{schema(), reader(), &writer}));
+  Query query{
+      absl::StrCat("UPDATE test_table "
+                   "SET k4 = 8 WHERE k3gen_storedpk > 1 ",
+                   GetParam() == POSTGRESQL ? "RETURNING" : "THEN RETURN",
+                   " k2, k3gen_storedpk, k5")};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(QueryResult result,
+                       query_engine().ExecuteSql(
+                           query, QueryContext{schema(), reader(), &writer}));
 
   ASSERT_NE(result.rows, nullptr);
   EXPECT_EQ(result.modified_row_count, 2);
@@ -5596,7 +5581,7 @@ TEST_F(GeneratedPrimaryKeyTest, ExecuteUpdateWithReturning) {
                   ValueList{Int64(4), Int64(4), Int64(9)})));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, ExecuteDeleteWithReturning) {
+TEST_P(GeneratedPrimaryKeyTest, ExecuteDeleteWithReturning) {
   MockRowWriter writer;
   EXPECT_CALL(
       writer,
@@ -5611,12 +5596,16 @@ TEST_F(GeneratedPrimaryKeyTest, ExecuteDeleteWithReturning) {
                                             Key{{Int64(4), Int64(4)}}))))))))
       .Times(1)
       .WillOnce(Return(absl::OkStatus()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      QueryResult result,
-      query_engine().ExecuteSql(Query{"DELETE FROM test_table "
-                                      "WHERE k3gen_storedpk > 1 "
-                                      "THEN RETURN k2, k3gen_storedpk, k5"},
-                                QueryContext{schema(), reader(), &writer}));
+
+  Query query{
+      absl::StrCat("DELETE FROM test_table "
+                   "WHERE k3gen_storedpk > 1 ",
+                   GetParam() == POSTGRESQL ? "RETURNING" : "THEN RETURN",
+                   " k2, k3gen_storedpk, k5")};
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(QueryResult result,
+                       query_engine().ExecuteSql(
+                           query, QueryContext{schema(), reader(), &writer}));
 
   ASSERT_NE(result.rows, nullptr);
   EXPECT_EQ(result.modified_row_count, 2);
@@ -5631,12 +5620,15 @@ TEST_F(GeneratedPrimaryKeyTest, ExecuteDeleteWithReturning) {
                   ValueList{Int64(4), Int64(4), Int64(5)})));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, InsertOrIgnoreGPK) {
+TEST_P(GeneratedPrimaryKeyTest, InsertOrIgnoreGPK) {
   // The insert statement inserts 1 new row and ignored the existing row with
   // primary key (k1_pk: 2, k3gen_storedpk:2).
-  std::string sql =
-      "INSERT OR IGNORE INTO test_table (k1_pk, k2, k4) "
-      "VALUES (2, 2, 8), (3, 3, 12)";
+  std::string sql = GetParam() == POSTGRESQL
+                        ? "INSERT INTO test_table (k1_pk, k2, k4) "
+                          "VALUES (2, 2, 8), (3, 3, 12) "
+                          "ON CONFLICT (k1_pk, k3gen_storedpk) DO NOTHING"
+                        : "INSERT OR IGNORE INTO test_table (k1_pk, k2, k4) "
+                          "VALUES (2, 2, 8), (3, 3, 12)";
   MockRowWriter writer;
   EXPECT_CALL(
       writer,
@@ -5656,7 +5648,7 @@ TEST_F(GeneratedPrimaryKeyTest, InsertOrIgnoreGPK) {
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, InsertOnConflictDoNothingGPK) {
+TEST_P(GeneratedPrimaryKeyTest, InsertOnConflictDoNothingGPK) {
   // The insert statement inserts 1 new row and ignores the existing row with
   // primary key (k1_pk: 2, k3gen_storedpk:2).
   std::string sql =
@@ -5681,9 +5673,11 @@ TEST_F(GeneratedPrimaryKeyTest, InsertOnConflictDoNothingGPK) {
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 1)));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, InsertOnConflictDoUpdateGPKReadsStoredGPK) {
+TEST_P(GeneratedPrimaryKeyTest, InsertOnConflictDoUpdateGPKReadsStoredGPK) {
   // The insert statement inserts 1 new row and updates the existing row with
   // primary key (k1_pk:2, k3gen_storedpk:2).
+  int expected_write_count = GetParam() == POSTGRESQL ? 1 : 2;
+
   std::string sql =
       "INSERT INTO test_table (k1_pk, k2, k4) VALUES (2, 2, 10), (3, 3, 12) "
       "ON CONFLICT(k1_pk, k3gen_storedpk) "
@@ -5700,7 +5694,7 @@ TEST_F(GeneratedPrimaryKeyTest, InsertOnConflictDoUpdateGPKReadsStoredGPK) {
                     std::vector<std::string>{"k1_pk", "k2", "k4"}),
               Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
                                            Int64(3), Int64(3), Int64(12)})))))))
-      .Times(2)
+      .Times(expected_write_count)
       .WillOnce(Return(absl::OkStatus()));
 
   EXPECT_CALL(
@@ -5714,12 +5708,17 @@ TEST_F(GeneratedPrimaryKeyTest, InsertOnConflictDoUpdateGPKReadsStoredGPK) {
                          Field(&MutationOp::rows,
                                UnorderedElementsAre(ValueList{
                                    Int64(2), Int64(2), Int64(1002)})))))))
-      .Times(2)
+      .Times(expected_write_count)
       .WillOnce(Return(absl::OkStatus()));
   EXPECT_THAT(query_engine().ExecuteSql(
                   Query{sql}, QueryContext{schema(), reader(), &writer}),
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
 
+  if (GetParam() == POSTGRESQL) {
+    // PostgreSQL dialect does not support STRUCTs which are used in the
+    // INSERT...SELECT statement below.
+    return;
+  }
   // Test same input with INSERT...SELECT
   sql =
       "INSERT INTO test_table (k1_pk, k2, k4) "
@@ -5731,7 +5730,7 @@ TEST_F(GeneratedPrimaryKeyTest, InsertOnConflictDoUpdateGPKReadsStoredGPK) {
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, InsertOnConflictDoUpdateGPKReadsNonStoredGPK) {
+TEST_P(GeneratedPrimaryKeyTest, InsertOnConflictDoUpdateGPKReadsNonStoredGPK) {
   // The insert statement inserts 1 new row and ignores the existing row with
   // primary key (k1_pk: 2, k3gen_storedpk:2).
   std::string sql =
@@ -5774,16 +5773,25 @@ TEST_F(GeneratedPrimaryKeyTest, InsertOnConflictDoUpdateGPKReadsNonStoredGPK) {
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
 }
 
-TEST_F(GeneratedPrimaryKeyTest,
+TEST_P(GeneratedPrimaryKeyTest,
        InsertOnConflictDoUpdateUniqueIndexAsConflictTarget) {
   // The insert statement inserts 1 new row (3, 3, 12) and updates an existing
   // row since k4:1 already exists in the table.
   std::string sql =
       "INSERT INTO test_table (k1_pk, k2, k4) VALUES (2, 2, 1), (3, 3, 12) "
       "ON CONFLICT (k5) "
-      "DO UPDATE "
-      "SET k2 = excluded.k2 + test_table.k2";
+      "DO UPDATE SET k2 = excluded.k2 + test_table.k2";
+
   MockRowWriter writer;
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(query_engine().ExecuteSql(
+                    Query{sql}, QueryContext{schema(), reader(), &writer}),
+                StatusIs(StatusCode::kUnimplemented,
+                         HasSubstr("Null filtered index as conflict target is "
+                                   "not supported")));
+    return;
+  }
+
   EXPECT_CALL(
       writer,
       Write(Property(
@@ -5816,14 +5824,20 @@ TEST_F(GeneratedPrimaryKeyTest,
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, InsertOrIgnoreGPKWithReturning) {
+TEST_P(GeneratedPrimaryKeyTest, InsertOrIgnoreGPKWithReturning) {
   // The insert statement inserts 2 new row. Ignores the existing row with
   // primary key (k1_pk: 2, k3gen_storedpk:2) and the 2nd insert row
   // with the duplicate key of (k1_pk:3, kggen_storedpk:3).
   std::string sql =
-      "INSERT OR IGNORE INTO test_table (k1_pk, k2, k4) "
-      "VALUES (2, 2, 8), (3, 3, 12), (5, 5, 20), (3, 3, 12) "
-      "THEN RETURN k2, k3gen_storedpk, k5";
+      GetParam() == POSTGRESQL
+          ? "INSERT INTO test_table (k1_pk, k2, k4) "
+            "VALUES (2, 2, 8), (3, 3, 12), (5, 5, 20), (3, 3, 12) "
+            "ON CONFLICT(k1_pk, k3gen_storedpk) "
+            "DO NOTHING "
+            "RETURNING k2, k3gen_storedpk, k5"
+          : "INSERT OR IGNORE INTO test_table (k1_pk, k2, k4) "
+            "VALUES (2, 2, 8), (3, 3, 12), (5, 5, 20), (3, 3, 12) "
+            "THEN RETURN k2, k3gen_storedpk, k5";
   MockRowWriter writer;
   EXPECT_CALL(writer,
               Write(Property(
@@ -5855,12 +5869,18 @@ TEST_F(GeneratedPrimaryKeyTest, InsertOrIgnoreGPKWithReturning) {
                   ValueList{Int64(5), Int64(5), Int64(21)})));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, InsertOrUpdateGPK) {
+TEST_P(GeneratedPrimaryKeyTest, InsertOrUpdateGPK) {
   // The insert statement inserts 1 new row and updates the existing row with
   // primary key (k1_pk:2, k3gen_storedpk:2).
   std::string sql =
-      "INSERT OR UPDATE INTO test_table (k1_pk, k2, k4) "
-      "VALUES (2, 2, 10), (3, 3, 12)";
+      GetParam() == POSTGRESQL
+          ? "INSERT INTO test_table (k1_pk, k2, k4) "
+            "VALUES (2, 2, 10), (3, 3, 12) "
+            "ON CONFLICT(k1_pk, k3gen_storedpk) "
+            "DO UPDATE "
+            "SET k1_pk = excluded.k1_pk, k2 = excluded.k2, k4 = excluded.k4"
+          : "INSERT OR UPDATE INTO test_table (k1_pk, k2, k4) "
+            "VALUES (2, 2, 10), (3, 3, 12)";
   MockRowWriter writer;
   EXPECT_CALL(writer,
               Write(Property(
@@ -5881,13 +5901,20 @@ TEST_F(GeneratedPrimaryKeyTest, InsertOrUpdateGPK) {
               IsOkAndHolds(Field(&QueryResult::modified_row_count, 2)));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, InsertOrUpdateGPKWithReturning) {
+TEST_P(GeneratedPrimaryKeyTest, InsertOrUpdateGPKWithReturning) {
   // The insert statement inserts 2 new row. Updates the existing row with
   // primary key (k1_pk: 2, k3gen_storedpk:2).
   std::string sql =
-      "INSERT OR UPDATE INTO test_table (k1_pk, k2, k4) "
-      "VALUES (2, 2, 8), (3, 3, 12) "
-      "THEN RETURN k2, k3gen_storedpk, k4, k5";
+      GetParam() == POSTGRESQL
+          ? "INSERT INTO test_table (k1_pk, k2, k4) "
+            "VALUES (2, 2, 8), (3, 3, 12) "
+            "ON CONFLICT(k1_pk, k3gen_storedpk) "
+            "DO UPDATE "
+            "SET k1_pk = excluded.k1_pk, k2 = excluded.k2, k4 = excluded.k4 "
+            "RETURNING k2, k3gen_storedpk, k4, k5"
+          : "INSERT OR UPDATE INTO test_table (k1_pk, k2, k4) "
+            "VALUES (2, 2, 8), (3, 3, 12) "
+            "THEN RETURN k2, k3gen_storedpk, k4, k5";
   MockRowWriter writer;
   EXPECT_CALL(writer,
               Write(Property(
@@ -5919,13 +5946,19 @@ TEST_F(GeneratedPrimaryKeyTest, InsertOrUpdateGPKWithReturning) {
                   ValueList{Int64(3), Int64(3), Int64(12), Int64(13)})));
 }
 
-TEST_F(GeneratedPrimaryKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
+TEST_P(GeneratedPrimaryKeyTest, InsertOrUpdateDuplicateInputRowsReturnError) {
   // Spanner does not allow duplicate insert rows with same key.
   // The insert statement inserts 2 rows with same key
   // (k1_pk:2, k3gen_storedpk:5).
   std::string sql =
-      "INSERT OR UPDATE INTO test_table (k1_pk, k2, k4) "
-      "VALUES (2, 5, 10), (2, 5, 100)";
+      GetParam() == POSTGRESQL
+          ? "INSERT INTO test_table (k1_pk, k2, k4) "
+            "VALUES (2, 5, 10), (2, 5, 100) "
+            "ON CONFLICT(k1_pk, k3gen_storedpk) "
+            "DO UPDATE "
+            "SET k1_pk = excluded.k1_pk, k2 = excluded.k2, k4 = excluded.k4"
+          : "INSERT OR UPDATE INTO test_table (k1_pk, k2, k4) "
+            "VALUES (2, 5, 10), (2, 5, 100)";
   MockRowWriter writer;
 
   EXPECT_THAT(query_engine().ExecuteSql(

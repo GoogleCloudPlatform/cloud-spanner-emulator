@@ -17,6 +17,8 @@
 #include "frontend/collections/multiplexed_session_transaction_manager.h"
 
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/status/status.h"
@@ -51,42 +53,42 @@ MultiplexedSessionTransactionManager::MultiplexedSessionTransactionManager(
       staleness_check_duration_(staleness_check_duration) {}
 
 absl::Status MultiplexedSessionTransactionManager::AddToCurrentTransactions(
-    std::shared_ptr<Transaction> txn, backend::TransactionID txn_id) {
+    std::shared_ptr<Transaction> txn, const std::string& database_uri,
+    backend::TransactionID txn_id) {
   absl::MutexLock lock(&mu_);
-  current_transactions_.emplace(txn_id, txn);
+  current_transactions_.emplace(std::make_pair(database_uri, txn_id), txn);
   return absl::OkStatus();
 }
 
 absl::StatusOr<std::shared_ptr<Transaction>>
 MultiplexedSessionTransactionManager::GetCurrentTransactionOnMultiplexedSession(
-    backend::TransactionID txn_id) {
+    const std::string& database_uri, backend::TransactionID txn_id) {
   absl::MutexLock lock(&mu_);
-  if (current_transactions_.find(txn_id) != current_transactions_.end()) {
+  auto it = current_transactions_.find(std::make_pair(database_uri, txn_id));
+  if (it != current_transactions_.end()) {
     // Transaction exists
-    return current_transactions_[txn_id];
+    return it->second;
   }
   return error::TransactionNotFound(txn_id);
 }
 
 void MultiplexedSessionTransactionManager::RemoveFromCurrentTransactionsLocked(
-    backend::TransactionID txn_id) {
-  current_transactions_.erase(txn_id);
+    const std::string& database_uri, backend::TransactionID txn_id) {
+  current_transactions_.erase(std::make_pair(database_uri, txn_id));
 }
 
 void MultiplexedSessionTransactionManager::ClearOldTransactionsLocked() {
-  // Create a temporary list of transactions to be deleted.
-  std::vector<backend::TransactionID> transactions_to_delete;
-  for (const auto& it : current_transactions_) {
-    // If transaction is closed or if the create time is older than
-    // old_transaction_staleness_duration_, add it to the list of
-    // transactions to be deleted.
-    if (it.second->IsClosed() || (absl::Now() - it.second->GetCreateTime()) >
-                                     old_transaction_staleness_duration_) {
-      transactions_to_delete.push_back(it.first);
+  std::vector<std::pair<std::string, backend::TransactionID>>
+      transactions_to_remove;
+  absl::Time now = absl::Now();
+  for (auto const& [key, txn] : current_transactions_) {
+    if (txn->IsClosed() ||
+        (now - txn->GetCreateTime() > old_transaction_staleness_duration_)) {
+      transactions_to_remove.push_back(key);
     }
   }
-  for (auto txn_id : transactions_to_delete) {
-    RemoveFromCurrentTransactionsLocked(txn_id);
+  for (auto const& key : transactions_to_remove) {
+    RemoveFromCurrentTransactionsLocked(key.first, key.second);
   }
 }
 

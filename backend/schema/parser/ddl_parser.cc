@@ -1109,8 +1109,8 @@ void VisitColumnNodeAlterAttrs(const SimpleNode* node,
 
 void VisitColumnNodeAlter(const std::string& table_name,
                           const std::string& column_name,
-                          const SimpleNode* node, absl::string_view ddl_text,
-                          DDLStatement* statement,
+                          const SimpleNode* node, bool if_exists,
+                          absl::string_view ddl_text, DDLStatement* statement,
                           std::vector<std::string>* errors) {
   CheckNode(node, JJTCOLUMN_DEF_ALTER);
   const SimpleNode* child = GetChildNode(node, 0);
@@ -1127,7 +1127,19 @@ void VisitColumnNodeAlter(const std::string& table_name,
     path->set_column_name(column_name);
     VisitColumnOptionListNode(child, 0 /* option_list_offset */,
                               set_options->mutable_options(), errors);
+    if (if_exists) {
+      errors->push_back("IF EXISTS is not supported for SET OPTIONS.");
+    }
     return;
+  }
+  if (if_exists) {
+    if (!EmulatorFeatureFlags::instance()
+             .flags()
+             .enable_alter_table_if_exists) {
+      errors->push_back("IF EXISTS is not supported in ALTER TABLE");
+      return;
+    }
+    alter_table->set_existence_modifier(ExistenceModifier::IF_EXISTS);
   }
   if (child->getId() == JJTCOLUMN_DEF_ALTER_ATTRS) {
     // For "ALTER COLUMN c TYPE NOT NULL"
@@ -2594,33 +2606,49 @@ void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
                          DDLStatement* statement,
                          std::vector<std::string>* errors) {
   CheckNode(node, JJTALTER_TABLE_STATEMENT);
-  const SimpleNode* child = GetChildNode(node, 1);
+  int offset = 0;
+  bool if_exists = false;
+  if (GetChildNode(node, offset)->getId() == JJTIF_EXISTS) {
+    if_exists = true;
+    offset++;
+  }
+
   std::string table_name =
-      GetQualifiedIdentifier(GetFirstChildNode(node, JJTTABLE_NAME));
+      GetQualifiedIdentifier(GetChildNode(node, offset++, JJTTABLE_NAME));
+  const SimpleNode* child = GetChildNode(node, offset++);
   if (child->getId() == JJTALTER_COLUMN) {
     // Depending on the ALTER COLUMN variant, we may generate either
     // an AlterTable or SetColumnOptions statement.
-    std::string column_name = GetChildNode(node, 2, JJTNAME)->image();
+    std::string column_name = GetChildNode(node, offset, JJTNAME)->image();
     VisitColumnNodeAlter(table_name, column_name,
-                         GetChildNode(node, 3, JJTCOLUMN_DEF_ALTER), ddl_text,
-                         statement, errors);
+                         GetChildNode(node, offset + 1, JJTCOLUMN_DEF_ALTER),
+                         if_exists, ddl_text, statement, errors);
   } else {
     // These will generate an AlterTable statement.
     AlterTable* alter_table = statement->mutable_alter_table();
+    if (if_exists) {
+      if (!EmulatorFeatureFlags::instance()
+               .flags()
+               .enable_alter_table_if_exists) {
+        errors->push_back("IF EXISTS is not supported.");
+        return;
+      }
+      alter_table->set_existence_modifier(ExistenceModifier::IF_EXISTS);
+    }
+
     alter_table->set_table_name(table_name);
     switch (child->getId()) {
       case JJTRENAME_TO: {
         alter_table->mutable_rename_to()->set_name(
             GetQualifiedIdentifier(child));
-        if (node->jjtGetNumChildren() > 2) {
-          SimpleNode* synonym = GetChildNode(node, 2, JJTSYNONYM);
+        if (node->jjtGetNumChildren() > offset) {
+          SimpleNode* synonym = GetChildNode(node, offset, JJTSYNONYM);
           alter_table->mutable_rename_to()->set_synonym(
               GetQualifiedIdentifier(synonym));
         }
         break;
       }
       case JJTADD_COLUMN: {
-        int offset = 2;
         if (GetChildNode(node, offset)->getId() == JJTIF_NOT_EXISTS) {
           offset++;
           alter_table->mutable_add_column()->set_existence_modifier(
@@ -2631,12 +2659,13 @@ void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
                         /*containing_table=*/nullptr, errors);
       } break;
       case JJTDROP_COLUMN: {
-        SimpleNode* column = GetChildNode(node, 2, JJTCOLUMN_NAME);
+        SimpleNode* column = GetChildNode(node, offset, JJTCOLUMN_NAME);
         alter_table->set_drop_column(column->image());
         break;
       }
       case JJTSET_ON_DELETE: {
-        SimpleNode* on_delete_node = GetChildNode(node, 2, JJTON_DELETE_CLAUSE);
+        SimpleNode* on_delete_node =
+            GetChildNode(node, offset, JJTON_DELETE_CLAUSE);
         InterleaveClause::Action on_delete_action;
         VisitOnDeleteClause(on_delete_node, &on_delete_action);
         alter_table->mutable_set_on_delete()->set_action(on_delete_action);
@@ -2655,7 +2684,8 @@ void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
                                  errors);
         break;
       case JJTDROP_CONSTRAINT: {
-        SimpleNode* constraint_name = GetChildNode(node, 2, JJTCONSTRAINT_NAME);
+        SimpleNode* constraint_name =
+            GetChildNode(node, offset, JJTCONSTRAINT_NAME);
         alter_table->mutable_drop_constraint()->set_name(
             constraint_name->image());
         break;
@@ -2700,7 +2730,7 @@ void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
       }
       default:
         ABSL_LOG(FATAL) << "Unexpected alter table type: "
-                   << GetChildNode(node, 1)->toString();
+                   << GetChildNode(node, offset - 1)->toString();
     }
   }
 }

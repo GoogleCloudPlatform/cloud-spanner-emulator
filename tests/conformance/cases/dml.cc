@@ -314,7 +314,7 @@ TEST_P(DmlTest, CanInsertToArrayColumns) {
 }
 
 TEST_P(DmlTest, CanInsertMultipleRowsUsingStructParam) {
-  // Spanner PG dialect doesn't support the UNNEST.
+  // Spanner PG dialect doesn't support STRUCTs.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();
   }
@@ -770,10 +770,6 @@ TEST_P(DmlTest, ReturningWithAction) {
 }
 
 TEST_P(DmlTest, ReturningGeneratedColumns) {
-  // TODO: b/310194797 - Generated columns are NULL in POSTGRES dialect.
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
-  }
   std::string returning =
       (GetParam() == database_api::DatabaseDialect::POSTGRESQL) ? "RETURNING"
                                                                 : "THEN RETURN";
@@ -1268,10 +1264,6 @@ TEST_P(DmlTest, ReturningUpsertDml) {
 }
 
 TEST_P(DmlTest, UpsertDmlGeneratedPrimaryKeyTable) {
-  // TODO: b/310194797 - Generated keys are NULL in POSTGRES dialect.
-  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    GTEST_SKIP();
-  }
   // Populate `gpktable2` table
   ZETASQL_EXPECT_OK(CommitDml(
       {SqlStatement("INSERT INTO gpktable2(k1, v1) VALUES (1, 1);")}));
@@ -1306,7 +1298,7 @@ TEST_P(DmlTest, UpsertDmlGeneratedPrimaryKeyTable) {
       IsOkAndHoldsRows({{1, 3, 10, 15}, {2, 6, 20, 25}, {5, 15, 50, 55}}));
 }
 
-TEST_P(DmlTest, DISABLED_ReturningGPK) {
+TEST_P(DmlTest, ReturningGPK) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_dml_returning = true;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);

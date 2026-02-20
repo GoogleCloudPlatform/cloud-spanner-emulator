@@ -47,6 +47,11 @@ namespace {
 
 using ::zetasql_base::testing::StatusIs;
 
+constexpr char kDatabaseUri[] =
+    "projects/test-project/instances/test-instance/databases/test-database";
+constexpr char kDatabaseUri2[] =
+    "projects/test-project/instances/test-instance/databases/test-database-2";
+
 namespace spanner_api = ::google::spanner::v1;
 
 class MultiplexedSessionTransactionManagerTest : public testing::Test {
@@ -109,17 +114,20 @@ TEST_F(MultiplexedSessionTransactionManagerTest, ValidateTransactionAdded) {
   std::shared_ptr<Transaction> txn_to_add = std::make_shared<Transaction>(
       std::move(backend_txn), nullptr, options, Transaction::Usage::kMultiUse);
 
-  ZETASQL_ASSERT_OK(mux_txn_manager.AddToCurrentTransactions(txn_to_add, 1));
+  ZETASQL_ASSERT_OK(
+      mux_txn_manager.AddToCurrentTransactions(txn_to_add, kDatabaseUri, 1));
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Transaction> txn_from_manager,
-      mux_txn_manager.GetCurrentTransactionOnMultiplexedSession(1));
+      mux_txn_manager.GetCurrentTransactionOnMultiplexedSession(kDatabaseUri,
+                                                                1));
   ASSERT_EQ(txn_from_manager->id(), 1);
   // Check that the transaction is not cleared here since its neither closed nor
   // has become stale
   mux_txn_manager.ClearOldTransactions();
   ZETASQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Transaction> txn_from_manager_2,
-      mux_txn_manager.GetCurrentTransactionOnMultiplexedSession(1));
+      mux_txn_manager.GetCurrentTransactionOnMultiplexedSession(kDatabaseUri,
+                                                                1));
 }
 
 TEST_F(MultiplexedSessionTransactionManagerTest, ClearStaleTransactions) {
@@ -137,13 +145,15 @@ TEST_F(MultiplexedSessionTransactionManagerTest, ClearStaleTransactions) {
   std::shared_ptr<Transaction> txn_to_add = std::make_shared<Transaction>(
       std::move(backend_txn), nullptr, spanner_api::TransactionOptions(),
       Transaction::Usage::kMultiUse);
-  ZETASQL_ASSERT_OK(mux_txn_manager.AddToCurrentTransactions(txn_to_add, 1));
+  ZETASQL_ASSERT_OK(
+      mux_txn_manager.AddToCurrentTransactions(txn_to_add, kDatabaseUri, 1));
   // Sleep for 4 seconds to make this transaction stale.
   absl::SleepFor(absl::Seconds(4));
   // Run the clear the old transactions method.
   mux_txn_manager.ClearOldTransactions();
   absl::StatusOr<std::shared_ptr<Transaction>> txn_from_manager =
-      mux_txn_manager.GetCurrentTransactionOnMultiplexedSession(1);
+      mux_txn_manager.GetCurrentTransactionOnMultiplexedSession(kDatabaseUri,
+                                                                1);
   ASSERT_THAT(txn_from_manager, StatusIs(absl::StatusCode::kNotFound));
 }
 
@@ -159,14 +169,56 @@ TEST_F(MultiplexedSessionTransactionManagerTest, ClearClosedTransactions) {
   std::shared_ptr<Transaction> txn_to_add = std::make_shared<Transaction>(
       std::move(backend_txn), nullptr, spanner_api::TransactionOptions(),
       Transaction::Usage::kMultiUse);
-  ZETASQL_ASSERT_OK(mux_txn_manager.AddToCurrentTransactions(txn_to_add, 1));
+  ZETASQL_ASSERT_OK(
+      mux_txn_manager.AddToCurrentTransactions(txn_to_add, kDatabaseUri, 1));
   // Close the transaction.
   txn_to_add->Close();
   // Run the clear the old transactions method and it should clear it out.
   mux_txn_manager.ClearOldTransactions();
   absl::StatusOr<std::shared_ptr<Transaction>> txn_from_manager =
-      mux_txn_manager.GetCurrentTransactionOnMultiplexedSession(1);
+      mux_txn_manager.GetCurrentTransactionOnMultiplexedSession(kDatabaseUri,
+                                                                1);
   ASSERT_THAT(txn_from_manager, StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST_F(MultiplexedSessionTransactionManagerTest, TransactionCollision) {
+  MultiplexedSessionTransactionManager mux_txn_manager;
+
+  // Create two transactions with the same ID but for different databases.
+  std::unique_ptr<backend::ReadWriteTransaction> backend_txn1 =
+      CreateReadWriteTransaction(1);
+  std::unique_ptr<backend::ReadWriteTransaction> backend_txn2 =
+      CreateReadWriteTransaction(1);
+
+  spanner_api::TransactionOptions options;
+  options.mutable_read_write();
+
+  std::shared_ptr<Transaction> txn1 = std::make_shared<Transaction>(
+      std::move(backend_txn1), nullptr, options, Transaction::Usage::kMultiUse);
+  std::shared_ptr<Transaction> txn2 = std::make_shared<Transaction>(
+      std::move(backend_txn2), nullptr, options, Transaction::Usage::kMultiUse);
+
+  // Add both transactions to the manager.
+  ZETASQL_ASSERT_OK(mux_txn_manager.AddToCurrentTransactions(txn1, kDatabaseUri, 1));
+  ZETASQL_ASSERT_OK(mux_txn_manager.AddToCurrentTransactions(txn2, kDatabaseUri2, 1));
+
+  // Verify we can retrieve them correctly.
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::shared_ptr<Transaction> txn_from_manager1,
+      mux_txn_manager.GetCurrentTransactionOnMultiplexedSession(kDatabaseUri,
+                                                                1));
+  ASSERT_EQ(txn_from_manager1->id(), 1);
+  ASSERT_EQ(txn_from_manager1, txn1);
+
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      std::shared_ptr<Transaction> txn_from_manager2,
+      mux_txn_manager.GetCurrentTransactionOnMultiplexedSession(kDatabaseUri2,
+                                                                1));
+  ASSERT_EQ(txn_from_manager2->id(), 1);
+  ASSERT_EQ(txn_from_manager2, txn2);
+
+  // Verify that they are distinct.
+  ASSERT_NE(txn_from_manager1, txn_from_manager2);
 }
 
 }  // namespace

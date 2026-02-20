@@ -135,6 +135,7 @@ CreateGpkSchemaWithOneTable(
                 k3gen_storedpk bigint NOT NULL GENERATED ALWAYS AS (k2) STORED,
                 k4 bigint,
                 k5 bigint GENERATED ALWAYS AS (k4+1) STORED,
+                k6gen_nonstored bigint GENERATED ALWAYS AS (k4 + 2) VIRTUAL,
                 PRIMARY KEY (k1_pk, k3gen_storedpk)
               );
             )";

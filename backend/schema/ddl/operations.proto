@@ -677,6 +677,8 @@ message AlterTable {
     AddSynonym add_synonym = 22;
     DropSynonym drop_synonym = 23;
   }
+
+  optional ExistenceModifier existence_modifier = 24;
 }
 
 message RenameTable {

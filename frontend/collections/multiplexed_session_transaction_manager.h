@@ -18,6 +18,8 @@
 #define STORAGE_CLOUD_SPANNER_EMULATOR_FRONTEND_MULTIPLEXED_SESSION_TRANSACTION_MANAGER_H_
 
 #include <memory>
+#include <string>
+#include <utility>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/status/status.h"
@@ -47,11 +49,13 @@ class MultiplexedSessionTransactionManager {
 
   // Adds new transactions to the current transactions map.
   absl::Status AddToCurrentTransactions(std::shared_ptr<Transaction> txn,
+                                        const std::string& database_uri,
                                         backend::TransactionID txn_id);
 
   // Retrieve a transaction from the current transactions map.
   absl::StatusOr<std::shared_ptr<Transaction>>
-  GetCurrentTransactionOnMultiplexedSession(backend::TransactionID txn_id);
+  GetCurrentTransactionOnMultiplexedSession(const std::string& database_uri,
+                                            backend::TransactionID txn_id);
 
   // Called occasionally to clear old transactions.
   void ClearOldTransactions();
@@ -78,7 +82,9 @@ class MultiplexedSessionTransactionManager {
 
  private:
   mutable absl::Mutex mu_;
-  std::map<backend::TransactionID, std::shared_ptr<Transaction>>
+  // First string is the database uri.
+  std::map<std::pair<std::string, backend::TransactionID>,
+           std::shared_ptr<Transaction>>
       current_transactions_ ABSL_GUARDED_BY(mu_);
   // The last time the transactions were checked for staleness.
   absl::Time last_clear_time_ ABSL_GUARDED_BY(mu_);
@@ -86,7 +92,8 @@ class MultiplexedSessionTransactionManager {
   absl::Duration staleness_check_duration_;
 
   // Evict a transaction from the current transactions map.
-  void RemoveFromCurrentTransactionsLocked(backend::TransactionID txn_id)
+  void RemoveFromCurrentTransactionsLocked(const std::string& database_uri,
+                                           backend::TransactionID txn_id)
       ABSL_SHARED_LOCKS_REQUIRED(mu_);
 
   void ClearOldTransactionsLocked() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);

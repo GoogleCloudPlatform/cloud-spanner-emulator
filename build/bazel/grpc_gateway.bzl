@@ -85,6 +85,7 @@ def _generate_grpc_gateway_file_impl(ctx):
     ctx.actions.run(
         inputs = proto_info.transitive_sources.to_list() + ctx.files.yaml_config,
         outputs = [original_genfile],
+        mnemonic = "CloudSpannerEmulatorGrpcGatewayGen",
         executable = ctx.executable.protoc,
         arguments = [args],
         tools = [ctx.executable.protoc_gen_grpc_gateway],
@@ -99,6 +100,7 @@ def _generate_grpc_gateway_file_impl(ctx):
     ctx.actions.run(
         inputs = [original_genfile],
         outputs = [modified_genfile],
+        mnemonic = "CloudSpannerEmulatorGrpcGatewayFix",
         executable = ctx.executable.fix_grpc_gateway,
         arguments = [args],
     )
