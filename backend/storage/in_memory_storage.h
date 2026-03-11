@@ -62,6 +62,22 @@ class InMemoryStorage : public Storage {
                       const KeyRange& key_range) override
       ABSL_LOCKS_EXCLUDED(mu_);
 
+  void SetVersionRetentionPeriod(
+      absl::Duration version_retention_period) override;
+
+  void CleanUpDeletedTables(absl::Time timestamp) override
+      ABSL_LOCKS_EXCLUDED(mu_);
+
+  void CleanUpDeletedColumns(absl::Time timestamp) override
+      ABSL_LOCKS_EXCLUDED(mu_);
+
+  void MarkDroppedTable(absl::Time timestamp, TableID dropped_table_id) override
+      ABSL_LOCKS_EXCLUDED(mu_);
+
+  void MarkDroppedColumn(absl::Time timestamp, TableID dropped_table_id,
+                         ColumnID dropped_column_id) override
+      ABSL_LOCKS_EXCLUDED(mu_);
+
  private:
   using Cell = std::map<absl::Time, zetasql::Value>;
   using Row = absl::flat_hash_map<ColumnID, Cell>;
@@ -78,8 +94,21 @@ class InMemoryStorage : public Storage {
                                            absl::Time timestamp) const
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
+  void RemoveExpiredVersions(Cell& cell, absl::Time timestamp);
+
   mutable absl::Mutex mu_;
   Tables tables_ ABSL_GUARDED_BY(mu_);
+
+  // Tracks when tables were dropped so that we can clean up the data.
+  std::map<absl::Time, TableID> dropped_tables_ ABSL_GUARDED_BY(mu_);
+
+  // Tracks when columns were dropped so that we can clean up the data.
+  std::map<absl::Time, std::pair<TableID, ColumnID>> dropped_columns_
+      ABSL_GUARDED_BY(mu_);
+
+  mutable absl::Mutex version_retention_period_mu_ ABSL_ACQUIRED_AFTER(mu_);
+  absl::Duration version_retention_period_
+      ABSL_GUARDED_BY(version_retention_period_mu_) = absl::Hours(1);
 };
 
 }  // namespace backend

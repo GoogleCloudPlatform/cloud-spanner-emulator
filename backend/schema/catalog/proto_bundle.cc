@@ -16,6 +16,7 @@
 
 #include "backend/schema/catalog/proto_bundle.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -246,6 +247,32 @@ ProtoBundle::GetEnumTypeDescriptor(absl::string_view type) const {
     return error::ProtoEnumTypeNotFound(type);
   }
   return descriptor;
+}
+
+absl::StatusOr<std::string> ProtoBundle::GetProtoDescriptorBytes() const {
+  google::protobuf::FileDescriptorSet file_descriptor_set;
+  absl::flat_hash_set<std::string> added_files;
+  for (const auto& type : types_) {
+    google::protobuf::FileDescriptorProto file_descriptor_proto;
+    ZETASQL_RET_CHECK(protodb_->FindFileContainingSymbol(type, &file_descriptor_proto))
+            .SetErrorCode(absl::StatusCode::kNotFound)
+        << absl::Substitute("Could not find FileDescriptor for `$0`", type);
+    if (added_files.contains(file_descriptor_proto.name())) {
+      // File already added.
+      continue;
+    }
+    added_files.insert(file_descriptor_proto.name());
+    file_descriptor_set.add_file()->Swap(&file_descriptor_proto);
+  }
+  if (file_descriptor_set.file_size() > 1) {
+    std::sort(file_descriptor_set.mutable_file()->begin(),
+              file_descriptor_set.mutable_file()->end(),
+              [](const google::protobuf::FileDescriptorProto a,
+                 const google::protobuf::FileDescriptorProto b) {
+                return a.name() < b.name();
+              });
+  }
+  return file_descriptor_set.SerializeAsString();
 }
 
 absl::Status ProtoBundle::Builder::CheckIfTypeExistsInUnfilteredDescriptors(

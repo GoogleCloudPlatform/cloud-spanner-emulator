@@ -165,21 +165,21 @@ absl::StatusOr<zetasql::AnalyzerOptions> MakeAnalyzerOptionsWithParameters(
   }
   // Enable SQL Graph language feature.
   options.mutable_language()->EnableLanguageFeature(
-      zetasql::FEATURE_V_1_4_SQL_GRAPH);
+      zetasql::FEATURE_SQL_GRAPH);
   options.mutable_language()->EnableLanguageFeature(
-      zetasql::FEATURE_V_1_4_SQL_GRAPH_ADVANCED_QUERY);
+      zetasql::FEATURE_SQL_GRAPH_ADVANCED_QUERY);
   options.mutable_language()->EnableLanguageFeature(
-      zetasql::FEATURE_V_1_4_SQL_GRAPH_BOUNDED_PATH_QUANTIFICATION);
+      zetasql::FEATURE_SQL_GRAPH_BOUNDED_PATH_QUANTIFICATION);
   options.mutable_language()->EnableLanguageFeature(
-      zetasql::FEATURE_V_1_4_SQL_GRAPH_PATH_TYPE);
+      zetasql::FEATURE_SQL_GRAPH_PATH_TYPE);
   options.mutable_language()->EnableLanguageFeature(
-      zetasql::FEATURE_V_1_4_SQL_GRAPH_PATH_MODE);
+      zetasql::FEATURE_SQL_GRAPH_PATH_MODE);
   options.mutable_language()->EnableLanguageFeature(
-      zetasql::FEATURE_V_1_4_SQL_GRAPH_DYNAMIC_ELEMENT_TYPE);
+      zetasql::FEATURE_SQL_GRAPH_DYNAMIC_ELEMENT_TYPE);
   options.mutable_language()->EnableLanguageFeature(
-      zetasql::FEATURE_V_1_4_SQL_GRAPH_DYNAMIC_LABEL_PROPERTIES_IN_DDL);
+      zetasql::FEATURE_SQL_GRAPH_DYNAMIC_LABEL_PROPERTIES_IN_DDL);
   options.mutable_language()->EnableLanguageFeature(
-      zetasql::FEATURE_V_1_4_SQL_GRAPH_DYNAMIC_LABEL_EXTENSION_IN_DDL);
+      zetasql::FEATURE_SQL_GRAPH_DYNAMIC_LABEL_EXTENSION_IN_DDL);
   if (EmulatorFeatureFlags::instance().flags().enable_insert_on_conflict_dml) {
     options.mutable_language()->EnableLanguageFeature(
         zetasql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);

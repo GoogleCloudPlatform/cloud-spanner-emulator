@@ -217,6 +217,81 @@ TEST_F(SnapshotReadsTest, CannnotQueryWithMinTimestampBoundTooFarInFuture) {
   }
 }
 
+class VersionRetentionPeriodTest : public DatabaseTest {
+  absl::Status SetUpDatabase() override { return absl::OkStatus(); }
+};
+
+TEST_F(VersionRetentionPeriodTest,
+       CannotReadDroppedTableWithExactTimestampAfterTableDeletion) {
+  if (in_prod_env()) {
+    GTEST_SKIP() << "Skipping this test in prod environment because the "
+                    "minimum version retention period is 1 hour";
+  }
+
+  ZETASQL_ASSERT_OK(SetSchema({R"(
+    CREATE TABLE TestTable(
+      ID   INT64 NOT NULL,
+      Name STRING(MAX),
+      Age  INT64
+    ) PRIMARY KEY (ID)
+  )"}));
+
+  // Sleep for 1s to ensure that the timestamp is different from the commit
+  // timestamp of the table creation.
+  absl::SleepFor(absl::Seconds(1));
+  Timestamp before_table_deletion_empty_read = MakeNowTimestamp();
+
+  // Insert a row.
+  ZETASQL_ASSERT_OK(Insert("TestTable", {"ID", "Name", "Age"}, {1, "John", 23}));
+
+  // Create a timestamp after confirming that the data is readable.
+  EXPECT_THAT(Read(Transaction::SingleUseOptions(std::chrono::seconds(1)),
+                   "TestTable", {"ID", "Name", "Age"}, KeySet::All()),
+              IsOkAndHoldsRows({ValueRow{1, "John", 23}}));
+
+  // Sleep for 1s to ensure that the timestamp is different from the commit
+  // timestamp of the row insertion.
+  absl::SleepFor(absl::Seconds(1));
+  Timestamp before_table_deletion_read_with_data = MakeNowTimestamp();
+
+  ZETASQL_ASSERT_OK(UpdateSchema({"DROP TABLE TestTable"}));
+
+  // Reads with a timestamp before the table deletion should succeed.
+  EXPECT_THAT(Read(Transaction::SingleUseOptions(Transaction::ReadOnlyOptions(
+                       before_table_deletion_empty_read)),
+                   "TestTable", {"ID", "Name", "Age"}, KeySet::All()),
+              IsOkAndHoldsRows({}));
+  EXPECT_THAT(Read(Transaction::SingleUseOptions(Transaction::ReadOnlyOptions(
+                       before_table_deletion_read_with_data)),
+                   "TestTable", {"ID", "Name", "Age"}, KeySet::All()),
+              IsOkAndHoldsRows({ValueRow{1, "John", 23}}));
+
+  // Sleep for 2s to ensure that the next version retention period update
+  // triggers the cleanup of the table and the schema with the definition.
+  absl::SleepFor(absl::Seconds(2));
+
+  // Set the version_retention_period to 1s. This will trigger the cleanup of
+  // the schema with the table definition, and the table's data.
+  ZETASQL_ASSERT_OK(UpdateSchema(
+      {"ALTER DATABASE db SET OPTIONS (version_retention_period = '1s')"}));
+
+  // Set the version_retention_period back to 1 hour so that reads with
+  // timestamp before the table deletion are not restricted.
+  ZETASQL_ASSERT_OK(UpdateSchema(
+      {"ALTER DATABASE db SET OPTIONS (version_retention_period = '1h')"}));
+
+  // The reads should fail with NotFound error because the table was dropped
+  // and the schema with the table no longer exists.
+  EXPECT_THAT(Read(Transaction::SingleUseOptions(Transaction::ReadOnlyOptions(
+                       before_table_deletion_empty_read)),
+                   "TestTable", {"ID", "Name", "Age"}, KeySet::All()),
+              StatusIs(absl::StatusCode::kNotFound));
+  EXPECT_THAT(Read(Transaction::SingleUseOptions(Transaction::ReadOnlyOptions(
+                       before_table_deletion_read_with_data)),
+                   "TestTable", {"ID", "Name", "Age"}, KeySet::All()),
+              StatusIs(absl::StatusCode::kNotFound));
+}
+
 }  // namespace
 
 }  // namespace test

@@ -293,6 +293,8 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 	Ttl                 *ttlopt;
 	LocalityGroupOption *locality_group_option;
 
+	ColumnarPolicyOption *columnar_policy_option;
+
 // SPANGRES BEGIN
 	AlterSearchIndexCmd  *altersearchindexcmd;
 	ViewSecurityType     view_security_type;
@@ -685,6 +687,8 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 %type <locality_group_option> opt_storage opt_ssd_to_hdd_spill_timespan
                               opt_locality_group
 
+%type <columnar_policy_option> opt_columnar_policy
+
 /*
  * Non-keyword token types.  These are hard-wired into the "flex" lexer.
  * They must be listed first so that their numeric codes do not depend on
@@ -712,7 +716,8 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 /* ordinary key words in alphabetical order */
 %token <keyword> ABORT_P ABSOLUTE_P ACCESS ACTION ADD_P ADMIN AFTER
 	AGGREGATE ALL ALSO ALTER ALWAYS ANALYSE ANALYZE AND ANY ARRAY AS ASC
-	ASENSITIVE ASSERTION ASSIGNMENT ASYMMETRIC ATOMIC AT ATTACH ATTRIBUTE AUTHORIZATION
+	ASENSITIVE ASSERTION
+	ASSIGNMENT ASYMMETRIC ATOMIC AT ATTACH ATTRIBUTE AUTHORIZATION
 
 	BACKWARD BEFORE BEGIN_P BETWEEN BIGINT BINARY BIT
     BIT_REVERSED_POSITIVE
@@ -721,6 +726,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 	CACHE CALL CALLED CASCADE CASCADED CASE CAST CATALOG_P CHAIN CHANGE CHAR_P
 	CHARACTER CHARACTERISTICS CHECK CHECKPOINT CLASS CLOSE
 	CLUSTER COALESCE COLLATE COLLATION COLUMN
+	COLUMNAR
 	COLUMNS COMMENT COMMENTS COMMIT
 	COMMITTED COMPRESSION CONCURRENTLY CONFIGURATION CONFLICT
 	CONNECTION CONSTRAINT	CONSTRAINTS CONTENT_P CONTINUE_P CONVERSION_P COPY
@@ -2468,6 +2474,24 @@ alter_index_cmd:
 					n->locality_group_name->is_null = true;
 					$$ = (Node *) n;
 				}
+			/* ALTER INDEX <name> SET COLUMNAR POLICY <columnar_policy> */
+			| SET COLUMNAR POLICY name
+				{
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+					n->subtype = AT_SetColumnarPolicy;
+					n->columnar_policy_name = makeNode(ColumnarPolicyOption);
+					n->columnar_policy_name->value = $4;
+					$$ = (Node *) n;
+				}
+			/* ALTER INDEX <name> SET COLUMNAR POLICY NULL */
+			| SET COLUMNAR POLICY NULL_P
+				{
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+					n->subtype = AT_SetColumnarPolicy;
+					n->columnar_policy_name = makeNode(ColumnarPolicyOption);
+					n->columnar_policy_name->is_null = true;
+					$$ = (Node *) n;
+				}
 
 alter_table_cmd:
 			/* ALTER TABLE <name> ADD <coldef> */
@@ -3185,6 +3209,24 @@ alter_table_cmd:
 					n->locality_group_name->is_null = true;
 					$$ = (Node *) n;
 				}
+			/* ALTER TABLE <name> SET COLUMNAR POLICY <columnar_policy> */
+			| SET COLUMNAR POLICY name
+				{
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+					n->subtype = AT_SetColumnarPolicy;
+					n->columnar_policy_name = makeNode(ColumnarPolicyOption);
+					n->columnar_policy_name->value = $4;
+					$$ = (Node *) n;
+				}
+			/* ALTER TABLE <name> SET COLUMNAR POLICY NULL */
+			| SET COLUMNAR POLICY NULL_P
+				{
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+					n->subtype = AT_SetColumnarPolicy;
+					n->columnar_policy_name = makeNode(ColumnarPolicyOption);
+					n->columnar_policy_name->is_null = true;
+					$$ = (Node *) n;
+				}
 		;
 
 alter_column_default:
@@ -3788,8 +3830,9 @@ OptTtl: TTL ConstInterval Sconst opt_interval ON ColId
 
 CreateStmt:	CREATE OptTemp TABLE qualified_name '(' OptTableElementList ')'
 			OptInherit OptPartitionSpec table_access_method_clause OptWith
-      OnCommitOption OptTableSpace
+			OnCommitOption OptTableSpace
 			opt_locality_group
+			opt_columnar_policy
 			OptInterleave OptTtl
 				{
 					CreateStmt *n = makeNode(CreateStmt);
@@ -3806,8 +3849,9 @@ CreateStmt:	CREATE OptTemp TABLE qualified_name '(' OptTableElementList ')'
 					n->oncommit = $12;
 					n->tablespacename = $13;
 					n->locality_group_name = $14;
-					n->interleavespec = $15;
-					n->ttl = $16;
+					n->columnar_policy_name = $15;
+					n->interleavespec = $16;
+					n->ttl = $17;
 					n->if_not_exists = false;
 					$$ = (Node *) n;
 				}
@@ -3815,6 +3859,7 @@ CreateStmt:	CREATE OptTemp TABLE qualified_name '(' OptTableElementList ')'
 			OptTableElementList ')' OptInherit OptPartitionSpec table_access_method_clause
 			OptWith OnCommitOption OptTableSpace
 			opt_locality_group
+			opt_columnar_policy
 			OptInterleave OptTtl
 				{
 					CreateStmt *n = makeNode(CreateStmt);
@@ -3832,8 +3877,9 @@ CreateStmt:	CREATE OptTemp TABLE qualified_name '(' OptTableElementList ')'
 					n->tablespacename = $16;
 					n->if_not_exists = true;
 					n->locality_group_name = $17;
-					n->interleavespec = $18;
-					n->ttl = $19;
+					n->columnar_policy_name = $18;
+					n->interleavespec = $19;
+					n->ttl = $20;
 					$$ = (Node *) n;
 				}
 		| CREATE OptTemp TABLE qualified_name OF any_name
@@ -4859,6 +4905,21 @@ OptInterleaveIndex: INTERLEAVE IN_P qualified_name
 
 interleave_action: key_delete	{ $$ = $1; }
 		| /*EMPTY*/								{ $$ = NULL; }
+
+
+opt_columnar_policy:
+			COLUMNAR POLICY name
+				{
+					$$ = makeNode(ColumnarPolicyOption);
+					$$->value = pstrdup($3);
+				}
+			| COLUMNAR POLICY NULL_P
+				{
+					$$ = makeNode(ColumnarPolicyOption);
+					$$->is_null = true;
+				}
+			| /*EMPTY*/ { $$ = NULL; }
+			;
 
 /*****************************************************************************
  *
@@ -8426,6 +8487,7 @@ IndexStmt:	CREATE opt_unique INDEX opt_concurrently opt_index_name
 			ON relation_expr access_method_clause '(' index_params ')'
 			opt_include opt_unique_null_treatment opt_reloptions OptTableSpace
 			opt_locality_group
+			opt_columnar_policy
 			OptInterleaveIndex where_clause
 				{
 					IndexStmt *n = makeNode(IndexStmt);
@@ -8441,8 +8503,9 @@ IndexStmt:	CREATE opt_unique INDEX opt_concurrently opt_index_name
 					n->options = $14;
 					n->tableSpace = $15;
 					n->locality_group_name = $16;
-					n->interleavespec = $17;
-					n->whereClause = $18;
+					n->columnar_policy_name = $17;
+					n->interleavespec = $18;
+					n->whereClause = $19;
 					n->excludeOpNames = NIL;
 					n->idxcomment = NULL;
 					n->indexOid = InvalidOid;
@@ -8462,6 +8525,7 @@ IndexStmt:	CREATE opt_unique INDEX opt_concurrently opt_index_name
 			ON relation_expr access_method_clause '(' index_params ')'
 			opt_include opt_unique_null_treatment opt_reloptions OptTableSpace
 			opt_locality_group
+			opt_columnar_policy
 			OptInterleaveIndex where_clause
 				{
 					IndexStmt *n = makeNode(IndexStmt);
@@ -8477,8 +8541,9 @@ IndexStmt:	CREATE opt_unique INDEX opt_concurrently opt_index_name
 					n->options = $17;
 					n->tableSpace = $18;
 					n->locality_group_name = $19;
-					n->interleavespec = $20;
-					n->whereClause = $21;
+					n->columnar_policy_name = $20;
+					n->interleavespec = $21;
+					n->whereClause = $22;
 					n->excludeOpNames = NIL;
 					n->idxcomment = NULL;
 					n->indexOid = InvalidOid;
@@ -13121,15 +13186,16 @@ returning_clause:
  *****************************************************************************/
 
 DeleteStmt: opt_with_clause DELETE_P FROM relation_expr_opt_alias
-			using_clause where_or_current_clause returning_clause
+			using_clause where_or_current_clause
+			returning_clause
 				{
 					DeleteStmt *n = makeNode(DeleteStmt);
 
 					n->relation = $4;
 					n->usingClause = $5;
 					n->whereClause = $6;
-					n->returningList = $7;
 					n->withClause = $1;
+					n->returningList = $7;
 					$$ = (Node *) n;
 				}
 		;
@@ -17909,12 +17975,13 @@ unreserved_keyword:
 			| CASCADED
 			| CATALOG_P
 			| CHAIN
-      | CHANGE
+			| CHANGE
 			| CHARACTERISTICS
 			| CHECKPOINT
 			| CLASS
 			| CLOSE
 			| CLUSTER
+			| COLUMNAR
 			| COLUMNS
 			| COMMENT
 			| COMMENTS

@@ -45,6 +45,7 @@ cc_library(
         "//tests/common:scoped_feature_flags_setter",
         "//third_party/spanner_pg/ddl:spangres_direct_schema_printer_impl",
         "//third_party/spanner_pg/ddl:spangres_schema_printer",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",

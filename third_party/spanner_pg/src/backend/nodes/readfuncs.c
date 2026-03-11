@@ -1211,6 +1211,7 @@ _readCreateStmt(void)
 	READ_ENUM_FIELD(oncommit, OnCommitAction);
 	READ_STRING_FIELD(tablespacename);
 	READ_NODE_FIELD(locality_group_name);
+	READ_NODE_FIELD(columnar_policy_name);
 	READ_STRING_FIELD(accessMethod);
 	READ_BOOL_FIELD(if_not_exists);
 	READ_NODE_FIELD(interleavespec);
@@ -2278,6 +2279,14 @@ static AlterColumnLocalityGroupStmt* _readAlterColumnLocalityGroupStmt(void) {
   READ_NODE_FIELD(locality_group_name);
 
   READ_DONE();
+}
+
+static ColumnarPolicyOption* _readColumnarPolicyOption(void) {
+  READ_LOCALS(ColumnarPolicyOption);
+  READ_STRING_FIELD(value);
+	READ_BOOL_FIELD(is_null);
+
+	READ_DONE();
 }
 
 static CreateRoleStmt*
@@ -3793,6 +3802,7 @@ _readIndexStmt(void)
 	READ_NODE_FIELD(indexIncludingParams);
 	READ_NODE_FIELD(options);
 	READ_NODE_FIELD(locality_group_name);
+	READ_NODE_FIELD(columnar_policy_name);
         READ_NODE_FIELD(interleavespec);
 	READ_NODE_FIELD(whereClause);
 	READ_NODE_FIELD(excludeOpNames);
@@ -3841,6 +3851,7 @@ _readAlterTableCmd(void)
 	READ_ENUM_FIELD(behavior, DropBehavior);
 	READ_BOOL_FIELD(missing_ok);
 	READ_NODE_FIELD(locality_group_name);
+	READ_NODE_FIELD(columnar_policy_name);
 	READ_STRING_FIELD(raw_expr_string);
 
 	READ_DONE();
@@ -4429,6 +4440,8 @@ parseNodeString(void)
 		return_value = _readAlterLocalityGroupStmt();
 	else if (MATCH("ALTERCOLUMNLOCALITYGROUPSTMT", 28))
 		return_value = _readAlterColumnLocalityGroupStmt();
+	else if (MATCH("COLUMNARPOLICYOPTION", 20))
+		return_value = _readColumnarPolicyOption();
 	else if (MATCH("CREATEROLESTMT", 14))
 		return_value = _readCreateRoleStmt();
 	else if (MATCH("DROPROLESTMT", 12))

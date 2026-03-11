@@ -511,7 +511,7 @@ void create_index_statement() :
   [ if_not_exists() ]
   qualified_identifier() #name
   <ON> qualified_identifier() #table
-  key() #columns
+  index_keys()
   [ <STORING> stored_column_list() ]
   [ <WHERE> create_index_where_clause() ]
   [ LOOKAHEAD(2) "," index_interleave_clause() ]
@@ -590,7 +590,7 @@ void index_interleave_clause() :
 void create_change_stream_statement() :
 {}
 {
-  <CHANGE> <STREAM> qualified_identifier() #name
+  <CHANGE> <STREAM> [ if_not_exists() ] qualified_identifier() #name
   [ change_stream_for_clause() ]
   [ options_clause() ]
 }
@@ -759,6 +759,23 @@ void stored_column_list() :
   "(" stored_column()
     ( "," stored_column() )*
   ")"
+}
+
+void index_keys() :
+{}
+{
+  "("
+    [
+      index_key_part()
+      ( "," index_key_part() )*
+    ]
+  ")"
+}
+
+void index_key_part() :
+{}
+{
+  key_part()
 }
 
 void option_list() #void :

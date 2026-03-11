@@ -286,6 +286,10 @@ absl::Status ColumnValidator::Validate(const Column* column,
   }
 
   if (column->is_generated()) {
+    if (!column->is_stored() && !column->is_nullable()) {
+      return error::NonStoredGeneratedColumnsMarkedAsNotNull(
+          column->FullName());
+    }
     if (context->is_postgresql_dialect()) {
       ZETASQL_RET_CHECK(column->postgresql_oid().has_value());
     } else {

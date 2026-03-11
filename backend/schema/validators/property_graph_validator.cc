@@ -36,7 +36,7 @@ absl::Status PropertyGraphValidator::Validate(
     const PropertyGraph* graph, SchemaValidationContext* context) {
   ZETASQL_RET_CHECK(!graph->name_.empty());
   ZETASQL_RETURN_IF_ERROR(
-      GlobalSchemaNames::ValidateSchemaName("PropertyGraph", graph->name_));
+      GlobalSchemaNames::ValidateSchemaName("Property Graph", graph->name_));
 
   CaseInsensitiveStringSet unique_label_names;
   for (const PropertyGraph::Label& label : graph->Labels()) {

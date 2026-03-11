@@ -94,6 +94,7 @@ cc_test(
         ":instance",
         "//frontend/converters:time",
         "//tests/common:proto_matchers",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
@@ -124,6 +125,7 @@ cc_test(
     deps = [
         ":operation",
         "//tests/common:proto_matchers",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googleapis//google/spanner/admin/instance/v1:instance_cc_grpc",
         "@com_google_googletest//:gtest_main",

@@ -603,6 +603,120 @@ TEST_P(TransactionApiTest, CommitTransactionWithMutations) {
   ASSERT_TRUE(commit_response.has_commit_timestamp());
 }
 
+TEST_P(TransactionApiTest, CommitMultiplexedSessionRetryWithoutMutations) {
+  if (GetSessionType() != SessionType::kMultiplexedSession) {
+    return;
+  }
+  spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
+    options { read_write {} }
+  )pb");
+  begin_request.set_session(GetSessionUri(true));
+
+  spanner_api::Transaction begin_response;
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &begin_response));
+
+  // 1. First Commit: Send mutations, NO precommit token.
+  //    Expect: OkStatus + precommit_token.
+  spanner_api::CommitRequest commit_request1;
+  commit_request1.set_session(GetSessionUri(true));
+  commit_request1.set_transaction_id(begin_response.id());
+
+  google::spanner::v1::Mutation m;
+  google::spanner::v1::Mutation::Write insert = PARSE_TEXT_PROTO(R"pb(
+    table: "test_table"
+    columns: "int64_col"
+    columns: "string_col"
+    values {
+      values { string_value: "999" }
+      values { string_value: "retry_test" }
+    }
+  )pb");
+  *m.mutable_insert() = insert;
+  *commit_request1.add_mutations() = m;
+
+  spanner_api::CommitResponse commit_response1;
+  ZETASQL_EXPECT_OK(Commit(commit_request1, &commit_response1));
+  EXPECT_TRUE(commit_response1.has_precommit_token());
+  EXPECT_FALSE(
+      commit_response1.has_commit_timestamp());  // Should NOT commit yet if
+                                                 // buggy logic was active?
+
+  // 2. Second Commit: Send precommit_token, NO mutations.
+  //    Expect: Success + Data written.
+  spanner_api::CommitRequest commit_request2;
+  commit_request2.set_session(GetSessionUri(true));
+  commit_request2.set_transaction_id(begin_response.id());
+  *commit_request2.mutable_precommit_token() =
+      commit_response1.precommit_token();
+
+  // Crucially: NO mutations added to commit_request2.
+
+  spanner_api::CommitResponse commit_response2;
+  ZETASQL_EXPECT_OK(Commit(commit_request2, &commit_response2));
+  EXPECT_TRUE(commit_response2.has_commit_timestamp());
+
+  // Verify data is written.
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"pb(
+    table: "test_table"
+    columns: "string_col"
+    key_set { keys { values { string_value: "999" } } }
+  )pb");
+  read_request.set_session(GetSessionUri(true));
+  spanner_api::ResultSet read_response;
+  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  EXPECT_EQ(read_response.rows_size(), 1);
+  EXPECT_EQ(read_response.rows(0).values(0).string_value(), "retry_test");
+}
+
+TEST_P(TransactionApiTest, CommitMultiplexedSessionIsolation) {
+  if (GetSessionType() != SessionType::kMultiplexedSession) {
+    return;
+  }
+  spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
+    options { read_write {} }
+  )pb");
+  begin_request.set_session(GetSessionUri(true));
+
+  spanner_api::Transaction begin_response;
+  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &begin_response));
+
+  // 1. Commit with mutations + NO precommit token.
+  //    Expect: OkStatus + precommit_token.
+  spanner_api::CommitRequest commit_request1;
+  commit_request1.set_session(GetSessionUri(true));
+  commit_request1.set_transaction_id(begin_response.id());
+
+  google::spanner::v1::Mutation m;
+  google::spanner::v1::Mutation::Write insert = PARSE_TEXT_PROTO(R"pb(
+    table: "test_table"
+    columns: "int64_col"
+    columns: "string_col"
+    values {
+      values { string_value: "888" }
+      values { string_value: "isolation_test" }
+    }
+  )pb");
+  *m.mutable_insert() = insert;
+  *commit_request1.add_mutations() = m;
+
+  spanner_api::CommitResponse commit_response1;
+  ZETASQL_EXPECT_OK(Commit(commit_request1, &commit_response1));
+  EXPECT_TRUE(commit_response1.has_precommit_token());
+  EXPECT_FALSE(commit_response1.has_commit_timestamp());
+
+  // 2. Read from a DIFFERENT transaction/session (Single Use).
+  //    Expect: Data NOT found.
+  spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"pb(
+    table: "test_table"
+    columns: "string_col"
+    key_set { keys { values { string_value: "888" } } }
+  )pb");
+  read_request.set_session(GetSessionUri(true));
+  spanner_api::ResultSet read_response;
+  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  EXPECT_EQ(read_response.rows_size(), 0);  // Should be empty!
+}
+
 }  // namespace
 
 }  // namespace frontend

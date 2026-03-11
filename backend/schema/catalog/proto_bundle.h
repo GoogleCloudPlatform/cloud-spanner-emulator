@@ -72,6 +72,10 @@ class ProtoBundle {
   absl::StatusOr<const google::protobuf::EnumDescriptor*> GetEnumTypeDescriptor(
       absl::string_view type) const;
 
+  // Returns the serialized bytes of the FileDescriptorSet containing all the
+  // types in the proto bundle.
+  absl::StatusOr<std::string> GetProtoDescriptorBytes() const;
+
   // Creates an empty ProtoBundle to be used in Schemas which do not use
   // proto types.
   // This empty instance will be used to return "Type not found" errors whenever

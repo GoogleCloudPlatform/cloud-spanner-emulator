@@ -2124,6 +2124,7 @@ TEST_P(InformationSchemaTest, DefaultTables) {
       {"BASE TABLE", "node_table", Ns(), "COMMITTED", Ns(), Ns(), Ns()},  // NOLINT
       {"BASE TABLE", "npi_child", "base", "COMMITTED", Ns(), "IN", Ns()},
       {"BASE TABLE", "row_deletion_policy", Ns(), "COMMITTED", Ns(), Ns(), expected_interval}, // NOLINT
+      {"BASE TABLE", "vector_table", Ns(), "COMMITTED", Ns(), Ns(), Ns()},  // NOLINT
     });
     // clang-format on
   } else {
@@ -2272,6 +2273,8 @@ TEST_P(InformationSchemaTest, GSQLDefaultColumns) {
     {"", "", "edge_table", "FromId", 1, Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "edge_table", "ToId", 2, Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "node_table", "Id", 1, Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "vector_table", "id", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "vector_table", "embedding", 2, Ns(), Ns(), "YES", "ARRAY<FLOAT32>(vector_length=>2)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
   });
   // clang-format on
   CheckResultsAgainstExpected(results, expected);
@@ -2461,6 +2464,8 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
         {"", "", "row_deletion_policy", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
         {"", "", "edge_table", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
         {"", "", "node_table", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+        {"", "", "vector_table", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+        {"", "", "vector_table", "vec_index", "VECTOR", "", false, false, "READ_WRITE", false},  // NOLINT
     });
     // clang-format on
     CheckResultsAgainstExpected(results, expected);
@@ -2602,6 +2607,8 @@ TEST_P(InformationSchemaTest, DefaultIndexColumns) {
         {"", "", "edge_table", "PRIMARY_KEY", "FromId", 1, "ASC", "NO", "INT64"},  // NOLINT
         {"", "", "edge_table", "PRIMARY_KEY", "ToId", 2, "ASC", "NO", "INT64"},  // NOLINT
         {"", "", "node_table", "PRIMARY_KEY", "Id", 1, "ASC", "NO", "INT64"},  // NOLINT
+        {"", "", "vector_table", "PRIMARY_KEY", "id", 1, "ASC", "YES", "INT64"},  // NOLINT
+        {"", "", "vector_table", "vec_index", "embedding", 1, Ns(), "NO", "ARRAY<FLOAT32>(vector_length=>2)"},  // NOLINT
     });
     // clang-format on
     CheckResultsAgainstExpected(results, expected);
@@ -2836,6 +2843,8 @@ TEST_P(InformationSchemaTest, DefaultTableConstraints) {
              "NO", "YES"},  // NOLINT
             {"", "", "PK_node_table", "", "", "node_table", "PRIMARY KEY", "NO",
              "NO", "YES"},  // NOLINT
+            {"", "", "PK_vector_table", "", "", "vector_table", "PRIMARY KEY",
+             "NO", "NO", "YES"},  // NOLINT
         });
     // clang-format off
     // clang-format on
@@ -2948,6 +2957,7 @@ TEST_P(InformationSchemaTest, DefaultConstraintTableUsage) {
       {"", "", "no_action_child", "", "", "PK_no_action_child"},  // NOLINT
       {"", "", "npi_child", "", "", "PK_npi_child"},  // NOLINT
       {"", "", "row_deletion_policy", "", "", "PK_row_deletion_policy"},  // NOLINT
+      {"", "", "vector_table", "", "", "PK_vector_table"},  // NOLINT
       {"", "", "edge_table", "", "", "CK_IS_NOT_NULL_edge_table_FromId"},  // NOLINT
       {"", "", "edge_table", "", "", "CK_IS_NOT_NULL_edge_table_ToId"},  // NOLINT
       {"", "", "edge_table", "", "", "PK_edge_table"},  // NOLINT
@@ -3226,6 +3236,7 @@ TEST_P(InformationSchemaTest, DefaultKeyColumnUsage) {
       {"", "", "PK_edge_table", "", "", "edge_table", "FromId", 1, Ni()},  // NOLINT
       {"", "", "PK_edge_table", "", "", "edge_table", "ToId", 2, Ni()},  // NOLINT
       {"", "", "PK_node_table", "", "", "node_table", "Id", 1, Ni()},  // NOLINT
+      {"", "", "PK_vector_table", "", "", "vector_table", "id", 1, Ni()},  // NOLINT
     });
     // clang-format on
     CheckResultsAgainstExpected(results, expected);
@@ -3391,6 +3402,7 @@ TEST_P(InformationSchemaTest, DefaultConstraintColumnUsage) {
       {"", "", "edge_table", "ToId", "", "", "PK_edge_table"},  // NOLINT
       {"", "", "node_table", "Id", "", "", "CK_IS_NOT_NULL_node_table_Id"},  // NOLINT
       {"", "", "node_table", "Id", "", "", "PK_node_table"},  // NOLINT
+      {"", "", "vector_table", "id", "", "", "PK_vector_table"},  // NOLINT
     });
     // clang-format on
     CheckResultsAgainstExpected(results, expected);
@@ -4308,6 +4320,30 @@ TEST_P(SequenceInformationSchemaTest, SequenceOptionsTable) {
     {"", "", "myseq2", "start_with_counter", "INT64", "20"}});
   // clang-format on
   EXPECT_THAT(results, IsOkAndHoldsUnorderedRows(expected));
+}
+
+TEST_P(InformationSchemaTest, VectorIndex) {
+  if (GetParam() != database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    return;
+  }
+
+  // Check that the index type is 'VECTOR' in INFORMATION_SCHEMA.INDEXES.
+  // Currently expectation is it might be 'INDEX' until we fix it.
+  // exact expectation:
+  // INDEX_NAME: vec_index, INDEX_TYPE: VECTOR
+  EXPECT_THAT(Query(R"sql(
+      SELECT INDEX_NAME, INDEX_TYPE
+      FROM INFORMATION_SCHEMA.INDEXES
+      WHERE INDEX_NAME = 'vec_index'
+    )sql"),
+              IsOkAndHoldsRows({{"vec_index", "VECTOR"}}));
+
+  EXPECT_THAT(Query(R"sql(
+      SELECT SPANNER_TYPE
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_NAME = 'vector_table' AND COLUMN_NAME = 'embedding'
+    )sql"),
+              IsOkAndHoldsRows({{"ARRAY<FLOAT32>(vector_length=>2)"}}));
 }
 
 }  // namespace

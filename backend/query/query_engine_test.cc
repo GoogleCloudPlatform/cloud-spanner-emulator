@@ -844,7 +844,7 @@ TEST_P(QueryEngineTest, ExecuteSqlSelectGetTableColumnIdentityState) {
     EXPECT_THAT(
         query_engine().ExecuteSql(Query{invalid_sql},
                                   QueryContext{sequence_schema(), reader()}),
-        StatusIs(StatusCode::kNotFound,
+        StatusIs(StatusCode::kInvalidArgument,
                  HasSubstr("function "
                            "invalid_schema.get_table_column_identity_state("
                            "unknown) does not exist")));
@@ -2327,12 +2327,10 @@ TEST_P(QueryEngineTest, TestCannotQueryChangeStreamPartitionTableExternally) {
   Query query{
       "SELECT partition_token FROM "
       "_change_stream_partition_change_stream_test_table"};
-  EXPECT_THAT(
-      query_engine().ExecuteSql(
-          query, QueryContext{change_stream_schema(),
-                              change_stream_partition_table_reader()}),
-      StatusIs(GetParam() == POSTGRESQL ? StatusCode::kNotFound
-                                        : StatusCode::kInvalidArgument));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  query, QueryContext{change_stream_schema(),
+                                      change_stream_partition_table_reader()}),
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST_P(QueryEngineTest, TestCanQueryChangeStreamDataTableInternally) {
@@ -2349,12 +2347,10 @@ TEST_P(QueryEngineTest, TestCannotQueryChangeStreamDataTableExternally) {
   Query query{
       "SELECT partition_token FROM "
       "_change_stream_data_change_stream_test_table"};
-  EXPECT_THAT(
-      query_engine().ExecuteSql(
-          query, QueryContext{change_stream_schema(),
-                              change_stream_data_table_reader()}),
-      StatusIs(GetParam() == POSTGRESQL ? StatusCode::kNotFound
-                                        : StatusCode::kInvalidArgument));
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  query, QueryContext{change_stream_schema(),
+                                      change_stream_data_table_reader()}),
+              StatusIs(StatusCode::kInvalidArgument));
 }
 
 TEST_P(QueryEngineTest, TestMlQuery) {
@@ -2400,6 +2396,27 @@ TEST_P(QueryEngineTest, TestPropertyGraphBasicQuery) {
   EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
               IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(2)),
                                                 ElementsAre(Int64(1)),
+                                                ElementsAre(Int64(4)))));
+}
+
+TEST_P(QueryEngineTest, TestPropertyGraphWithDistinct) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      "GRAPH test_graph "
+      "MATCH (a)-[]->(b) "
+      "WITH DISTINCT a "
+      "RETURN a.id AS node_id"};
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(1)),
+                                                ElementsAre(Int64(2)),
                                                 ElementsAre(Int64(4)))));
 }
 

@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "zetasql/public/value.h"
+#include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
@@ -73,6 +74,14 @@ class TransactionStore {
 
   // Buffers a write operation. Acquires write locks.
   absl::Status BufferWriteOp(const WriteOp& op);
+
+  // Tracks commit timestamps for the current statement operations and then
+  // clears them.
+  void TrackCommitTimestamps();
+
+  // Returns "last-operation-wins" deduplicated ops per key in the current
+  // statement.
+  std::vector<WriteOp> GetDeduplicatedCurrentStatementOps() const;
 
   // Returns the column values for 'key' by merging information from the
   // buffered mutations and the base storage. Returns NOT_FOUND if 'key'
@@ -147,10 +156,13 @@ class TransactionStore {
   LockHandle* lock_handle_;
 
   // Map that stores the buffered mutations.
-  absl::flat_hash_map<const Table*, std::map<Key, RowOp>> buffered_ops_;
+  absl::flat_hash_map<const Table*, absl::btree_map<Key, RowOp>> buffered_ops_;
 
   // Tracks tables/columns containing pending commit timestamps.
-  const CommitTimestampTracker* commit_timestamp_tracker_;
+  CommitTimestampTracker* commit_timestamp_tracker_;
+
+  // Tracks all operations buffered during the current statement.
+  std::vector<WriteOp> current_statement_ops_;
 };
 
 }  // namespace backend

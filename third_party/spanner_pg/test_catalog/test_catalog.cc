@@ -64,7 +64,7 @@ void MutateLanguageOptionsForSpangres(zetasql::LanguageOptions* options) {
   // existing Spangres tests have non-strict mode ZetaSQL queries.
   options->set_name_resolution_mode(zetasql::NAME_RESOLUTION_DEFAULT);
 
-  options->EnableLanguageFeature(zetasql::FEATURE_V_1_3_DML_RETURNING);
+  options->EnableLanguageFeature(zetasql::FEATURE_DML_RETURNING);
 
   // Proto and enum are not supported in spangres.
   options->DisableLanguageFeature(zetasql::FEATURE_PROTO_BASE);
@@ -73,20 +73,20 @@ void MutateLanguageOptionsForSpangres(zetasql::LanguageOptions* options) {
   options->DisableLanguageFeature(zetasql::FEATURE_MAP_TYPE);
 
   options->EnableLanguageFeature(
-      zetasql::FEATURE_V_1_3_NULLS_FIRST_LAST_IN_ORDER_BY);
+      zetasql::FEATURE_NULLS_FIRST_LAST_IN_ORDER_BY);
 
-  options->EnableLanguageFeature(zetasql::FEATURE_V_1_4_FOR_UPDATE);
+  options->EnableLanguageFeature(zetasql::FEATURE_FOR_UPDATE);
 
   // `SELECT ARRAY_AGG(x HAVING MAX y) FROM (SELECT 1 as x, 2 as y UNION ALL
   //  SELECT 2, 3)` not supported in PostgreSQL.
-  options->DisableLanguageFeature(zetasql::FEATURE_V_1_1_HAVING_IN_AGGREGATE);
+  options->DisableLanguageFeature(zetasql::FEATURE_HAVING_IN_AGGREGATE);
   // `SELECT ARRAY_AGG(x LIMIT 10) FROM (SELECT 1 as x)` not supported in
   // PostgreSQL.
-  options->DisableLanguageFeature(zetasql::FEATURE_V_1_1_LIMIT_IN_AGGREGATE);
+  options->DisableLanguageFeature(zetasql::FEATURE_LIMIT_IN_AGGREGATE);
   // `SELECT ARRAY_AGG(x IGNORE NULLS) FROM (SELECT null as x
   //  union all select 3)` not supported in PostgreSQL.
   options->DisableLanguageFeature(
-      zetasql::FEATURE_V_1_1_NULL_HANDLING_MODIFIER_IN_AGGREGATE);
+      zetasql::FEATURE_NULL_HANDLING_MODIFIER_IN_AGGREGATE);
 }
 
 }  // namespace

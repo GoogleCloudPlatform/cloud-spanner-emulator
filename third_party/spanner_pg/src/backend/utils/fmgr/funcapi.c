@@ -17,6 +17,7 @@
 #include "access/relation.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_proc.h"
+#include "catalog/pg_proc_d.h"
 #include "catalog/pg_type.h"
 #include "funcapi.h"
 #include "miscadmin.h"
@@ -424,6 +425,43 @@ get_func_result_type(Oid functionId,
 									resultTupleDesc);
 }
 
+// SPANGRES BEGIN
+static TupleDesc spangres_get_function_result_tupdesc(Oid funcid) {
+  extern int GetFunctionArgInfo(Oid, Oid**, char***, char**);
+  Oid* argtypes = NULL;
+  char** argnames = NULL;
+  char* argmodes = NULL;
+  int numargs = GetFunctionArgInfo(funcid, &argtypes, &argnames, &argmodes);
+
+  if (numargs <= 0 || argmodes == NULL) {
+    return NULL;
+  }
+
+  int numoutargs = 0;
+  for (int i = 0; i < numargs; ++i) {
+    if (argmodes[i] == PROARGMODE_OUT || argmodes[i] == PROARGMODE_INOUT ||
+        argmodes[i] == PROARGMODE_TABLE) {
+      numoutargs++;
+    }
+  }
+  if (numoutargs == 0) {
+    return NULL;
+  }
+
+  TupleDesc desc = CreateTemplateTupleDesc(numoutargs);
+  int j = 1;
+  for (int i = 0; i < numargs; ++i) {
+    if (argmodes[i] == PROARGMODE_OUT || argmodes[i] == PROARGMODE_INOUT ||
+        argmodes[i] == PROARGMODE_TABLE) {
+      TupleDescInitEntry(desc, j, argnames ? argnames[i] : NULL, argtypes[i],
+                         -1, 0);
+      j++;
+    }
+  }
+  return desc;
+}
+// SPANGRES END
+
 /*
  * internal_get_result_type -- workhorse code implementing all the above
  *
@@ -452,11 +490,11 @@ internal_get_result_type(Oid funcid,
 	rettype = procform->prorettype;
 
 	/*
-	 * Spangres does not support RECORD return types. Verify this function doesn't
-	 * return RECORD.
+	 * Spangres does not support RECORD return types for scalar UDFs. Verify this
+	 * function doesn't return RECORD.
 	 * TODO: Add support for complex types.
 	 */
-	if (procform->prorettype == RECORDOID) {
+	if (procform->prorettype == RECORDOID && !procform->proretset) {
 		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 										errmsg("Cannot get result type for function %u", funcid)));
 	}
@@ -487,11 +525,20 @@ internal_get_result_type(Oid funcid,
 	/* Classify the result type */
 	TypeFuncClass result = get_type_func_class(rettype, &base_rettype);
 	/* TODO: Add support for complex types */
-	if (result == TYPEFUNC_COMPOSITE || result == TYPEFUNC_RECORD) {
+	if (result == TYPEFUNC_COMPOSITE || (result == TYPEFUNC_RECORD && !procform->proretset)) {
 		/* Should not happen since we checked this above */
 		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						errmsg("Cannot get result type for function %u", funcid)));
 	}
+	if (result == TYPEFUNC_RECORD) {
+          TupleDesc desc = spangres_get_function_result_tupdesc(funcid);
+          if (desc) {
+            if (resultTupleDesc) {
+              *resultTupleDesc = desc;
+            }
+            result = TYPEFUNC_COMPOSITE;
+          }
+        }
 	// SPANGRES END
 	return result;
 }

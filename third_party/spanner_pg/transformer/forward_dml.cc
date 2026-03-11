@@ -982,7 +982,8 @@ ForwardTransformer::BuildPartialGsqlResolvedDeleteStmt(const Query& query) {
 
   // Construct a ResolvedDeleteStmt.
   return zetasql::MakeResolvedDeleteStmt(
-      std::move(table_scan), /*assert_rows_modified=*/nullptr,
+      std::move(table_scan),
+      nullptr,
       std::move(returning_clause), /*array_offset_column=*/nullptr,
       std::move(where_expr));
 }

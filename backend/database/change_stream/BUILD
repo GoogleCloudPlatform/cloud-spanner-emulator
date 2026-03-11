@@ -71,6 +71,7 @@ cc_test(
         "//backend/transaction:read_only_transaction",
         "//common:clock",
         "//tests/common:proto_matchers",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/status",

@@ -45,6 +45,7 @@ cc_test(
         "//frontend/common:uris",
         "//frontend/entities:session",
         "//tests/common:proto_matchers",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/strings",
         "@com_google_googleapis//google/spanner/admin/instance/v1:instance_cc_grpc",
@@ -74,6 +75,7 @@ cc_test(
     deps = [
         ":handler",
         "//tests/common:proto_matchers",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googletest//:gtest_main",

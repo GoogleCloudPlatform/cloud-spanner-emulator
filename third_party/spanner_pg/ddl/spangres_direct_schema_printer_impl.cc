@@ -633,6 +633,13 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
           }
           return StrCat(alter_table, " SET LOCALITY GROUP ",
                         option.string_value());
+        } else if (absl::EqualsIgnoreCase(option.option_name(),
+                                          "columnar_policy")) {
+          if (option.null_value()) {
+            return StrCat(alter_table, " SET COLUMNAR POLICY NULL");
+          }
+          return StrCat(alter_table, " SET COLUMNAR POLICY ",
+                        option.string_value());
         }
       }
       return absl::InvalidArgumentError("Invalid options for <ALTER TABLE>.");
@@ -713,6 +720,19 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateTable(
     }
   }
   StrAppend(&after_create, locality_group);
+
+  std::string columnar_policy = "";
+  for (const google::spanner::emulator::backend::ddl::SetOption& option : statement.set_options()) {
+    if (option.option_name() == "columnar_policy") {
+      StrAppend(&columnar_policy, " COLUMNAR POLICY ");
+      if (option.null_value()) {
+        StrAppend(&columnar_policy, "NULL");
+      } else {
+        StrAppend(&columnar_policy, option.string_value());
+      }
+    }
+  }
+  StrAppend(&after_create, columnar_policy);
 
   if (statement.has_interleave_clause()) {
     ZETASQL_ASSIGN_OR_RETURN(std::string interleave_in_string,
@@ -1229,13 +1249,20 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterIndex(
           }
           break;
         }
+        if (option.option_name() == "columnar_policy") {
+          alter_type = " SET COLUMNAR POLICY ";
+          if (option.null_value()) {
+            column_name = "NULL";
+          } else {
+            column_name = option.string_value();
+          }
+          break;
+        }
       }
       if (column_name.empty()) {
-        // TODO: b/410616675 - Alter this error message after columnar policy is
-        // allowed
         return absl::InvalidArgumentError(
-            "Locality group option not found in <ALTER INDEX ... SET "
-            "LOCALITY GROUP> statement.");
+            "No option found in a "
+            "<ALTER INDEX ... SET > statement.");
       }
       break;
     }
@@ -1286,6 +1313,17 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateIndex(
   for (const google::spanner::emulator::backend::ddl::SetOption& option : statement.set_options()) {
     if (option.option_name() == "locality_group") {
       StrAppend(&other_options, " LOCALITY GROUP ");
+      if (option.null_value()) {
+        StrAppend(&other_options, "NULL");
+      } else {
+        StrAppend(&other_options, option.string_value());
+      }
+    }
+  }
+
+  for (const google::spanner::emulator::backend::ddl::SetOption& option : statement.set_options()) {
+    if (option.option_name() == "columnar_policy") {
+      StrAppend(&other_options, " COLUMNAR POLICY ");
       if (option.null_value()) {
         StrAppend(&other_options, "NULL");
       } else {

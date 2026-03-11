@@ -813,6 +813,7 @@ cc_library(
         "//third_party/spanner_pg/errors:error_catalog",
         "//third_party/spanner_pg/interface:catalog_wrappers",
         "//third_party/spanner_pg/postgres_includes",
+        "//third_party/spanner_pg/src/backend/catalog:generated_catalog_headers",
         "//third_party/spanner_pg/transformer",
         "//third_party/spanner_pg/util:pg_list_iterators",
         "@com_google_absl//absl/flags:flag",
@@ -845,9 +846,9 @@ cc_test(
     features = ["-use_header_modules"],
     tags = ["spanner.spangres"],
     deps = [
+        ":catalog_adapter_holder",
         ":catalog_wrappers",
         "//third_party/spanner_pg/bootstrap_catalog",
-        "//third_party/spanner_pg/catalog:catalog_adapter_holder",
         "//third_party/spanner_pg/interface:catalog_wrappers",
         "//third_party/spanner_pg/interface:ereport",
         "//third_party/spanner_pg/postgres_includes",

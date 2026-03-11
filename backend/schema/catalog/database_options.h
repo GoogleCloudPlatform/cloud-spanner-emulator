@@ -51,6 +51,10 @@ class DatabaseOptions : public SchemaNode {
     return default_time_zone_;
   }
 
+  std::optional<std::string> version_retention_period() const {
+    return version_retention_period_;
+  }
+
   // SchemaNode interface implementation.
   // ------------------------------------
   std::optional<SchemaNameInfo> GetSchemaNameInfo() const override {
@@ -97,6 +101,8 @@ class DatabaseOptions : public SchemaNode {
   std::optional<std::string> default_sequence_kind_;
   // Default time zone for the database.
   std::optional<std::string> default_time_zone_;
+  // Version retention period for the database.
+  std::optional<std::string> version_retention_period_;
 };
 }  // namespace backend
 }  // namespace emulator

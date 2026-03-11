@@ -589,7 +589,7 @@ transformDeleteStmt(ParseState *pstate, DeleteStmt *stmt)
 	if (pstate->p_hasAggs)
 		parseCheckAggregates(pstate, qry);
 
-	return qry;
+  return qry;
 }
 
 /*

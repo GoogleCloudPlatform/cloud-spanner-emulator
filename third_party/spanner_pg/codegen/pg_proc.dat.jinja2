@@ -52,6 +52,17 @@
   prosrc => 'cancel_query'
 },
 
+{
+  oid => '50077',
+  proname => 'compact_all',
+  pronamespace => 'spanner',
+  prolang => 'spanner_internal',
+  prokind => 'p',
+  prorettype => 'void',
+  proargtypes => '',
+  prosrc => 'compact_all'
+},
+
 # Automated entries
 {%- for entry in pg_proc_entries %}
 {

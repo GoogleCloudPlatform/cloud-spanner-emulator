@@ -146,6 +146,7 @@ static constexpr char kColumnColumnUsage[] = "COLUMN_COLUMN_USAGE";
 static constexpr char kDepenentColumn[] = "DEPENDENT_COLUMN";
 static constexpr char kIndexes[] = "INDEXES";
 static constexpr char kIndex[] = "INDEX";
+static constexpr char kVectorIndex[] = "VECTOR";
 static constexpr char kIndexName[] = "INDEX_NAME";
 static constexpr char kIndexType[] = "INDEX_TYPE";
 static constexpr char kIsUnique[] = "IS_UNIQUE";
@@ -795,6 +796,13 @@ void InformationSchemaCatalog::FillTablesTable() {
 // Returns the spanner_type based on the dialect.
 zetasql::Value InformationSchemaCatalog::GetSpannerType(
     const Column* column) {
+  if (column->vector_length().has_value()) {
+    std::string type_string =
+        ColumnTypeToString(column->GetType(), column->declared_max_length());
+    absl::StrAppend(&type_string, "(vector_length=>",
+                    column->vector_length().value(), ")");
+    return String(type_string);
+  }
   return GetSpannerType(column->GetType(), column->declared_max_length());
 }
 
@@ -1164,7 +1172,7 @@ void InformationSchemaCatalog::FillIndexesTable() {
           // index_name
           String(SDLObjectName::GetInSchemaName(index->Name())),
           // index_type
-          String(kIndex),
+          String(index->is_vector_index() ? kVectorIndex : kIndex),
           // parent_table_name
           String(index->parent()
                      ? SDLObjectName::GetInSchemaName(index->parent()->Name())
@@ -1279,29 +1287,31 @@ void InformationSchemaCatalog::FillIndexColumnsTable() {
       int pos = 1;
       // Add key columns.
       for (const KeyColumn* key_column : index->key_columns()) {
-        rows.push_back({// table_catalog
-                        DialectTableCatalog(),
-                        // table_schema
-                        String(table_schema_part),
-                        // table_name
-                        String(table_name_part),
-                        // index_name
-                        String(SDLObjectName::GetInSchemaName(index->Name())),
-                        // index_type
-                        String(kIndex),
-                        // column_name
-                        String(key_column->column()->Name()),
-                        // ordinal_position
-                        Int64(pos++),
-                        // column_ordering
-                        DialectColumnOrdering(key_column),
-                        // is_nullable
-                        String(key_column->column()->is_nullable() &&
-                                       !index->is_null_filtered()
-                                   ? kYes
-                                   : kNo),
-                        // spanner_type
-                        GetSpannerType(key_column->column())});
+        rows.push_back(
+            {// table_catalog
+             DialectTableCatalog(),
+             // table_schema
+             String(table_schema_part),
+             // table_name
+             String(table_name_part),
+             // index_name
+             String(SDLObjectName::GetInSchemaName(index->Name())),
+             // index_type
+             String(index->is_vector_index() ? kVectorIndex : kIndex),
+             // column_name
+             String(key_column->column()->Name()),
+             // ordinal_position
+             Int64(pos++),
+             // column_ordering
+             index->is_vector_index() ? NullString()
+                                      : DialectColumnOrdering(key_column),
+             // is_nullable
+             String(key_column->column()->is_nullable() &&
+                            !index->is_null_filtered()
+                        ? kYes
+                        : kNo),
+             // spanner_type
+             GetSpannerType(key_column->column())});
       }
       // Add storing columns.
       for (const Column* column : index->stored_columns()) {
@@ -1315,7 +1325,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable() {
             // index_name
             String(SDLObjectName::GetInSchemaName(index->Name())),
             // index_type
-            String(kIndex),
+            String(index->is_vector_index() ? kVectorIndex : kIndex),
             // column_name
             String(column->Name()),
             // ordinal_position

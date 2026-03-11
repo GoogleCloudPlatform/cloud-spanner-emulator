@@ -265,6 +265,7 @@ TEST_F(SerializationDeserializationTest, CreateStmt) {
   create_stmt->oncommit = ONCOMMIT_PRESERVE_ROWS;
   create_stmt->tablespacename = pstrdup("test_tablespace");
   create_stmt->locality_group_name = makeNode(LocalityGroupOption);
+  create_stmt->columnar_policy_name = makeNode(ColumnarPolicyOption);
   create_stmt->if_not_exists = true;
   create_stmt->ttl = makeNode(Ttl);
   create_stmt->ttl->name = pstrdup("some_column");
@@ -521,6 +522,7 @@ TEST_F(SerializationDeserializationTest, IndexStmt) {
   index_stmt->accessMethod = pstrdup("btree");
   index_stmt->tableSpace = pstrdup("placeholder_tablespace");
   index_stmt->locality_group_name = makeNode(LocalityGroupOption);
+  index_stmt->columnar_policy_name = makeNode(ColumnarPolicyOption);
   index_stmt->indexParams = list_make1(PlaceHolderNode());
   index_stmt->indexIncludingParams = list_make1(PlaceHolderNode());
   index_stmt->options = list_make1(PlaceHolderNode());
@@ -563,6 +565,7 @@ TEST_F(SerializationDeserializationTest, AlterTableCmd) {
   alter_table_cmd->behavior = DROP_RESTRICT;
   alter_table_cmd->missing_ok = true;
   alter_table_cmd->locality_group_name = makeNode(LocalityGroupOption);
+  alter_table_cmd->columnar_policy_name = makeNode(ColumnarPolicyOption);
 
   EXPECT_THAT(alter_table_cmd, CanSerializeAndDeserialize());
 }

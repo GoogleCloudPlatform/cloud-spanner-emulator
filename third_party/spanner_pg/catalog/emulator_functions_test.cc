@@ -3791,7 +3791,7 @@ TEST_F(EmulatorFunctionsTest, CastNumericToInt64ReturnsErrorForNaN) {
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext("NaN")})),
-              StatusIs(absl::StatusCode::kUnimplemented,
+              StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("cannot convert NaN to bigint")));
 }
 

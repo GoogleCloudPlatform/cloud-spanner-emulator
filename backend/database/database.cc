@@ -119,6 +119,9 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
   database->query_engine_->SetLatestSchemaForFunctionCatalog(
       database->versioned_catalog_->GetLatestSchema());
 
+  database->storage_->SetVersionRetentionPeriod(
+      database->versioned_catalog_->version_retention_period());
+
   return database;
 }
 absl::StatusOr<std::unique_ptr<ReadOnlyTransaction>>
@@ -195,6 +198,14 @@ absl::Status Database::UpdateSchema(
   // set the latest schema to the function catalog here.
   query_engine_->SetLatestSchemaForFunctionCatalog(
       versioned_catalog_->GetLatestSchema());
+
+  storage_->SetVersionRetentionPeriod(
+      versioned_catalog_->version_retention_period());
+
+  // Enforce the retention period.
+  storage_->CleanUpDeletedTables(update_timestamp);
+  storage_->CleanUpDeletedColumns(update_timestamp);
+  versioned_catalog_->RemoveExpiredSchemas(update_timestamp);
 
   return absl::OkStatus();
 }

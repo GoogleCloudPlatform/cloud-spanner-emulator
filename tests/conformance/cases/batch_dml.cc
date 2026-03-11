@@ -234,15 +234,8 @@ TEST_P(BatchDmlTest, InvalidDmlFailsButCommitSucceeds) {
       txn,
       {SqlStatement(
           "INSERT INTO InvalidTable(id, name, age) VALUES (1, 'Levin', 27)")});
-  if (dialect_ == database_api::POSTGRESQL) {
-    EXPECT_THAT(ToUtilStatus(result.value().status),
-                StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                       : absl::StatusCode::kNotFound));
-
-  } else {
-    EXPECT_THAT(ToUtilStatus(result.value().status),
-                StatusIs(absl::StatusCode::kInvalidArgument));
-  }
+  EXPECT_THAT(ToUtilStatus(result.value().status),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Commit succeeds on same transaction.
   result = BatchDmlTransaction(
@@ -276,13 +269,7 @@ TEST_P(BatchDmlTest, BatchDmlFailsInReadOnlyTxn) {
           "INSERT INTO InvalidTable(id, name, age) VALUES (1, 'Levin', 27)")});
   // The Status can come from the call Status or the `BatchDmlResult`
   auto status = !result.ok() ? result.status() : ToUtilStatus(result->status);
-  if (dialect_ == database_api::POSTGRESQL) {
-    EXPECT_THAT(status,
-                StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                       : absl::StatusCode::kNotFound));
-  } else {
-    EXPECT_THAT(status, StatusIs(absl::StatusCode::kInvalidArgument));
-  }
+  EXPECT_THAT(status, StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_P(BatchDmlTest, InvalidNonInitialDmlTransactionRemainsOpen) {
@@ -298,9 +285,7 @@ TEST_P(BatchDmlTest, InvalidNonInitialDmlTransactionRemainsOpen) {
   ZETASQL_EXPECT_OK(ToUtilStatus(result.status()));
   EXPECT_EQ(result.value().stats.size(), 2);
   EXPECT_THAT(ToUtilStatus(result.value().status),
-              StatusIs(!in_prod_env() && dialect_ == database_api::POSTGRESQL
-                           ? absl::StatusCode::kNotFound
-                           : absl::StatusCode::kInvalidArgument));
+              StatusIs(absl::StatusCode::kInvalidArgument));
   // Commit succeeds on same transaction because it was not rolled back.
   ZETASQL_EXPECT_OK(CommitTransaction(txn, {}));
 }

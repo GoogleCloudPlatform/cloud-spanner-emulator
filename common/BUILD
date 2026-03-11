@@ -39,6 +39,7 @@ cc_test(
     deps = [
         ":clock",
         "//tests/common:proto_matchers",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
@@ -116,6 +117,7 @@ cc_test(
         ":feature_flags",
         "//tests/common:proto_matchers",
         "//tests/common:scoped_feature_flags_setter",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
@@ -155,6 +157,7 @@ cc_test(
     deps = [
         ":pg_literals",
         "//tests/common:proto_matchers",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",

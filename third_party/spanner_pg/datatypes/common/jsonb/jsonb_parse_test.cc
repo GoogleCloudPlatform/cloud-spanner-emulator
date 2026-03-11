@@ -293,6 +293,15 @@ TEST(JSONBParseTest, NullJSON) {
   EXPECT_EQ(jsonb, "null");
 }
 
+TEST(JSONBParseTest, EmptyTextToJSONReturnsError) {
+  EXPECT_THAT(
+      ParseJsonb(""),
+      zetasql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          testing::ContainsRegex("Error parsing user input JSON "
+                                 ".*\\[json.exception.parse_error.101\\]")));
+}
+
 // Test cases that result in errors.
 using ParsingErrorTest = ValidMemoryContextParameterized<std::string>;
 

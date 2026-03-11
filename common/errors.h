@@ -669,6 +669,8 @@ absl::Status GeneratedColumnDefinitionParseError(absl::string_view table_name,
                                                  absl::string_view column_name,
                                                  absl::string_view message);
 absl::Status NonScalarExpressionInColumnExpression(absl::string_view type);
+absl::Status NonStoredGeneratedColumnsMarkedAsNotNull(
+    absl::string_view column_name);
 absl::Status ColumnExpressionMaxDepthExceeded(int depth, int max_depth);
 absl::Status InvalidDropColumnReferencedByGeneratedColumn(
     absl::string_view column_name, absl::string_view table_name,

@@ -33,6 +33,7 @@
 #include <cstdio>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -319,8 +320,12 @@ std::string UnderscoresToTitleCase(const std::string& input) {
 
 // Represents a single error message from the error file.
 struct Message {
-  // The code: "BadUsage", "PermissionDenied", etc.
+  // The PG error code: "UNDEFINED_TABLE", "UNDEFINED_FUNCTION", etc.
   std::string code;
+
+  // If present, errors should use this code instead of the
+  // canonical code that would be generated from the above `code` field.
+  std::optional<google::rpc::Code> canonical_code;
 
   // The symbolic name for the message, e.g., "NullWrittenToNotNullColumn".
   std::string name;
@@ -380,6 +385,9 @@ struct Message {
                       const MessageProto& msg) {
     Message ret;
     ret.code = group.code();
+    if (msg.has_canonical_code()) {
+      ret.canonical_code = msg.canonical_code();
+    }
     ret.name = msg.name();
     ret.namespaze = absl::AsciiStrToLower(group.code());
     // Loop over the declared parameters first, as the order in the parameters
@@ -600,12 +608,21 @@ void WriteSource(FILE* f, const ErrorFile& file, const std::string& h_filename,
       msg_expr = "exc.what()";
     }
     fprintf(f, "%s {\n", signature.c_str());
+    std::string canonical_code;
+    if (msg.canonical_code.has_value()) {
+      canonical_code =
+          absl::Substitute("static_cast<absl::StatusCode>(google::rpc::$0)",
+                           google::rpc::Code_Name(msg.canonical_code.value()));
+    } else {
+      canonical_code =
+          absl::Substitute("spangres::error::CanonicalCode($0$1)",
+                           kPGErrorCodePrefix, absl::AsciiStrToUpper(msg.code));
+    }
     // Generate internal error message.
     fprintf(f,
             "  absl::Status err = "
-            "absl::Status(spangres::error::CanonicalCode(%s%s), %s);\n",
-            kPGErrorCodePrefix, absl::AsciiStrToUpper(msg.code).c_str(),
-            msg_expr.c_str());
+            "absl::Status(%s, %s);\n",
+            canonical_code.c_str(), msg_expr.c_str());
     fprintf(f, "  spangres::error::PgErrorInfo pg_error_info;\n");
     fprintf(f, "  pg_error_info.set_pg_error_code(%s%s);\n", kPGErrorCodePrefix,
             absl::AsciiStrToUpper(msg.code).c_str());

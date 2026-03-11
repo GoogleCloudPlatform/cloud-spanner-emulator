@@ -188,15 +188,11 @@ TEST_P(SearchTest, SearchFunctionWrongArguments) {
           WHERE SEARCH(summary_tokens)
             AND userid = 1
           ORDER BY albumid ASC)sql";
-  auto expected_status =
-      IsGoogleStandardSql()
-          ? StatusIs(absl::StatusCode::kInvalidArgument,
-                     HasSubstr("function SPANNER:SEARCH"))
-          : StatusIs(
-                in_prod_env() ? absl::StatusCode::kInvalidArgument
-                              : absl::StatusCode::kNotFound,
-                HasSubstr("function spanner.search"));
-  EXPECT_THAT(Query(GetSqlQueryString(query)), expected_status);
+  EXPECT_THAT(
+      Query(GetSqlQueryString(query)),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr(IsGoogleStandardSql() ? "function SPANNER:SEARCH"
+                                               : "function spanner.search")));
 }
 
 TEST_P(SearchTest, SearchSubStringRelativeSearch) {
@@ -234,15 +230,10 @@ TEST_P(SearchTest, SearchSubstringWrongArguments) {
             AND userid = 1
           ORDER BY albumid ASC)sql";
 
-  auto expected_status =
-      IsGoogleStandardSql()
-          ? StatusIs(absl::StatusCode::kInvalidArgument,
-                     HasSubstr("function SPANNER:SEARCH_SUBSTRING"))
-          : StatusIs(
-                in_prod_env() ? absl::StatusCode::kInvalidArgument
-                              : absl::StatusCode::kNotFound,
-                HasSubstr("function spanner.search_substring"));
-
+  auto expected_status = StatusIs(
+      absl::StatusCode::kInvalidArgument,
+      HasSubstr(IsGoogleStandardSql() ? "function SPANNER:SEARCH_SUBSTRING"
+                                      : "function spanner.search_substring"));
   EXPECT_THAT(Query(GetSqlQueryString(query1)), expected_status);
 
   std::string query2 = R"sql(

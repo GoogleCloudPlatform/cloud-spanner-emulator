@@ -4123,6 +4123,18 @@ TEST(CreateChangeStream, CanParseCreateChangeStreamForAll) {
                 })pb")));
 }
 
+TEST(CreateChangeStream, CanParseCreateChangeStreamIfNotExists) {
+  EXPECT_THAT(ParseDDLStatement(
+                  R"sql(CREATE CHANGE STREAM IF NOT EXISTS ChangeStream FOR
+      ALL)sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_change_stream {
+                  change_stream_name: "ChangeStream"
+                  for_clause { all: true }
+                  existence_modifier: IF_NOT_EXISTS
+                })pb")));
+}
+
 TEST(CreateChangeStream, CanParseCreateChangeStreamForExplicitEntireTable) {
   EXPECT_THAT(ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
       TestTable)sql"),
@@ -8230,6 +8242,39 @@ TEST(OnUpdate, OnUpdateAlterColumn) {
                       alter_column {
                         column { column_name: "C" type: NONE }
                         operation: DROP_ON_UPDATE
+                      }
+                    }
+                  )pb")));
+}
+TEST(VersionRetentionPeriod, HandlesOption) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER DATABASE d SET OPTIONS(version_retention_period=NULL)
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_database {
+                      db_name: "d"
+                      set_options {
+                        options {
+                          option_name: "version_retention_period"
+                          null_value: true
+                        }
+                      }
+                    }
+                  )pb")));
+
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER DATABASE d SET OPTIONS(version_retention_period='2h')
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_database {
+                      db_name: "d"
+                      set_options {
+                        options {
+                          option_name: "version_retention_period"
+                          string_value: "2h"
+                        }
                       }
                     }
                   )pb")));

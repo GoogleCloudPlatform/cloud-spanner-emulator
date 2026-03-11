@@ -24,6 +24,7 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/memory/memory.h"
 #include "absl/time/time.h"
+#include "backend/actions/manager.h"
 
 namespace google {
 namespace spanner {
@@ -101,6 +102,30 @@ TEST(VersionedCatalogTest, AddSchemaWithSameOrEarlierCreationTime) {
               zetasql_base::testing::StatusIs(
                   absl::StatusCode::kInternal,
                   testing::MatchesRegex(".*Failed to insert schema.*")));
+}
+
+TEST(VersionedCatalogTest, ExpiredSchemasThatCoverRetentionPeriodAreKept) {
+  VersionedCatalog catalog;
+  ActionManager action_manager;
+  absl::Time t0 = absl::Now();
+  absl::Time t1 = t0 + absl::Minutes(10);
+  absl::Time t2 = t0 + absl::Minutes(40);
+  absl::Time t3 = t0 + absl::Hours(1) + absl::Seconds(1);
+  absl::Time t4 = t2 + absl::Hours(1) + absl::Seconds(1);
+
+  ZETASQL_EXPECT_OK(catalog.AddSchema(t0, std::make_unique<const Schema>()));
+  ZETASQL_EXPECT_OK(catalog.AddSchema(t1, std::make_unique<const Schema>()));
+  ZETASQL_EXPECT_OK(catalog.AddSchema(t2, std::make_unique<const Schema>()));
+
+  catalog.RemoveExpiredSchemas(t3);
+  // Verify that the schema created at t0 is not removed as it still covers the
+  // retention period.
+  EXPECT_NE(catalog.GetSchema(t0), catalog.GetSchema(absl::InfinitePast()));
+
+  catalog.RemoveExpiredSchemas(t4);
+  // Verify that the schema created at t0 is removed as it is no longer required
+  // to cover the retention period.
+  EXPECT_EQ(catalog.GetSchema(t0), catalog.GetSchema(absl::InfinitePast()));
 }
 
 }  // namespace

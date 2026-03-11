@@ -506,3 +506,13 @@ CREATE TABLE T (
 ) PRIMARY KEY(id);
 --
 ERROR:.* Error parsing the definition of generated column `T`.`expr`: The PENDING_COMMIT_TIMESTAMP\(\) function may only be used as a value for INSERT or UPDATE of an appropriately typed column. It cannot be used in SELECT, or as the input to any other scalar expression.
+
+==
+# NOT NULL constraint on non-stored generated column.
+# --regex
+CREATE TABLE T (
+  id INT64,
+  expr INT64 NOT NULL AS (id),
+) PRIMARY KEY(id);
+--
+ERROR:.* Generated column `T.expr` that are not marked as STORED cannot be specified as NOT NULL.

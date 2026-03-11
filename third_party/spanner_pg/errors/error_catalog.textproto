@@ -323,11 +323,13 @@ group {
 
   message {
     name: "UnableToConvertNanToNumber"
+    canonical_code: OUT_OF_RANGE
     pg_message_id: "cannot convert NaN to %s"
   }
 
   message {
     name: "UnableToConvertNanToInteger"
+    canonical_code: OUT_OF_RANGE
     pg_message_id: "cannot convert NaN to integer"
   }
 

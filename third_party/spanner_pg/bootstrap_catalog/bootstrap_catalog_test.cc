@@ -198,6 +198,13 @@ TEST(BootstrapCatalog, GetProcOidInt8Sum) {
   EXPECT_THAT(int8_sum_oid, ElementsAre(1842));
 }
 
+TEST(BootstrapCatalog, SpannerCompactAllProc) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid compact_all_oid,
+                       PgBootstrapCatalog::Default()->GetProcOid(
+                           "spanner", "compact_all", {}));
+  EXPECT_EQ(compact_all_oid, 50077);
+}
+
 TEST(BootstrapCatalog, GetProcOidsLog) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<Oid> log_oids, GetProcOids("log"));
   EXPECT_THAT(log_oids, ElementsAre(1340, 1736, 1741));

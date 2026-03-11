@@ -128,28 +128,6 @@ class DatabaseApiTest : public test::ServerTest {
                                                             database);
   }
 
-  absl::Status UpdateDatabaseDdl(
-      const std::string& database_uri,
-      const std::vector<std::string>& update_statements,
-      database_api::UpdateDatabaseDdlMetadata* metadata = nullptr) {
-    grpc::ClientContext context;
-    database_api::UpdateDatabaseDdlRequest request;
-    request.set_database(database_uri);
-    for (auto statement : update_statements) {
-      request.add_statements(statement);
-    }
-    operations_api::Operation operation;
-    ZETASQL_RETURN_IF_ERROR(test_env()->database_admin_client()->UpdateDatabaseDdl(
-        &context, request, &operation));
-    ZETASQL_RETURN_IF_ERROR(WaitForOperation(operation.name(), &operation));
-    if (metadata) {
-      ZETASQL_RET_CHECK(operation.metadata().UnpackTo(metadata));
-    }
-    google::rpc::Status status = operation.error();
-    return absl::Status(static_cast<absl::StatusCode>(status.code()),
-                        status.message());
-  }
-
   absl::Status GetDatabaseDdl(const std::string& database_uri,
                               database_api::GetDatabaseDdlResponse* response) {
     grpc::ClientContext context;
@@ -539,15 +517,20 @@ TEST_F(DatabaseApiTest, UpdateAndGetDatabaseDDL) {
 ) PRIMARY KEY(int64_col))sql"},
   };
 
-  for (auto schema : test_schemas) {
+  for (int i = 0; i < test_schemas.size(); ++i) {
+    auto schema = test_schemas[i];
     ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_, schema));
 
     database_api::GetDatabaseDdlResponse response;
     ZETASQL_EXPECT_OK(GetDatabaseDdl(test_database_uri_, &response));
 
-    for (int i = 0; i < schema.size(); ++i) {
-      EXPECT_THAT(response.statements(i), schema[i]);
+    for (int j = 0; j < schema.size(); ++j) {
+      EXPECT_THAT(response.statements(j), schema[j]);
     }
+    EXPECT_EQ(response.proto_descriptors(),
+              i == test_schemas.size() - 1
+                  ? GenerateProtoDescriptorBytesAsString()
+                  : "");
 
     ZETASQL_EXPECT_OK(
         DropDatabase(MakeDatabaseUri(test_instance_uri_, test_database_name_)));

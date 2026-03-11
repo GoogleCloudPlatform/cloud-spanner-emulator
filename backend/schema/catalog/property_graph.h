@@ -200,7 +200,7 @@ class PropertyGraph : public SchemaNode {
   // ------------------------------------
   std::optional<SchemaNameInfo> GetSchemaNameInfo() const override {
     return SchemaNameInfo{
-        .name = name_, .kind = "PropertyGraph", .global = true};
+        .name = name_, .kind = "Property Graph", .global = true};
   }
   absl::Status Validate(SchemaValidationContext* context) const override;
   absl::Status ValidateUpdate(const SchemaNode* orig,

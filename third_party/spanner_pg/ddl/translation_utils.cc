@@ -147,6 +147,9 @@ static std::vector<PGAlterOption> GetOptionList() {
           PostgreSQLConstants::kSpangresDefaultTimeZoneOptionName, T_String,
           PostgreSQLConstants::kInternalDatabaseDefaultTimeZoneOptionName,
           T_String),
+      PGAlterOption(
+          PostgreSQLConstants::kSpangresColumnarPolicyOptionName, T_String,
+          PostgreSQLConstants::kInternalColumnarPolicyOptionName, T_String),
   };
 
   return options;

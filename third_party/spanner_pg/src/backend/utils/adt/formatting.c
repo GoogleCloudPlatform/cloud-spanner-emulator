@@ -4813,7 +4813,8 @@ do_to_timestamp(text *date_txt, text *fmt, Oid collid, bool std,
 		// validation before returning the result (see ValidateDate below).
 		// `tmfc.dd = (tmfc.w - 1) * 7 + 1;`
 		int tmp;
-		if (pg_mul_s32_overflow((tmfc.w - 1), 7, &tmp) ||
+		if (pg_sub_s32_overflow(tmfc.w, 1, &tmp) ||
+				pg_mul_s32_overflow(tmp, 7, &tmp) ||
 			  pg_add_s32_overflow(tmp, 1, &tmfc.dd)) {
 			tmfc.dd = -1;
 		}

@@ -61,6 +61,7 @@ cc_test(
         ":manager",
         "//backend/common:ids",
         "//tests/common:proto_matchers",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",

@@ -682,6 +682,12 @@ typedef struct LocalityGroupOption {
 	bool is_null;  /* whether the option value is NULL */
 } LocalityGroupOption;
 
+typedef struct ColumnarPolicyOption {
+  NodeTag type;
+  char *value;  /* string value of the columnar policy option */
+  bool is_null; /* whether the option value is NULL */
+} ColumnarPolicyOption;
+
 /*
  * ColumnDef - column definition (used in various creates)
  *
@@ -2095,6 +2101,7 @@ typedef enum AlterTableType
 	AT_DropIndexIncludeColumn,	/* ALTER INDEX DROP INCLUDE COLUMN -- drop an
 															non-key column from the index*/
 	AT_SetLocalityGroup,				/* SET LOCALITY GROUP */
+	AT_SetColumnarPolicy, /* SET COLUMNAR POLICY */
 	AT_AddSynonym,				/* add synonym */
   AT_DropSynonym,				/* drop synonym */
 	AT_ColumnOnUpdate  /* ADD/DROP ON UPDATE behavior */
@@ -2123,6 +2130,8 @@ typedef struct AlterTableCmd /* one subcommand of an ALTER TABLE */
 	bool		recurse;		/* exec-time recursion */
   LocalityGroupOption *locality_group_name; /* locality group to be attached to the table */
 
+  ColumnarPolicyOption *columnar_policy_name; /* columnar policy for the
+                                               * table */
 	// SPANGRES BEGIN
   char *raw_expr_string;  // `raw_expr` in its SQL text representation
                           // used for the constraints with expression
@@ -2355,6 +2364,7 @@ typedef struct CreateStmt
 	InterleaveSpec	*interleavespec; /* INTERLEAVE IN clause */
 	Ttl        *ttl;            /* TTL for table */
 	LocalityGroupOption *locality_group_name;  /* locality group for the table */
+	ColumnarPolicyOption *columnar_policy_name; /* columnar policy for the table*/
 } CreateStmt;
 
 /* ----------
@@ -3091,6 +3101,7 @@ typedef struct IndexStmt
 	List	   *excludeOpNames; /* exclusion operator names, or NIL if none */
 	char	   *idxcomment;		/* comment to apply to index, or NULL */
 	LocalityGroupOption *locality_group_name;  /* locality group name, or NULL */
+	ColumnarPolicyOption *columnar_policy_name;  /* columnar policy for the table, or NULL */
 	Oid			indexOid;		/* OID of an existing index, if any */
 	Oid			oldNode;		/* relfilenode of existing storage, if any */
 	SubTransactionId oldCreateSubid;	/* rd_createSubid of oldNode */

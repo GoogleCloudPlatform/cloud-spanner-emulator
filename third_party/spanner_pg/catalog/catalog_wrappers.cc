@@ -54,6 +54,7 @@
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/transformer/transformer.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
+#include "third_party/spanner_pg/src/backend/catalog/pg_type_d.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
 
@@ -647,10 +648,14 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromTVF(
   ZETASQL_RET_CHECK(signature->result_type().IsFixedRelation());
   const zetasql::TVFRelation& output_schema =
       signature->result_type().options().relation_input_schema();
-  ZETASQL_RET_CHECK_EQ(output_schema.num_columns(), 1);
-  ZETASQL_ASSIGN_OR_RETURN(
-      proc->prorettype,
-      Transformer::BuildPgTypeOid(*adapter, output_schema.column(0).type));
+
+  if (output_schema.num_columns() == 1) {
+    ZETASQL_ASSIGN_OR_RETURN(
+        proc->prorettype,
+        Transformer::BuildPgTypeOid(*adapter, output_schema.column(0).type));
+  } else {
+    proc->prorettype = RECORDOID;
+  }
 
   result.push_back(proc);
   return result;
@@ -723,7 +728,8 @@ static absl::Status GetProcsByNameFromUserCatalog(
 // This is a helper function that handles retrieving TVF data for
 // GetFunctionArgInfo. Returns true iff the TVF is found with one signature.
 static bool GetArgInfoForTVF(Oid tvf_oid, std::vector<Oid>& argument_types,
-                             std::vector<std::string>& argument_names) {
+                             std::vector<std::string>& argument_names,
+                             std::vector<char>& argument_modes) {
   const auto adapter = postgres_translator::GetCatalogAdapter();
   if (!adapter.ok()) {
     postgres_translator::ereport_helper(adapter.status(),
@@ -750,6 +756,20 @@ static bool GetArgInfoForTVF(Oid tvf_oid, std::vector<Oid>& argument_types,
         argument_names.push_back(arg.argument_name());
       } else {
         argument_names.push_back("");
+      }
+      argument_modes.push_back('i');
+    }
+    const zetasql::TVFRelation& output_schema =
+        signature->result_type().options().relation_input_schema();
+    if (output_schema.num_columns() > 1) {
+      for (int i = 0; i < output_schema.num_columns(); i++) {
+        const zetasql::TVFRelation::Column& col = output_schema.column(i);
+        auto pg_type = adapter.value()
+                           ->GetEngineSystemCatalog()
+                           ->GetTypeFromReverseMapping(col.type);
+        argument_types.push_back(pg_type->PostgresTypeOid());
+        argument_names.push_back(col.name);
+        argument_modes.push_back('t');
       }
     }
     return true;
@@ -1418,8 +1438,9 @@ extern "C" int GetFunctionArgInfo(Oid proc_oid, Oid **p_argtypes,
   // Function not found in BootstrapCatalog which means it may be a TVF.
   std::vector<std::string> argument_names;
   std::vector<Oid> argument_types;
+  std::vector<char> argument_modes;
   if (postgres_translator::GetArgInfoForTVF(proc_oid, argument_types,
-                                            argument_names)) {
+                                            argument_names, argument_modes)) {
     // Cannot point directly to the data for TVFs so we need to copy it.
     *p_argtypes = (Oid*)palloc(argument_types.size() * sizeof(Oid));
     memcpy(*p_argtypes, argument_types.data(),
@@ -1428,7 +1449,18 @@ extern "C" int GetFunctionArgInfo(Oid proc_oid, Oid **p_argtypes,
     for (int i = 0; i < argument_names.size(); ++i) {
       (*p_argnames)[i] = pstrdup(argument_names[i].c_str());
     }
-    *p_argmodes = NULL;  // Ignore argmodes for TVFs.
+    // Copy argmodes if the TVF has OUT arguments (e.g. queue receive TVF).
+    bool has_out_args = false;
+    for (char mode : argument_modes) {
+      if (mode != 'i') has_out_args = true;
+    }
+    if (has_out_args) {
+      *p_argmodes = (char*)palloc(argument_modes.size() * sizeof(char));
+      memcpy(*p_argmodes, argument_modes.data(),
+             argument_modes.size() * sizeof(char));
+    } else {
+      *p_argmodes = nullptr;
+    }
     return argument_types.size();
   };
   // Function not found in TVF catalog which means it may be a UDF.
