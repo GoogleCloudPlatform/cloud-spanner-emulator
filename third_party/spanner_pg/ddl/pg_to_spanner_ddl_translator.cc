@@ -887,6 +887,14 @@ PostgreSQLToSpannerDDLTranslatorImpl::TranslateOption(
         absl::StrCat("Database option <", option_name, "> is not supported."));
   }
 
+  if (option->PGName() ==
+          internal::PostgreSQLConstants::
+              kSpangresColumnarPolicyOptionName &&
+      !options.enable_columnar_policy) {
+    return UnsupportedTranslationError(
+        absl::StrCat("Database option <", option_name, "> is not supported."));
+  }
+
   return *option;
 }
 
@@ -2062,6 +2070,22 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
     }
   }
 
+  if (create_statement.columnar_policy_name != nullptr) {
+    if (!options.enable_columnar_policy) {
+      return UnsupportedTranslationError(
+          "<CREATE TABLE ... SET COLUMNAR POLICY> statement is not supported.");
+    }
+    google::spanner::emulator::backend::ddl::SetOption* const columnar_policy_option =
+        out.add_set_options();
+    columnar_policy_option->set_option_name("columnar_policy");
+    if (create_statement.columnar_policy_name->is_null) {
+      columnar_policy_option->set_null_value(true);
+    } else {
+      columnar_policy_option->set_string_value(
+          create_statement.columnar_policy_name->value);
+    }
+  }
+
   // Post processing phase: add all the constraints (PRIMARY KEY, FOREIGN KEY,
   // NULL, NOT NULL).
   for (int i = 0; i < out.column_size(); i++) {
@@ -2375,6 +2399,37 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
       return absl::OkStatus();
     }
 
+    case AT_ColumnOnUpdate: {
+      google::spanner::emulator::backend::ddl::AlterTable::AlterColumn* alter_column =
+          out.mutable_alter_column();
+      alter_column->mutable_column()->set_column_name(first_cmd->name);
+
+      // Per ColumnDefinition::Type, NONE is used for ALTER statements that have
+      // no effect on the column type. See comments there for more details.
+      alter_column->mutable_column()->set_type(
+          google::spanner::emulator::backend::ddl::ColumnDefinition::NONE);
+
+      if (first_cmd->def == nullptr) {
+        alter_column->set_operation(
+            google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::DROP_ON_UPDATE);
+      } else {
+        alter_column->set_operation(
+            google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::SET_ON_UPDATE);
+        ZETASQL_ASSIGN_OR_RETURN(std::string serialized_expression,
+                         CheckedPgNodeToString(first_cmd->def));
+        google::spanner::emulator::backend::ddl::SQLExpressionOrigin* expression_origin =
+            alter_column->mutable_column()
+                ->mutable_column_on_update()
+                ->mutable_expression_origin();
+        expression_origin->set_serialized_parse_tree(serialized_expression);
+        if (options.enable_expression_string) {
+          expression_origin->set_original_expression(
+              first_cmd->raw_expr_string);
+        }
+      }
+      return absl::OkStatus();
+    }
+
     case AT_SetNotNull: {
       google::spanner::emulator::backend::ddl::AlterTable::AlterColumn* alter_column =
           out.mutable_alter_column();
@@ -2482,6 +2537,24 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
       } else {
         locality_group_option->set_string_value(
             first_cmd->locality_group_name->value);
+      }
+      return absl::OkStatus();
+    }
+
+    case AT_SetColumnarPolicy: {
+      if (!options.enable_columnar_policy) {
+        return UnsupportedTranslationError(
+            "<ALTER TABLE ... SET COLUMNAR POLICY> statement is not "
+            "supported.");
+      }
+      google::spanner::emulator::backend::ddl::SetOption* const columnar_policy_option =
+          out.mutable_set_options()->add_options();
+      columnar_policy_option->set_option_name("columnar_policy");
+      if (first_cmd->columnar_policy_name->is_null) {
+        columnar_policy_option->set_null_value(true);
+      } else {
+        columnar_policy_option->set_string_value(
+            first_cmd->columnar_policy_name->value);
       }
       return absl::OkStatus();
     }
@@ -4005,6 +4078,28 @@ absl::Status ProcessLocalityGroup(const IndexStmt& create_index_statement,
   return absl::OkStatus();
 }
 
+template <typename SDLType>
+absl::Status ProcessColumnarPolicy(const IndexStmt& create_index_statement,
+                                   SDLType& create_index_out,
+                                   const TranslationOptions& options) {
+  if (create_index_statement.columnar_policy_name != nullptr) {
+    if (!options.enable_columnar_policy) {
+      return UnsupportedTranslationError(
+          "<CREATE INDEX ... SET COLUMNAR POLICY> statement is not supported.");
+    }
+    google::spanner::emulator::backend::ddl::SetOption* const columnar_policy_option =
+        create_index_out.add_set_options();
+    columnar_policy_option->set_option_name("columnar_policy");
+    if (create_index_statement.columnar_policy_name->is_null) {
+      columnar_policy_option->set_null_value(true);
+    } else {
+      columnar_policy_option->set_string_value(
+          create_index_statement.columnar_policy_name->value);
+    }
+  }
+  return absl::OkStatus();
+}
+
   absl::Status
   PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::Translate(
       const IndexStmt& create_index_statement,
@@ -4080,6 +4175,8 @@ absl::Status ProcessLocalityGroup(const IndexStmt& create_index_statement,
 
   ZETASQL_RETURN_IF_ERROR(
       ProcessLocalityGroup(create_index_statement, create_index_out, options));
+  ZETASQL_RETURN_IF_ERROR(
+      ProcessColumnarPolicy(create_index_statement, create_index_out, options));
 
   if (create_index_statement.if_not_exists && options.enable_if_not_exists) {
     create_index_out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_NOT_EXISTS);
@@ -4119,6 +4216,17 @@ PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::Translate(
         set_option->set_null_value(true);
       } else {
         set_option->set_string_value(first_cmd->locality_group_name->value);
+      }
+      break;
+    }
+    case AT_SetColumnarPolicy: {
+      google::spanner::emulator::backend::ddl::SetOption* set_option =
+          out.mutable_set_options()->add_options();
+      set_option->set_option_name("columnar_policy");
+      if (first_cmd->columnar_policy_name->is_null) {
+        set_option->set_null_value(true);
+      } else {
+        set_option->set_string_value(first_cmd->columnar_policy_name->value);
       }
       break;
     }

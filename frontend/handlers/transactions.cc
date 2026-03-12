@@ -23,6 +23,7 @@
 #include "google/spanner/v1/transaction.pb.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/time/time.h"
 #include "backend/access/write.h"
 #include "common/errors.h"
 #include "frontend/converters/mutations.h"
@@ -109,13 +110,6 @@ absl::Status Commit(RequestContext* ctx,
 
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn, maybe_txn);
 
-  if (txn->IsReadWrite() && session->multiplexed() && !is_single_use &&
-      !request->has_precommit_token()) {
-    // A lightweight commit retry protocol.
-    response->mutable_precommit_token();
-    return absl::OkStatus();
-  }
-
   // Wrap all operations on this transaction so they are atomic .
   return txn->GuardedCall(Transaction::OpType::kCommit, [&]() -> absl::Status {
     // Cannot commit a ReadOnlyTransaction.
@@ -145,6 +139,13 @@ absl::Status Commit(RequestContext* ctx,
     ZETASQL_RETURN_IF_ERROR(
         MutationFromProto(*txn->schema(), request->mutations(), &mutation));
     ZETASQL_RETURN_IF_ERROR(txn->Write(mutation));
+
+    if (txn->IsReadWrite() && session->multiplexed() && !is_single_use &&
+        !request->has_precommit_token()) {
+      // A lightweight commit retry protocol.
+      response->mutable_precommit_token();
+      return absl::OkStatus();
+    }
 
     // Actually commit the request.
     ZETASQL_RETURN_IF_ERROR(txn->Commit());

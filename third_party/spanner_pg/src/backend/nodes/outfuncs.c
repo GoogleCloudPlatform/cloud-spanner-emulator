@@ -2749,6 +2749,7 @@ _outCreateStmtInfo(StringInfo str, const CreateStmt *node)
 	WRITE_ENUM_FIELD(oncommit, OnCommitAction);
 	WRITE_STRING_FIELD(tablespacename);
 	WRITE_NODE_FIELD(locality_group_name);
+	WRITE_NODE_FIELD(columnar_policy_name);
 	WRITE_STRING_FIELD(accessMethod);
 	WRITE_BOOL_FIELD(if_not_exists);
 	WRITE_NODE_FIELD(interleavespec);
@@ -2800,6 +2801,7 @@ _outIndexStmt(StringInfo str, const IndexStmt *node)
 	WRITE_NODE_FIELD(indexIncludingParams);
 	WRITE_NODE_FIELD(options);
 	WRITE_NODE_FIELD(locality_group_name);
+	WRITE_NODE_FIELD(columnar_policy_name);
   WRITE_NODE_FIELD(interleavespec);
 	WRITE_NODE_FIELD(whereClause);
 	WRITE_NODE_FIELD(excludeOpNames);
@@ -3983,6 +3985,7 @@ _outAlterTableCmd(StringInfo str, const AlterTableCmd *node)
 	WRITE_ENUM_FIELD(behavior, DropBehavior);
 	WRITE_BOOL_FIELD(missing_ok);
 	WRITE_NODE_FIELD(locality_group_name);
+	WRITE_NODE_FIELD(columnar_policy_name);
 	WRITE_STRING_FIELD(raw_expr_string);
 }
 
@@ -4216,6 +4219,13 @@ static void _outAlterColumnLocalityGroupStmt(
   WRITE_NODE_FIELD(relation);
   WRITE_STRING_FIELD(column);
   WRITE_NODE_FIELD(locality_group_name);
+}
+
+static void _outColumnarPolicyOption(
+    StringInfo str, const ColumnarPolicyOption *node) {
+  WRITE_NODE_TYPE("COLUMNARPOLICYOPTION");
+  WRITE_STRING_FIELD(value);
+  WRITE_BOOL_FIELD(is_null);
 }
 
 static void
@@ -5180,6 +5190,9 @@ outNode(StringInfo str, const void *obj)
 			case T_AlterColumnLocalityGroupStmt:
 				_outAlterColumnLocalityGroupStmt(str, obj);
 				break;
+			case T_ColumnarPolicyOption:
+			  _outColumnarPolicyOption(str, obj);
+			  break;
 			case T_CreateRoleStmt:
 				_outCreateRoleStmt(str, obj);
 				break;

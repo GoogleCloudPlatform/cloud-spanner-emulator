@@ -65,6 +65,12 @@ class DatabaseOptions::Builder {
     return *this;
   }
 
+  Builder& set_version_retention_period(
+      std::optional<std::string> version_retention_period) {
+    instance_->version_retention_period_ = version_retention_period;
+    return *this;
+  }
+
  private:
   std::unique_ptr<DatabaseOptions> instance_;
 };
@@ -89,6 +95,12 @@ class DatabaseOptions::Editor {
 
   Editor& set_default_time_zone(std::optional<std::string> default_time_zone) {
     instance_->default_time_zone_ = default_time_zone;
+    return *this;
+  }
+
+  Editor& set_version_retention_period(
+      std::optional<std::string> version_retention_period) {
+    instance_->version_retention_period_ = version_retention_period;
     return *this;
   }
 

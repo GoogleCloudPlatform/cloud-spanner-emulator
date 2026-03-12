@@ -3440,6 +3440,7 @@ _copyAlterTableCmd(const AlterTableCmd *from)
 	COPY_SCALAR_FIELD(missing_ok);
 	COPY_SCALAR_FIELD(recurse);
 	COPY_NODE_FIELD(locality_group_name);
+	COPY_NODE_FIELD(columnar_policy_name);
 	COPY_STRING_FIELD(raw_expr_string);
 
 	return newnode;
@@ -3621,6 +3622,7 @@ CopyCreateStmtFields(const CreateStmt *from, CreateStmt *newnode)
 	COPY_SCALAR_FIELD(oncommit);
 	COPY_STRING_FIELD(tablespacename);
 	COPY_NODE_FIELD(locality_group_name);
+	COPY_NODE_FIELD(columnar_policy_name);
 	COPY_STRING_FIELD(accessMethod);
 	COPY_SCALAR_FIELD(if_not_exists);
 	COPY_NODE_FIELD(interleavespec);
@@ -3739,6 +3741,7 @@ _copyIndexStmt(const IndexStmt *from)
 	COPY_STRING_FIELD(accessMethod);
 	COPY_STRING_FIELD(tableSpace);
 	COPY_NODE_FIELD(locality_group_name);
+	COPY_NODE_FIELD(columnar_policy_name);
 	COPY_NODE_FIELD(indexParams);
 	COPY_NODE_FIELD(indexIncludingParams);
 	COPY_NODE_FIELD(options);
@@ -5183,6 +5186,15 @@ static AlterColumnLocalityGroupStmt *_copyAlterColumnLocalityGroupStmt(
 	return newnode;
 }
 
+static ColumnarPolicyOption *
+_copyColumnarPolicyOption(const ColumnarPolicyOption *from)
+{
+  ColumnarPolicyOption *newnode = makeNode(ColumnarPolicyOption);
+  COPY_STRING_FIELD(value);
+  COPY_SCALAR_FIELD(is_null);
+  return newnode;
+}
+
 static SynonymClause *
 _copySynonymClause(const SynonymClause *from)
 {
@@ -6104,6 +6116,9 @@ copyObjectImpl(const void *from)
 		case T_AlterColumnLocalityGroupStmt:
 			retval = _copyAlterColumnLocalityGroupStmt(from);
 			break;
+		case T_ColumnarPolicyOption:
+		  retval = _copyColumnarPolicyOption(from);
+		  break;
 		case T_A_Expr:
 			retval = _copyA_Expr(from);
 			break;

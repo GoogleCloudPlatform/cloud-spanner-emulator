@@ -241,6 +241,9 @@ namespace postgres_translator {
   absl::StatusOr<zetasql::Value> EvalExtract(
       absl::Span<const zetasql::Value> args);
 
+  absl::StatusOr<zetasql::Value> EvalTimestamptzTrunc(
+      absl::Span<const zetasql::Value> args);
+
   absl::StatusOr<zetasql::Value> EvalCastToTimestamp(
       absl::Span<const zetasql::Value> args);
 

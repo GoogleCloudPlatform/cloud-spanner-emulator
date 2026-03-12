@@ -73,6 +73,20 @@ class Storage {
   // ranges will result in INVALID_ARGUMENT.
   virtual absl::Status Delete(absl::Time timestamp, const TableID& table_id,
                               const KeyRange& key_range) = 0;
+
+  // Sets the version retention period from the database options.
+  // This is used to determine when to delete expired data from storage.
+  virtual void SetVersionRetentionPeriod(
+      absl::Duration version_retention_period) = 0;
+
+  virtual void CleanUpDeletedTables(absl::Time timestamp) = 0;
+  virtual void CleanUpDeletedColumns(absl::Time timestamp) = 0;
+
+  virtual void MarkDroppedTable(absl::Time timestamp,
+                                TableID dropped_table_id) = 0;
+
+  virtual void MarkDroppedColumn(absl::Time timestamp, TableID dropped_table_id,
+                                 ColumnID dropped_column_id) = 0;
 };
 
 }  // namespace backend

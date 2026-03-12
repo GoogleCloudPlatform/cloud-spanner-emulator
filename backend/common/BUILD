@@ -43,6 +43,7 @@ cc_test(
     deps = [
         ":ids",
         "//tests/common:proto_matchers",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:node_hash_set",
         "@com_google_absl//absl/synchronization",
@@ -81,6 +82,7 @@ cc_test(
         "indexing",
         "//tests/common:proto_matchers",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
@@ -107,6 +109,7 @@ cc_test(
     deps = [
         ":case",
         "//tests/common:proto_matchers",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_googletest//:gtest_main",
@@ -139,6 +142,7 @@ cc_test(
         "rows",
         "//tests/common:proto_matchers",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",
@@ -171,6 +175,7 @@ cc_test(
     deps = [
         ":graph_dependency_helper",
         "//tests/common:proto_matchers",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",

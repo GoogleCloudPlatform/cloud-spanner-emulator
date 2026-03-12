@@ -1612,7 +1612,7 @@ absl::Status MultipleRefsToKeyColumn(absl::string_view object_type,
 
 absl::Status UnsupportedAlterDatabaseOption(absl::string_view option_name) {
   return absl::Status(absl::StatusCode::kFailedPrecondition,
-                      absl::Substitute("Invalid Alter Database Option: $0."
+                      absl::Substitute("Invalid Alter Database Option: $0. "
                                        "Supported options are witness_location "
                                        "and default_leader.",
                                        option_name));
@@ -2767,6 +2767,15 @@ absl::Status NonScalarExpressionInColumnExpression(absl::string_view type) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
       absl::Substitute("Cannot use non-scalar expressions inside $0.", type));
+}
+
+absl::Status NonStoredGeneratedColumnsMarkedAsNotNull(
+    absl::string_view column_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Generated column `$0` that are not marked as STORED "
+                       "cannot be specified as NOT NULL.",
+                       column_name));
 }
 
 absl::Status ColumnExpressionMaxDepthExceeded(int depth, int max_depth) {

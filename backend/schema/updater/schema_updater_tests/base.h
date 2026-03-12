@@ -192,6 +192,7 @@ class SchemaUpdaterTest
     } else {
       pg_oid_assigner_ = std::make_unique<PgOidAssigner>(/*enabled=*/false);
     }
+    storage_ = std::make_unique<InMemoryStorage>();
   }
 
   std::unique_ptr<SpangresSchemaPrinter> pg_schema_printer_;
@@ -200,6 +201,7 @@ class SchemaUpdaterTest
   ColumnIDGenerator column_id_generator_;
   std::unique_ptr<PgOidAssigner> pg_oid_assigner_;
   ScopedEmulatorFeatureFlagsSetter feature_flags_;
+  std::unique_ptr<InMemoryStorage> storage_;
 };
 
 INSTANTIATE_TEST_SUITE_P(

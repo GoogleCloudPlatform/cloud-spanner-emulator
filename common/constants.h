@@ -89,6 +89,9 @@ constexpr char kInstanceResourceType[] =
 // The default timezone used by the query engine.
 constexpr char kDefaultTimeZone[] = "America/Los_Angeles";
 
+// The default version retention period for the database.
+constexpr char kDefaultVersionRetentionPeriod[] = "1h";
+
 // Change stream tvf output column name and type
 constexpr char kChangeStreamTvfOutputColumn[] = "ChangeRecord";
 constexpr char kChangeStreamTvfOutputFormat[] = R"(ARRAY<STRUCT<

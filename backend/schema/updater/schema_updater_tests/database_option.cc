@@ -132,6 +132,25 @@ TEST_P(DatabaseOptionTest, ValidDefaultTimeZoneOptionName) {
   EXPECT_EQ(schema->options()->default_time_zone().value(), "UTC");
 }
 
+TEST_P(DatabaseOptionTest, VersionRetentionPeriodOptionName) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"(
+      ALTER DATABASE db SET spanner.version_retention_period TO '2h'
+                                      )"},
+                                      /*proto_descriptor_bytes=*/"",
+                                      /*dialect=*/POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+  } else {
+    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+      ALTER DATABASE db SET OPTIONS (version_retention_period = '2h')
+        )"}));
+  }
+  ASSERT_TRUE(schema->options()->version_retention_period().has_value());
+  EXPECT_EQ(schema->options()->version_retention_period().value(), "2h");
+}
+
 TEST_P(DatabaseOptionTest, InvalidDatabaseOptionName) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {

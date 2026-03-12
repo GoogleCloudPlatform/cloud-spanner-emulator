@@ -185,6 +185,7 @@ cc_library(
         ":file_based_test_util",
         ":proto_matchers",
         "@bazel_tools//tools/cpp/runfiles",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
@@ -204,6 +205,7 @@ cc_library(
     deps = [
         ":proto_matchers",
         "@bazel_tools//tools/cpp/runfiles",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/log:absl_log",
@@ -224,6 +226,7 @@ cc_library(
         ":file_based_test_util",
         ":proto_matchers",
         "@bazel_tools//tools/cpp/runfiles",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/status:statusor",
@@ -245,6 +248,7 @@ cc_test(
     deps = [
         ":file_based_schema_reader",
         ":proto_matchers",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest_main",

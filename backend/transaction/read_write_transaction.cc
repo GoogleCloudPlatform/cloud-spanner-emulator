@@ -273,7 +273,8 @@ absl::Status ReadWriteTransaction::ApplyEffectors(const WriteOp& op) {
 }
 
 absl::Status ReadWriteTransaction::ApplyStatementVerifiers() {
-  for (const auto& write_op : transaction_store_->GetBufferedOps()) {
+  for (const auto& write_op :
+       transaction_store_->GetDeduplicatedCurrentStatementOps()) {
     ZETASQL_RETURN_IF_ERROR(
         action_registry_->ExecuteVerifiers(action_context_.get(), write_op));
   }
@@ -281,7 +282,7 @@ absl::Status ReadWriteTransaction::ApplyStatementVerifiers() {
 }
 
 void ReadWriteTransaction::UpdateTrackedCommitTimestamps() {
-  commit_timestamp_tracker_->Track(transaction_store_->GetBufferedOps());
+  transaction_store_->TrackCommitTimestamps();
 }
 
 const Schema* ReadWriteTransaction::schema() const {

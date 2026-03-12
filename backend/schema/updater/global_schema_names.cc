@@ -279,7 +279,9 @@ const CaseInsensitiveStringSet& GlobalSchemaNames::ReservedSchemaNames() {
 
 bool GlobalSchemaNames::IsSDLTypeAllowedInNamedSchema(absl::string_view type) {
   return type == "Table" || type == "Synonym" || type == "View" ||
-         type == "Sequence" || type == "Index" || type == "Udf";
+         type == "Sequence" || type == "Index" || type == "Udf" ||
+         type == "Foreign Key" || type == "Check Constraint" ||
+         type == "Property Graph";
 }
 
 }  // namespace backend

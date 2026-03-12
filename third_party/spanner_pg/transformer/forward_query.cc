@@ -100,9 +100,9 @@ ABSL_FLAG(
     "than the limit.");
 
 ABSL_FLAG(bool, spangres_use_emulator_ordinality_transformer, false,
-         "When true, array scans with array_offset_column will be wrapped in "
-         "a ProjectScan that adds one to the offset column to convert "
-         "zero-based offset to one-based ordinal values");
+          "When true, array scans with array_offset_column will be wrapped in "
+          "a ProjectScan that adds one to the offset column to convert "
+          "zero-based offset to one-based ordinal values");
 
 namespace postgres_translator {
 
@@ -859,6 +859,79 @@ ForwardTransformer::BuildGsqlResolvedJoinScan(
           /*array_offset_column=*/std::move(right_scan_array_offset_col_holder),
           /*join_expr=*/std::move(gsql_join_expr),
           /*is_outer=*/is_left_outer);
+    } else if (right_scan->Is<zetasql::ResolvedProjectScan>() &&
+               right_scan->GetAs<zetasql::ResolvedProjectScan>()
+                   ->input_scan()
+                   ->Is<zetasql::ResolvedArrayScan>()) {
+      // The Emulator's ordinality transformer wraps the ArrayScan in a
+      // ProjectScan, preventing the standard logic from identifying it as an
+      // array scan and acting as an opaque barrier to lateral correlation.
+      // We must manually propagate the lateral join input (left_scan) into the
+      // underlying ArrayScan to make the correlation visible, while keeping
+      // the ProjectScan wrapper for ordinality generation.
+      auto* project_scan = right_scan->GetAs<zetasql::ResolvedProjectScan>();
+
+      std::unique_ptr<const zetasql::ResolvedScan> inner_scan_const =
+          project_scan->release_input_scan();
+
+      std::unique_ptr<zetasql::ResolvedScan> inner_scan(
+          const_cast<zetasql::ResolvedScan*>(inner_scan_const.release()));
+
+      zetasql::ResolvedArrayScan* right_array_scan =
+          inner_scan->GetAs<zetasql::ResolvedArrayScan>();
+
+      std::unique_ptr<const zetasql::ResolvedColumnHolder>
+          right_scan_array_offset_col_holder = nullptr;
+      if (right_array_scan->array_offset_column() != nullptr) {
+        right_scan_array_offset_col_holder =
+            zetasql::MakeResolvedColumnHolder(
+                right_array_scan->array_offset_column()->column());
+      }
+      std::vector<zetasql::ResolvedColumn> array_scan_output_columns =
+          left_scan->column_list();
+
+      array_scan_output_columns.insert(array_scan_output_columns.end(),
+                                       right_array_scan->column_list().begin(),
+                                       right_array_scan->column_list().end());
+
+      std::unique_ptr<const zetasql::ResolvedExpr> array_scan_join_expr =
+          nullptr;
+      std::unique_ptr<const zetasql::ResolvedExpr> filter_scan_join_expr =
+          nullptr;
+
+      // If the join is INNER, we can move the join expression to a FilterScan
+      // on top of the ProjectScan. This is necessary if the join expression
+      // references the ordinality column, which is produced by the ProjectScan
+      // and not visible inside the ArrayScan.
+      // For LEFT/RIGHT/FULL joins, we cannot easily move the condition up,
+      // so we try to push it into the ArrayScan (which may fail if it
+      // references ordinality).
+      if (gsql_join_type == zetasql::ResolvedJoinScan::INNER) {
+        filter_scan_join_expr = std::move(gsql_join_expr);
+      } else {
+        array_scan_join_expr = std::move(gsql_join_expr);
+      }
+
+      std::unique_ptr<zetasql::ResolvedArrayScan> new_array_scan =
+          zetasql::MakeResolvedArrayScan(
+              /*column_list=*/array_scan_output_columns,
+              /*input_scan=*/std::move(left_scan),
+              /*array_expr=*/right_array_scan->release_array_expr(),
+              /*element_column=*/right_array_scan->element_column(),
+              /*array_offset_column=*/
+              std::move(right_scan_array_offset_col_holder),
+              /*join_expr=*/std::move(array_scan_join_expr),
+              /*is_outer=*/is_left_outer);
+
+      result = zetasql::MakeResolvedProjectScan(
+          output_columns, project_scan->release_expr_list(),
+          std::move(new_array_scan));
+
+      if (filter_scan_join_expr != nullptr) {
+        std::vector<zetasql::ResolvedColumn> columns = result->column_list();
+        result = zetasql::MakeResolvedFilterScan(
+            columns, std::move(result), std::move(filter_scan_join_expr));
+      }
     } else {
       // Although the RHS is an unnest expr, it may not be a ResolvedArrayScan
       // if it represents `unnest with ordinality` and was wrapped in a
@@ -992,6 +1065,44 @@ ForwardTransformer::BuildGsqlResolvedScanForFromList(
                               array_scan->column_list().begin(),
                               array_scan->column_list().end());
         array_scan->set_column_list(output_columns);
+        array_scan->set_input_scan(std::move(current_tree));
+      } else if (current_scan->Is<zetasql::ResolvedProjectScan>() &&
+                 current_scan->GetAs<zetasql::ResolvedProjectScan>()
+                     ->input_scan()
+                     ->Is<zetasql::ResolvedArrayScan>()) {
+        // Handle the comma-join equivalent of the opaque barrier issue
+        // described above. We inject the left-side tree into the underlying
+        // ArrayScan of the ProjectScan to enable correct lateral correlation
+        // for UNNEST ... WITH ORDINALITY in comma joins. Get the ProjectScan
+        // from the current scan (which is the right side of the comma join).
+        zetasql::ResolvedProjectScan* project_scan =
+            current_scan->GetAs<zetasql::ResolvedProjectScan>();
+
+        zetasql::ResolvedArrayScan* array_scan =
+            const_cast<zetasql::ResolvedArrayScan*>(
+                project_scan->input_scan()
+                    ->GetAs<zetasql::ResolvedArrayScan>());
+
+        std::vector<zetasql::ResolvedColumn> output_columns(
+            current_tree->column_list().begin(),
+            current_tree->column_list().end());
+
+        output_columns.insert(output_columns.end(),
+                              project_scan->column_list().begin(),
+                              project_scan->column_list().end());
+
+        project_scan->set_column_list(output_columns);
+
+        std::vector<zetasql::ResolvedColumn> array_scan_output_columns(
+            current_tree->column_list().begin(),
+            current_tree->column_list().end());
+
+        array_scan_output_columns.insert(array_scan_output_columns.end(),
+                                         array_scan->column_list().begin(),
+                                         array_scan->column_list().end());
+
+        array_scan->set_column_list(array_scan_output_columns);
+
         array_scan->set_input_scan(std::move(current_tree));
       } else {
         if (current_scan->Is<zetasql::ResolvedJoinScan>()) {

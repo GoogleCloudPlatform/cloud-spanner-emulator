@@ -298,7 +298,7 @@ TEST_F(NumericToCharTest, ReturnsErrorForInvalidNaNFormatting) {
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("\"NaN\" is not a number")));
   EXPECT_THAT(NumericToChar("NaN", "RN"),
-              StatusIs(absl::StatusCode::kUnimplemented,
+              StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("cannot convert NaN to integer")));
 }
 

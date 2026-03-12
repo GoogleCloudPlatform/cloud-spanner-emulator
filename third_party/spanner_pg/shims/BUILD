@@ -309,6 +309,10 @@ cc_library(
         # TSAN OOMs).
         "-fexceptions",
     ],
+    visibility = [
+        "//:__subpackages__",
+        "//spanner/client:__pkg__",
+    ],
     deps = [
         ":error_shim",
         "//third_party/spanner_pg/postgres_includes",

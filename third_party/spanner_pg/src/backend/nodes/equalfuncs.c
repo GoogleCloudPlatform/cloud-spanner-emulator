@@ -1174,6 +1174,7 @@ _equalAlterTableCmd(const AlterTableCmd *a, const AlterTableCmd *b)
 	COMPARE_SCALAR_FIELD(missing_ok);
 	COMPARE_SCALAR_FIELD(recurse);
 	COMPARE_NODE_FIELD(locality_group_name);
+	COMPARE_NODE_FIELD(columnar_policy_name);
 	COMPARE_STRING_FIELD(raw_expr_string);
 
 	return true;
@@ -1325,6 +1326,7 @@ _equalCreateStmt(const CreateStmt *a, const CreateStmt *b)
 	COMPARE_SCALAR_FIELD(oncommit);
 	COMPARE_STRING_FIELD(tablespacename);
 	COMPARE_NODE_FIELD(locality_group_name);
+	COMPARE_NODE_FIELD(columnar_policy_name);
 	COMPARE_STRING_FIELD(accessMethod);
 	COMPARE_SCALAR_FIELD(if_not_exists);
 	COMPARE_NODE_FIELD(interleavespec);
@@ -1419,6 +1421,7 @@ _equalIndexStmt(const IndexStmt *a, const IndexStmt *b)
 	COMPARE_STRING_FIELD(accessMethod);
 	COMPARE_STRING_FIELD(tableSpace);
 	COMPARE_NODE_FIELD(locality_group_name);
+	COMPARE_NODE_FIELD(columnar_policy_name);
 	COMPARE_NODE_FIELD(indexParams);
 	COMPARE_NODE_FIELD(indexIncludingParams);
 	COMPARE_NODE_FIELD(options);
@@ -2553,6 +2556,14 @@ static bool _equalAlterColumnLocalityGroupStmt(
   COMPARE_NODE_FIELD(relation);
   COMPARE_STRING_FIELD(column);
   COMPARE_NODE_FIELD(locality_group_name);
+
+  return true;
+}
+
+static bool _equalColumnarPolicyOption(const ColumnarPolicyOption *a,
+																			 const ColumnarPolicyOption *b) {
+  COMPARE_STRING_FIELD(value);
+  COMPARE_SCALAR_FIELD(is_null);
 
   return true;
 }
@@ -4066,6 +4077,9 @@ equal(const void *a, const void *b)
 		case T_AlterColumnLocalityGroupStmt:
 			retval = _equalAlterColumnLocalityGroupStmt(a, b);
 			break;
+		case T_ColumnarPolicyOption:
+		  retval = _equalColumnarPolicyOption(a, b);
+		  break;
 		case T_A_Expr:
 			retval = _equalA_Expr(a, b);
 			break;

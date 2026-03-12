@@ -23,7 +23,7 @@
  * the node numbers are never stored on disk.  But don't do it in a released
  * branch, because that would represent an ABI break for extensions.
  */
-typedef enum NodeTag
+typedef enum NodeTag : int
 {
 	T_Invalid = 0,
 
@@ -446,6 +446,7 @@ typedef enum NodeTag
 	T_AlterLocalityGroupStmt,
 	T_AlterColumnLocalityGroupStmt,
 	// SPANGRES BEGIN
+  T_ColumnarPolicyOption,
   T_CreateSearchIndexStmt,
   T_AlterSearchIndexStmt,
   T_AlterSearchIndexCmd,

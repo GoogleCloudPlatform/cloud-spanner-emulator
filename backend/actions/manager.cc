@@ -231,20 +231,20 @@ void ActionManager::AddActionsForSchema(const Schema* schema,
                                         const FunctionCatalog* function_catalog,
                                         zetasql::TypeFactory* type_factory) {
   absl::MutexLock l(&mutex_);
-  registry_[schema] =
+  latest_schema_ = schema;
+  registry_ =
       std::make_unique<ActionRegistry>(schema, function_catalog, type_factory);
 }
 
 absl::StatusOr<ActionRegistry*> ActionManager::GetActionsForSchema(
     const Schema* schema) const {
   absl::MutexLock l(&mutex_);
-  auto itr = registry_.find(schema);
-  if (itr == registry_.end()) {
+  if (latest_schema_ != schema) {
     return error::Internal(
         absl::StrCat("Schema generation ", schema->generation(),
                      " was not registered with the Action Manager"));
   }
-  return itr->second.get();
+  return registry_.get();
 }
 
 }  // namespace backend

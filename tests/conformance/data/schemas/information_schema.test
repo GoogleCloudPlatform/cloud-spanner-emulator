@@ -125,6 +125,11 @@ CREATE PROPERTY GRAPH test_graph
         SOURCE KEY(FromId) REFERENCES node_table(Id)
         DESTINATION KEY(ToId) REFERENCES node_table(Id)
         DEFAULT LABEL PROPERTIES ALL COLUMNS);
+CREATE TABLE vector_table (
+  id INT64,
+  embedding ARRAY<FLOAT32>(vector_length=>2),
+) PRIMARY KEY(id);
+CREATE VECTOR INDEX vec_index ON vector_table(embedding) WHERE embedding IS NOT NULL OPTIONS(distance_type = 'COSINE', tree_depth = 2);
 ===
 @Dialect=POSTGRESQL
 ALTER DATABASE db SET spanner.default_sequence_kind = 'bit_reversed_positive';

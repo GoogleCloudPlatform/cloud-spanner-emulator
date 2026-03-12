@@ -24,6 +24,7 @@
 #include "zetasql/public/types/type_factory.h"
 #include "zetasql/public/value.h"
 #include "absl/base/thread_annotations.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/node_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -81,11 +82,11 @@ class ActionRegistry {
   const Schema* schema_;
 
   // List of validators per table.
-  absl::node_hash_map<const Table*, std::vector<std::unique_ptr<Validator>>>
+  absl::flat_hash_map<const Table*, std::vector<std::unique_ptr<Validator>>>
       table_validators_;
 
   // List of effectors per table.
-  absl::node_hash_map<const Table*, std::vector<std::unique_ptr<Effector>>>
+  absl::flat_hash_map<const Table*, std::vector<std::unique_ptr<Effector>>>
       table_effectors_;
 
   // List of effectors for primary key columns per table.
@@ -93,11 +94,11 @@ class ActionRegistry {
       table_evaluated_key_effectors_;
 
   // List of modifiers per table.
-  absl::node_hash_map<const Table*, std::vector<std::unique_ptr<Modifier>>>
+  absl::flat_hash_map<const Table*, std::vector<std::unique_ptr<Modifier>>>
       table_modifiers_;
 
   // List of verifiers per table.
-  absl::node_hash_map<const Table*, std::vector<std::unique_ptr<Verifier>>>
+  absl::flat_hash_map<const Table*, std::vector<std::unique_ptr<Verifier>>>
       table_verifiers_;
 
   // Used for function resolution in actions.
@@ -118,8 +119,8 @@ class ActionManager {
       const Schema* schema) const;
 
  private:
-  absl::node_hash_map<const Schema*, std::unique_ptr<ActionRegistry>> registry_
-      ABSL_GUARDED_BY(mutex_);
+  const Schema* latest_schema_ ABSL_GUARDED_BY(mutex_);
+  std::unique_ptr<ActionRegistry> registry_ ABSL_GUARDED_BY(mutex_);
 
   mutable absl::Mutex mutex_;
 };

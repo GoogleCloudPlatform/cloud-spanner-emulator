@@ -214,6 +214,14 @@ class Schema {
     return kDefaultTimeZone;
   }
 
+  std::string version_retention_period() const {
+    if (options() != nullptr &&
+        options()->version_retention_period().has_value()) {
+      return options()->version_retention_period().value();
+    }
+    return kDefaultVersionRetentionPeriod;
+  }
+
   // Return user-visible options in this schema.
   const DatabaseOptions* const options() const { return database_options_; }
 

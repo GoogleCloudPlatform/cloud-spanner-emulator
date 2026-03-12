@@ -783,6 +783,18 @@ TEST_F(ProtoBundleTest, EnumTopologicalOrder_WithImports_Succeeds) {
                       TestEnum_descriptor()));
 }
 
+TEST_F(ProtoBundleTest, GetProtoDescriptorBytes) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+                       ProtoBundle::Builder::New(read_descriptors()));
+  ZETASQL_ASSERT_OK(builder->InsertTypes(
+      std::vector<std::string>{kSimpleProtoName, kParentProtoName,
+                               kGlobalEnumName, kImportingNestingEnumName}));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
+  ZETASQL_ASSERT_OK_AND_ASSIGN(std::string proto_descriptor_bytes,
+                       proto_bundle->GetProtoDescriptorBytes());
+  EXPECT_EQ(proto_descriptor_bytes, read_descriptors());
+}
+
 }  // namespace
 }  // namespace backend
 }  // namespace emulator

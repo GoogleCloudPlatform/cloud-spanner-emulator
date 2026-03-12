@@ -186,20 +186,31 @@ TEST(GlobalSchemaNames, ValidateConstraintName) {
 }
 
 TEST(GlobalSchemaNames, ValidateNamedSchemaName) {
+  // Valid named schema names.
   ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateNamedSchemaName("Albums"));
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Table", "Albums.Songs"));
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("View", "Albums.Songs"));
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Sequence", "Albums.Seq"));
-  ZETASQL_EXPECT_OK(
-      GlobalSchemaNames::ValidateSchemaName("Index", "Albums.SongsIndex"));
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Udf", "Albums.SongsUdf"));
-  EXPECT_THAT(GlobalSchemaNames::ValidateSchemaName("Schema", "Albums.Artists"),
-              Eq(error::SchemaObjectTypeUnsupportedInNamedSchema(
-                  "Schema", "Albums.Artists")));
   EXPECT_THAT(GlobalSchemaNames::ValidateNamedSchemaName("_Albums"),
               Eq(error::InvalidSchemaName("Schema", "_Albums")));
   EXPECT_THAT(GlobalSchemaNames::ValidateNamedSchemaName("pg_catalog"),
               Eq(error::InvalidSchemaName("Schema", "pg_catalog")));
+
+  // Validate names of SDL types in named schemas.
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Table", "Albums.Songs"));
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Synonym", "Albums.Songs"));
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Sequence", "Albums.Seq"));
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("View", "Albums.Songs"));
+  ZETASQL_EXPECT_OK(
+      GlobalSchemaNames::ValidateSchemaName("Index", "Albums.SongsIndex"));
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Udf", "Albums.SongsUdf"));
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Foreign Key",
+                                                  "Albums.FK_Songs_Artists"));
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Check Constraint",
+                                                  "Albums.CK_Songs_Artists"));
+  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Property Graph",
+                                                  "Albums.ArtistsGraph"));
+
+  EXPECT_THAT(GlobalSchemaNames::ValidateSchemaName("Schema", "Albums.Artists"),
+              Eq(error::SchemaObjectTypeUnsupportedInNamedSchema(
+                  "Schema", "Albums.Artists")));
 }
 
 }  // namespace

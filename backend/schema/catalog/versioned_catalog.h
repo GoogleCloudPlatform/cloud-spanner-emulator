@@ -63,6 +63,13 @@ class VersionedCatalog {
                          std::unique_ptr<const Schema> schema)
       ABSL_LOCKS_EXCLUDED(mu_);
 
+  void RemoveExpiredSchemas(absl::Time timestamp) ABSL_LOCKS_EXCLUDED(mu_);
+
+  absl::Duration version_retention_period() const {
+    absl::MutexLock lock(&mu_);
+    return version_retention_period_;
+  }
+
  private:
   // For guarding concurrent access to `schemas_`.
   mutable absl::Mutex mu_;
@@ -77,6 +84,10 @@ class VersionedCatalog {
   // of keys in this map.
   std::map<absl::Time, std::unique_ptr<const Schema>> schemas_
       ABSL_GUARDED_BY(mu_);
+
+  // The retention period for schema versions.
+  absl::Duration version_retention_period_ ABSL_GUARDED_BY(mu_) =
+      absl::Hours(1);
 };
 
 }  // namespace backend

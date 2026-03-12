@@ -138,6 +138,28 @@ class ServerTest : public testing::Test {
     return WaitForOperation(operation.name(), &operation);
   }
 
+  absl::Status UpdateDatabaseDdl(
+      const std::string& database_uri,
+      const std::vector<std::string>& update_statements,
+      database_api::UpdateDatabaseDdlMetadata* metadata = nullptr) {
+    grpc::ClientContext context;
+    database_api::UpdateDatabaseDdlRequest request;
+    request.set_database(database_uri);
+    for (auto statement : update_statements) {
+      request.add_statements(statement);
+    }
+    longrunning::Operation operation;
+    ZETASQL_RETURN_IF_ERROR(test_env()->database_admin_client()->UpdateDatabaseDdl(
+        &context, request, &operation));
+    ZETASQL_RETURN_IF_ERROR(WaitForOperation(operation.name(), &operation));
+    if (metadata) {
+      ZETASQL_RET_CHECK(operation.metadata().UnpackTo(metadata));
+    }
+    google::rpc::Status status = operation.error();
+    return absl::Status(static_cast<absl::StatusCode>(status.code()),
+                        status.message());
+  }
+
   absl::Status CreateTestDatabaseWithChangeStream(
       database_api::DatabaseDialect dialect) {
     // Create a database that belongs to the instance created above and create

@@ -650,6 +650,28 @@ void VisitKeyNode(const SimpleNode* node,
   }
 }
 
+void VisitIndexKeyNode(const SimpleNode* node,
+                       google::protobuf::RepeatedPtrField<KeyPartClause>* key,
+                       absl::string_view ddl_text,
+                       std::vector<std::string>* errors) {
+  for (int i = 0; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* index_key_part = GetChildNode(node, i, JJTINDEX_KEY_PART);
+    KeyPartClause* key_part = key->Add();
+    SimpleNode* child = GetChildNode(index_key_part, 0);
+    switch (child->getId()) {
+      case JJTKEY_PART: {
+        key_part->set_key_name(GetChildNode(child, 0, JJTPATH)->image());
+        SetSortOrder(child, key_part, errors);
+        break;
+      }
+      default:
+        errors->push_back(
+            absl::StrCat("Unexpected key part type: ", child->toString()));
+        break;
+    }
+  }
+}
+
 void VisitStoredColumnNode(const SimpleNode* node, StoredColumnDefinition* def,
                            std::vector<std::string>* errors) {
   CheckNode(node, JJTSTORED_COLUMN);
@@ -1602,6 +1624,7 @@ void VisitCreateViewNode(const SimpleNode* node, CreateFunction* function,
 }
 
 void VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index,
+                          absl::string_view ddl_text,
                           std::vector<std::string>* errors) {
   CheckNode(node, JJTCREATE_INDEX_STATEMENT);
   for (int i = 0; i < node->jjtGetNumChildren(); i++) {
@@ -1619,8 +1642,8 @@ void VisitCreateIndexNode(const SimpleNode* node, CreateIndex* index,
       case JJTTABLE:
         index->set_index_base_name(GetQualifiedIdentifier(child));
         break;
-      case JJTCOLUMNS:
-        VisitKeyNode(child, index->mutable_key(), errors);
+      case JJTINDEX_KEYS:
+        VisitIndexKeyNode(child, index->mutable_key(), ddl_text, errors);
         break;
       case JJTSTORED_COLUMN_LIST:
         VisitStoredColumnListNode(
@@ -2312,9 +2335,15 @@ void VisitCreateChangeStreamNode(const SimpleNode* node,
                                  CreateChangeStream* change_stream,
                                  std::vector<std::string>* errors) {
   CheckNode(node, JJTCREATE_CHANGE_STREAM_STATEMENT);
+  int offset = 0;
+  if (GetFirstChildNode(node, JJTIF_NOT_EXISTS) != nullptr) {
+    change_stream->set_existence_modifier(IF_NOT_EXISTS);
+    ++offset;
+  }
+
   change_stream->set_change_stream_name(
-      GetQualifiedIdentifier(GetChildNode(node, 0, JJTNAME)));
-  for (int i = 1; i < node->jjtGetNumChildren(); i++) {
+      GetQualifiedIdentifier(GetChildNode(node, offset++, JJTNAME)));
+  for (int i = offset; i < node->jjtGetNumChildren(); i++) {
     const SimpleNode* child = GetChildNode(node, i);
     switch (child->getId()) {
       case JJTCHANGE_STREAM_FOR_CLAUSE:
@@ -3406,7 +3435,8 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
                            errors);
       break;
     case JJTCREATE_INDEX_STATEMENT:
-      VisitCreateIndexNode(stmt, statement->mutable_create_index(), errors);
+      VisitCreateIndexNode(stmt, statement->mutable_create_index(), ddl_text,
+                           errors);
       break;
     case JJTCREATE_PLACEMENT_STATEMENT:
       VisitCreatePlacementNode(stmt, statement->mutable_create_placement(),

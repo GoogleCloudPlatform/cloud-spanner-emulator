@@ -935,8 +935,8 @@ TEST_F(EngineSystemCatalogTest, CastOverrideFunction) {
   // The default ZetaSQL catalog doesn't include date constructors.
   // Enable the feature so we have something to test  with.
   absl::flat_hash_set<zetasql::LanguageFeature> language_features = {
-      zetasql::FEATURE_V_1_2_CIVIL_TIME,
-      zetasql::FEATURE_V_1_3_DATE_TIME_CONSTRUCTORS};
+      zetasql::FEATURE_CIVIL_TIME,
+      zetasql::FEATURE_DATE_TIME_CONSTRUCTORS};
   ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog(language_features));
   zetasql::LanguageOptions language_options;

@@ -2518,6 +2518,127 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexWithInvalidOptions) {
   }
 }
 
+TEST_P(SchemaUpdaterTest, CreateSearchIndexWithManyTokenKeys) {
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(CreateSchema(
+                    {
+                        R"sql(
+        CREATE TABLE T (
+          k1 bigint NOT NULL,
+          c1 text,
+          t1 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t2 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t3 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t4 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t5 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t6 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t7 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t8 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t9 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t10 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t11 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t12 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t13 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t14 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t15 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t16 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          t17 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          PRIMARY KEY (k1))
+      )sql",
+                        R"sql(
+        CREATE SEARCH INDEX Idx ON T(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17)
+      )sql"},
+                    "", POSTGRESQL, false),
+                StatusIs(absl::OkStatus()));
+    return;
+  }
+
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+        CREATE TABLE T (
+          k1 INT64,
+          c1 STRING(MAX),
+          t1 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t2 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t3 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t4 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t5 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t6 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t7 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t8 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t9 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t10 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t11 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t12 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t13 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t14 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t15 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t16 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          t17 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN
+        ) PRIMARY KEY (k1)
+      )sql",
+                  R"sql(
+        CREATE SEARCH INDEX Idx ON T(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10,
+          t11, t12, t13, t14, t15, t16, t17)
+      )sql"}),
+              StatusIs(absl::OkStatus()));
+}
+
+TEST_P(SchemaUpdaterTest, CreateSearchIndexExceedsMaxKeyColumns) {
+  // This will fail because the index has 17 key columns (1 base key column + 10
+  // partitionBy columns + 4 orderBy columns + 1 token column + 1 UID column),
+  // which is more than the 16 key columns allowed for a search index.
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        CreateSchema(
+            {
+                R"sql(
+        CREATE TABLE T (
+          k1 bigint NOT NULL,
+          c1 text,
+          t1 spanner.tokenlist generated always as (spanner.tokenize_fulltext(c1)) stored hidden,
+          p1 bigint, p2 bigint, p3 bigint, p4 bigint, p5 bigint,
+          p6 bigint, p7 bigint, p8 bigint, p9 bigint, p10 bigint,
+          o1 bigint NOT NULL,
+          o2 bigint NOT NULL,
+          o3 bigint NOT NULL,
+          o4 bigint NOT NULL,
+          PRIMARY KEY (k1))
+      )sql",
+                R"sql(
+        CREATE SEARCH INDEX Idx ON T(t1)
+          PARTITION BY p1, p2, p3, p4, p5, p6, p7, p8, p9, p10
+          ORDER BY o1, o2, o3, o4
+      )sql"},
+            "", POSTGRESQL, false),
+        zetasql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            testing::HasSubstr("has too many keys (17); the limit is 16")));
+    return;
+  }
+
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+        CREATE TABLE T (
+          k1 INT64,
+          c1 STRING(MAX),
+          t1 TOKENLIST AS (TOKENIZE_FULLTEXT(c1)) HIDDEN,
+          p1 INT64, p2 INT64, p3 INT64, p4 INT64, p5 INT64,
+          p6 INT64, p7 INT64, p8 INT64, p9 INT64, p10 INT64,
+          o1 INT64 NOT NULL,
+          o2 INT64 NOT NULL,
+          o3 INT64 NOT NULL,
+          o4 INT64 NOT NULL
+        ) PRIMARY KEY (k1)
+      )sql",
+                  R"sql(
+        CREATE SEARCH INDEX Idx ON T(t1)
+          PARTITION BY p1, p2, p3, p4, p5, p6, p7, p8, p9, p10
+          ORDER BY o1, o2, o3, o4
+      )sql"}),
+              StatusIs(error::TooManyKeys("Index", "Idx", 17, 16)));
+}
+
 }  // namespace
 
 }  // namespace test

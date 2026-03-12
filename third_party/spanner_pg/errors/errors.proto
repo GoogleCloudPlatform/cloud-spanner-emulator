@@ -131,6 +131,11 @@ message MessageProto {
   // from the original PG code. If this field is defined, it indicates that this
   // entry in the error catalog is a correpsonding match to a PG error.
   optional string pg_message_id = 6;
+
+  // If present, errors should use this code instead of the
+  // canonical code that would be generated from the PG error code in
+  // third_party/spanner_pg/errors/errors.cc.
+  optional google.rpc.Code canonical_code = 7;
 }
 
 // ParamTypeProto declares a C++ type to be used as a parameter to an

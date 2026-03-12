@@ -17,17 +17,18 @@
 #include "backend/transaction/transaction_store.h"
 
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <utility>
 #include <variant>
 #include <vector>
 
 #include "zetasql/public/value.h"
+#include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "backend/actions/ops.h"
@@ -38,7 +39,6 @@
 #include "backend/datamodel/value.h"
 #include "backend/locking/request.h"
 #include "backend/schema/catalog/column.h"
-#include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/in_memory_iterator.h"
 #include "backend/storage/iterator.h"
@@ -170,6 +170,7 @@ absl::Status TransactionStore::BufferDelete(const Table* table,
 }
 
 absl::Status TransactionStore::BufferWriteOp(const WriteOp& op) {
+  current_statement_ops_.push_back(op);
   return std::visit(
       overloaded{
           [&](const InsertOp& op) {
@@ -181,6 +182,29 @@ absl::Status TransactionStore::BufferWriteOp(const WriteOp& op) {
           [&](const DeleteOp& op) { return BufferDelete(op.table, op.key); },
       },
       op);
+}
+
+void TransactionStore::TrackCommitTimestamps() {
+  commit_timestamp_tracker_->Track(current_statement_ops_);
+  current_statement_ops_.clear();
+}
+
+std::vector<WriteOp> TransactionStore::GetDeduplicatedCurrentStatementOps()
+    const {
+  std::map<std::pair<const Table*, Key>, WriteOp> deduplicated_map;
+  for (const auto& op : current_statement_ops_) {
+    const Table* table = TableOf(op);
+    const Key& key =
+        std::visit([](const auto& o) -> const Key& { return o.key; }, op);
+    deduplicated_map[{table, key}] = op;
+  }
+
+  std::vector<WriteOp> final_ops;
+  final_ops.reserve(deduplicated_map.size());
+  for (auto& entry : deduplicated_map) {
+    final_ops.push_back(std::move(entry.second));
+  }
+  return final_ops;
 }
 
 absl::StatusOr<ValueList> TransactionStore::ReadCommitted(
@@ -224,11 +248,13 @@ absl::Status TransactionStore::Read(
   // Table lookup.
   std::vector<FixedRowStorageIterator::Row> rows;
   auto table_itr = buffered_ops_.find(table);
+  typename absl::btree_map<Key, RowOp>::const_iterator buffer_it, buffer_end;
+  bool has_buffer = false;
   if (table_itr != buffered_ops_.end()) {
-    auto table = table_itr->second;
+    const auto& key_to_row_op_map = table_itr->second;
     // Key range lookup.
-    auto begin_itr = table.lower_bound(key_range.start_key());
-    auto end_itr = table.lower_bound(key_range.limit_key());
+    auto begin_itr = key_to_row_op_map.lower_bound(key_range.start_key());
+    auto end_itr = key_to_row_op_map.lower_bound(key_range.limit_key());
 
     for (auto itr = begin_itr; itr != end_itr; ++itr) {
       if (itr->second.first == OpType::kInsert) {
@@ -246,6 +272,9 @@ absl::Status TransactionStore::Read(
         rows.emplace_back(itr->first, std::move(values));
       }
     }
+    buffer_it = key_to_row_op_map.lower_bound(key_range.start_key());
+    buffer_end = key_to_row_op_map.lower_bound(key_range.limit_key());
+    has_buffer = true;
   }
   auto buffered_rows_count = rows.size();
 
@@ -255,23 +284,39 @@ absl::Status TransactionStore::Read(
   ZETASQL_RETURN_IF_ERROR(base_storage_->Read(absl::InfiniteFuture(), table->id(),
                                       key_range, GetColumnIDs(columns),
                                       &base_itr));
+
   while (base_itr->Next()) {
+    const Key& base_key = base_itr->Key();
+    const RowOp* row_op_ptr = nullptr;
+
+    if (has_buffer) {
+      // Step buffer iterator towards the current base_key.
+      while (buffer_it != buffer_end && buffer_it->first < base_key) {
+        ++buffer_it;
+      }
+      // If the keys match, we have a buffered mutation for this base storage
+      // row.
+      if (buffer_it != buffer_end && buffer_it->first == base_key) {
+        row_op_ptr = &buffer_it->second;
+      }
+    }
+
     ValueList values;
     values.reserve(columns.size());
 
-    RowOp row_op;
-    // Merge column values from transaction store & base storage.
-    if (RowExistsInBuffer(table, base_itr->Key(), &row_op)) {
+    if (row_op_ptr != nullptr) {
+      const RowOp& row_op = *row_op_ptr;
+      // Merge column values from transaction store & base storage.
       if (row_op.first == OpType::kDelete || row_op.first == OpType::kInsert) {
-        // Omit the deletes from the output. The buffered inserts have already
-        // been added to the output.
         continue;
       }
+      // Update the column values to reflect the buffered changes in
+      // transaction store.
       if (row_op.first == OpType::kUpdate) {
-        // Update the column values to reflect the changes in transaction store.
         for (int i = 0; i < columns.size(); i++) {
-          if (row_op.second.find(columns[i]) != row_op.second.end()) {
-            values.emplace_back(row_op.second[columns[i]]);
+          auto it = row_op.second.find(columns[i]);
+          if (it != row_op.second.end()) {
+            values.emplace_back(it->second);
           } else if (base_itr->ColumnValue(i).is_valid()) {
             values.emplace_back(base_itr->ColumnValue(i));
           } else {
@@ -280,8 +325,7 @@ absl::Status TransactionStore::Read(
         }
       }
     } else {
-      // Copy the base storage column values since this row does not exists in
-      // transaction store.
+      // No buffered mutation; copy values directly from base storage.
       for (int i = 0; i < columns.size(); i++) {
         if (base_itr->ColumnValue(i).is_valid()) {
           values.emplace_back(base_itr->ColumnValue(i));
@@ -290,7 +334,7 @@ absl::Status TransactionStore::Read(
         }
       }
     }
-    rows.emplace_back(base_itr->Key(), std::move(values));
+    rows.emplace_back(base_key, std::move(values));
   }
 
   // Pending commit timestamp values in buffer cannot be returned to

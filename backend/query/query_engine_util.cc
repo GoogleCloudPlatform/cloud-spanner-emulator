@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "zetasql/analyzer/function_signature_matcher.h"
@@ -31,7 +32,10 @@
 #include "zetasql/public/signature_match_result.h"
 #include "zetasql/public/type.h"
 #include "zetasql/resolved_ast/resolved_ast.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/cord.h"
+#include "absl/strings/string_view.h"
 #include "backend/query/function_catalog.h"
 #include "common/errors.h"
 #include "common/limits.h"
@@ -40,6 +44,29 @@
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "zetasql/base/ret_check.h"
 #include "zetasql/base/status_macros.h"
+
+namespace {
+
+absl::Status MapSpangresQueryErrorToSpannerError(const absl::Status& status) {
+  switch (status.code()) {
+    case absl::StatusCode::kUnimplemented:
+    case absl::StatusCode::kInvalidArgument:
+    case absl::StatusCode::kInternal:
+    case absl::StatusCode::kUnavailable: {
+      return status;
+    }
+    default: {
+      absl::Status mapped_status = absl::InvalidArgumentError(status.message());
+      status.ForEachPayload(
+          [&mapped_status](absl::string_view url, const absl::Cord& payload) {
+            mapped_status.SetPayload(url, payload);
+          });
+      return mapped_status;
+    }
+  }
+}
+
+}  // namespace
 
 namespace google {
 namespace spanner {
@@ -81,13 +108,17 @@ AnalyzePostgreSQL(const std::string& sql, zetasql::EnumerableCatalog* catalog,
   // PG needs ASC NULLS LAST and DESC NULLS FIRST for functions implemented as
   // a SQL rewrite.
   options.mutable_language()->EnableLanguageFeature(
-      zetasql::FEATURE_V_1_3_NULLS_FIRST_LAST_IN_ORDER_BY);
-  return postgres_translator::spangres::ParseAndAnalyzePostgreSQL(
-      sql, catalog, options, type_factory,
-      std::make_unique<FunctionCatalog>(
-          type_factory,
-          /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
-          /*schema=*/function_catalog->GetLatestSchema()));
+      zetasql::FEATURE_NULLS_FIRST_LAST_IN_ORDER_BY);
+  ZETASQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<const zetasql::AnalyzerOutput> output,
+      postgres_translator::spangres::ParseAndAnalyzePostgreSQL(
+          sql, catalog, options, type_factory,
+          std::make_unique<FunctionCatalog>(
+              type_factory,
+              /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+              /*schema=*/function_catalog->GetLatestSchema())),
+      _.With(MapSpangresQueryErrorToSpannerError));
+  return std::move(output);
 }
 
 absl::StatusOr<std::unique_ptr<const zetasql::ResolvedFunctionCall>>

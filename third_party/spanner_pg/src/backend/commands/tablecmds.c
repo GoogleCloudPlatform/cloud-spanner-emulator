@@ -4471,6 +4471,9 @@ AlterTableGetLockLevel(List *cmds)
 			case AT_SetLocalityGroup:
 				cmd_lockmode = AccessExclusiveLock;  /* must rewrite heap */
 				break;
+			case AT_SetColumnarPolicy:
+				cmd_lockmode = AccessExclusiveLock;  /* must rewrite heap */
+				break;
 
 			default:			/* oops */
 				elog(ERROR, "unrecognized alter table type: %d",
@@ -6328,6 +6331,8 @@ alter_table_type_to_string(AlterTableType cmdtype)
 			return "DROP SYNONYM";
 		case AT_SetLocalityGroup:
 			return "SET LOCALITY GROUP";
+		case AT_SetColumnarPolicy:
+			return "SET COLUMNAR POLICY";
 		case AT_ColumnOnUpdate:
 			// NB: This node is also used for DROP ON UPDATE.
 			return "ALTER COLUMN ... SET ON UPDATE";

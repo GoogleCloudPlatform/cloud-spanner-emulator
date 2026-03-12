@@ -50,7 +50,7 @@ class ReadOnlyTransaction : public RowReader {
   ReadOnlyTransaction(const ReadOnlyOptions& options,
                       TransactionID transaction_id, Clock* clock,
                       Storage* storage, LockManager* lock_manager,
-                      const VersionedCatalog* const versioned_catalog);
+                      const VersionedCatalog* versioned_catalog);
 
   absl::Status Read(const ReadArg& read_arg,
                     std::unique_ptr<RowCursor>* cursor) override
@@ -95,6 +95,9 @@ class ReadOnlyTransaction : public RowReader {
 
   // The read timestamp picked by this transaction.
   absl::Time read_timestamp_;
+
+  // The version retention period for the database.
+  const absl::Duration version_retention_period_;
 };
 
 }  // namespace backend

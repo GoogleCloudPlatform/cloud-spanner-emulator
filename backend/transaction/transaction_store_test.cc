@@ -17,12 +17,15 @@
 #include "backend/transaction/transaction_store.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
+#include "benchmark/benchmark.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/log/check.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
 #include "backend/actions/ops.h"
@@ -374,6 +377,70 @@ TEST_F(TransactionStoreTest, ReadsClosedOpenRange) {
 }
 
 }  // namespace
+
+void BM_TransactionStoreRead(benchmark::State& state) {
+  int num_base_rows = state.range(0);
+  int num_buffer_rows = state.range(1);
+
+  Clock clock;
+  LockManager lock_manager(&clock);
+  auto lock_handle = lock_manager.CreateHandle(TransactionID(1), nullptr,
+                                               TransactionPriority(1));
+  InMemoryStorage base_storage;
+  CommitTimestampTracker commit_timestamp_tracker;
+  TransactionStore transaction_store(&base_storage, lock_handle.get(),
+                                     &commit_timestamp_tracker);
+
+  auto type_factory = std::make_unique<zetasql::TypeFactory>();
+  absl::StatusOr<std::unique_ptr<const Schema>> schema_or =
+      test::CreateSchemaFromDDL({R"(
+        CREATE TABLE TestTable (
+          Int64Col    INT64 NOT NULL,
+          StringCol   STRING(MAX),
+        ) PRIMARY KEY (Int64Col)
+      )"},
+                                type_factory.get());
+  ABSL_CHECK_OK(schema_or.status());
+  auto schema = std::move(schema_or).value();
+  const Table* table = schema->FindTable("TestTable");
+  const Column* int64_col = table->FindColumn("Int64Col");
+  const Column* string_col = table->FindColumn("StringCol");
+
+  absl::Time t0 = absl::Now();
+  for (int i = 0; i < num_base_rows; ++i) {
+    base_storage
+        .Write(t0, table->id(), Key({Int64(i * 10)}),
+               {int64_col->id(), string_col->id()},
+               {Int64(i * 10), String("base_value")})
+        .IgnoreError();
+  }
+
+  for (int i = 0; i < num_buffer_rows; ++i) {
+    transaction_store
+        .BufferWriteOp(InsertOp{table,
+                                Key({Int64(i * 10 + 5)}),
+                                {int64_col, string_col},
+                                {Int64(i * 10 + 5), String("buffer_value")}})
+        .IgnoreError();
+  }
+
+  for (auto s : state) {
+    std::unique_ptr<StorageIterator> itr;
+    transaction_store
+        .Read(table, KeyRange::All(), {int64_col, string_col}, &itr)
+        .IgnoreError();
+    int count = 0;
+    while (itr->Next()) {
+      count++;
+    }
+    benchmark::DoNotOptimize(count);
+  }
+}
+BENCHMARK(BM_TransactionStoreRead)
+    ->Args({10000, 100})
+    ->Args({10000, 1000})
+    ->Args({10000, 5000});
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

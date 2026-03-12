@@ -194,10 +194,7 @@ TEST_F(PGFunctionsTest, DateFunction) {
   // Use unsupported `date()` function instead of `spanner.date()`.
   EXPECT_THAT(
       Query(R"sql(SELECT date('2025-04-14 03:38:40', 'America/New_York'))sql"),
-      // TODO: Remove check if the two environments ever
-      // become consistent.
-      StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                             : absl::StatusCode::kNotFound,
+      StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("does not exist")));
   // Illegal timestamptz format.
   EXPECT_THAT(
@@ -214,10 +211,7 @@ TEST_F(PGFunctionsTest, DateFunction) {
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("date/time field value out of range")));
   EXPECT_THAT(Query(R"sql(SELECT spanner.date(2016, 'America/New_York'))sql"),
-              // TODO: Remove check if the two environments ever
-              // become consistent.
-              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                     : absl::StatusCode::kNotFound,
+              StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("does not exist")));
   EXPECT_THAT(Query(
                   R"sql(SELECT spanner.date('2025-04-14 03:38:40+00',
@@ -642,10 +636,7 @@ TEST_F(PGFunctionsTest, NumericAdd) {
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("value overflows numeric format")));
   EXPECT_THAT(Query("SELECT numeric_add(1.0, 2.0, 3.0)"),
-              // TODO: Remove check if the two environments ever
-              // become consistent.
-              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                     : absl::StatusCode::kNotFound,
+              StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("does not exist")));
 }
 
@@ -664,10 +655,7 @@ TEST_F(PGFunctionsTest, NumericCeil) {
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("value overflows numeric format")));
   EXPECT_THAT(Query("SELECT ceil(1.0, 2.0)"),
-              // TODO: Remove check if the two environments ever
-              // become consistent.
-              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                     : absl::StatusCode::kNotFound,
+              StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("does not exist")));
 }
 
@@ -686,10 +674,7 @@ TEST_F(PGFunctionsTest, NumericCeiling) {
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("value overflows numeric format")));
   EXPECT_THAT(Query("SELECT ceiling(1.0, 2.0)"),
-              // TODO: Remove check if the two environments ever
-              // become consistent.
-              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                     : absl::StatusCode::kNotFound,
+              StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("does not exist")));
 }
 
@@ -734,10 +719,7 @@ TEST_F(PGFunctionsTest, NumericDivTrunc) {
       StatusIs(absl::StatusCode::kOutOfRange,
                HasSubstr(in_prod_env() ? "divide by 0" : "division by zero")));
   EXPECT_THAT(Query("SELECT div(1.0, 2.0, 3.0)"),
-              // TODO: Remove check if the two environments ever
-              // become consistent.
-              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                     : absl::StatusCode::kNotFound,
+              StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("does not exist")));
 }
 
@@ -776,10 +758,7 @@ TEST_F(PGFunctionsTest, NumericDivide) {
       StatusIs(absl::StatusCode::kOutOfRange,
                HasSubstr(in_prod_env() ? "divide by 0" : "division by zero")));
   EXPECT_THAT(Query("SELECT numeric_div(1.0, 2.0, 3.0)"),
-              // TODO: Remove check if the two environments ever
-              // become consistent.
-              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                     : absl::StatusCode::kNotFound,
+              StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("does not exist")));
 }
 
@@ -796,10 +775,7 @@ TEST_F(PGFunctionsTest, NumericFloor) {
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("value overflows numeric format")));
   EXPECT_THAT(Query("SELECT floor(1.0, 2.0)"),
-              // TODO: Remove check if the two environments ever
-              // become consistent.
-              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                     : absl::StatusCode::kNotFound,
+              StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("does not exist")));
 }
 
@@ -849,10 +825,7 @@ TEST_F(PGFunctionsTest, NumericMod) {
       StatusIs(absl::StatusCode::kOutOfRange,
                HasSubstr(in_prod_env() ? "mod by 0" : "division by zero")));
   EXPECT_THAT(Query("SELECT numeric_mod(1.0, 2.0, 3.0)"),
-              // TODO: Remove check if the two environments ever
-              // become consistent.
-              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                     : absl::StatusCode::kNotFound,
+              StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("does not exist")));
 }
 
@@ -891,10 +864,7 @@ TEST_F(PGFunctionsTest, NumericMultiply) {
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("value overflows numeric format")));
   EXPECT_THAT(Query("SELECT numeric_mul(1.0, 2.0, 3.0)"),
-              // TODO: Remove check if the two environments ever
-              // become consistent.
-              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                     : absl::StatusCode::kNotFound,
+              StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("does not exist")));
 }
 
@@ -933,10 +903,7 @@ TEST_F(PGFunctionsTest, NumericSubtract) {
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("value overflows numeric format")));
   EXPECT_THAT(Query("SELECT numeric_sub(1.0, 2.0, 3.0)"),
-              // TODO: Remove check if the two environments ever
-              // become consistent.
-              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                     : absl::StatusCode::kNotFound,
+              StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("does not exist")));
 }
 
@@ -980,10 +947,7 @@ TEST_F(PGFunctionsTest, NumericUminus) {
 
   // Error cases
   EXPECT_THAT(Query("SELECT numeric_uminus(1.0, 2.0)"),
-              // TODO: Remove check if the two environments ever
-              // become consistent.
-              StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                     : absl::StatusCode::kNotFound,
+              StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("does not exist")));
 }
 
@@ -1023,9 +987,13 @@ TEST_F(PGFunctionsTest, NumericCastToInt64) {
                        in_prod_env() ? HasSubstr("Cannot cast to INT64")
                                      : HasSubstr("out of range")));
   // TODO: b/308518029 - Normalize the error status / message
+  if (!in_prod_env()) {
+    EXPECT_THAT(Query("SELECT 'NaN'::numeric::int8").status().message(),
+                HasSubstr("cannot convert NaN"));
+    return;
+  }
   EXPECT_THAT(Query("SELECT 'NaN'::numeric::int8"),
-              StatusIs(in_prod_env() ? absl::StatusCode::kOutOfRange
-                                     : absl::StatusCode::kUnimplemented,
+              StatusIs(absl::StatusCode::kOutOfRange,
                        in_prod_env() ? HasSubstr("Cannot cast from NaN")
                                      : HasSubstr("cannot convert NaN")));
 }
@@ -1323,11 +1291,8 @@ TEST_F(PGFunctionsTest, ArrayLength) {
   // array_length(<array>, <dimension>).
   EXPECT_THAT(
       Query("SELECT array_length(ARRAY[1,2,3])"),
-      // TODO: Remove check if the two environments ever
-      // become consistent.
       StatusIs(
-          in_prod_env() ? absl::StatusCode::kInvalidArgument
-                        : absl::StatusCode::kNotFound,
+          absl::StatusCode::kInvalidArgument,
           HasSubstr("No function matches the given name and argument types")));
 }
 

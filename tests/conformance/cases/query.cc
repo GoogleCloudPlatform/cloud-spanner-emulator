@@ -310,10 +310,7 @@ TEST_P(QueryTest, JSONFunctions) {
         IsOkAndHoldsRow({Value(JsonB(R"({"a": [1, 2], "b": "str"})"))}));
     EXPECT_THAT(Query(absl::Substitute(R"(SELECT to_jsonb('{"id":$0}'::jsonb))",
                                        absl::StrCat(MaxNumericString(), "1"))),
-                // TODO: Remove check once the errors are
-                // consistent between the two environments.
-                StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                       : absl::StatusCode::kOutOfRange));
+                StatusIs(absl::StatusCode::kInvalidArgument));
 
     EXPECT_THAT(Query(R"(SELECT to_jsonb(123))"),
                 IsOkAndHoldsRow({Value(JsonB("123"))}));
@@ -321,10 +318,7 @@ TEST_P(QueryTest, JSONFunctions) {
                 IsOkAndHoldsRow({Value(JsonB("12345678901234567"))}));
     EXPECT_THAT(Query(absl::Substitute(R"(SELECT to_jsonb($0))",
                                        absl::StrCat(MaxNumericString(), "1"))),
-                // TODO: Remove check once the errors are
-                // consistent between the two environments.
-                StatusIs(in_prod_env() ? absl::StatusCode::kInvalidArgument
-                                       : absl::StatusCode::kOutOfRange));
+                StatusIs(absl::StatusCode::kInvalidArgument));
 
     EXPECT_THAT(Query(R"(SELECT CAST('{"a":"str", "b":2}'::jsonb AS text))"),
                 IsOkAndHoldsRow({R"({"a": "str", "b": 2})"}));

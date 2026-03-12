@@ -37,6 +37,7 @@
 #include "backend/datamodel/types.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
+#include "backend/schema/catalog/index.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
@@ -329,9 +330,23 @@ absl::Status TableValidator::Validate(const Table* table,
     unique_keys.insert(column->Name());
   }
 
-  if (table->primary_key_.size() > limits::kMaxKeyColumns) {
-    return error::TooManyKeys(object_type, object_name,
-                              table->primary_key_.size(),
+  int key_count = table->primary_key_.size();
+  if (table->owner_index() != nullptr &&
+      table->owner_index()->is_search_index()) {
+    const Index* index = table->owner_index();
+    // For search indexes, the backing table includes all TOKENLIST columns as
+    // keys, which can exceed the limit. We need to validate based on the
+    // logical key count: BasePK + PartitionBy + OrderBy + Token + UID.
+    key_count = index->indexed_table()->primary_key().size() +
+                index->partition_by().size() + index->order_by().size() +
+                1;  // +1 for the Token column.
+    if (!index->search_index_options().disable_automatic_uid_column()) {
+      key_count += 1;  // +1 for the UID column.
+    }
+  }
+
+  if (key_count > limits::kMaxKeyColumns) {
+    return error::TooManyKeys(object_type, object_name, key_count,
                               limits::kMaxKeyColumns);
   }
 

@@ -284,6 +284,7 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
       FieldTypeChecker<DropBehavior>(node.behavior),
       FieldTypeChecker<bool>(node.missing_ok),
       FieldTypeChecker<LocalityGroupOption*>(node.locality_group_name),
+      FieldTypeChecker<ColumnarPolicyOption*>(node.columnar_policy_name),
       FieldTypeChecker<char*>(node.raw_expr_string));
 
   ZETASQL_RET_CHECK_EQ(node.type, T_AlterTableCmd);
@@ -382,6 +383,10 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
           ZETASQL_RET_CHECK_NE(node.locality_group_name, nullptr);
           break;
         }
+        case AT_SetColumnarPolicy: {
+          ZETASQL_RET_CHECK_NE(node.columnar_policy_name, nullptr);
+          break;
+        }
         default: {
           return UnsupportedTranslationError(
               "Operation is not supported in <ALTER TABLE> statement.");
@@ -401,6 +406,10 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
                 "statement.");
           }
           ZETASQL_RET_CHECK_NE(node.locality_group_name, nullptr);
+          break;
+        }
+        case AT_SetColumnarPolicy: {
+          ZETASQL_RET_CHECK_NE(node.columnar_policy_name, nullptr);
           break;
         }
         default: {
@@ -1427,6 +1436,7 @@ absl::Status ValidateParseTreeNode(const CreateStmt& node,
       FieldTypeChecker<bool>(node.if_not_exists),
       FieldTypeChecker<InterleaveSpec*>(node.interleavespec),
       FieldTypeChecker<Ttl*>(node.ttl),
+      FieldTypeChecker<ColumnarPolicyOption*>(node.columnar_policy_name),
       FieldTypeChecker<LocalityGroupOption*>(node.locality_group_name));
 
   ZETASQL_RET_CHECK_EQ(node.type, T_CreateStmt);
@@ -2171,6 +2181,7 @@ absl::Status ValidateParseTreeNode(const IndexStmt& node,
       FieldTypeChecker<char*>(node.accessMethod),
       FieldTypeChecker<char*>(node.tableSpace),
       FieldTypeChecker<LocalityGroupOption*>(node.locality_group_name),
+      FieldTypeChecker<ColumnarPolicyOption*>(node.columnar_policy_name),
       FieldTypeChecker<List*>(node.indexParams),
       FieldTypeChecker<List*>(node.indexIncludingParams),
       FieldTypeChecker<List*>(node.options),

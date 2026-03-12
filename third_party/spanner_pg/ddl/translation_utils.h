@@ -214,6 +214,11 @@ struct PostgreSQLConstants {
   // The OPTION syntax is a recent equivalent upstream-PostgreSQL addition.)
   static constexpr absl::string_view kSecurityViewOptionName =
       "security_invoker";
+
+  static constexpr absl::string_view kSpangresColumnarPolicyOptionName =
+      "spanner.columnar_policy";
+  static constexpr absl::string_view kInternalColumnarPolicyOptionName =
+      "columnar_policy";
 };
 
 class PGAlterOption {

@@ -27,8 +27,10 @@
 #include "gtest/gtest.h"
 #include "zetasql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "backend/access/write.h"
 #include "backend/actions/manager.h"
@@ -725,6 +727,156 @@ TEST_F(ReadWriteTransactionTest, IndexUniquenessFailTest) {
   EXPECT_THAT(txn->Write(m), StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
+TEST_F(ReadWriteTransactionTest, IndexUniquenessMultiStatementFailTest) {
+  Mutation m1;
+  m1.AddWriteOp(MutationOpType::kInsert, "test_table",
+                {"int64_col", "string_col"}, {{Int64(3), String("value")}});
+  Mutation m2;
+  m2.AddWriteOp(MutationOpType::kInsert, "test_table",
+                {"int64_col", "string_col"}, {{Int64(4), String("value")}});
+
+  auto txn = CreateReadWriteTransaction();
+  ZETASQL_EXPECT_OK(txn->Write(m1));
+  EXPECT_THAT(txn->Write(m2), StatusIs(absl::StatusCode::kAlreadyExists));
+}
+
+TEST_F(ReadWriteTransactionTest, DeduplicationInsertAndUpdateSameStatement) {
+  auto txn = CreateReadWriteTransaction();
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table",
+               {"int64_col", "string_col"}, {{Int64(10), String("val1")}});
+  m.AddWriteOp(MutationOpType::kUpdate, "test_table",
+               {"int64_col", "string_col"}, {{Int64(10), String("val2")}});
+
+  ZETASQL_EXPECT_OK(txn->Write(m));
+
+  backend::ReadArg arg;
+  arg.table = "test_table";
+  arg.key_set = KeySet{Key{{Int64(10)}}};
+  arg.columns = {"string_col"};
+  std::unique_ptr<backend::RowCursor> cursor;
+  ZETASQL_EXPECT_OK(txn->Read(arg, &cursor));
+
+  EXPECT_TRUE(cursor->Next());
+  EXPECT_EQ(cursor->ColumnValue(0), String("val2"));
+  EXPECT_FALSE(cursor->Next());
+}
+
+TEST_F(ReadWriteTransactionTest,
+       DeduplicationUpdatePartialColumnsSameStatement) {
+  auto txn = CreateReadWriteTransaction();
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table",
+               {"int64_col", "string_col", "int64_val_col"},
+               {{Int64(10), String("val1"), Int64(1)}});
+  m.AddWriteOp(MutationOpType::kUpdate, "test_table",
+               {"int64_col", "string_col"}, {{Int64(10), String("val2")}});
+
+  // This should not fail because the operations are merged.
+  ZETASQL_EXPECT_OK(txn->Write(m));
+
+  backend::ReadArg arg;
+  arg.table = "test_table";
+  arg.key_set = KeySet{Key{{Int64(10)}}};
+  arg.columns = {"string_col", "int64_val_col"};
+  std::unique_ptr<backend::RowCursor> cursor;
+  ZETASQL_EXPECT_OK(txn->Read(arg, &cursor));
+
+  EXPECT_TRUE(cursor->Next());
+  EXPECT_EQ(cursor->ColumnValue(0), String("val2"));
+  EXPECT_EQ(cursor->ColumnValue(1), Int64(1));
+  EXPECT_FALSE(cursor->Next());
+}
+
+TEST_F(ReadWriteTransactionTest, DeduplicationMultipleInsertFailSameStatement) {
+  auto txn = CreateReadWriteTransaction();
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table",
+               {"int64_col", "string_col"}, {{Int64(10), String("val1")}});
+  m.AddWriteOp(MutationOpType::kInsert, "test_table",
+               {"int64_col", "string_col"}, {{Int64(10), String("val2")}});
+
+  // Even though we merge for verifiers, the transaction store should still
+  // report ALREADY_EXISTS for the second insert.
+  EXPECT_THAT(txn->Write(m), StatusIs(absl::StatusCode::kAlreadyExists));
+}
+
+TEST_F(ReadWriteTransactionTest, DeduplicationDeleteAndInsertSameStatement) {
+  auto txn = CreateReadWriteTransaction();
+  // Ensure the row exists first.
+  Mutation m1;
+  m1.AddWriteOp(MutationOpType::kInsert, "test_table",
+                {"int64_col", "string_col"}, {{Int64(10), String("initial")}});
+  ZETASQL_EXPECT_OK(txn->Write(m1));
+
+  Mutation m2;
+  m2.AddDeleteOp("test_table", KeySet{Key{{Int64(10)}}});
+  m2.AddWriteOp(MutationOpType::kInsert, "test_table",
+                {"int64_col", "string_col"}, {{Int64(10), String("new")}});
+
+  ZETASQL_EXPECT_OK(txn->Write(m2));
+
+  backend::ReadArg arg;
+  arg.table = "test_table";
+  arg.key_set = KeySet{Key{{Int64(10)}}};
+  arg.columns = {"string_col"};
+  std::unique_ptr<backend::RowCursor> cursor;
+  ZETASQL_EXPECT_OK(txn->Read(arg, &cursor));
+
+  EXPECT_TRUE(cursor->Next());
+  EXPECT_EQ(cursor->ColumnValue(0), String("new"));
+  EXPECT_FALSE(cursor->Next());
+}
+
+TEST_F(ReadWriteTransactionTest, DeduplicationMultipleUpdatesSameStatement) {
+  auto txn = CreateReadWriteTransaction();
+  Mutation m_insert;
+  m_insert.AddWriteOp(MutationOpType::kInsert, "test_table",
+                      {"int64_col", "string_col"},
+                      {{Int64(11), String("initial")}});
+  ZETASQL_EXPECT_OK(txn->Write(m_insert));
+
+  Mutation m_update;
+  m_update.AddWriteOp(MutationOpType::kUpdate, "test_table",
+                      {"int64_col", "string_col"},
+                      {{Int64(11), String("update1")}});
+  m_update.AddWriteOp(MutationOpType::kUpdate, "test_table",
+                      {"int64_col", "string_col"},
+                      {{Int64(11), String("update2")}});
+  ZETASQL_EXPECT_OK(txn->Write(m_update));
+
+  backend::ReadArg arg;
+  arg.table = "test_table";
+  arg.key_set = KeySet{Key{{Int64(11)}}};
+  arg.columns = {"string_col"};
+  std::unique_ptr<backend::RowCursor> cursor;
+  ZETASQL_EXPECT_OK(txn->Read(arg, &cursor));
+
+  EXPECT_TRUE(cursor->Next());
+  EXPECT_EQ(cursor->ColumnValue(0), String("update2"));
+  EXPECT_FALSE(cursor->Next());
+}
+
+TEST_F(ReadWriteTransactionTest, DeduplicationInsertAndDeleteSameStatement) {
+  auto txn = CreateReadWriteTransaction();
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "test_table",
+               {"int64_col", "string_col"},
+               {{Int64(12), String("to_be_deleted")}});
+  m.AddDeleteOp("test_table", KeySet{Key{{Int64(12)}}});
+
+  ZETASQL_EXPECT_OK(txn->Write(m));
+
+  backend::ReadArg arg;
+  arg.table = "test_table";
+  arg.key_set = KeySet{Key{{Int64(12)}}};
+  arg.columns = {"string_col"};
+  std::unique_ptr<backend::RowCursor> cursor;
+  ZETASQL_EXPECT_OK(txn->Read(arg, &cursor));
+
+  EXPECT_FALSE(cursor->Next());
+}
+
 TEST_F(ReadWriteTransactionTest, UpdateAfterDeleteFails) {
   Mutation m;
   m.AddDeleteOp("test_table", KeySet{Key{{Int64(4)}}});
@@ -792,6 +944,47 @@ TEST_F(ReadWriteTransactionTest, CannotInsertWithDuplicateColumns) {
 
   auto txn1 = CreateReadWriteTransaction();
   EXPECT_THAT(txn1->Write(m), StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(ReadWriteTransactionTest, ManyInserts) {
+  int num_inserts = 5000;
+  auto txn = CreateReadWriteTransaction();
+
+  // We write one mutation at a time to simulate DML statements which are
+  // executed sequentially. Each DML statement triggers validation.
+  absl::Time start = absl::Now();
+  for (int i = 0; i < num_inserts; ++i) {
+    Mutation m;
+    m.AddWriteOp(MutationOpType::kInsert, "test_table",
+                 {"int64_col", "string_col"},
+                 {{Int64(i), String(std::to_string(i))}});
+    ASSERT_EQ(txn->Write(m), absl::OkStatus());
+  }
+  absl::Time end = absl::Now();
+  absl::Duration duration = end - start;
+  // If it's O(N^2), 5000 inserts might take a few seconds (~90s).
+  // If it's O(N), it should be very fast (< 0.5s).
+  ABSL_LOG(INFO) << "Time taken for " << num_inserts << " inserts: " << duration;
+
+  // Fail if too slow (e.g. > 5 second for 5000 inserts implies < 1k ops/sec).
+  EXPECT_LE(duration, absl::Seconds(5));
+
+  // Validate the data can be read back and is correct.
+  backend::ReadArg arg;
+  arg.table = "test_table";
+  arg.key_set = KeySet::All();
+  arg.columns = {"int64_col", "string_col"};
+  std::unique_ptr<backend::RowCursor> cursor;
+  ASSERT_EQ(txn->Read(arg, &cursor), absl::OkStatus());
+
+  int count = 0;
+  while (cursor->Next()) {
+    EXPECT_EQ(cursor->ColumnValue(0), Int64(count));
+    EXPECT_EQ(cursor->ColumnValue(1), String(std::to_string(count)));
+    ++count;
+  }
+  EXPECT_EQ(cursor->Status(), absl::OkStatus());
+  EXPECT_EQ(count, num_inserts);
 }
 
 class GeneratedPrimaryKeyTransactionTest : public ReadWriteTransactionTest {

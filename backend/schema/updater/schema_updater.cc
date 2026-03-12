@@ -745,6 +745,9 @@ class SchemaUpdaterImpl {
 
   // Holds the database id for this schema updater.
   std::string database_id_;
+
+  std::vector<TableID> dropped_tables_;
+  std::vector<std::pair<TableID, ColumnID>> dropped_columns_;
 };
 
 absl::Status SchemaUpdaterImpl::Init() {
@@ -831,9 +834,17 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       break;
     }
     case ddl::DDLStatement::kCreateChangeStream: {
-      ZETASQL_RETURN_IF_ERROR(
-          CreateChangeStream(ddl_statement->create_change_stream(), dialect)
-              .status());
+      const ddl::CreateChangeStream& create_cs =
+          ddl_statement->create_change_stream();
+      if (latest_schema_->FindChangeStream(create_cs.change_stream_name()) !=
+              nullptr &&
+          create_cs.existence_modifier() == ddl::IF_NOT_EXISTS) {
+        // A change stream with the same name already exists, and we have the
+        // IF NOT EXISTS clause in the statement, so return it as a no-op which
+        // would not cause any schema change.
+        return nullptr;
+      }
+      ZETASQL_RETURN_IF_ERROR(CreateChangeStream(create_cs, dialect).status());
       break;
     }
     case ddl::DDLStatement::kCreateIndex: {
@@ -1178,6 +1189,18 @@ SchemaUpdaterImpl::ApplyDDLStatements(
     // the next statement and save the pending schema snapshot and backfill
     // work.
     pending_work.emplace_back(std::move(statement_context));
+
+    if (storage_ != nullptr) {
+      for (auto& table_id : dropped_tables_) {
+        storage_->MarkDroppedTable(schema_change_timestamp_, table_id);
+      }
+      dropped_tables_.clear();
+      for (auto& [table_id, column_id] : dropped_columns_) {
+        storage_->MarkDroppedColumn(schema_change_timestamp_, table_id,
+                                    column_id);
+      }
+      dropped_columns_.clear();
+    }
   }
 
   return pending_work;
@@ -1278,6 +1301,16 @@ absl::Status SchemaUpdaterImpl::SetDatabaseOptions(
         modifier->set_default_time_zone(default_time_zone);
       } else if (option.has_null_value()) {
         modifier->set_default_time_zone(std::nullopt);
+      }
+    }
+    if (absl::StripPrefix(option.option_name(), "spanner.internal.minimum_") ==
+        ddl::kVersionRetentionPeriodOptionName) {
+      if (option.has_string_value()) {
+        std::optional<std::string> version_retention_period =
+            option.string_value();
+        modifier->set_version_retention_period(version_retention_period);
+      } else if (option.has_null_value()) {
+        modifier->set_version_retention_period(std::nullopt);
       }
     }
   }
@@ -3164,6 +3197,10 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateIndexDataTableColumn(
     builder.set_nullable(source_column->is_nullable());
   }
 
+  if (source_column->vector_length().has_value()) {
+    builder.set_vector_length(source_column->vector_length().value());
+  }
+
   const Column* column = builder.get();
   ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return column;
@@ -4875,7 +4912,8 @@ absl::Status SchemaUpdaterImpl::ValidateAlterDatabaseOptions(
       } else {
         return error::UnsupportedDefaultTimeZoneOptionValues();
       }
-    } else if (option_name == ddl::kVersionRetentionPeriodOptionName) {
+    } else if (absl::StripPrefix(option_name, "minimum_") ==
+               ddl::kVersionRetentionPeriodOptionName) {
       if (option.has_string_value() || option.has_null_value()) {
         continue;
       }
@@ -5349,7 +5387,7 @@ absl::Status SchemaUpdaterImpl::AlterTable(
               return absl::OkStatus();
             }));
       }
-
+      dropped_columns_.push_back({table->id(), column->id()});
       return absl::OkStatus();
     }
     case ddl::AlterTable::kAddRowDeletionPolicy: {
@@ -5922,6 +5960,7 @@ absl::Status SchemaUpdaterImpl::DropTable(const ddl::DropTable& drop_table) {
             }));
       }
     }
+    dropped_tables_.push_back(table->id());
   }
   return status;
 }
@@ -6186,7 +6225,7 @@ absl::Status SchemaUpdaterImpl::CreatePropertyGraph(
           limits::kMaxPropertyGraphsPerDatabase);
     }
 
-    ZETASQL_RETURN_IF_ERROR(global_names_.AddName("PropertyGraph",
+    ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Property Graph",
                                           ddl_create_property_graph.name()));
   }
 
@@ -6195,7 +6234,7 @@ absl::Status SchemaUpdaterImpl::CreatePropertyGraph(
   analyzer_options.mutable_language()->set_name_resolution_mode(
       zetasql::NAME_RESOLUTION_DEFAULT);
   analyzer_options.mutable_language()->EnableLanguageFeature(
-      zetasql::FEATURE_V_1_4_SQL_GRAPH);
+      zetasql::FEATURE_SQL_GRAPH);
   analyzer_options.mutable_language()->AddSupportedStatementKind(
       zetasql::RESOLVED_CREATE_PROPERTY_GRAPH_STMT);
   FunctionCatalog function_catalog(
@@ -6750,6 +6789,7 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
         .enable_change_streams = true,
         .enable_change_streams_mod_type_filter_options = true,
         .enable_change_streams_ttl_deletes_filter_option = true,
+        .enable_change_streams_if_not_exists = true,
         .enable_search_index =
             EmulatorFeatureFlags::instance().flags().enable_search_index,
         .enable_sequence = true,

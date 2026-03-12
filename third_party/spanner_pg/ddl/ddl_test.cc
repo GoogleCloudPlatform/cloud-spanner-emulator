@@ -797,6 +797,69 @@ TEST_F(DdlTest, DisableColumnLevelLocalityGroupOnCreateTable) {
           "<CREATE TABLE ... SET LOCALITY GROUP> statement is not supported."));
 }
 
+TEST_F(DdlTest, DisableTableLevelColumnarPolicyOnCreateTable) {
+  const std::string input =
+      R"sql(
+        CREATE TABLE Users (
+          id bigint PRIMARY KEY,
+          abc varchar NOT NULL
+        ) COLUMNAR POLICY enabled
+      )sql";
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_columnar_policy = false});
+
+  EXPECT_THAT(statements, StatusIs(absl::StatusCode::kFailedPrecondition,
+                                   "<CREATE TABLE ... SET COLUMNAR POLICY> "
+                                   "statement is not supported."));
+}
+
+TEST_F(DdlTest, DisableAlterTableSetColumnarPolicy) {
+  const std::string input = "ALTER TABLE t SET COLUMNAR POLICY enabled";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_columnar_policy = false});
+
+  EXPECT_THAT(
+      statements,
+      StatusIs(
+          absl::StatusCode::kFailedPrecondition,
+          "<ALTER TABLE ... SET COLUMNAR POLICY> statement is not supported."));
+}
+
+TEST_F(DdlTest, DisableColumnarPolicyOnCreateIndex) {
+  const std::string input =
+      R"sql(
+        CREATE INDEX my_index ON Users (id) COLUMNAR POLICY enabled
+      )sql";
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_columnar_policy = false});
+
+  EXPECT_THAT(statements, StatusIs(absl::StatusCode::kFailedPrecondition,
+                                   "<CREATE INDEX ... SET COLUMNAR POLICY> "
+                                   "statement is not supported."));
+}
+
 TEST_F(DdlTest, PrintDDLStatementForEmulator) {
   google::protobuf::TextFormat::Parser parser;
   google::spanner::emulator::backend::ddl::DDLStatement ddl;

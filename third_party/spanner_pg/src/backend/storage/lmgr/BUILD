@@ -99,7 +99,6 @@ cc_library(
         "s_lock.c",
         "spin.c",
     ],
-    hdrs = glob(["*.h"]),
     copts = [
         "-D_GNU_SOURCE",
         "-fexceptions",

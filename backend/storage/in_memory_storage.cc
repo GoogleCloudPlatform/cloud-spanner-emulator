@@ -23,9 +23,9 @@
 #include "zetasql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "absl/time/time.h"
 #include "backend/storage/in_memory_iterator.h"
 #include "common/errors.h"
-#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -37,6 +37,20 @@ namespace {
 static constexpr char kExistsColumn[] = "_exists";
 
 }  // namespace
+
+void InMemoryStorage::RemoveExpiredVersions(Cell& cell, absl::Time timestamp) {
+  absl::MutexLock lock(&version_retention_period_mu_);
+  auto it = cell.begin();
+  auto upper_bound = cell.upper_bound(timestamp - version_retention_period_);
+  while (it != upper_bound) {
+    auto next = it;
+    if (++next == upper_bound) {
+      // The current value needs to be kept to cover the retention period.
+      break;
+    }
+    it = cell.erase(it);
+  }
+}
 
 zetasql::Value InMemoryStorage::GetCellValueAtTimestamp(
     const Row& row, const ColumnID& column_id, absl::Time timestamp) const {
@@ -184,12 +198,16 @@ absl::Status InMemoryStorage::Write(
   // Add the row with _exists system column if it does not exist.
   Row& row = table[key];
   if (!Exists(row, timestamp)) {
-    row[kExistsColumn][timestamp] = zetasql::values::Bool(true);
+    Cell& cell = row[kExistsColumn];
+    cell[timestamp] = zetasql::values::Bool(true);
+    RemoveExpiredVersions(cell, timestamp);
   }
 
   // Add the values for the given columns.
   for (int i = 0; i < column_ids.size(); ++i) {
-    row[column_ids[i]][timestamp] = values[i];
+    Cell& cell = row[column_ids[i]];
+    cell[timestamp] = values[i];
+    RemoveExpiredVersions(cell, timestamp);
   }
 
   return absl::OkStatus();
@@ -232,15 +250,68 @@ absl::Status InMemoryStorage::Delete(absl::Time timestamp,
 
     for (const auto& columns : itr->second) {
       if (columns.first == kExistsColumn) {
-        itr->second[kExistsColumn][timestamp] = zetasql::values::Bool(false);
+        Cell& cell = itr->second[kExistsColumn];
+        cell[timestamp] = zetasql::values::Bool(false);
+        RemoveExpiredVersions(cell, timestamp);
       } else {
         // Column values are marked invalid zetasql::Value to avoid reading
         // the value of the cell before the delete.
-        itr->second[columns.first][timestamp] = zetasql::Value();
+        Cell& cell = itr->second[columns.first];
+        cell[timestamp] = zetasql::Value();
+        RemoveExpiredVersions(cell, timestamp);
       }
     }
   }
   return absl::OkStatus();
+}
+
+void InMemoryStorage::SetVersionRetentionPeriod(
+    const absl::Duration version_retention_period) {
+  absl::MutexLock lock(&version_retention_period_mu_);
+  version_retention_period_ = version_retention_period;
+}
+
+void InMemoryStorage::CleanUpDeletedTables(absl::Time timestamp) {
+  absl::MutexLock lock(&mu_);
+  absl::MutexLock version_retention_period_lock(&version_retention_period_mu_);
+  absl::Time expiration_time = timestamp - version_retention_period_;
+
+  // Remove expired dropped tables.
+  for (auto it = dropped_tables_.begin();
+       it != dropped_tables_.upper_bound(expiration_time);) {
+    tables_.erase(it->second);
+    it = dropped_tables_.erase(it);
+  }
+}
+
+void InMemoryStorage::CleanUpDeletedColumns(absl::Time timestamp) {
+  absl::MutexLock lock(&mu_);
+  absl::MutexLock version_retention_period_lock(&version_retention_period_mu_);
+  absl::Time expiration_time = timestamp - version_retention_period_;
+
+  // Remove expired dropped columns.
+  for (auto it = dropped_columns_.begin();
+       it != dropped_columns_.upper_bound(expiration_time);) {
+    auto [table_id, column_id] = it->second;
+    for (auto& [_, row] : tables_[table_id]) {
+      row.erase(column_id);
+    }
+    it = dropped_columns_.erase(it);
+  }
+}
+
+void InMemoryStorage::MarkDroppedTable(absl::Time timestamp,
+                                       TableID dropped_table_id) {
+  absl::MutexLock lock(&mu_);
+  dropped_tables_[timestamp] = dropped_table_id;
+}
+
+void InMemoryStorage::MarkDroppedColumn(absl::Time timestamp,
+                                        TableID dropped_table_id,
+                                        ColumnID dropped_column_id) {
+  absl::MutexLock lock(&mu_);
+  dropped_columns_[timestamp] =
+      std::make_pair(dropped_table_id, dropped_column_id);
 }
 
 }  // namespace backend

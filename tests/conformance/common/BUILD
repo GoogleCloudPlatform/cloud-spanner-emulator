@@ -47,6 +47,7 @@ cc_library(
         "//frontend/server",
         "//tests/common:file_based_schema_reader",
         "//tests/common:proto_matchers",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_googleapis_google_cloud_cpp//:common",
         "@com_github_googleapis_google_cloud_cpp//:spanner",
         "@com_github_grpc_grpc//:grpc++",
@@ -87,6 +88,7 @@ cc_test(
         "//tests/common:proto_matchers",
         "//third_party/spanner_pg/bootstrap_catalog:bootstrap_catalog_accessor_impl",  # buildcleaner: keep
         "//third_party/spanner_pg/src/backend:backend_with_shims",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googletest//:gtest_main",
         "@com_google_zetasql//zetasql/base/testing:status_matchers",

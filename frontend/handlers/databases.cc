@@ -285,12 +285,15 @@ absl::Status GetDatabaseDdl(RequestContext* ctx,
   ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Database> database,
                    GetDatabase(ctx, request->database()));
 
-  absl::StatusOr<std::vector<std::string>> printed_statements =
-      backend::PrintDDLStatements(database->backend()->GetLatestSchema());
-  ZETASQL_RETURN_IF_ERROR(printed_statements.status());
-  for (const auto& statement : *printed_statements) {
+  auto latest_schema = database->backend()->GetLatestSchema();
+  ZETASQL_ASSIGN_OR_RETURN(std::vector<std::string> printed_statements,
+                   backend::PrintDDLStatements(latest_schema));
+  for (const auto& statement : printed_statements) {
     response->add_statements(statement);
   }
+  ZETASQL_ASSIGN_OR_RETURN(std::string proto_descriptor_bytes,
+                   latest_schema->proto_bundle()->GetProtoDescriptorBytes());
+  response->set_proto_descriptors(proto_descriptor_bytes);
   return absl::OkStatus();
 }
 REGISTER_GRPC_HANDLER(DatabaseAdmin, GetDatabaseDdl);

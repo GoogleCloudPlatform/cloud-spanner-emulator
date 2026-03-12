@@ -702,6 +702,130 @@ TEST_F(InMemoryStorageTest,
       zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
+TEST_F(InMemoryStorageTest, DroppedTablesAreRemovedAfterRetentionPeriod) {
+  absl::Time t0 = absl::Now();
+
+  // Write into 2 tables.
+  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+                           {String("value-1")}));
+  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId1, Key({Int64(10)}), {kColumnID},
+                           {String("value-10")}));
+
+  // Drop the first table.
+  storage_.MarkDroppedTable(t0, kTableId0);
+
+  // Expire the table.
+  storage_.CleanUpDeletedTables(t0 + absl::Hours(1) + absl::Seconds(1));
+
+  // Lookup should return not found for first table.
+  std::vector<zetasql::Value> values;
+  EXPECT_THAT(
+      storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {kColumnID}, &values),
+      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+  ZETASQL_EXPECT_OK(
+      storage_.Lookup(t0, kTableId1, Key({Int64(10)}), {kColumnID}, &values));
+}
+
+TEST_F(InMemoryStorageTest, DroppedColumnsAreRemovedAfterRetentionPeriod) {
+  absl::Time t0 = absl::Now();
+
+  // Write multiple rows to column.
+  for (int i = 0; i < 10; i++) {
+    ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(i)}), {kColumnID},
+                             {String("value-1")}));
+  }
+
+  // Drop and expire the column.
+  storage_.MarkDroppedColumn(t0, kTableId0, kColumnID);
+  storage_.CleanUpDeletedColumns(t0 + absl::Hours(1) + absl::Seconds(1));
+
+  // Lookup of column should return empty values in all rows.
+  for (int i = 0; i < 10; i++) {
+    std::vector<zetasql::Value> values;
+    ZETASQL_EXPECT_OK(
+        storage_.Lookup(t0, kTableId0, Key({Int64(i)}), {kColumnID}, &values));
+    EXPECT_THAT(values, testing::ElementsAre(zetasql::Value()));
+  }
+}
+
+TEST_F(InMemoryStorageTest, ExpiredCellsThatCoverRetentionPeriodAreKept) {
+  absl::Time t0 = absl::Now();
+  absl::Time t1 = t0 + absl::Minutes(10);
+  absl::Time t2 = t0 + absl::Minutes(40);
+  absl::Time t3 = t0 + absl::Hours(1) + absl::Seconds(1);
+  absl::Time t4 = t2 + absl::Hours(1) + absl::Seconds(1);
+
+  // Write into column.
+  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+                           {String("value-0")}));
+  ZETASQL_EXPECT_OK(storage_.Write(t2, kTableId0, Key({Int64(1)}), {kColumnID},
+                           {String("value-2")}));
+
+  // Write to remove expired values.
+  ZETASQL_EXPECT_OK(storage_.Write(t3, kTableId0, Key({Int64(1)}), {kColumnID},
+                           {String("value-3")}));
+
+  // Lookup of t1 should return the first value which shouldn't be cleaned up
+  // because it covers the retention period.
+  std::vector<zetasql::Value> values;
+  ZETASQL_EXPECT_OK(
+      storage_.Lookup(t1, kTableId0, Key({Int64(1)}), {kColumnID}, &values));
+  EXPECT_THAT(values, testing::ElementsAre(String("value-0")));
+
+  ZETASQL_EXPECT_OK(storage_.Write(t4, kTableId0, Key({Int64(1)}), {kColumnID},
+                           {String("value-4")}));
+
+  // Lookup of t1 should return an empty value because the first value was
+  // cleaned up as it doesn't cover the retention period.
+  values.clear();
+  ZETASQL_EXPECT_OK(
+      storage_.Lookup(t1, kTableId0, Key({Int64(1)}), {kColumnID}, &values));
+  EXPECT_THAT(values, testing::ElementsAre(zetasql::Value()));
+}
+
+TEST_F(InMemoryStorageTest, RemoveExpiredVersionsFromCellOnWrite) {
+  absl::Time t0 = absl::Now();
+  absl::Time t1 = t0 + absl::Seconds(1);
+  absl::Time t2 = t1 + absl::Hours(1);
+
+  // Write into column.
+  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+                           {String("value-0")}));
+  ZETASQL_EXPECT_OK(storage_.Write(t1, kTableId0, Key({Int64(1)}), {kColumnID},
+                           {String("value-1")}));
+
+  // Write should remove the t0 value as that will be expired.
+  ZETASQL_EXPECT_OK(storage_.Write(t2, kTableId0, Key({Int64(1)}), {kColumnID},
+                           {String("value-2")}));
+
+  // Lookup of t0 should return an empty value because the value was cleaned up.
+  std::vector<zetasql::Value> values;
+  ZETASQL_EXPECT_OK(
+      storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {kColumnID}, &values));
+  EXPECT_THAT(values, testing::ElementsAre(zetasql::Value()));
+}
+
+TEST_F(InMemoryStorageTest, RemoveExpiredVersionsFromCellOnDelete) {
+  absl::Time t0 = absl::Now();
+  absl::Time t1 = t0 + absl::Seconds(1);
+  absl::Time t2 = t1 + absl::Hours(1);
+
+  // Write into column.
+  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+                           {String("value-0")}));
+  ZETASQL_EXPECT_OK(storage_.Write(t1, kTableId0, Key({Int64(1)}), {kColumnID},
+                           {String("value-1")}));
+
+  // Delete should remove the t0 value as that will be expired.
+  ZETASQL_EXPECT_OK(storage_.Delete(t2, kTableId0, KeyRange::Point(Key({Int64(1)}))));
+
+  // Lookup of t0 should return an empty value because the value was cleaned up.
+  std::vector<zetasql::Value> values;
+  ZETASQL_EXPECT_OK(
+      storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {kColumnID}, &values));
+  EXPECT_THAT(values, testing::ElementsAre(zetasql::Value()));
+}
+
 }  // namespace
 
 }  // namespace backend

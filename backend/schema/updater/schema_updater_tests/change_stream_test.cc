@@ -288,6 +288,51 @@ TEST_P(SchemaUpdaterTest, CreateChangeStreamAlreadyExists) {
               StatusIs(error::SchemaObjectAlreadyExists("Change Stream", "C")));
 }
 
+TEST_P(SchemaUpdaterTest, CreateChangeStreamIfNotExists) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+      CREATE CHANGE STREAM C FOR ALL)",
+                                        R"(
+      CREATE CHANGE STREAM IF NOT EXISTS C FOR ALL)"}));
+  EXPECT_NE(schema->FindChangeStream("C"), nullptr);
+}
+
+TEST_P(SchemaUpdaterTest, CreateChangeStreamIfNotExistsIntermediateStatement) {
+  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE CHANGE STREAM C FOR ALL)",
+                                                  R"(
+      CREATE CHANGE STREAM IF NOT EXISTS C FOR ALL)",
+                                                  R"(
+      CREATE TABLE T (
+        k1 INT64,
+        c1 STRING(100),
+      ) PRIMARY KEY (k1)
+    )"}));
+  // Check that change stream C tracks table T.
+  const Table* table = schema->FindTable("T");
+  const Column* pk_col = table->FindColumn("k1");
+  const Column* c1_col = table->FindColumn("c1");
+  EXPECT_EQ(table->change_streams().size(), 1);
+  EXPECT_EQ(pk_col->change_streams().size(), 0);
+  EXPECT_EQ(c1_col->change_streams().size(), 1);
+  const ChangeStream* change_stream = schema->FindChangeStream("C");
+  EXPECT_TRUE(change_stream->tracked_tables_columns().contains("T"));
+  EXPECT_THAT(change_stream->tracked_tables_columns().find("T")->second,
+              testing::UnorderedElementsAre("k1", "c1"));
+  EXPECT_TRUE(schema->FindTable("T")->FindChangeStream("C"));
+  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      schema,
+      UpdateSchema(schema.get(), {R"(ALTER TABLE T ADD COLUMN c2 INT64)"}));
+  ASSERT_EQ(schema->FindTable("T")->FindColumn("c2")->change_streams().size(),
+            1);
+  EXPECT_EQ(
+      schema->FindTable("T")->FindColumn("c2")->change_streams()[0]->Name(),
+      "C");
+  EXPECT_THAT(
+      schema->FindChangeStream("C")->tracked_tables_columns().find("T")->second,
+      testing::UnorderedElementsAre("k1", "c1", "c2"));
+}
+
 TEST_P(SchemaUpdaterTest, CreateChangeStream_NullOptions) {
   ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
               CREATE TABLE Singers (

@@ -39,7 +39,9 @@
 #include "backend/database/database.h"
 #include "backend/query/query_context.h"
 #include "backend/query/query_engine.h"
+#include "backend/schema/catalog/schema.h"
 #include "backend/transaction/options.h"
+#include "backend/transaction/read_only_transaction.h"
 #include "backend/transaction/read_write_transaction.h"
 #include "common/constants.h"
 #include "common/errors.h"
@@ -99,7 +101,8 @@ Transaction::Transaction(
       usage_type_(usage),
       type_(TypeFromTransactionOptions(options)),
       options_(options),
-      create_time_(absl::Now()) {}
+      create_time_(absl::Now())
+{}
 
 void Transaction::Close() {
   absl::MutexLock lock(&mu_);

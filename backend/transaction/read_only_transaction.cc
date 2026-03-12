@@ -41,12 +41,6 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-namespace {
-
-absl::Duration kMaxStaleReadDuration = absl::Hours(1);
-
-}  // namespace
-
 ReadOnlyTransaction::ReadOnlyTransaction(
     const ReadOnlyOptions& options, TransactionID transaction_id, Clock* clock,
     Storage* storage, LockManager* lock_manager,
@@ -56,7 +50,8 @@ ReadOnlyTransaction::ReadOnlyTransaction(
       clock_(clock),
       base_storage_(storage),
       versioned_catalog_(versioned_catalog),
-      lock_manager_(lock_manager) {
+      lock_manager_(lock_manager),
+      version_retention_period_(versioned_catalog->version_retention_period()) {
   lock_handle_ = lock_manager_->CreateHandle(transaction_id,
                                              /*try_abort_fn=*/nullptr,
                                              /*priority=*/1);
@@ -69,12 +64,18 @@ absl::Status ReadOnlyTransaction::Read(const ReadArg& read_arg,
   // Wait for any concurrent schema change or read-write transactions to commit
   // before accessing database state to perform a read.
   lock_handle_->WaitForSafeRead(read_timestamp_);
-  if (clock_->Now() - read_timestamp_ >= kMaxStaleReadDuration) {
+  auto now = clock_->Now();
+  if (now - read_timestamp_ >= version_retention_period_) {
     return error::ReadTimestampPastVersionGCLimit(read_timestamp_);
   }
 
   ZETASQL_ASSIGN_OR_RETURN(const ResolvedReadArg resolved_read_arg,
                    ResolveReadArg(read_arg, schema()));
+
+  // Clean up any dropped tables that are eligible for deletion.
+  // This is inexpensive to do so it can be done for every read.
+  // If there are no tables to clean up, this is a no-op.
+  base_storage_->CleanUpDeletedTables(now);
 
   std::vector<std::unique_ptr<StorageIterator>> iterators;
   for (const auto& key_range : resolved_read_arg.key_ranges) {
