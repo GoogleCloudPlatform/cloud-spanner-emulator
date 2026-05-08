@@ -35,7 +35,7 @@
 #include "frontend/proto/partition_token.pb.h"
 #include "frontend/server/handler.h"
 #include "frontend/server/request_context.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -102,7 +102,7 @@ absl::Status ProcessMutationGroup(
 absl::Status BatchWrite(RequestContext* ctx,
                         const spanner_api::BatchWriteRequest* request,
                         ServerStream<spanner_api::BatchWriteResponse>* stream) {
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    GetSession(ctx, request->session()));
 
   for (int i = 0; i < request->mutation_groups_size(); ++i) {
@@ -113,6 +113,9 @@ absl::Status BatchWrite(RequestContext* ctx,
 
     spanner_api::TransactionOptions txn_options;
     txn_options.mutable_read_write();
+    if (request->exclude_txn_from_change_streams()) {
+      txn_options.set_exclude_txn_from_change_streams(true);
+    }
     absl::StatusOr<std::shared_ptr<Transaction>> single_use_transaction =
         session->CreateSingleUseTransaction(txn_options);
     if (!single_use_transaction.ok()) {

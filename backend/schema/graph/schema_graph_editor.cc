@@ -20,16 +20,16 @@
 #include <memory>
 #include <utility>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_join.h"
 #include "backend/schema/graph/schema_node.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -46,23 +46,23 @@ SchemaNode* SchemaGraphEditor::MakeNewClone(const SchemaNode* node) {
 
 absl::Status SchemaGraphEditor::InitCloneMap() {
   // First, make a clone of the graph.
-  ZETASQL_VLOG(2) << "First cloning pass";
+  GOOGLESQL_VLOG(2) << "First cloning pass";
   for (const auto* schema_node : original_graph_->GetSchemaNodes()) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* cloned_node, Clone(schema_node));
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* cloned_node, Clone(schema_node));
     new_nodes_.push_back(cloned_node);
   }
-  ZETASQL_RET_CHECK_EQ(clone_map_.size(), num_original_nodes());
+  GOOGLESQL_RET_CHECK_EQ(clone_map_.size(), num_original_nodes());
   return absl::OkStatus();
 }
 
 absl::Status SchemaGraphEditor::FixupInternal(const SchemaNode* original,
                                               SchemaNode* mutable_clone) {
-  ZETASQL_VLOG(4) << std::string(depth_, ' ') << "Fixing "
+  GOOGLESQL_VLOG(4) << std::string(depth_, ' ') << "Fixing "
           << NodeKindString(mutable_clone) << " node :" << mutable_clone;
   ++depth_;
-  ZETASQL_RETURN_IF_ERROR(mutable_clone->DeepClone(this, original));
+  GOOGLESQL_RETURN_IF_ERROR(mutable_clone->DeepClone(this, original));
   --depth_;
-  ZETASQL_VLOG(4) << std::string(depth_, ' ')
+  GOOGLESQL_VLOG(4) << std::string(depth_, ' ')
           << "Finished fixing node: " << mutable_clone->DebugString();
   return absl::OkStatus();
 }
@@ -79,7 +79,7 @@ absl::Status SchemaGraphEditor::FixupInternal(const SchemaNode* original,
 //    Clone() are made, guaranteeing termination of the cloning procedure.
 absl::StatusOr<const SchemaNode*> SchemaGraphEditor::Clone(
     const SchemaNode* node) {
-  ZETASQL_RET_CHECK_NE(node, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node, nullptr);
 
   // During the delete_fixup_ phase, we don't do any recursive calls.
   if (delete_fixup_) {
@@ -90,24 +90,24 @@ absl::StatusOr<const SchemaNode*> SchemaGraphEditor::Clone(
   NodeKind kind = GetNodeKind(node);
   const SchemaNode* clone = FindClone(node);
   if (clone != nullptr) {
-    ZETASQL_VLOG(5) << std::string(depth_, ' ') << "Found already visited "
+    GOOGLESQL_VLOG(5) << std::string(depth_, ' ') << "Found already visited "
             << NodeKindString(clone) << " node :" << clone->DebugString();
     ret = clone;
   } else if (kind == kAdded || kind == kEdited || kind == kCloned) {
     SchemaNode* mutable_node = const_cast<SchemaNode*>(node);
     // When called with non-original nodes, clone_map_ acts as a 'visited' set.
     clone_map_[node] = node;
-    ZETASQL_RETURN_IF_ERROR(FixupInternal(node, mutable_node));
+    GOOGLESQL_RETURN_IF_ERROR(FixupInternal(node, mutable_node));
     ret = node;
   } else {
-    ZETASQL_RET_CHECK_EQ(kind, kOriginal);
-    ZETASQL_RET_CHECK(!node->is_deleted());
-    ZETASQL_VLOG(3) << std::string(depth_, ' ') << "Cloning " << NodeKindString(node)
+    GOOGLESQL_RET_CHECK_EQ(kind, kOriginal);
+    GOOGLESQL_RET_CHECK(!node->is_deleted());
+    GOOGLESQL_VLOG(3) << std::string(depth_, ' ') << "Cloning " << NodeKindString(node)
             << " node: " << node->DebugString();
 
     SchemaNode* mutable_clone = MakeNewClone(node);
-    ZETASQL_RETURN_IF_ERROR(FixupInternal(node, mutable_clone));
-    ZETASQL_VLOG(3) << std::string(depth_, ' ')
+    GOOGLESQL_RETURN_IF_ERROR(FixupInternal(node, mutable_clone));
+    GOOGLESQL_VLOG(3) << std::string(depth_, ' ')
             << "Finished cloning node: " << node->DebugString();
     ret = mutable_clone;
   }
@@ -115,17 +115,17 @@ absl::StatusOr<const SchemaNode*> SchemaGraphEditor::Clone(
 }
 
 absl::Status SchemaGraphEditor::DeleteNode(const SchemaNode* node) {
-  ZETASQL_RET_CHECK(edited_clones_.empty() && added_nodes_.empty())
+  GOOGLESQL_RET_CHECK(edited_clones_.empty() && added_nodes_.empty())
       << "Graph already contains modifications. It must be canonicalized "
       << "before making further changes.";
-  ZETASQL_RET_CHECK(IsOriginalNode(node));
+  GOOGLESQL_RET_CHECK(IsOriginalNode(node));
   deleted_nodes_.emplace_back(node);
   return absl::OkStatus();
 }
 
 absl::Status SchemaGraphEditor::AddNode(
     std::unique_ptr<const SchemaNode> node) {
-  ZETASQL_RET_CHECK(deleted_nodes_.empty())
+  GOOGLESQL_RET_CHECK(deleted_nodes_.empty())
       << "Graph already has deleted nodes. It must be canonicalized before "
       << "making further changes.";
   added_nodes_.emplace_back(std::move(node));
@@ -145,11 +145,11 @@ absl::StatusOr<std::unique_ptr<SchemaGraph>>
 SchemaGraphEditor::CanonicalizeGraph() {
   std::unique_ptr<SchemaGraph> cloned_graph = nullptr;
   if (!deleted_nodes_.empty()) {
-    ZETASQL_VLOG(2) << "Canonicalizing deletes";
-    ZETASQL_RETURN_IF_ERROR(CanonicalizeDeletion());
+    GOOGLESQL_VLOG(2) << "Canonicalizing deletes";
+    GOOGLESQL_RETURN_IF_ERROR(CanonicalizeDeletion());
   } else {
-    ZETASQL_VLOG(2) << "Canonicalizing edits and additions";
-    ZETASQL_RETURN_IF_ERROR(CanonicalizeEdits());
+    GOOGLESQL_VLOG(2) << "Canonicalizing edits and additions";
+    GOOGLESQL_RETURN_IF_ERROR(CanonicalizeEdits());
   }
   // Set the edited nodes in the context so that nodes can check
   // if they were edited/cloned inside ValidateUpdate()/Validate().
@@ -173,8 +173,8 @@ SchemaGraphEditor::CanonicalizeGraph() {
   // deleted nodes.
   for (const auto* orig_node : original_graph_->GetSchemaNodes()) {
     auto clone = FindClone(orig_node);
-    ZETASQL_RET_CHECK_NE(clone, nullptr);
-    ZETASQL_RETURN_IF_ERROR(clone->ValidateUpdate(orig_node, context_));
+    GOOGLESQL_RET_CHECK_NE(clone, nullptr);
+    GOOGLESQL_RETURN_IF_ERROR(clone->ValidateUpdate(orig_node, context_));
   }
 
   // Finally, erase deleted nodes from the new graph.
@@ -185,16 +185,16 @@ SchemaGraphEditor::CanonicalizeGraph() {
   // Do a final pass on the canonicalized set of nodes to perform per-node
   // validation.
   for (const auto* node : cloned_graph->GetSchemaNodes()) {
-    ZETASQL_RETURN_IF_ERROR(node->Validate(context_));
+    GOOGLESQL_RETURN_IF_ERROR(node->Validate(context_));
   }
   context_->ClearNewTempSchemaSnapshot();
 
   // Check the invariants around the nodes.
-  ZETASQL_RET_CHECK_EQ(cloned_pool_ptr->size(), cloned_graph->GetSchemaNodes().size())
+  GOOGLESQL_RET_CHECK_EQ(cloned_pool_ptr->size(), cloned_graph->GetSchemaNodes().size())
       << "\nNodes:\n"
       << cloned_pool_ptr->DebugString();
 
-  ZETASQL_RET_CHECK_EQ(cloned_pool_ptr->size(),
+  GOOGLESQL_RET_CHECK_EQ(cloned_pool_ptr->size(),
                num_original_nodes() - trimmed_ + added_nodes_.size())
       << "Internal error while cloning schema graph "
       << "Original: " << num_original_nodes() << "\n"
@@ -209,46 +209,46 @@ SchemaGraphEditor::CanonicalizeGraph() {
 
 absl::Status SchemaGraphEditor::CanonicalizeEdits() {
   if (clone_map_.empty()) {
-    ZETASQL_RETURN_IF_ERROR(InitCloneMap());
+    GOOGLESQL_RETURN_IF_ERROR(InitCloneMap());
   }
 
   // Run a fixup/cloning pass so that changes from edit nodes in the cloned
   // graph are propagated to their neighbors.
-  ZETASQL_VLOG(2) << "Fixing clones";
+  GOOGLESQL_VLOG(2) << "Fixing clones";
   for (const auto* clone : new_nodes_) {
-    ZETASQL_RETURN_IF_ERROR(Fixup(clone));
+    GOOGLESQL_RETURN_IF_ERROR(Fixup(clone));
   }
 
   // No new clones were added.
-  ZETASQL_RET_CHECK_EQ(new_nodes_.size(), num_original_nodes());
-  ZETASQL_RET_CHECK_EQ(cloned_pool_->size(), num_original_nodes());
+  GOOGLESQL_RET_CHECK_EQ(new_nodes_.size(), num_original_nodes());
+  GOOGLESQL_RET_CHECK_EQ(cloned_pool_->size(), num_original_nodes());
 
-  ZETASQL_VLOG(2) << "Fixing added nodes";
+  GOOGLESQL_VLOG(2) << "Fixing added nodes";
   for (auto& added_node : added_nodes_) {
-    ZETASQL_RETURN_IF_ERROR(Fixup(added_node.get()));
+    GOOGLESQL_RETURN_IF_ERROR(Fixup(added_node.get()));
     new_nodes_.push_back(added_node.get());
     cloned_pool_->Add(std::move(added_node));
   }
-  ZETASQL_RET_CHECK_EQ(cloned_pool_->size(),
+  GOOGLESQL_RET_CHECK_EQ(cloned_pool_->size(),
                num_original_nodes() + added_nodes_.size());
   return absl::OkStatus();
 }
 
 absl::Status SchemaGraphEditor::Fixup(const SchemaNode* node) {
-  ZETASQL_ASSIGN_OR_RETURN(const auto* cloned_node, Clone(node));
-  ZETASQL_RET_CHECK_NE(cloned_node, nullptr);
+  GOOGLESQL_ASSIGN_OR_RETURN(const auto* cloned_node, Clone(node));
+  GOOGLESQL_RET_CHECK_NE(cloned_node, nullptr);
   return absl::OkStatus();
 }
 
 absl::Status SchemaGraphEditor::CanonicalizeDeletion() {
   if (clone_map_.empty()) {
-    ZETASQL_RETURN_IF_ERROR(InitCloneMap());
+    GOOGLESQL_RETURN_IF_ERROR(InitCloneMap());
   }
 
   // Mark the clone of the node as deleted.
   for (const auto* node : deleted_nodes_) {
     const SchemaNode* deleted_clone = FindClone(node);
-    ZETASQL_RET_CHECK_NE(deleted_clone, nullptr);
+    GOOGLESQL_RET_CHECK_NE(deleted_clone, nullptr);
     const_cast<SchemaNode*>(deleted_clone)->MarkDeleted();
   }
 
@@ -262,13 +262,13 @@ absl::Status SchemaGraphEditor::CanonicalizeDeletion() {
     int new_deletions = 0;
     for (const auto* node : original_graph_->GetSchemaNodes()) {
       const SchemaNode* clone = FindClone(node);
-      ZETASQL_RET_CHECK_NE(clone, nullptr);
-      ZETASQL_RETURN_IF_ERROR(FixupInternal(clone, const_cast<SchemaNode*>(clone)));
+      GOOGLESQL_RET_CHECK_NE(clone, nullptr);
+      GOOGLESQL_RETURN_IF_ERROR(FixupInternal(clone, const_cast<SchemaNode*>(clone)));
       if (clone->is_deleted()) {
         ++new_deletions;
       }
     }
-    ZETASQL_RET_CHECK_LE(deletions, new_deletions);
+    GOOGLESQL_RET_CHECK_LE(deletions, new_deletions);
 
     // No need to run more fixup passes if the number of updates have converged.
     if (new_deletions == deletions) {
@@ -276,7 +276,7 @@ absl::Status SchemaGraphEditor::CanonicalizeDeletion() {
     } else {
       deletions = new_deletions;
     }
-    ZETASQL_VLOG(5) << "Fixup pass " << i + 1 << " deletions: " << new_deletions;
+    GOOGLESQL_VLOG(5) << "Fixup pass " << i + 1 << " deletions: " << new_deletions;
   }
   delete_fixup_ = false;
   return absl::OkStatus();

@@ -17,8 +17,8 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_HINT_REWRITER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_HINT_REWRITER_H_
 
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_ast_deep_copy_visitor.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_deep_copy_visitor.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -28,10 +28,10 @@ namespace backend {
 
 // Implements ResolvedASTDeepCopyVisitor to rewrite empty hint qualifiers to
 // "spanner".
-class HintRewriter : public zetasql::ResolvedASTDeepCopyVisitor {
+class HintRewriter : public googlesql::ResolvedASTDeepCopyVisitor {
  public:
   absl::Status VisitResolvedOption(
-      const zetasql::ResolvedOption* node) override;
+      const googlesql::ResolvedOption* node) override;
 };
 
 }  // namespace backend

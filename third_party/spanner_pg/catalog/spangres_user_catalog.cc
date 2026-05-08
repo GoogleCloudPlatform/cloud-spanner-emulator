@@ -33,8 +33,8 @@
 
 #include <vector>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/table_valued_function.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/table_valued_function.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_split.h"
 #include "backend/query/queryable_table.h"
@@ -52,17 +52,17 @@ namespace spangres {
 // GetCatalogPathForTable returns the full catalog path for a table. It is safe
 // to use because Spanner does not allow periods inside of names.
 const std::vector<std::string> SpangresUserCatalog::GetCatalogPathForTable(
-    const zetasql::Table* table) const {
+    const googlesql::Table* table) const {
   return absl::StrSplit(table->FullName(), '.');
 }
 
 bool SpangresUserCatalog::IsUserDefinedFunction(
-    const zetasql::Function* udf) const {
+    const googlesql::Function* udf) const {
   return udf->GetGroup() == google::spanner::emulator::backend::kSqlUdfGroup;
 }
 
 absl::StatusOr<std::vector<absl::string_view>>
-SpangresUserCatalog::GetPrimaryKeyColumns(const zetasql::Table& table) const {
+SpangresUserCatalog::GetPrimaryKeyColumns(const googlesql::Table& table) const {
   std::vector<absl::string_view> key_columns;
     if (table.Is<google::spanner::emulator::backend::QueryableTable>()) {
     const google::spanner::emulator::backend::QueryableTable* queryable_table =

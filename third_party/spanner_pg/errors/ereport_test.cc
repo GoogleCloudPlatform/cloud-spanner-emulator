@@ -33,7 +33,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/log/scoped_mock_log.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
@@ -44,7 +44,7 @@ namespace test {
 namespace {
 
 using ::testing::Optional;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 // Checks that most fields on an ErrorData are empty.
 // DELIBERATELY SKIPS elevel, message, and sqlerrcode

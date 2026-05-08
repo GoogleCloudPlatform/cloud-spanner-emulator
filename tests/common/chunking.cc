@@ -26,7 +26,7 @@
 #include "absl/strings/substitute.h"
 #include "absl/types/optional.h"
 #include "common/errors.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {

@@ -23,7 +23,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
@@ -155,7 +155,7 @@ class InformationSchemaTest
       expected_col_values.insert(
           row.values()[col_index].get<std::string>().value());
     }
-    ZETASQL_EXPECT_OK(results_or);
+    GOOGLESQL_EXPECT_OK(results_or);
     std::vector<ValueRow> results = std::move(results_or.value());
     for (const auto& col_value : expected_col_values) {
       std::vector<ValueRow> col_results;
@@ -231,7 +231,7 @@ class InformationSchemaTest
   inline std::string GetNameForDialect(absl::string_view name) {
     // The system tables and associated columns are all defined in lowercase for
     // the PG dialect. The constants defined for the InformationSchema are for
-    // the ZetaSQL dialect which are all uppercase. So we lowercase them here
+    // the GoogleSQL dialect which are all uppercase. So we lowercase them here
     // for PG.
     if (GetParam() == POSTGRESQL) {
       return absl::AsciiStrToLower(name);
@@ -306,7 +306,7 @@ TEST_P(InformationSchemaTest, Schemata) {
 
 TEST_P(InformationSchemaTest, MetaTables) {
   // The documented set of tables that should be returned is at:
-  // ZetaSQL: https://cloud.google.com/spanner/docs/information-schema
+  // GoogleSQL: https://cloud.google.com/spanner/docs/information-schema
   // PostgreSQL: https://cloud.google.com/spanner/docs/information-schema-pg
   //
   // The tables filtered out by the WHERE clause are not currently available in
@@ -518,6 +518,7 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
     {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_IDENTITY", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_NULLABLE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "IS_STORED", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "COLUMNS", "ON_UPDATE_EXPRESSION", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "ORDINAL_POSITION", Ns(), Ns(), "NO", "INT64", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "SPANNER_STATE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
     {"", "INFORMATION_SCHEMA", "COLUMNS", "SPANNER_TYPE", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
@@ -554,6 +555,7 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
     {"", "INFORMATION_SCHEMA", "DATABASE_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
     {"", "INFORMATION_SCHEMA", "DATABASE_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
     {"", "INFORMATION_SCHEMA", "DATABASE_OPTIONS", "SCHEMA_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEXES", "FILTER", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
     {"", "INFORMATION_SCHEMA", "INDEXES", "INDEX_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
     {"", "INFORMATION_SCHEMA", "INDEXES", "INDEX_STATE", Ns(), Ns(), "NO", "STRING(100)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
     {"", "INFORMATION_SCHEMA", "INDEXES", "INDEX_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false},  // NOLINT
@@ -2121,6 +2123,7 @@ TEST_P(InformationSchemaTest, DefaultTables) {
       {"VIEW", "base_view", Ns(), Ns(), Ns(), Ns(), Ns()},
       {"BASE TABLE", "cascade_child", "base", "COMMITTED", "CASCADE", "IN PARENT", Ns()}, // NOLINT
       {"BASE TABLE", "edge_table", Ns(), "COMMITTED", Ns(), Ns(), Ns()},  // NOLINT
+      {"BASE TABLE", "filter_test", Ns(), "COMMITTED", Ns(), Ns(), Ns()},  // NOLINT
       {"BASE TABLE", "no_action_child", "base", "COMMITTED", "NO ACTION", "IN PARENT", Ns()},  // NOLINT
       {"BASE TABLE", "node_table", Ns(), "COMMITTED", Ns(), Ns(), Ns()},  // NOLINT
       {"BASE TABLE", "npi_child", "base", "COMMITTED", Ns(), "IN", Ns()},
@@ -2135,6 +2138,7 @@ TEST_P(InformationSchemaTest, DefaultTables) {
       {"BASE TABLE", "base", Ns(), "COMMITTED", Ns(), Ns(), Ns()},
       {"VIEW", "base_view", Ns(), Ns(), Ns(), Ns(), Ns()},
       {"BASE TABLE", "cascade_child", "base", "COMMITTED", "CASCADE", "IN PARENT", Ns()}, // NOLINT
+      {"BASE TABLE", "filter_test", Ns(), "COMMITTED", Ns(), Ns(), Ns()}, // NOLINT
       {"BASE TABLE", "no_action_child", "base", "COMMITTED", "NO ACTION", "IN PARENT", Ns()}, // NOLINT
       {"BASE TABLE", "npi_child", "base", "COMMITTED", Ns(), "IN", Ns()},
       {"BASE TABLE", "row_deletion_policy", Ns(), "COMMITTED", Ns(), Ns(), expected_interval}, // NOLINT
@@ -2261,6 +2265,9 @@ TEST_P(InformationSchemaTest, GSQLDefaultColumns) {
     {"", "", "cascade_child", "value1", 4, Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "cascade_child", "value2", 5, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "cascade_child", "created_at", 6, Ns(), Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"}, // NOLINT
+    {"", "", "filter_test", "k", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "filter_test", "v1", 2, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "filter_test", "v2", 3, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "no_action_child", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "no_action_child", "key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "no_action_child", "child_key", 3, Ns(), Ns(), "YES", "BOOL", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
@@ -2441,6 +2448,10 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
       {TableCatalogForDialect(), "public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", "YES", "NO", "READ_WRITE", "YES"},  // NOLINT
       {TableCatalogForDialect(), "public", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
       {TableCatalogForDialect(), "public", "cascade_child", "cascade_child_by_value", "INDEX", "base", "YES", "NO", "READ_WRITE", "NO"},  // NOLINT
+      {TableCatalogForDialect(), "public", "filter_test", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
+      {TableCatalogForDialect(), "public", "filter_test", "idx_normal", "INDEX", "", "NO", "NO", "READ_WRITE", "NO"},  // NOLINT
+      {TableCatalogForDialect(), "public", "filter_test", "idx_partial", "INDEX", "", "NO", "NO", "READ_WRITE", "NO"},  // NOLINT
+      {TableCatalogForDialect(), "public", "filter_test", "idx_partial_multi", "INDEX", "", "NO", "NO", "READ_WRITE", "NO"},  // NOLINT
       {TableCatalogForDialect(), "public", "no_action_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
       {TableCatalogForDialect(), "public", "no_action_child", "no_action_child_by_value", "INDEX", "", "NO", "NO", "READ_WRITE", "NO"},  // NOLINT
       {TableCatalogForDialect(), "public", "npi_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
@@ -2459,6 +2470,10 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
         {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", true, true, "READ_WRITE", true},  // NOLINT
         {"", "", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
         {"", "", "cascade_child", "cascade_child_by_value", "INDEX", "base", true, true, "READ_WRITE", false},  // NOLINT
+        {"", "", "filter_test", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+        {"", "", "filter_test", "idx_normal", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
+        {"", "", "filter_test", "idx_partial", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
+        {"", "", "filter_test", "idx_partial_multi", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
         {"", "", "no_action_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
         {"", "", "no_action_child", "no_action_child_by_value", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
         {"", "", "npi_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
@@ -2567,6 +2582,11 @@ TEST_P(InformationSchemaTest, DefaultIndexColumns) {
       {TableCatalogForDialect(), "public", "cascade_child", "cascade_child_by_value", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
       {TableCatalogForDialect(), "public", "cascade_child", "cascade_child_by_value", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
       {TableCatalogForDialect(), "public", "cascade_child", "cascade_child_by_value", "value1", Ni(), Ns(), "NO", "character varying(256)"},  // NOLINT
+      {TableCatalogForDialect(), "public", "filter_test", "PRIMARY_KEY", "k", 1, "ASC", "NO", "bigint"},  // NOLINT
+      {TableCatalogForDialect(), "public", "filter_test", "idx_normal", "v1", 1, "ASC", "YES", "bigint"},  // NOLINT
+      {TableCatalogForDialect(), "public", "filter_test", "idx_partial", "v1", 1, "ASC", "NO", "bigint"},  // NOLINT
+      {TableCatalogForDialect(), "public", "filter_test", "idx_partial_multi", "v1", 1, "ASC", "NO", "bigint"},  // NOLINT
+      {TableCatalogForDialect(), "public", "filter_test", "idx_partial_multi", "v2", 2, "ASC", "NO", "bigint"},  // NOLINT
       {TableCatalogForDialect(), "public", "no_action_child", "PRIMARY_KEY", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
       {TableCatalogForDialect(), "public", "no_action_child", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
       {TableCatalogForDialect(), "public", "no_action_child", "PRIMARY_KEY", "child_key", 3, "ASC", "NO", "boolean"},  // NOLINT
@@ -2597,6 +2617,11 @@ TEST_P(InformationSchemaTest, DefaultIndexColumns) {
         {"", "", "cascade_child", "cascade_child_by_value", "key1", 1, "ASC", "NO", "INT64"},  // NOLINT
         {"", "", "cascade_child", "cascade_child_by_value", "key2", 2, "DESC", "NO", "STRING(256)"},  // NOLINT
         {"", "", "cascade_child", "cascade_child_by_value", "value2", 3, "ASC", "NO", "BOOL"},  // NOLINT
+        {"", "", "filter_test", "PRIMARY_KEY", "k", 1, "ASC", "YES", "INT64"},  // NOLINT
+        {"", "", "filter_test", "idx_normal", "v1", 1, "ASC", "YES", "INT64"},  // NOLINT
+        {"", "", "filter_test", "idx_partial", "v1", 1, "ASC", "NO", "INT64"},  // NOLINT
+        {"", "", "filter_test", "idx_partial_multi", "v1", 1, "ASC", "NO", "INT64"},  // NOLINT
+        {"", "", "filter_test", "idx_partial_multi", "v2", 2, "ASC", "NO", "INT64"},  // NOLINT
         {"", "", "no_action_child", "PRIMARY_KEY", "key1", 1, "ASC", "YES", "INT64"},  // NOLINT
         {"", "", "no_action_child", "PRIMARY_KEY", "key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
         {"", "", "no_action_child", "PRIMARY_KEY", "child_key", 3, "ASC", "YES", "BOOL"},  // NOLINT
@@ -2665,6 +2690,7 @@ TEST_P(InformationSchemaTest, DefaultDatabaseOptions) {
       from
         information_schema.database_options AS t
       where
+        t.option_name = 'columnar_policy' OR
         t.option_name = 'database_dialect' OR
         t.option_name = 'default_sequence_kind' OR
         t.option_name = 'version_retention_period'
@@ -2676,6 +2702,7 @@ TEST_P(InformationSchemaTest, DefaultDatabaseOptions) {
       (GetParam() == POSTGRESQL) ? "character varying" : "STRING";
   // clang-format off
   auto expected = std::vector<ValueRow>({
+    {"columnar_policy", type, "enabled"},  // NOLINT
     {"database_dialect", type, database_api::DatabaseDialect_Name(GetParam())},  // NOLINT
     {"default_sequence_kind", type, "bit_reversed_positive"},  // NOLINT
     {"version_retention_period", type, "2h"},  // NOLINT
@@ -2789,6 +2816,7 @@ TEST_P(InformationSchemaTest, DefaultTableConstraints) {
       {"public", "CK_IS_NOT_NULL_cascade_child_key1", "public", "cascade_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"public", "CK_IS_NOT_NULL_cascade_child_key2", "public", "cascade_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"public", "CK_IS_NOT_NULL_cascade_child_value1", "public", "cascade_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"public", "CK_IS_NOT_NULL_filter_test_k", "public", "filter_test", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"public", "CK_IS_NOT_NULL_no_action_child_child_key", "public", "no_action_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"public", "CK_IS_NOT_NULL_no_action_child_key1", "public", "no_action_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"public", "CK_IS_NOT_NULL_no_action_child_key2", "public", "no_action_child", "CHECK", "NO", "NO", "YES"},  // NOLINT
@@ -2800,6 +2828,7 @@ TEST_P(InformationSchemaTest, DefaultTableConstraints) {
       {"public", "IDX_cascade_child_child_key_value1_U_\\w{16}", "public", "cascade_child", "UNIQUE", "NO", "NO", "YES"},  // NOLINT
       {"public", "PK_base", "public", "base", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"public", "PK_cascade_child", "public", "cascade_child", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+      {"public", "PK_filter_test", "public", "filter_test", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"public", "PK_no_action_child", "public", "no_action_child", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"public", "PK_npi_child", "public", "npi_child", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"public", "PK_row_deletion_policy", "public", "row_deletion_policy", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
@@ -2825,6 +2854,8 @@ TEST_P(InformationSchemaTest, DefaultTableConstraints) {
             {"", "", "PK_base", "", "", "base", "PRIMARY KEY", "NO", "NO",
              "YES"},  // NOLINT
             {"", "", "PK_cascade_child", "", "", "cascade_child", "PRIMARY KEY",
+             "NO", "NO", "YES"},  // NOLINT
+            {"", "", "PK_filter_test", "", "", "filter_test", "PRIMARY KEY",
              "NO", "NO", "YES"},  // NOLINT
             {"", "", "PK_no_action_child", "", "", "no_action_child",
              "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
@@ -2939,6 +2970,7 @@ TEST_P(InformationSchemaTest, DefaultConstraintTableUsage) {
       {schema, "cascade_child", schema, "IDX_cascade_child_child_key_value1_U_\\w{16}"},  // NOLINT
       {schema, "cascade_child", schema, "PK_cascade_child"},  // NOLINT
       {schema, "cascade_child", schema, "fk_base_cascade_child"},  // NOLINT
+      {schema, "filter_test", schema, "PK_filter_test"},  // NOLINT
       {schema, "no_action_child", schema, "PK_no_action_child"},  // NOLINT
       {schema, "npi_child", schema, "PK_npi_child"},  // NOLINT
       {schema, "row_deletion_policy", schema, "PK_row_deletion_policy"},  // NOLINT
@@ -2957,6 +2989,7 @@ TEST_P(InformationSchemaTest, DefaultConstraintTableUsage) {
       {"", "", "cascade_child", "", "", "IDX_cascade_child_child_key_value1_U_\\w{16}"},  // NOLINT
       {"", "", "cascade_child", "", "", "PK_cascade_child"},  // NOLINT
       {"", "", "cascade_child", "", "", "fk_base_cascade_child"},  // NOLINT
+      {"", "", "filter_test", "", "", "PK_filter_test"},  // NOLINT
       {"", "", "no_action_child", "", "", "PK_no_action_child"},  // NOLINT
       {"", "", "npi_child", "", "", "PK_npi_child"},  // NOLINT
       {"", "", "row_deletion_policy", "", "", "PK_row_deletion_policy"},  // NOLINT
@@ -3127,7 +3160,7 @@ TEST_P(InformationSchemaTest, NamedSchemaReferentialConstraints) {
 
 TEST_P(InformationSchemaTest, CrossSchemaForeignKey) {
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK(SetSchema({R"(CREATE TABLE t (id VARCHAR(255) PRIMARY KEY))",
+    GOOGLESQL_ASSERT_OK(SetSchema({R"(CREATE TABLE t (id VARCHAR(255) PRIMARY KEY))",
                          R"(CREATE SCHEMA s)",
                          R"(CREATE TABLE s.f (
             id VARCHAR(255) PRIMARY KEY,
@@ -3135,7 +3168,7 @@ TEST_P(InformationSchemaTest, CrossSchemaForeignKey) {
             CONSTRAINT fk_t FOREIGN KEY (t_id) REFERENCES t(id))
         )"}));
   } else {
-    ZETASQL_ASSERT_OK(SetSchema({R"(CREATE TABLE t (id STRING(MAX)) PRIMARY KEY(id))",
+    GOOGLESQL_ASSERT_OK(SetSchema({R"(CREATE TABLE t (id STRING(MAX)) PRIMARY KEY(id))",
                          R"(CREATE SCHEMA s)",
                          R"(CREATE TABLE s.f (
             id STRING(MAX),
@@ -3205,6 +3238,7 @@ TEST_P(InformationSchemaTest, DefaultKeyColumnUsage) {
       {schema, "PK_cascade_child", schema, "cascade_child", "key1", 1, Ni()},  // NOLINT
       {schema, "PK_cascade_child", schema, "cascade_child", "key2", 2, Ni()},  // NOLINT
       {schema, "PK_cascade_child", schema, "cascade_child", "child_key", 3, Ni()},  // NOLINT
+      {schema, "PK_filter_test", schema, "filter_test", "k", 1, Ni()},  // NOLINT
       {schema, "PK_no_action_child", schema, "no_action_child", "key1", 1, Ni()},  // NOLINT
       {schema, "PK_no_action_child", schema, "no_action_child", "key2", 2, Ni()},  // NOLINT
       {schema, "PK_no_action_child", schema, "no_action_child", "child_key", 3, Ni()},  // NOLINT
@@ -3227,6 +3261,7 @@ TEST_P(InformationSchemaTest, DefaultKeyColumnUsage) {
       {"", "", "PK_cascade_child", "", "", "cascade_child", "key1", 1, Ni()},  // NOLINT
       {"", "", "PK_cascade_child", "", "", "cascade_child", "key2", 2, Ni()},  // NOLINT
       {"", "", "PK_cascade_child", "", "", "cascade_child", "child_key", 3, Ni()},  // NOLINT
+      {"", "", "PK_filter_test", "", "", "filter_test", "k", 1, Ni()},  // NOLINT
       {"", "", "PK_no_action_child", "", "", "no_action_child", "key1", 1, Ni()},  // NOLINT
       {"", "", "PK_no_action_child", "", "", "no_action_child", "key2", 2, Ni()},  // NOLINT
       {"", "", "PK_no_action_child", "", "", "no_action_child", "child_key", 3, Ni()},  // NOLINT
@@ -3358,6 +3393,8 @@ TEST_P(InformationSchemaTest, DefaultConstraintColumnUsage) {
       {schema, "cascade_child", "value1", schema, "CK_IS_NOT_NULL_cascade_child_value1"},  // NOLINT
       {schema, "cascade_child", "value1", schema, "IDX_cascade_child_child_key_value1_U_\\w{16}"},  // NOLINT
       {schema, "cascade_child", "value1", schema, "fk_base_cascade_child"},  // NOLINT
+      {schema, "filter_test", "k", schema, "CK_IS_NOT_NULL_filter_test_k"},  // NOLINT
+      {schema, "filter_test", "k", schema, "PK_filter_test"},  // NOLINT
       {schema, "no_action_child", "child_key", schema, "CK_IS_NOT_NULL_no_action_child_child_key"},  // NOLINT
       {schema, "no_action_child", "child_key", schema, "PK_no_action_child"},  // NOLINT
       {schema, "no_action_child", "key1", schema, "CK_IS_NOT_NULL_no_action_child_key1"},  // NOLINT
@@ -3392,6 +3429,7 @@ TEST_P(InformationSchemaTest, DefaultConstraintColumnUsage) {
       {"", "", "cascade_child", "value1", "", "", "CK_IS_NOT_NULL_cascade_child_value1"},  // NOLINT
       {"", "", "cascade_child", "value1", "", "", "IDX_cascade_child_child_key_value1_U_\\w{16}"},  // NOLINT
       {"", "", "cascade_child", "value1", "", "", "fk_base_cascade_child"},  // NOLINT
+      {"", "", "filter_test", "k", "", "", "PK_filter_test"},  // NOLINT
       {"", "", "no_action_child", "child_key", "", "", "PK_no_action_child"},  // NOLINT
       {"", "", "no_action_child", "key1", "", "", "PK_no_action_child"},  // NOLINT
       {"", "", "no_action_child", "key2", "", "", "PK_no_action_child"},  // NOLINT
@@ -3465,7 +3503,7 @@ TEST_P(InformationSchemaTest, NamedSchemaConstraintColumnUsage) {
 
 TEST_P(InformationSchemaTest, SpannerSysTables) {
   auto results = Query(R"(
-      -- Using LOWER because ZetaSQL uses upper case, while PG uses lowercase.
+      -- Using LOWER because GoogleSQL uses upper case, while PG uses lowercase.
       select LOWER(table_name)
       from information_schema.tables
       where LOWER(table_schema) = 'spanner_sys';
@@ -3583,6 +3621,7 @@ TEST_P(InformationSchemaTest, DefaultCheckConstraints) {
       {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_cascade_child_key1", "key1 IS NOT NULL", "COMMITTED"},  // NOLINT
       {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_cascade_child_key2", "key2 IS NOT NULL", "COMMITTED"},  // NOLINT
       {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_cascade_child_value1", "value1 IS NOT NULL", "COMMITTED"},  // NOLINT
+      {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_filter_test_k", "k IS NOT NULL", "COMMITTED"},  // NOLINT
       {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_no_action_child_child_key", "child_key IS NOT NULL", "COMMITTED"},  // NOLINT
       {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_no_action_child_key1", "key1 IS NOT NULL", "COMMITTED"},  // NOLINT
       {TableCatalogForDialect(), "public", "CK_IS_NOT_NULL_no_action_child_key2", "key2 IS NOT NULL", "COMMITTED"},  // NOLINT
@@ -3908,7 +3947,7 @@ TEST_P(InformationSchemaTest, DefaultChangeStreams) {
         {"", "", "test_stream3", true},
         {"", "", "test_stream4", false},
     });
-    ZETASQL_ASSERT_OK(results);
+    GOOGLESQL_ASSERT_OK(results);
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   }
 }
@@ -3990,7 +4029,7 @@ TEST_P(InformationSchemaTest, DefaultChangeStreamsOptions) {
         {"", "", "test_stream2", "value_capture_type", type,
          "OLD_AND_NEW_VALUES"},
     });
-    ZETASQL_ASSERT_OK(results);
+    GOOGLESQL_ASSERT_OK(results);
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   }
 }
@@ -4036,7 +4075,7 @@ TEST_P(InformationSchemaTest, DefaultChangeStreamColumns) {
         {"", "test_stream2", "", "cascade_child", "value1"},
         {"", "test_stream2", "", "cascade_child", "value2"},
     });
-    ZETASQL_ASSERT_OK(results);
+    GOOGLESQL_ASSERT_OK(results);
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   }
 }
@@ -4052,7 +4091,7 @@ TEST_P(InformationSchemaTest, DefaultModels) {
       order by model_name
     )");
   LogResults(results);
-  ZETASQL_ASSERT_OK(results);
+  GOOGLESQL_ASSERT_OK(results);
 
   auto expected = std::vector<ValueRow>({
       {"", "", "test_model1", true},  // NOLINT
@@ -4072,7 +4111,7 @@ TEST_P(InformationSchemaTest, DefaultModelOptions) {
       order by model_name, option_name
     )");
   LogResults(results);
-  ZETASQL_ASSERT_OK(results);
+  GOOGLESQL_ASSERT_OK(results);
 
   auto expected = std::vector<ValueRow>({
       {"", "", "test_model1", "endpoint", "STRING",
@@ -4097,7 +4136,7 @@ TEST_P(InformationSchemaTest, DefaultModelColumns) {
       order by model_name, column_name
     )");
   LogResults(results);
-  ZETASQL_ASSERT_OK(results);
+  GOOGLESQL_ASSERT_OK(results);
 
   auto expected = std::vector<ValueRow>({
       {"", "", "test_model1", "INPUT", "feature", 1, "INT64", true},  // NOLINT
@@ -4123,7 +4162,7 @@ TEST_P(InformationSchemaTest, DefaultModelColumnOptions) {
       order by model_name, column_name, option_name
     )");
   LogResults(results);
-  ZETASQL_ASSERT_OK(results);
+  GOOGLESQL_ASSERT_OK(results);
 
   auto expected = std::vector<ValueRow>({
       {"", "", "test_model1", "INPUT", "feature", "required", "BOOL",
@@ -4154,10 +4193,10 @@ TEST_P(InformationSchemaTest, DefaultPropertyGraphs) {
       order by property_graph_name
     )");
   LogResults(results);
-  ZETASQL_ASSERT_OK(results);
+  GOOGLESQL_ASSERT_OK(results);
   Json property_graph_json = results.value()[0].values()[3].get<Json>().value();
   google::spanner::emulator::backend::catalog::PropertyGraphProto proto;
-  ZETASQL_ASSERT_OK(google::protobuf::util::JsonStringToMessage(std::string(property_graph_json),
+  GOOGLESQL_ASSERT_OK(google::protobuf::util::JsonStringToMessage(std::string(property_graph_json),
                                               &proto));
   EXPECT_THAT(
       proto,
@@ -4281,7 +4320,7 @@ TEST_P(SequenceInformationSchemaTest, PGSequencesTable) {
   auto results = Query("select * from information_schema.sequences");
   LogResults(results);
   // clang-format off
-  ZETASQL_EXPECT_OK(results);
+  GOOGLESQL_EXPECT_OK(results);
   auto expected = ExpectedRows(results, {
     {TableCatalogForDialect(), "public", "myseq", "INT64", Ni(), Ni(), Ni(),
      Ni(), Ni(), Ni(), Ni(), "NO", "bit_reversed_positive", 1, Ni(), Ni()},
@@ -4350,6 +4389,39 @@ TEST_P(InformationSchemaTest, VectorIndex) {
       WHERE TABLE_NAME = 'vector_table' AND COLUMN_NAME = 'embedding'
     )sql"),
               IsOkAndHoldsRows({{"ARRAY<FLOAT32>(vector_length=>2)"}}));
+}
+
+TEST_P(InformationSchemaTest, IndexesFilter) {
+  auto results = Query(R"(
+      SELECT
+        table_name,
+        index_name,
+        is_null_filtered,
+        filter
+      FROM
+        information_schema.indexes
+      WHERE
+        table_name LIKE 'filter_test%'
+      ORDER BY
+        table_name,
+        index_name
+    )");
+  LogResults(results);
+
+  // clang-format off
+  auto no_val = (GetParam() == POSTGRESQL)
+                    ? google::cloud::spanner::Value("NO")
+                    : google::cloud::spanner::Value(false);
+  auto expected = std::vector<ValueRow>({
+      {"filter_test", "PRIMARY_KEY", no_val, Ns()},
+      {"filter_test", "idx_normal", no_val, Ns()},
+      {"filter_test", "idx_partial", no_val, "v1 IS NOT NULL"},
+      {"filter_test", "idx_partial_multi", no_val,
+       "v1 IS NOT NULL AND v2 IS NOT NULL"},
+  });
+  // clang-format on
+
+  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
 }  // namespace

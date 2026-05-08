@@ -20,10 +20,10 @@
 #include <limits>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "backend/query/search/tokenizer.h"
 
 namespace google {
@@ -34,7 +34,7 @@ namespace query {
 namespace search {
 
 struct NumericTokenizerTestCase {
-  std::vector<zetasql::Value> tokenize_args;
+  std::vector<googlesql::Value> tokenize_args;
 };
 
 using NumericTokenizerTest = ::testing::TestWithParam<NumericTokenizerTestCase>;
@@ -42,16 +42,16 @@ using NumericTokenizerTest = ::testing::TestWithParam<NumericTokenizerTestCase>;
 TEST_P(NumericTokenizerTest, TestTokenize) {
   const NumericTokenizerTestCase& test_case = GetParam();
 
-  absl::StatusOr<zetasql::Value> result =
+  absl::StatusOr<googlesql::Value> result =
       NumericTokenizer::Tokenize(test_case.tokenize_args);
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
 
-  zetasql::Value token_list = result.value();
+  googlesql::Value token_list = result.value();
   EXPECT_TRUE(token_list.type()->IsTokenList());
 
   // For numeric tokenized column, since no operation is supported on the
   // column, we don't store original text but only the tokenizer information.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
   ASSERT_EQ(tokens.size(), 1);
   EXPECT_EQ(tokens[0], "numeric");
 }
@@ -59,37 +59,37 @@ TEST_P(NumericTokenizerTest, TestTokenize) {
 INSTANTIATE_TEST_SUITE_P(
     NumericTokenizerTest, NumericTokenizerTest,
     testing::ValuesIn<NumericTokenizerTestCase>(
-        {{{zetasql::Value::Int64(8)}},
-         {{zetasql::Value::Int64(8), zetasql::Value::String("RANGE")}},
-         {{zetasql::Value::Int64(8), zetasql::Value::String("RANGE"),
-           zetasql::Value::String("logtree")}},
-         {{zetasql::Value::Double(8), zetasql::Value::String("RANGE"),
-           zetasql::Value::String("logtree"),
-           zetasql::Value::Double(std::numeric_limits<double>::min())}},
-         {{zetasql::Value::Int64(8), zetasql::Value::String("ALL"),
-           zetasql::Value::String("logtree"),
-           zetasql::Value::Int64(std::numeric_limits<int64_t>::min()),
-           zetasql::Value::Int64(std::numeric_limits<int64_t>::max())}},
-         {{zetasql::Value::Int64(8), zetasql::Value::String("ALL"),
-           zetasql::Value::String("logtree"),
-           zetasql::Value::Int64(std::numeric_limits<int64_t>::min()),
-           zetasql::Value::Int64(std::numeric_limits<int64_t>::max()),
-           zetasql::Value::Int64(2)}},
-         {{zetasql::Value::Int64(8), zetasql::Value::String("ALL"),
-           zetasql::Value::String("auto"),
-           zetasql::Value::Int64(std::numeric_limits<int64_t>::min()),
-           zetasql::Value::Int64(std::numeric_limits<int64_t>::max()),
-           zetasql::Value::Int64(2), zetasql::Value::Int64(4)}},
-         {{zetasql::Value::Int64(8), zetasql::Value::String("ALL"),
-           zetasql::Value::String("auto"),
-           zetasql::Value::Int64(std::numeric_limits<int64_t>::min()),
-           zetasql::Value::Int64(std::numeric_limits<int64_t>::max()),
-           zetasql::Value::Int64(2), zetasql::Value::Int64(4),
-           zetasql::Value::Int64(8)}},
-         {{zetasql::Value::Int64(8), zetasql::Value::String("ALL"),
-           zetasql::Value::String("auto"), zetasql::Value::NullInt64(),
-           zetasql::Value::NullInt64(), zetasql::Value::Double(2),
-           zetasql::Value::Int64(4), zetasql::Value::Int64(8)}}}));
+        {{{googlesql::Value::Int64(8)}},
+         {{googlesql::Value::Int64(8), googlesql::Value::String("RANGE")}},
+         {{googlesql::Value::Int64(8), googlesql::Value::String("RANGE"),
+           googlesql::Value::String("logtree")}},
+         {{googlesql::Value::Double(8), googlesql::Value::String("RANGE"),
+           googlesql::Value::String("logtree"),
+           googlesql::Value::Double(std::numeric_limits<double>::min())}},
+         {{googlesql::Value::Int64(8), googlesql::Value::String("ALL"),
+           googlesql::Value::String("logtree"),
+           googlesql::Value::Int64(std::numeric_limits<int64_t>::min()),
+           googlesql::Value::Int64(std::numeric_limits<int64_t>::max())}},
+         {{googlesql::Value::Int64(8), googlesql::Value::String("ALL"),
+           googlesql::Value::String("logtree"),
+           googlesql::Value::Int64(std::numeric_limits<int64_t>::min()),
+           googlesql::Value::Int64(std::numeric_limits<int64_t>::max()),
+           googlesql::Value::Int64(2)}},
+         {{googlesql::Value::Int64(8), googlesql::Value::String("ALL"),
+           googlesql::Value::String("auto"),
+           googlesql::Value::Int64(std::numeric_limits<int64_t>::min()),
+           googlesql::Value::Int64(std::numeric_limits<int64_t>::max()),
+           googlesql::Value::Int64(2), googlesql::Value::Int64(4)}},
+         {{googlesql::Value::Int64(8), googlesql::Value::String("ALL"),
+           googlesql::Value::String("auto"),
+           googlesql::Value::Int64(std::numeric_limits<int64_t>::min()),
+           googlesql::Value::Int64(std::numeric_limits<int64_t>::max()),
+           googlesql::Value::Int64(2), googlesql::Value::Int64(4),
+           googlesql::Value::Int64(8)}},
+         {{googlesql::Value::Int64(8), googlesql::Value::String("ALL"),
+           googlesql::Value::String("auto"), googlesql::Value::NullInt64(),
+           googlesql::Value::NullInt64(), googlesql::Value::Double(2),
+           googlesql::Value::Int64(4), googlesql::Value::Int64(8)}}}));
 
 // TODO: Add more code and test to check the parameter values.
 

@@ -28,7 +28,7 @@ generate_grpc_gateway(
     src = "@com_google_googleapis//google/spanner/v1:spanner_proto",
     out_filename = "spanner.pb.gw.go",
     proto_imports = ["cloud.google.com/go/spanner/apiv1/spannerpb"],
-    deps = ["@com_google_googleapis//google/spanner/v1:spanner_go_proto"],
+    deps = ["//common:spanner_go_proto"],
 )
 
 generate_grpc_gateway(
@@ -37,8 +37,8 @@ generate_grpc_gateway(
     out_filename = "spanner_database_admin.pb.gw.go",
     proto_imports = ["cloud.google.com/go/spanner/admin/database/apiv1/databasepb"],
     deps = [
-        "@com_google_googleapis//google/iam/v1:iam_go_proto",
-        "@com_google_googleapis//google/spanner/admin/database/v1:database_go_proto",
+        "//common:database_go_proto",
+        "//common:iam_go_proto",
     ],
 )
 
@@ -48,8 +48,8 @@ generate_grpc_gateway(
     out_filename = "spanner_instance_admin.pb.gw.go",
     proto_imports = ["cloud.google.com/go/spanner/admin/instance/apiv1/instancepb"],
     deps = [
-        "@com_google_googleapis//google/iam/v1:iam_go_proto",
-        "@com_google_googleapis//google/spanner/admin/instance/v1:instance_go_proto",
+        "//common:iam_go_proto",
+        "//common:instance_go_proto",
     ],
 )
 
@@ -59,7 +59,7 @@ generate_grpc_gateway(
     out_filename = "operations.pb.gw.go",
     proto_imports = ["cloud.google.com/go/longrunning/autogen/longrunningpb"],
     yaml_config = "operations.yaml",
-    deps = ["@com_google_googleapis//google/longrunning:longrunning_go_proto"],
+    deps = ["//common:longrunning_go_proto"],
 )
 
 go_library(
@@ -71,7 +71,7 @@ go_library(
         ":spanner_admin_database_gateway",
         ":spanner_admin_instance_gateway",
         ":spanner_gateway",
-        "@com_google_googleapis//google/spanner/admin/instance/v1:instance_go_proto",
+        "//common:instance_go_proto",
         "@grpc_ecosystem_grpc_gateway//runtime:go_default_library",
         "@org_golang_google_genproto_googleapis_rpc//errdetails",
         "@org_golang_google_grpc//:go_default_library",

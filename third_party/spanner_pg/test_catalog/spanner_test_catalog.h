@@ -32,7 +32,7 @@
 #ifndef TEST_CATALOG_SPANNER_TEST_CATALOG_H_
 #define TEST_CATALOG_SPANNER_TEST_CATALOG_H_
 
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/catalog.h"
 
 namespace postgres_translator::spangres::test {
 
@@ -47,7 +47,7 @@ namespace postgres_translator::spangres::test {
 // If a catalog must be used by multiple threads concurrently, either
 // synchronize access to it or give each thread their open copy via
 // `GetSpangresTestSqlCatalog()`.
-zetasql::EnumerableCatalog* GetSpangresTestSpannerUserCatalog();
+googlesql::EnumerableCatalog* GetSpangresTestSpannerUserCatalog();
 
 }  // namespace postgres_translator::spangres::test
 

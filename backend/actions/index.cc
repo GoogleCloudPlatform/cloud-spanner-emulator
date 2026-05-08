@@ -25,8 +25,8 @@
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "common/errors.h"
+#include "googlesql/base/status_macros.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -39,7 +39,7 @@ namespace {
 absl::StatusOr<Row> ReadBaseTableRow(
     const ActionContext* ctx, const Table* table, const Key& key,
     const std::vector<const Column*>& base_columns) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<StorageIterator> itr,
       ctx->store()->Read(table, KeyRange::Point(key), base_columns));
 
@@ -49,7 +49,7 @@ absl::StatusOr<Row> ReadBaseTableRow(
       base_row[base_columns[i]] = itr->ColumnValue(i);
     }
   }
-  ZETASQL_RETURN_IF_ERROR(itr->Status());
+  GOOGLESQL_RETURN_IF_ERROR(itr->Status());
   return base_row;
 }
 
@@ -66,7 +66,7 @@ absl::Status IndexEffector::Effect(const ActionContext* ctx,
                                    const InsertOp& op) const {
   // Compute the index key and column values.
   Row base_row = MakeRow(op.columns, op.values);
-  ZETASQL_ASSIGN_OR_RETURN(Key index_key, ComputeIndexKey(base_row, index_));
+  GOOGLESQL_ASSIGN_OR_RETURN(Key index_key, ComputeIndexKey(base_row, index_));
   ValueList index_values = ComputeIndexValues(base_row, index_);
   if (ShouldFilterIndexKeyOrValue(index_, index_key, base_row)) {
     return absl::OkStatus();
@@ -81,7 +81,7 @@ absl::Status IndexEffector::Effect(const ActionContext* ctx,
 absl::Status IndexEffector::Effect(const ActionContext* ctx,
                                    const UpdateOp& op) const {
   // Read the current base row values from the indexed table.
-  ZETASQL_ASSIGN_OR_RETURN(Row base_row,
+  GOOGLESQL_ASSIGN_OR_RETURN(Row base_row,
                    ReadBaseTableRow(ctx, op.table, op.key, base_columns_));
   if (base_row.empty()) {
     return error::Internal(
@@ -91,7 +91,7 @@ absl::Status IndexEffector::Effect(const ActionContext* ctx,
   }
 
   // If a previous index entry existed, delete it.
-  ZETASQL_ASSIGN_OR_RETURN(Key old_index_key, ComputeIndexKey(base_row, index_));
+  GOOGLESQL_ASSIGN_OR_RETURN(Key old_index_key, ComputeIndexKey(base_row, index_));
   if (!ShouldFilterIndexKeyOrValue(index_, old_index_key, base_row)) {
     ctx->effects()->Delete(index_->index_data_table(), old_index_key);
   }
@@ -100,7 +100,7 @@ absl::Status IndexEffector::Effect(const ActionContext* ctx,
   for (int i = 0; i < op.columns.size(); ++i) {
     base_row[op.columns[i]] = op.values[i];
   }
-  ZETASQL_ASSIGN_OR_RETURN(Key new_index_key, ComputeIndexKey(base_row, index_));
+  GOOGLESQL_ASSIGN_OR_RETURN(Key new_index_key, ComputeIndexKey(base_row, index_));
   ValueList index_values = ComputeIndexValues(base_row, index_);
   if (ShouldFilterIndexKeyOrValue(index_, new_index_key, base_row)) {
     return absl::OkStatus();
@@ -115,7 +115,7 @@ absl::Status IndexEffector::Effect(const ActionContext* ctx,
 absl::Status IndexEffector::Effect(const ActionContext* ctx,
                                    const DeleteOp& op) const {
   // Read base row values.
-  ZETASQL_ASSIGN_OR_RETURN(Row base_row,
+  GOOGLESQL_ASSIGN_OR_RETURN(Row base_row,
                    ReadBaseTableRow(ctx, op.table, op.key, base_columns_));
 
   // Did not find an entry to delete from the index.
@@ -124,7 +124,7 @@ absl::Status IndexEffector::Effect(const ActionContext* ctx,
   }
 
   // Compute the index key to delete.
-  ZETASQL_ASSIGN_OR_RETURN(Key index_key, ComputeIndexKey(base_row, index_));
+  GOOGLESQL_ASSIGN_OR_RETURN(Key index_key, ComputeIndexKey(base_row, index_));
   if (ShouldFilterIndexKeyOrValue(index_, index_key, base_row)) {
     return absl::OkStatus();
   }

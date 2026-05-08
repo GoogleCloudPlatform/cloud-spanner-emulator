@@ -21,7 +21,7 @@
 #include <string>
 #include <string_view>
 
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "backend/schema/catalog/schema.h"
@@ -41,7 +41,7 @@ namespace database_api = ::google::spanner::admin::database::v1;
 // TODO : Deprecate this method and fix all tests.
 absl::StatusOr<std::unique_ptr<const backend::Schema>> CreateSchemaFromDDL(
     absl::Span<const std::string> statements,
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     std::string proto_descriptor_bytes = "",
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
@@ -49,70 +49,70 @@ absl::StatusOr<std::unique_ptr<const backend::Schema>> CreateSchemaFromDDL(
 
 // Creates a schema with a single table and an index on the table.
 std::unique_ptr<const backend::Schema> CreateSchemaWithOneTable(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 // Creates a schema with a single table that has a timestamp and date column.
 std::unique_ptr<const backend::Schema> CreateSchemaWithTimestampDateTable(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 std::unique_ptr<const backend::Schema>
 CreateSchemaWithOneTableAndOneChangeStream(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithOneTableAndOnePlacement(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 absl::StatusOr<std::unique_ptr<const backend::Schema>>
 CreateSchemaWithOneSequence(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithOneModel(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithOnePropertyGraph(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithDynamicPropertyGraph(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 std::unique_ptr<const backend::Schema> CreateSimpleDefaultValuesSchema(
-    zetasql::TypeFactory* type_factory);
+    googlesql::TypeFactory* type_factory);
 
 std::unique_ptr<const backend::Schema> CreateSimpleDefaultKeySchema(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 std::unique_ptr<const backend::Schema> CreateSimpleTimestampKeySchema(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithOneTableWithSynonym(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 // Creates a schema with a single table and generated primary key column.
 inline absl::StatusOr<std::unique_ptr<const backend::Schema>>
 CreateGpkSchemaWithOneTable(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
   std::string test_table =
@@ -159,11 +159,11 @@ CreateGpkSchemaWithOneTable(
 // Creates a schema having protos and enum columns ( including proto arrays and
 // enum arrays)
 std::unique_ptr<const backend::Schema> CreateSchemaWithProtoEnumColumn(
-    zetasql::TypeFactory* type_factory, std::string proto_descriptors);
+    googlesql::TypeFactory* type_factory, std::string proto_descriptors);
 
 // Creates a schema with two child tables interleaved in a parent table.
 std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
-    zetasql::TypeFactory* const type_factory,
+    googlesql::TypeFactory* const type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
@@ -171,33 +171,33 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
 // the INTERLEAVE IN clause.
 absl::StatusOr<std::unique_ptr<const backend::Schema>>
 CreateSchemaWithNonParentInterleaving(
-    zetasql::TypeFactory* const type_factory,
+    googlesql::TypeFactory* const type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 // Creates a schema with two top level tables and one child table.
 std::unique_ptr<const backend::Schema> CreateSchemaWithMultiTables(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 // Creates a schema with foreign key constraints.
 std::unique_ptr<const backend::Schema> CreateSchemaWithForeignKey(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 // Creates a schema with foreign key constraints that have ON DELETE clauses.
 std::unique_ptr<const backend::Schema> CreateSchemaWithForeignKeyOnDelete(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithView(
-    zetasql::TypeFactory* type_factory);
+    googlesql::TypeFactory* type_factory);
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithNamedSchema(
-    zetasql::TypeFactory* type_factory);
+    googlesql::TypeFactory* type_factory);
 
 }  // namespace test
 }  // namespace emulator

@@ -34,9 +34,9 @@
 
 #include <memory>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/language_options.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/language_options.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter_holder.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
@@ -45,33 +45,33 @@ namespace postgres_translator::spangres::test {
 
 // Return the Spanner Analyzer Options in cloud mode with slight modifications
 // to the language options specific to Spangres.
-zetasql::AnalyzerOptions GetSpangresTestAnalyzerOptions();
+googlesql::AnalyzerOptions GetSpangresTestAnalyzerOptions();
 
 std::unique_ptr<EngineBuiltinFunctionCatalog>
 GetSpangresTestBuiltinFunctionCatalog(
-    const zetasql::LanguageOptions& language_options);
+    const googlesql::LanguageOptions& language_options);
 
 // If the EngineSystemCatalog singleton is not already initialized, initialize
 // it using the SpangresBuiltinFunctionCatalog.
 // Return a raw pointer to the EngineSystemCatalog singleton.
 EngineSystemCatalog* GetSpangresTestSystemCatalog(
-    const zetasql::LanguageOptions& language_options =
+    const googlesql::LanguageOptions& language_options =
         GetSpangresTestAnalyzerOptions().language());
 
 // Returns a CatalogAdapter with the spangres test system catalog.
 // If a user catalog is provided (only for RQG tests), use that catalog as the
 // engine user catalog. Otherwise, use the spangres test user catalog.
 std::unique_ptr<CatalogAdapter> GetSpangresTestCatalogAdapter(
-    const zetasql::AnalyzerOptions& analyzer_options,
-    zetasql::EnumerableCatalog* rqg_user_catalog = nullptr,
+    const googlesql::AnalyzerOptions& analyzer_options,
+    googlesql::EnumerableCatalog* rqg_user_catalog = nullptr,
     absl::flat_hash_map<int, int> token_locations = {});
 
 // Returns a CatalogAdapterHolder with the spangres test system catalog.
 // If a user catalog is provided (only for RQG tests), use that catalog as the
 // engine user catalog. Otherwise, use the spangres test user catalog.
 std::unique_ptr<CatalogAdapterHolder> GetSpangresTestCatalogAdapterHolder(
-    const zetasql::AnalyzerOptions& analyzer_options,
-    zetasql::EnumerableCatalog* rqg_user_catalog = nullptr,
+    const googlesql::AnalyzerOptions& analyzer_options,
+    googlesql::EnumerableCatalog* rqg_user_catalog = nullptr,
     absl::flat_hash_map<int, int> token_locations = {});
 
 }  // namespace postgres_translator::spangres::test

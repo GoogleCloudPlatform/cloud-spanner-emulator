@@ -20,7 +20,7 @@
 #include <memory>
 #include <vector>
 
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/time/time.h"
@@ -30,7 +30,7 @@
 #include "backend/schema/graph/schema_node.h"
 #include "backend/storage/storage.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -66,7 +66,7 @@ class SchemaValidationContext {
   SchemaValidationContext() = default;
 
   SchemaValidationContext(Storage* storage, GlobalSchemaNames* global_names,
-                          zetasql::TypeFactory* type_factory,
+                          googlesql::TypeFactory* type_factory,
                           absl::Time pending_commit_timestamp,
                           DatabaseDialect dialect)
       : storage_(storage),
@@ -99,7 +99,7 @@ class SchemaValidationContext {
   GlobalSchemaNames* global_names() const { return global_names_; }
 
   // Access to the current database's type factory.
-  zetasql::TypeFactory* type_factory() const { return type_factory_; }
+  googlesql::TypeFactory* type_factory() const { return type_factory_; }
 
   // Returns the pending commit timestamp.
   absl::Time pending_commit_timestamp() const {
@@ -146,7 +146,7 @@ class SchemaValidationContext {
   // Runs all SchemaVerifiers added to this validation context.
   absl::Status RunSchemaChangeActions() const {
     for (auto& action : actions_) {
-      ZETASQL_RETURN_IF_ERROR(action(this));
+      GOOGLESQL_RETURN_IF_ERROR(action(this));
     }
     return absl::OkStatus();
   }
@@ -227,8 +227,8 @@ class SchemaValidationContext {
   // Global names for schema objects.
   GlobalSchemaNames* global_names_;
 
-  // Type factory used for all ZetaSQL operations on the database.
-  zetasql::TypeFactory* type_factory_;
+  // Type factory used for all GoogleSQL operations on the database.
+  googlesql::TypeFactory* type_factory_;
 
   // Planned commit time for the schema change.
   absl::Time pending_commit_timestamp_;

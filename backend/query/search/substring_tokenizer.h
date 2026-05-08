@@ -18,7 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_SEARCH_PLAIN_SUBSTRING_TOKENIZER_H_
 
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -32,8 +32,8 @@ class SubstringTokenizer {
   // Generate tokenlist value by doing substring tokenization on the original
   // strings from source column.
  public:
-  static absl::StatusOr<zetasql::Value> Tokenize(
-      absl::Span<const zetasql::Value> args);
+  static absl::StatusOr<googlesql::Value> Tokenize(
+      absl::Span<const googlesql::Value> args);
 
  private:
   static constexpr int64_t kMaxAllowedNgramSizeMax = 12;
@@ -42,7 +42,7 @@ class SubstringTokenizer {
 
   static absl::Status ValidateNgramSize(int ngram_size_min, int ngram_size_max);
   static absl::StatusOr<int> ParseRelativeSearchTypes(
-      absl::Span<const zetasql::Value> args);
+      absl::Span<const googlesql::Value> args);
 };
 
 }  // namespace search

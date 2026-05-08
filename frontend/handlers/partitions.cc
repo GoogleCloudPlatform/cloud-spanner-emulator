@@ -39,7 +39,7 @@
 #include "frontend/proto/partition_token.pb.h"
 #include "frontend/server/handler.h"
 #include "frontend/server/request_context.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -99,12 +99,12 @@ absl::StatusOr<SessionAndTransaction> SetBasePartitionOptions(
     const std::string& session_name) {
   // Take shared ownerships of session and transaction so that they will keep
   // valid throughout this function.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    GetSession(ctx, session_name));
 
   // Get underlying transaction.
-  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForPartitionRead(transaction));
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
+  GOOGLESQL_RETURN_IF_ERROR(ValidateTransactionSelectorForPartitionRead(transaction));
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(transaction));
   if (!txn->IsReadOnly()) {
     return error::PartitionReadNeedsReadOnlyTxn();
@@ -162,7 +162,7 @@ absl::StatusOr<spanner_api::Partition> CreateStreamingPartitionTokenForQuery(
   }
 
   spanner_api::Partition partition;
-  ZETASQL_ASSIGN_OR_RETURN(*partition.mutable_partition_token(),
+  GOOGLESQL_ASSIGN_OR_RETURN(*partition.mutable_partition_token(),
                    StreamingPartitionTokenToString(partition_token));
   return partition;
 }
@@ -175,40 +175,40 @@ absl::Status PartitionRead(RequestContext* ctx,
                            spanner_api::PartitionResponse* response) {
   // Take shared ownerships of session and transaction so that they will keep
   // valid throughout this function.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    GetSession(ctx, request->session()));
 
   // Get underlying transaction.
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateTransactionSelectorForPartitionRead(request->transaction()));
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
   if (!txn->IsReadOnly()) {
     return error::PartitionReadNeedsReadOnlyTxn();
   }
 
   if (request->has_partition_options()) {
-    ZETASQL_RETURN_IF_ERROR(ValidatePartitionOptions(request->partition_options()));
+    GOOGLESQL_RETURN_IF_ERROR(ValidatePartitionOptions(request->partition_options()));
   }
 
   if (ShouldReturnTransaction(request->transaction())) {
-    ZETASQL_ASSIGN_OR_RETURN(*response->mutable_transaction(), txn->ToProto());
+    GOOGLESQL_ASSIGN_OR_RETURN(*response->mutable_transaction(), txn->ToProto());
   }
 
   // Add two partitions to result set, with first partition being empty.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto empty_partition_token,
       CreatePartitionTokenForRead(*request, txn->id(), spanner_api::KeySet()));
   spanner_api::Partition empty_partition;
-  ZETASQL_ASSIGN_OR_RETURN(*empty_partition.mutable_partition_token(),
+  GOOGLESQL_ASSIGN_OR_RETURN(*empty_partition.mutable_partition_token(),
                    PartitionTokenToString(empty_partition_token));
 
   // Second partition contains full result set for requested key_set.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto full_partition_token,
       CreatePartitionTokenForRead(*request, txn->id(), request->key_set()));
   spanner_api::Partition full_partition;
-  ZETASQL_ASSIGN_OR_RETURN(*full_partition.mutable_partition_token(),
+  GOOGLESQL_ASSIGN_OR_RETURN(*full_partition.mutable_partition_token(),
                    PartitionTokenToString(full_partition_token));
 
   *response->mutable_partitions()->Add() = empty_partition;
@@ -222,47 +222,47 @@ REGISTER_GRPC_HANDLER(Spanner, PartitionRead);
 absl::Status PartitionQuery(RequestContext* ctx,
                             const spanner_api::PartitionQueryRequest* request,
                             spanner_api::PartitionResponse* response) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       SessionAndTransaction session_and_txn,
       SetBasePartitionOptions(ctx, request->transaction(), request->session()));
   auto session = session_and_txn.session;
   auto txn = session_and_txn.transaction;
 
   if (request->has_partition_options()) {
-    ZETASQL_RETURN_IF_ERROR(ValidatePartitionOptions(request->partition_options()));
+    GOOGLESQL_RETURN_IF_ERROR(ValidatePartitionOptions(request->partition_options()));
   }
 
   if (ShouldReturnTransaction(request->transaction())) {
-    ZETASQL_ASSIGN_OR_RETURN(*response->mutable_transaction(), txn->ToProto());
+    GOOGLESQL_ASSIGN_OR_RETURN(*response->mutable_transaction(), txn->ToProto());
   }
 
   // check query is partitionable.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       backend::Query query,
       QueryFromProto(request->sql(), request->params(), request->param_types(),
                      txn->query_engine()->type_factory()
                      ,
                      txn->schema()->proto_bundle()
                      ));
-  ZETASQL_RETURN_IF_ERROR(txn->query_engine()->IsPartitionable(
+  GOOGLESQL_RETURN_IF_ERROR(txn->query_engine()->IsPartitionable(
       query,
       backend::QueryContext{
           .schema = txn->schema(), .reader = nullptr, .writer = nullptr}));
 
   // Add two partitions to result set, with first partition being empty.
-  ZETASQL_ASSIGN_OR_RETURN(auto empty_partition_token,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto empty_partition_token,
                    CreatePartitionTokenForQuery(*request, txn->id(),
                                                 /*empty_partition=*/true));
   spanner_api::Partition empty_partition;
-  ZETASQL_ASSIGN_OR_RETURN(*empty_partition.mutable_partition_token(),
+  GOOGLESQL_ASSIGN_OR_RETURN(*empty_partition.mutable_partition_token(),
                    PartitionTokenToString(empty_partition_token));
 
   // Second partition contains full result set for requested query.
-  ZETASQL_ASSIGN_OR_RETURN(auto full_partition_token,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto full_partition_token,
                    CreatePartitionTokenForQuery(*request, txn->id(),
                                                 /*empty_partition=*/false));
   spanner_api::Partition full_partition;
-  ZETASQL_ASSIGN_OR_RETURN(*full_partition.mutable_partition_token(),
+  GOOGLESQL_ASSIGN_OR_RETURN(*full_partition.mutable_partition_token(),
                    PartitionTokenToString(full_partition_token));
 
   *response->mutable_partitions()->Add() = empty_partition;

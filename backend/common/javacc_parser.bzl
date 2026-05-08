@@ -118,7 +118,7 @@ def generate_javacc_parser(name, srcs, parser_class_name, extra_deps, extra_head
             "-funsigned-char",
         ],
         deps = [
-            "@com_google_zetasql//zetasql/base",
+            "@com_google_googlesql//googlesql/base",
             "@com_google_absl//absl/base:core_headers",
             "@com_google_absl//absl/status",
             "@com_google_absl//absl/strings",

@@ -31,11 +31,11 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
 #include "third_party/spanner_pg/interface/datetime_evaluators.h"
 #include "third_party/spanner_pg/shims/timezone_helper.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::function_evaluators {
 namespace {
@@ -43,7 +43,7 @@ namespace {
 constexpr char kDefaultTimezone[] = "America/Los_Angeles";
 
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 struct TimestamptzBinTestCase {
   TimestamptzBinTestCase(std::string interval_in, std::string source_in,
@@ -64,7 +64,7 @@ class TimestamptzBinTest
  protected:
   void SetUp() override {
     PgEvaluatorTestWithParam<TimestamptzBinTestCase>::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {
@@ -76,15 +76,15 @@ class TimestamptzBinTest
 
 TEST_P(TimestamptzBinTest, TimestamptzBin) {
   const TimestamptzBinTestCase& test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time source_input,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time source_input,
                        PgTimestamptzIn(test_case.source));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time origin_input,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time origin_input,
                        PgTimestamptzIn(test_case.origin));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       absl::Time computed_time,
       PgTimestamptzBin(test_case.interval, source_input, origin_input));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time expected_timestamptz,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time expected_timestamptz,
                        PgTimestamptzIn(test_case.expected_result));
   EXPECT_EQ(expected_timestamptz, computed_time);
 }
@@ -145,7 +145,7 @@ class TimestamptzBinErrorTest
  protected:
   void SetUp() override {
     PgEvaluatorTestWithParam<TimestamptzBinErrorTestCase>::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {
@@ -157,9 +157,9 @@ class TimestamptzBinErrorTest
 
 TEST_P(TimestamptzBinErrorTest, TimestamptzBin) {
   const TimestamptzBinErrorTestCase& test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time source_input,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time source_input,
                        PgTimestamptzIn(test_case.source));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time origin_input,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time origin_input,
                        PgTimestamptzIn(test_case.origin));
   EXPECT_THAT(
       PgTimestamptzBin(test_case.interval, source_input, origin_input),

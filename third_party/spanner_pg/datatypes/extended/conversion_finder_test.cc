@@ -31,13 +31,13 @@
 
 #include "third_party/spanner_pg/datatypes/extended/conversion_finder.h"
 
-#include "zetasql/public/cast.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/cast.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
@@ -61,22 +61,22 @@ MATCHER_P(EqPG, result,
 }
 }  // namespace
 
-using ::zetasql::types::BoolType;
-using ::zetasql::types::BytesType;
-using ::zetasql::types::DoubleType;
-using ::zetasql::types::FloatType;
-using ::zetasql::types::Int64Type;
-using ::zetasql::types::StringType;
-using FindConversionOptions = ::zetasql::Catalog::FindConversionOptions;
+using ::googlesql::types::BoolType;
+using ::googlesql::types::BytesType;
+using ::googlesql::types::DoubleType;
+using ::googlesql::types::FloatType;
+using ::googlesql::types::Int64Type;
+using ::googlesql::types::StringType;
+using FindConversionOptions = ::googlesql::Catalog::FindConversionOptions;
 using ConversionSourceExpressionKind =
-    ::zetasql::Catalog::ConversionSourceExpressionKind;
+    ::googlesql::Catalog::ConversionSourceExpressionKind;
 
 struct ConversionFoundTestCase {
-  const zetasql::Type* from;
-  const zetasql::Type* to;
+  const googlesql::Type* from;
+  const googlesql::Type* to;
   const FindConversionOptions options;
-  zetasql::Value input;
-  zetasql::Value expected_output;
+  googlesql::Value input;
+  googlesql::Value expected_output;
 };
 
 class ConversionFoundTest
@@ -84,11 +84,11 @@ class ConversionFoundTest
 
 TEST_P(ConversionFoundTest, ConversionFound) {
   const ConversionFoundTestCase& test = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      zetasql::Conversion conversion,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      googlesql::Conversion conversion,
       FindExtendedTypeConversion(test.from, test.to, test.options));
   EXPECT_THAT(conversion.evaluator().Eval(test.input),
-              zetasql_base::testing::IsOkAndHolds(EqPG(test.expected_output)));
+              googlesql_base::testing::IsOkAndHolds(EqPG(test.expected_output)));
 }
 
 std::vector<ConversionFoundTestCase> GetConversionFoundTestCases() {
@@ -97,71 +97,71 @@ std::vector<ConversionFoundTestCase> GetConversionFoundTestCases() {
       {Int64Type(), GetPgNumericType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
-       zetasql::Value::Int64(-123456),
+       googlesql::Value::Int64(-123456),
        CreatePgNumericValueWithMemoryContext("-123456").value()},
       {DoubleType(), GetPgNumericType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
-       zetasql::Value::Double(-123.523535),
+       googlesql::Value::Double(-123.523535),
        CreatePgNumericValueWithMemoryContext("-123.523535").value()},
       {FloatType(), GetPgNumericType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
-       zetasql::Value::Float(-123.523f),
+       googlesql::Value::Float(-123.523f),
        CreatePgNumericValueWithMemoryContext("-123.523").value()},
       {StringType(), GetPgNumericType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
-       zetasql::Value::String("NaN"),
+       googlesql::Value::String("NaN"),
        CreatePgNumericValueWithMemoryContext("NaN").value()},
       // PG.NUMERIC -> <TYPE> conversions
       {GetPgNumericType(), Int64Type(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
        CreatePgNumericValueWithMemoryContext("123456").value(),
-       zetasql::Value::Int64(123456)},
+       googlesql::Value::Int64(123456)},
       {GetPgNumericType(), DoubleType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
        CreatePgNumericValueWithMemoryContext("123.52353500").value(),
-       zetasql::Value::Double(123.523535)},
+       googlesql::Value::Double(123.523535)},
       {GetPgNumericType(), FloatType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
        CreatePgNumericValueWithMemoryContext("123.52300").value(),
-       zetasql::Value::Float(123.523f)},
+       googlesql::Value::Float(123.523f)},
       {GetPgNumericType(), StringType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
        CreatePgNumericValueWithMemoryContext("123.000").value(),
-       zetasql::Value::String("123.000")},
+       googlesql::Value::String("123.000")},
       // <TYPE> -> PG.JSONB conversions
       {StringType(), GetPgJsonbType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
-       zetasql::Value::String("{\"a\":    1}"),
+       googlesql::Value::String("{\"a\":    1}"),
        CreatePgJsonbValueWithMemoryContext("{\"a\": 1}").value()},
       {StringType(), GetPgJsonbType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
-       zetasql::Value::NullString(),
-       zetasql::Value::Null(GetPgJsonbType())},
+       googlesql::Value::NullString(),
+       googlesql::Value::Null(GetPgJsonbType())},
       // PG.JSONB -> <TYPE> conversions
       {GetPgJsonbType(), Int64Type(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
        CreatePgJsonbValueWithMemoryContext("123456").value(),
-       zetasql::Value::Int64(123456)},
+       googlesql::Value::Int64(123456)},
       {GetPgJsonbType(), DoubleType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
        CreatePgJsonbValueWithMemoryContext("123.52353500").value(),
-       zetasql::Value::Double(123.523535)},
+       googlesql::Value::Double(123.523535)},
       {GetPgJsonbType(), FloatType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
        CreatePgJsonbValueWithMemoryContext("123.523500").value(),
-       zetasql::Value::Float(123.5235f)},
+       googlesql::Value::Float(123.5235f)},
       {GetPgJsonbType(), GetPgNumericType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
@@ -171,23 +171,23 @@ std::vector<ConversionFoundTestCase> GetConversionFoundTestCases() {
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
        CreatePgJsonbValueWithMemoryContext("\"abc\"").value(),
-       zetasql::Value::String("\"abc\"")},
+       googlesql::Value::String("\"abc\"")},
       {GetPgOidType(), StringType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
-       *CreatePgOidValue(42), zetasql::Value::String("42")},
+       *CreatePgOidValue(42), googlesql::Value::String("42")},
       {StringType(), GetPgOidType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
-       zetasql::Value::String("42"), *CreatePgOidValue(42)},
+       googlesql::Value::String("42"), *CreatePgOidValue(42)},
       {GetPgOidType(), Int64Type(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
-       *CreatePgOidValue(42), zetasql::Value::Int64(42)},
+       *CreatePgOidValue(42), googlesql::Value::Int64(42)},
       {Int64Type(), GetPgOidType(),
        FindConversionOptions(/*is_explicit=*/true,
                              ConversionSourceExpressionKind::kOther),
-       zetasql::Value::Int64(42), *CreatePgOidValue(42)},
+       googlesql::Value::Int64(42), *CreatePgOidValue(42)},
   };
 }
 
@@ -195,8 +195,8 @@ INSTANTIATE_TEST_SUITE_P(ConversionsTestSuite, ConversionFoundTest,
                          testing::ValuesIn(GetConversionFoundTestCases()));
 
 struct DummyConversionFoundTestCase {
-  const zetasql::Type* from;
-  const zetasql::Type* to;
+  const googlesql::Type* from;
+  const googlesql::Type* to;
   const FindConversionOptions options;
 };
 
@@ -205,7 +205,7 @@ class DummyConversionFoundTest
 
 TEST_P(DummyConversionFoundTest, ConversionFound) {
   const DummyConversionFoundTestCase& test = GetParam();
-  ZETASQL_EXPECT_OK(FindExtendedTypeConversion(test.from, test.to, test.options));
+  GOOGLESQL_EXPECT_OK(FindExtendedTypeConversion(test.from, test.to, test.options));
 }
 
 std::vector<DummyConversionFoundTestCase> GetDummyConversionFoundTestCases() {
@@ -219,8 +219,8 @@ INSTANTIATE_TEST_SUITE_P(ConversionsTestSuite, DummyConversionFoundTest,
                          testing::ValuesIn(GetDummyConversionFoundTestCases()));
 
 struct ConversionNotFoundTestCase {
-  const zetasql::Type* from;
-  const zetasql::Type* to;
+  const googlesql::Type* from;
+  const googlesql::Type* to;
   const FindConversionOptions options;
 };
 
@@ -231,7 +231,7 @@ TEST_P(ConversionNotFoundTest, ConversionNotFound) {
   const ConversionNotFoundTestCase& test = GetParam();
   EXPECT_THAT(
       FindExtendedTypeConversion(test.from, test.to, test.options),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           testing::_,
           testing::ContainsRegex(
               "(Cast|Coercion) from type .* to type .* not found in catalog")));

@@ -34,8 +34,8 @@
 
 #include <memory>
 
-#include "zetasql/base/logging.h"
-#include "zetasql/public/catalog.h"
+#include "googlesql/base/logging.h"
+#include "googlesql/public/catalog.h"
 #include "absl/time/time.h"
 #include "third_party/spanner_pg/interface/engine_builtin_function_catalog.h"
 #include "third_party/spanner_pg/interface/memory_reservation_manager.h"
@@ -70,7 +70,7 @@ class SpangresTranslatorTestWrapper {
     ABSL_CHECK_NE(Parser(), nullptr);
   }
 
-  absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>> TranslateQuery(
+  absl::StatusOr<std::unique_ptr<googlesql::AnalyzerOutput>> TranslateQuery(
       absl::string_view sql,
       std::function<void(const interfaces::ParserBatchOutput::Statistics&)>
           parser_statistics_callback) {
@@ -81,27 +81,27 @@ class SpangresTranslatorTestWrapper {
         std::move(parser_statistics_callback));
   }
 
-  absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>> TranslateQuery(
-      absl::string_view sql, const zetasql::AnalyzerOptions& options =
+  absl::StatusOr<std::unique_ptr<googlesql::AnalyzerOutput>> TranslateQuery(
+      absl::string_view sql, const googlesql::AnalyzerOptions& options =
                                  test::GetSpangresTestAnalyzerOptions()) {
     return TranslateQuery(sql, std::function<absl::Status(const Query*)>(),
                           options);
   }
 
   // TODO: Accept a function catalog as an input.
-  absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>> TranslateQuery(
+  absl::StatusOr<std::unique_ptr<googlesql::AnalyzerOutput>> TranslateQuery(
       absl::string_view sql,
       std::function<absl::Status(const Query*)> pg_query_callback,
-      const zetasql::AnalyzerOptions& options =
+      const googlesql::AnalyzerOptions& options =
           test::GetSpangresTestAnalyzerOptions(),
-      zetasql::EnumerableCatalog* engine_provided_catalog =
+      googlesql::EnumerableCatalog* engine_provided_catalog =
           test::GetSpangresTestSpannerUserCatalog(),
       std::function<void(const interfaces::ParserBatchOutput::Statistics&)>
           parser_statistics_callback = std::function<
               void(const interfaces::ParserBatchOutput::Statistics&)>()) {
     std::unique_ptr<EngineBuiltinFunctionCatalog> function_catalog =
         test::GetSpangresTestBuiltinFunctionCatalog(options.language());
-    ZETASQL_RET_CHECK_NE(Parser(), nullptr);
+    GOOGLESQL_RET_CHECK_NE(Parser(), nullptr);
     return translator_->TranslateQuery(
         interfaces::TranslateQueryParamsBuilder(
             sql, Parser(), engine_provided_catalog, std::move(function_catalog))
@@ -113,12 +113,12 @@ class SpangresTranslatorTestWrapper {
             .Build());
   }
 
-  absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
+  absl::StatusOr<std::unique_ptr<googlesql::AnalyzerOutput>>
   TranslateParsedQuery(const std::string& serialized_parse_tree,
                        absl::string_view sql,
-                       const zetasql::AnalyzerOptions& options =
+                       const googlesql::AnalyzerOptions& options =
                            test::GetSpangresTestAnalyzerOptions(),
-                       zetasql::EnumerableCatalog* engine_provided_catalog =
+                       googlesql::EnumerableCatalog* engine_provided_catalog =
                            test::GetSpangresTestSpannerUserCatalog()) {
     return translator_->TranslateParsedQuery(
         interfaces::TranslateParsedQueryParamsBuilder(
@@ -133,9 +133,9 @@ class SpangresTranslatorTestWrapper {
   TranslateParsedExpression(
       const std::string& serialized_expr, absl::string_view sql,
       std::string table_name,
-      const zetasql::AnalyzerOptions& options =
+      const googlesql::AnalyzerOptions& options =
           test::GetSpangresTestAnalyzerOptions(),
-      zetasql::EnumerableCatalog* engine_provided_catalog =
+      googlesql::EnumerableCatalog* engine_provided_catalog =
           test::GetSpangresTestSpannerUserCatalog()) {
     return translator_->TranslateParsedTableLevelExpression(
         interfaces::TranslateParsedQueryParamsBuilder(
@@ -149,9 +149,9 @@ class SpangresTranslatorTestWrapper {
 
   absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateExpression(
       absl::string_view string_expr,
-      const zetasql::AnalyzerOptions& options =
+      const googlesql::AnalyzerOptions& options =
           test::GetSpangresTestAnalyzerOptions(),
-      zetasql::EnumerableCatalog* engine_provided_catalog =
+      googlesql::EnumerableCatalog* engine_provided_catalog =
           test::GetSpangresTestSpannerUserCatalog()) {
     return translator_->TranslateExpression(
         interfaces::TranslateQueryParamsBuilder(
@@ -166,9 +166,9 @@ class SpangresTranslatorTestWrapper {
   TranslateTableLevelExpression(
       const std::string& string_expr, absl::string_view sql,
       std::string table_name,
-      const zetasql::AnalyzerOptions& options =
+      const googlesql::AnalyzerOptions& options =
           test::GetSpangresTestAnalyzerOptions(),
-      zetasql::EnumerableCatalog* engine_provided_catalog =
+      googlesql::EnumerableCatalog* engine_provided_catalog =
           test::GetSpangresTestSpannerUserCatalog()) {
     return translator_->TranslateTableLevelExpression(
         interfaces::TranslateQueryParamsBuilder(
@@ -182,16 +182,16 @@ class SpangresTranslatorTestWrapper {
 
   absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateQueryInView(
       absl::string_view sql,
-      const zetasql::AnalyzerOptions& options =
+      const googlesql::AnalyzerOptions& options =
           test::GetSpangresTestAnalyzerOptions(),
-      zetasql::EnumerableCatalog* engine_provided_catalog =
+      googlesql::EnumerableCatalog* engine_provided_catalog =
           test::GetSpangresTestSpannerUserCatalog(),
       std::function<void(const interfaces::ParserBatchOutput::Statistics&)>
           parser_statistics_callback = std::function<
               void(const interfaces::ParserBatchOutput::Statistics&)>()) {
     std::unique_ptr<EngineBuiltinFunctionCatalog> function_catalog =
         test::GetSpangresTestBuiltinFunctionCatalog(options.language());
-    ZETASQL_RET_CHECK_NE(Parser(), nullptr);
+    GOOGLESQL_RET_CHECK_NE(Parser(), nullptr);
     return translator_->TranslateQueryInView(
         interfaces::TranslateQueryParamsBuilder(
             sql, Parser(), engine_provided_catalog, std::move(function_catalog))
@@ -205,9 +205,9 @@ class SpangresTranslatorTestWrapper {
   absl::StatusOr<interfaces::ExpressionTranslateResult>
   TranslateParsedQueryInView(
       const std::string& serialized_parse_tree, absl::string_view sql,
-      const zetasql::AnalyzerOptions& options =
+      const googlesql::AnalyzerOptions& options =
           test::GetSpangresTestAnalyzerOptions(),
-      zetasql::EnumerableCatalog* engine_provided_catalog =
+      googlesql::EnumerableCatalog* engine_provided_catalog =
           test::GetSpangresTestSpannerUserCatalog()) {
     return translator_->TranslateParsedQueryInView(
         interfaces::TranslateParsedQueryParamsBuilder(
@@ -222,16 +222,16 @@ class SpangresTranslatorTestWrapper {
 
   absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateFunctionBody(
       absl::string_view sql,
-      const zetasql::AnalyzerOptions& options =
+      const googlesql::AnalyzerOptions& options =
           test::GetSpangresTestAnalyzerOptions(),
-      zetasql::EnumerableCatalog* engine_provided_catalog =
+      googlesql::EnumerableCatalog* engine_provided_catalog =
           test::GetSpangresTestSpannerUserCatalog(),
       std::function<void(const interfaces::ParserBatchOutput::Statistics&)>
           parser_statistics_callback = std::function<
               void(const interfaces::ParserBatchOutput::Statistics&)>()) {
     std::unique_ptr<EngineBuiltinFunctionCatalog> function_catalog =
         test::GetSpangresTestBuiltinFunctionCatalog(options.language());
-    ZETASQL_RET_CHECK_NE(Parser(), nullptr);
+    GOOGLESQL_RET_CHECK_NE(Parser(), nullptr);
     return translator_->TranslateFunctionBody(
         interfaces::TranslateQueryParamsBuilder(
             sql, Parser(), engine_provided_catalog, std::move(function_catalog))
@@ -245,9 +245,9 @@ class SpangresTranslatorTestWrapper {
   absl::StatusOr<interfaces::ExpressionTranslateResult>
   TranslateParsedFunctionBody(
       const std::string& serialized_parse_tree, absl::string_view sql,
-      const zetasql::AnalyzerOptions& options =
+      const googlesql::AnalyzerOptions& options =
           test::GetSpangresTestAnalyzerOptions(),
-      zetasql::EnumerableCatalog* engine_provided_catalog =
+      googlesql::EnumerableCatalog* engine_provided_catalog =
           test::GetSpangresTestSpannerUserCatalog()) {
     return translator_->TranslateParsedFunctionBody(
         interfaces::TranslateParsedQueryParamsBuilder(

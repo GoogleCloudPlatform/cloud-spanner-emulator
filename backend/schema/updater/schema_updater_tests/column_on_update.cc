@@ -17,10 +17,10 @@
 #include <memory>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/options.pb.h"
+#include "googlesql/public/options.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/schema.h"
@@ -41,7 +41,7 @@ using database_api::DatabaseDialect::POSTGRESQL;
 TEST_P(SchemaUpdaterTest, OnUpdate) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
         CREATE TABLE T (
           id bigint NOT NULL PRIMARY KEY,
@@ -57,7 +57,7 @@ TEST_P(SchemaUpdaterTest, OnUpdate) {
                                       database_api::DatabaseDialect::POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE TABLE T (
           id INT64 NOT NULL,
           a INT64,

@@ -22,24 +22,24 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/types/array_type.h"
-#include "zetasql/public/types/struct_type.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_node.h"
-#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "googlesql/public/types/array_type.h"
+#include "googlesql/public/types/struct_type.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/status/status.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
-using zetasql::ResolvedAggregateScan;
-using zetasql::ResolvedMakeStruct;
-using zetasql::ResolvedNode;
-using zetasql::ResolvedNodeKind;
-using zetasql::ResolvedParameter;
-using zetasql::ResolvedProjectScan;
-using zetasql::ResolvedSetOperationScan;
+using googlesql::ResolvedAggregateScan;
+using googlesql::ResolvedMakeStruct;
+using googlesql::ResolvedNode;
+using googlesql::ResolvedNodeKind;
+using googlesql::ResolvedParameter;
+using googlesql::ResolvedProjectScan;
+using googlesql::ResolvedSetOperationScan;
 
 namespace google::spanner::emulator::backend {
 
@@ -66,9 +66,9 @@ absl::Status QuerySizeLimitsChecker::CheckQueryAgainstLimits(
   interest_nodes.insert(ResolvedNodeKind::RESOLVED_FUNCTION_CALL);
   interest_nodes.insert(ResolvedNodeKind::RESOLVED_PARAMETER);
   std::map<ResolvedNodeKind, NodeCounts> collected_node_counts;
-  ZETASQL_RETURN_IF_ERROR(GetNodeMetricsAndRunLocalChecks(ast_root, interest_nodes,
+  GOOGLESQL_RETURN_IF_ERROR(GetNodeMetricsAndRunLocalChecks(ast_root, interest_nodes,
                                                   &collected_node_counts));
-  ZETASQL_RETURN_IF_ERROR(RunGlobalChecks(collected_node_counts));
+  GOOGLESQL_RETURN_IF_ERROR(RunGlobalChecks(collected_node_counts));
   return absl::OkStatus();
 }
 
@@ -171,7 +171,7 @@ absl::Status QuerySizeLimitsChecker::CheckNumColumnsInGroupBy(
     const ResolvedNode* node) {
   const ResolvedAggregateScan* aggregate_scan =
       node->GetAs<ResolvedAggregateScan>();
-  ZETASQL_RET_CHECK(aggregate_scan != nullptr);
+  GOOGLESQL_RET_CHECK(aggregate_scan != nullptr);
   if (aggregate_scan->group_by_list().size() > kMaxColumnsInGroupBy) {
     return error::TooManyAggregates(kMaxColumnsInGroupBy);
   }
@@ -181,7 +181,7 @@ absl::Status QuerySizeLimitsChecker::CheckNumColumnsInGroupBy(
 absl::Status QuerySizeLimitsChecker::CheckNumUnions(const ResolvedNode* node) {
   const ResolvedSetOperationScan* union_scan =
       node->GetAs<ResolvedSetOperationScan>();
-  ZETASQL_RET_CHECK(union_scan != nullptr);
+  GOOGLESQL_RET_CHECK(union_scan != nullptr);
   if (union_scan->input_item_list().size() > kMaxUnionsInQuery) {
     return error::TooManyUnions(kMaxUnionsInQuery);
   }
@@ -191,7 +191,7 @@ absl::Status QuerySizeLimitsChecker::CheckNumUnions(const ResolvedNode* node) {
 absl::Status QuerySizeLimitsChecker::CheckNumSubQueriesInSelectList(
     const ResolvedNode* node) {
   const ResolvedProjectScan* project_scan = node->GetAs<ResolvedProjectScan>();
-  ZETASQL_RET_CHECK(project_scan != nullptr);
+  GOOGLESQL_RET_CHECK(project_scan != nullptr);
   if (project_scan->expr_list_size() > kMaxSubqueryExpressionChildren) {
     return error::TooManySubqueryChildren(kMaxSubqueryExpressionChildren);
   }
@@ -201,7 +201,7 @@ absl::Status QuerySizeLimitsChecker::CheckNumSubQueriesInSelectList(
 absl::Status QuerySizeLimitsChecker::CheckNumFieldsInStruct(
     const ResolvedNode* node) {
   const ResolvedMakeStruct* struct_node = node->GetAs<ResolvedMakeStruct>();
-  ZETASQL_RET_CHECK(struct_node != nullptr);
+  GOOGLESQL_RET_CHECK(struct_node != nullptr);
   if (struct_node->field_list().size() > kMaxStructFields) {
     return error::TooManyStructFields(kMaxStructFields);
   }
@@ -211,18 +211,18 @@ absl::Status QuerySizeLimitsChecker::CheckNumFieldsInStruct(
 absl::Status QuerySizeLimitsChecker::CheckStructParameterBreadthAndDepth(
     const ResolvedNode* node) {
   const ResolvedParameter* param_node = node->GetAs<ResolvedParameter>();
-  ZETASQL_RET_CHECK(param_node != nullptr);
+  GOOGLESQL_RET_CHECK(param_node != nullptr);
   if (!param_node->type()->IsStruct() &&
       !(param_node->type()->IsArray() &&
         param_node->type()->AsArray()->element_type()->IsStruct())) {
     return absl::OkStatus();
   }
-  const zetasql::StructType* struct_type =
+  const googlesql::StructType* struct_type =
       param_node->type()->IsStruct()
           ? param_node->type()->AsStruct()
           : param_node->type()->AsArray()->element_type()->AsStruct();
 
-  std::queue<const zetasql::StructType*> type_queue;
+  std::queue<const googlesql::StructType*> type_queue;
   int depth = 1;
   type_queue.push(struct_type);
   type_queue.push(nullptr);
@@ -245,7 +245,7 @@ absl::Status QuerySizeLimitsChecker::CheckStructParameterBreadthAndDepth(
     }
 
     for (int i = 0; i < type->num_fields(); ++i) {
-      const zetasql::Type* next_type = nullptr;
+      const googlesql::Type* next_type = nullptr;
       if (type->field(i).type->IsArray()) {
         next_type = type->field(i).type->AsArray()->element_type();
       } else {
@@ -260,15 +260,15 @@ absl::Status QuerySizeLimitsChecker::CheckStructParameterBreadthAndDepth(
 }
 
 absl::Status QuerySizeLimitsChecker::RunGlobalChecks(
-    const std::map<zetasql::ResolvedNodeKind, NodeCounts>&
+    const std::map<googlesql::ResolvedNodeKind, NodeCounts>&
         collected_node_counts) {
-  ZETASQL_RETURN_IF_ERROR(CheckNumPredicates(collected_node_counts));
-  ZETASQL_RETURN_IF_ERROR(CheckPredicateBooleanExpressionDepth(collected_node_counts));
-  ZETASQL_RETURN_IF_ERROR(CheckNumJoins(collected_node_counts));
-  ZETASQL_RETURN_IF_ERROR(CheckSubqueryExpressionDepth(collected_node_counts));
-  ZETASQL_RETURN_IF_ERROR(CheckSubselectDepth(collected_node_counts));
-  ZETASQL_RETURN_IF_ERROR(CheckGroupByDepth(collected_node_counts));
-  ZETASQL_RETURN_IF_ERROR(CheckNumParameters(collected_node_counts));
+  GOOGLESQL_RETURN_IF_ERROR(CheckNumPredicates(collected_node_counts));
+  GOOGLESQL_RETURN_IF_ERROR(CheckPredicateBooleanExpressionDepth(collected_node_counts));
+  GOOGLESQL_RETURN_IF_ERROR(CheckNumJoins(collected_node_counts));
+  GOOGLESQL_RETURN_IF_ERROR(CheckSubqueryExpressionDepth(collected_node_counts));
+  GOOGLESQL_RETURN_IF_ERROR(CheckSubselectDepth(collected_node_counts));
+  GOOGLESQL_RETURN_IF_ERROR(CheckGroupByDepth(collected_node_counts));
+  GOOGLESQL_RETURN_IF_ERROR(CheckNumParameters(collected_node_counts));
   return absl::OkStatus();
 }
 
@@ -276,19 +276,19 @@ absl::Status QuerySizeLimitsChecker::RunNodeLocalChecks(
     const ResolvedNode* node) {
   switch (node->node_kind()) {
     case ResolvedNodeKind::RESOLVED_AGGREGATE_SCAN:
-      ZETASQL_RETURN_IF_ERROR(CheckNumColumnsInGroupBy(node));
+      GOOGLESQL_RETURN_IF_ERROR(CheckNumColumnsInGroupBy(node));
       break;
     case ResolvedNodeKind::RESOLVED_SET_OPERATION_SCAN:
-      ZETASQL_RETURN_IF_ERROR(CheckNumUnions(node));
+      GOOGLESQL_RETURN_IF_ERROR(CheckNumUnions(node));
       break;
     case ResolvedNodeKind::RESOLVED_MAKE_STRUCT:
-      ZETASQL_RETURN_IF_ERROR(CheckNumFieldsInStruct(node));
+      GOOGLESQL_RETURN_IF_ERROR(CheckNumFieldsInStruct(node));
       break;
     case ResolvedNodeKind::RESOLVED_PROJECT_SCAN:
-      ZETASQL_RETURN_IF_ERROR(CheckNumSubQueriesInSelectList(node));
+      GOOGLESQL_RETURN_IF_ERROR(CheckNumSubQueriesInSelectList(node));
       break;
     case ResolvedNodeKind::RESOLVED_PARAMETER:
-      ZETASQL_RETURN_IF_ERROR(CheckStructParameterBreadthAndDepth(node));
+      GOOGLESQL_RETURN_IF_ERROR(CheckStructParameterBreadthAndDepth(node));
       break;
     default:
       return absl::OkStatus();
@@ -331,7 +331,7 @@ absl::Status QuerySizeLimitsChecker::GetNodeMetricsAndRunLocalChecks(
         (*collected_node_counts)[node->node_kind()] = node_counts;
       }
     }
-    ZETASQL_RETURN_IF_ERROR(RunNodeLocalChecks(node));
+    GOOGLESQL_RETURN_IF_ERROR(RunNodeLocalChecks(node));
     std::vector<const ResolvedNode*> child_nodes;
     node->GetChildNodes(&child_nodes);
     for (const ResolvedNode* child_node : child_nodes) {

@@ -20,7 +20,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "common/errors.h"
 #include "common/limits.h"
@@ -34,12 +34,12 @@ namespace {
 
 using testing::Eq;
 using testing::Not;
-using zetasql_base::testing::IsOk;
+using googlesql_base::testing::IsOk;
 
 TEST(GlobalSchemaNames, AddName) {
   GlobalSchemaNames names;
-  ZETASQL_EXPECT_OK(names.AddName("Table", "Albums"));
-  ZETASQL_EXPECT_OK(names.AddName("Table", "Singers"));
+  GOOGLESQL_EXPECT_OK(names.AddName("Table", "Albums"));
+  GOOGLESQL_EXPECT_OK(names.AddName("Table", "Singers"));
   EXPECT_TRUE(names.HasName("Albums"));
   EXPECT_TRUE(names.HasName("Singers"));
 
@@ -54,29 +54,29 @@ TEST(GlobalSchemaNames, AddName) {
 
 TEST(GlobalSchemaNames, RemoveName) {
   GlobalSchemaNames names;
-  ZETASQL_EXPECT_OK(names.AddName("Table", "Albums"));
+  GOOGLESQL_EXPECT_OK(names.AddName("Table", "Albums"));
   EXPECT_TRUE(names.HasName("Albums"));
   names.RemoveName("albums");  // Case-insensitive.
   EXPECT_FALSE(names.HasName("Albums"));
-  ZETASQL_EXPECT_OK(names.AddName("Table", "Albums"));
+  GOOGLESQL_EXPECT_OK(names.AddName("Table", "Albums"));
   EXPECT_TRUE(names.HasName("Albums"));
 }
 
 TEST(GlobalSchemaNames, GenerateForeignKeyName) {
   GlobalSchemaNames names;
   auto status = names.GenerateForeignKeyName("Albums", "Singers");
-  ZETASQL_EXPECT_OK(status);
+  GOOGLESQL_EXPECT_OK(status);
   EXPECT_TRUE(names.HasName(status.value()));
   EXPECT_THAT(status.value(), Eq("FK_Albums_Singers_5FB395005BB87272_1"));
 
   // Same tables.
   status = names.GenerateForeignKeyName("Albums", "Singers");
-  ZETASQL_EXPECT_OK(status);
+  GOOGLESQL_EXPECT_OK(status);
   EXPECT_THAT(status.value(), Eq("FK_Albums_Singers_5FB395005BB87272_2"));
 
   // Different tables.
   status = names.GenerateForeignKeyName("Albums", "Songs");
-  ZETASQL_EXPECT_OK(status);
+  GOOGLESQL_EXPECT_OK(status);
   EXPECT_THAT(status.value(), Eq("FK_Albums_Songs_42ABDA0A1D54791A_1"));
 
   // Truncate long names.
@@ -86,7 +86,7 @@ TEST(GlobalSchemaNames, GenerateForeignKeyName) {
   status = names.GenerateForeignKeyName(
       std::string(limits::kMaxSchemaIdentifierLength / 4, 'x'),
       std::string(limits::kMaxSchemaIdentifierLength, 'y'));
-  ZETASQL_EXPECT_OK(status);
+  GOOGLESQL_EXPECT_OK(status);
   EXPECT_THAT(status.value(),
               Eq("FK_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_"
                  "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
@@ -99,7 +99,7 @@ TEST(GlobalSchemaNames, GenerateForeignKeyName) {
 
   // Remove schemas for the base name. Append the schema for the full name.
   status = names.GenerateForeignKeyName("Schema1.Albums", "Schema2.Songs");
-  ZETASQL_EXPECT_OK(status);
+  GOOGLESQL_EXPECT_OK(status);
   EXPECT_THAT(status.value(), Eq("Schema1.FK_Albums_Songs_04F0A18F8F9162C0_1"));
 }
 
@@ -109,14 +109,14 @@ TEST(GlobalSchemaNames, GenerateManagedIndexName) {
       names.GenerateManagedIndexName("Songs", {"FirstName", "LastName"},
                                      /*null_filtered=*/false,
                                      /*unique=*/false);
-  ZETASQL_EXPECT_OK(status);
+  GOOGLESQL_EXPECT_OK(status);
   EXPECT_THAT(status.value(),
               Eq("IDX_Songs_FirstName_LastName_09F682A0D8AF2F47"));
 
   status =
       names.GenerateManagedIndexName("Schema1.Albums", {"Songs", "Artists"},
                                      /*null_filtered=*/false, /*unique=*/false);
-  ZETASQL_EXPECT_OK(status);
+  GOOGLESQL_EXPECT_OK(status);
   EXPECT_THAT(status.value(),
               Eq("Schema1.IDX_Albums_Songs_Artists_013336CDE9D3087F"));
 }
@@ -127,7 +127,7 @@ TEST(GlobalSchemaNames, GenerateManagedNullFilteredIndexName) {
       names.GenerateManagedIndexName("Songs", {"FirstName", "LastName"},
                                      /*null_filtered=*/true,
                                      /*unique=*/false);
-  ZETASQL_EXPECT_OK(status);
+  GOOGLESQL_EXPECT_OK(status);
   EXPECT_THAT(status.value(),
               Eq("IDX_Songs_FirstName_LastName_N_5849069C505A683F"));
 }
@@ -138,7 +138,7 @@ TEST(GlobalSchemaNames, GenerateManagedUniqueIndexName) {
       names.GenerateManagedIndexName("Songs", {"FirstName", "LastName"},
                                      /*null_filtered=*/false,
                                      /*unique=*/true);
-  ZETASQL_EXPECT_OK(status);
+  GOOGLESQL_EXPECT_OK(status);
   EXPECT_THAT(status.value(),
               Eq("IDX_Songs_FirstName_LastName_U_E3AF278F4A7F7E44"));
 }
@@ -149,20 +149,20 @@ TEST(GlobalSchemaNames, GenerateManagedNullFilteredUniqueIndexName) {
       names.GenerateManagedIndexName("Songs", {"FirstName", "LastName"},
                                      /*null_filtered=*/true,
                                      /*unique=*/true);
-  ZETASQL_EXPECT_OK(status);
+  GOOGLESQL_EXPECT_OK(status);
   EXPECT_THAT(status.value(),
               Eq("IDX_Songs_FirstName_LastName_U_E3AF278F4A7F7E44"));
 }
 
 TEST(GlobalSchemaNames, ValidateSchemaName) {
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Table", "Albums"));
+  GOOGLESQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Table", "Albums"));
 
   EXPECT_THAT(GlobalSchemaNames::ValidateSchemaName("Table", ""), Not(IsOk()));
   EXPECT_THAT(GlobalSchemaNames::ValidateSchemaName("Table", "_Albums"),
               Eq(error::InvalidSchemaName("Table", "_Albums")));
 
   std::string max_name(limits::kMaxSchemaIdentifierLength, 'x');
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Table", max_name));
+  GOOGLESQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Table", max_name));
 
   std::string long_name(limits::kMaxSchemaIdentifierLength + 1, 'x');
   EXPECT_THAT(GlobalSchemaNames::ValidateSchemaName("Table", long_name),
@@ -174,7 +174,7 @@ TEST(GlobalSchemaNames, ValidateSchemaName) {
 }
 
 TEST(GlobalSchemaNames, ValidateConstraintName) {
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateConstraintName("Albums", "Foreign Key",
+  GOOGLESQL_EXPECT_OK(GlobalSchemaNames::ValidateConstraintName("Albums", "Foreign Key",
                                                       "FK_C"));
   EXPECT_THAT(GlobalSchemaNames::ValidateConstraintName("Albums", "Foreign Key",
                                                         "PK_C"),
@@ -187,25 +187,25 @@ TEST(GlobalSchemaNames, ValidateConstraintName) {
 
 TEST(GlobalSchemaNames, ValidateNamedSchemaName) {
   // Valid named schema names.
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateNamedSchemaName("Albums"));
+  GOOGLESQL_EXPECT_OK(GlobalSchemaNames::ValidateNamedSchemaName("Albums"));
   EXPECT_THAT(GlobalSchemaNames::ValidateNamedSchemaName("_Albums"),
               Eq(error::InvalidSchemaName("Schema", "_Albums")));
   EXPECT_THAT(GlobalSchemaNames::ValidateNamedSchemaName("pg_catalog"),
               Eq(error::InvalidSchemaName("Schema", "pg_catalog")));
 
   // Validate names of SDL types in named schemas.
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Table", "Albums.Songs"));
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Synonym", "Albums.Songs"));
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Sequence", "Albums.Seq"));
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("View", "Albums.Songs"));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Table", "Albums.Songs"));
+  GOOGLESQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Synonym", "Albums.Songs"));
+  GOOGLESQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Sequence", "Albums.Seq"));
+  GOOGLESQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("View", "Albums.Songs"));
+  GOOGLESQL_EXPECT_OK(
       GlobalSchemaNames::ValidateSchemaName("Index", "Albums.SongsIndex"));
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Udf", "Albums.SongsUdf"));
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Foreign Key",
+  GOOGLESQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Udf", "Albums.SongsUdf"));
+  GOOGLESQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Foreign Key",
                                                   "Albums.FK_Songs_Artists"));
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Check Constraint",
+  GOOGLESQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Check Constraint",
                                                   "Albums.CK_Songs_Artists"));
-  ZETASQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Property Graph",
+  GOOGLESQL_EXPECT_OK(GlobalSchemaNames::ValidateSchemaName("Property Graph",
                                                   "Albums.ArtistsGraph"));
 
   EXPECT_THAT(GlobalSchemaNames::ValidateSchemaName("Schema", "Albums.Artists"),

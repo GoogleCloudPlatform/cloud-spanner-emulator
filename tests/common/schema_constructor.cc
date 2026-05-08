@@ -22,7 +22,7 @@
 #include <utility>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/statusor.h"
@@ -42,7 +42,7 @@ namespace database_api = ::google::spanner::admin::database::v1;
 
 absl::StatusOr<std::unique_ptr<const backend::Schema>> CreateSchemaFromDDL(
     absl::Span<const std::string> statements,
-    zetasql::TypeFactory* type_factory, std::string proto_descriptor_bytes,
+    googlesql::TypeFactory* type_factory, std::string proto_descriptor_bytes,
     database_api::DatabaseDialect dialect, std::string_view database_id) {
   backend::TableIDGenerator table_id_gen;
   backend::ColumnIDGenerator column_id_gen;
@@ -67,7 +67,7 @@ absl::StatusOr<std::unique_ptr<const backend::Schema>> CreateSchemaFromDDL(
 }
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithOneTable(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect) {
   std::string test_table =
       R"(
@@ -102,7 +102,7 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneTable(
 }
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithTimestampDateTable(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect) {
   std::string timestamp_date_table =
       R"(
@@ -135,7 +135,7 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithTimestampDateTable(
 
 std::unique_ptr<const backend::Schema>
 CreateSchemaWithOneTableAndOneChangeStream(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect) {
   absl::StatusOr<std::unique_ptr<const backend::Schema>> maybe_schema;
 
@@ -173,7 +173,7 @@ CreateSchemaWithOneTableAndOneChangeStream(
 }
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithOneTableAndOnePlacement(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect) {
   absl::StatusOr<std::unique_ptr<const backend::Schema>> maybe_schema;
   std::string test_table =
@@ -205,7 +205,7 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneTableAndOnePlacement(
 }
 
 absl::StatusOr<std::unique_ptr<const backend::Schema>>
-CreateSchemaWithOneSequence(zetasql::TypeFactory* type_factory,
+CreateSchemaWithOneSequence(googlesql::TypeFactory* type_factory,
                             database_api::DatabaseDialect dialect) {
   test::ScopedEmulatorFeatureFlagsSetter setter(
       {.enable_bit_reversed_positive_sequences = true,
@@ -267,7 +267,7 @@ CreateSchemaWithOneSequence(zetasql::TypeFactory* type_factory,
 }
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithOneModel(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect) {
   absl::StatusOr<std::unique_ptr<const backend::Schema>> maybe_schema;
 
@@ -299,7 +299,7 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneModel(
 }
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithOnePropertyGraph(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect) {
   std::string node_table =
       R"(
@@ -341,10 +341,10 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOnePropertyGraph(
 }
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithDynamicPropertyGraph(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect) {
-  ZETASQL_VLOG(dialect == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL)
-      << "Dynamic property graphs are only supported in ZetaSQL, not "
+  GOOGLESQL_VLOG(dialect == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL)
+      << "Dynamic property graphs are only supported in GoogleSQL, not "
          "supported in PostgreSQL dialect.";
   std::string node_table =
       R"(
@@ -396,7 +396,7 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithDynamicPropertyGraph(
 }
 
 std::unique_ptr<const backend::Schema> CreateSimpleDefaultValuesSchema(
-    zetasql::TypeFactory* type_factory) {
+    googlesql::TypeFactory* type_factory) {
   auto maybe_schema = CreateSchemaFromDDL(
       {
           R"sql(
@@ -412,7 +412,7 @@ std::unique_ptr<const backend::Schema> CreateSimpleDefaultValuesSchema(
 }
 
 std::unique_ptr<const backend::Schema> CreateSimpleDefaultKeySchema(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect) {
   std::string table_ddl = R"sql(
             CREATE TABLE players_default_key (
@@ -453,7 +453,7 @@ std::unique_ptr<const backend::Schema> CreateSimpleDefaultKeySchema(
 }
 
 std::unique_ptr<const backend::Schema> CreateSimpleTimestampKeySchema(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect) {
   std::string table_ddl =
       R"sql(
@@ -492,7 +492,7 @@ std::unique_ptr<const backend::Schema> CreateSimpleTimestampKeySchema(
 }
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithOneTableWithSynonym(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect) {
   std::string test_table =
       R"(
@@ -523,7 +523,7 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneTableWithSynonym(
 }
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithProtoEnumColumn(
-    zetasql::TypeFactory* type_factory, std::string proto_descriptors) {
+    googlesql::TypeFactory* type_factory, std::string proto_descriptors) {
   auto maybe_schema = test::CreateSchemaFromDDL(
       {
           R"sql(
@@ -549,7 +549,7 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithProtoEnumColumn(
 }
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
-    zetasql::TypeFactory* const type_factory,
+    googlesql::TypeFactory* const type_factory,
     database_api::DatabaseDialect dialect) {
   std::string parent_table =
       R"(
@@ -620,7 +620,7 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithInterleaving(
 
 absl::StatusOr<std::unique_ptr<const backend::Schema>>
 CreateSchemaWithNonParentInterleaving(
-    zetasql::TypeFactory* const type_factory,
+    googlesql::TypeFactory* const type_factory,
     database_api::DatabaseDialect dialect) {
   std::string parent_table =
       R"(
@@ -670,7 +670,7 @@ CreateSchemaWithNonParentInterleaving(
 }
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithMultiTables(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect) {
   std::string test_table =
       R"(
@@ -734,7 +734,7 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithMultiTables(
 }
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithForeignKey(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect) {
   std::string referenced_table =
       R"(
@@ -798,7 +798,7 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithForeignKey(
 }
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithForeignKeyOnDelete(
-    zetasql::TypeFactory* type_factory,
+    googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect) {
   std::string referenced_table =
       R"(
@@ -862,7 +862,7 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithForeignKeyOnDelete(
 }
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithView(
-    zetasql::TypeFactory* type_factory) {
+    googlesql::TypeFactory* type_factory) {
   test::ScopedEmulatorFeatureFlagsSetter setter({.enable_views = true});
   auto maybe_schema = CreateSchemaFromDDL(
       {
@@ -884,7 +884,7 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithView(
 }
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithNamedSchema(
-    zetasql::TypeFactory* type_factory) {
+    googlesql::TypeFactory* type_factory) {
   test::ScopedEmulatorFeatureFlagsSetter setter({.enable_views = true});
   auto maybe_schema = CreateSchemaFromDDL(
       {

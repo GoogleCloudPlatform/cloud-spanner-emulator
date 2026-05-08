@@ -35,22 +35,22 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/commandlineflag.h"
 #include "absl/flags/reflection.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_join.h"
 #include "google/protobuf/repeated_ptr_field.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 
 namespace {
 
-static zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
-    kCatalogManualRegistration({
+static googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
+    kCatalogManualRegistration(absl::flat_hash_set<std::string>{
         "pg.array_all_equal",
         "pg.array_all_greater",
         "pg.array_all_greater_equal",
@@ -86,9 +86,9 @@ absl::StatusOr<bool> IsEnabledInCatalog(
     const google::protobuf::RepeatedPtrField<std::string> flags) {
   for (const auto& flag_name : flags) {
     const absl::CommandLineFlag* flag = absl::FindCommandLineFlag(flag_name);
-    ZETASQL_RET_CHECK(flag != nullptr) << "Flag " << flag_name << " not found";
+    GOOGLESQL_RET_CHECK(flag != nullptr) << "Flag " << flag_name << " not found";
     std::optional<bool> is_enabled = flag->TryGet<bool>();
-    ZETASQL_RET_CHECK(is_enabled.has_value())
+    GOOGLESQL_RET_CHECK(is_enabled.has_value())
         << "Could not get boolean value of flag " << flag_name;
     if (!is_enabled.value()) {
       return false;
@@ -110,7 +110,7 @@ absl::StatusOr<std::vector<FunctionProto>> FilterEnabledFunctionsAndSignatures(
     if (kCatalogManualRegistration->contains(full_name)) continue;
 
     // Excludes functions disabled in catalog
-    ZETASQL_ASSIGN_OR_RETURN(bool is_enabled_in_catalog,
+    GOOGLESQL_ASSIGN_OR_RETURN(bool is_enabled_in_catalog,
                      IsEnabledInCatalog(function.enable_in_catalog()));
     if (!is_enabled_in_catalog) continue;
 
@@ -121,7 +121,7 @@ absl::StatusOr<std::vector<FunctionProto>> FilterEnabledFunctionsAndSignatures(
 
     for (const auto& signature : function.signatures()) {
       // Excludes signatures disabled in catalog
-      ZETASQL_ASSIGN_OR_RETURN(bool is_enabled_in_catalog,
+      GOOGLESQL_ASSIGN_OR_RETURN(bool is_enabled_in_catalog,
                        IsEnabledInCatalog(signature.enable_in_catalog()));
       if (!is_enabled_in_catalog) continue;
 

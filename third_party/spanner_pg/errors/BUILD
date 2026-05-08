@@ -36,6 +36,8 @@
 #
 
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("//third_party/spanner_pg/errors:error_generator.bzl", "spangres_error_catalog")
 
@@ -78,11 +80,11 @@ cc_binary(
         "@com_google_absl//absl/strings",
         "@com_google_googleapis//google/rpc:code_cc_proto",
         "@com_google_googleapis//google/rpc:error_details_cc_proto",
+        "@com_google_googlesql//googlesql/base",
+        "@com_google_googlesql//googlesql/base:file_util",
+        "@com_google_googlesql//googlesql/base:path",
+        "@com_google_googlesql//googlesql/base:status",
         "@com_google_protobuf//:protobuf",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base:file_util",
-        "@com_google_zetasql//zetasql/base:path",
-        "@com_google_zetasql//zetasql/base:status",
         "@com_googlesource_code_re2//:re2",
     ],
 )
@@ -112,7 +114,7 @@ cc_library(
         "//third_party/spanner_pg/postgres_includes",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",
-        "@com_google_zetasql//zetasql/base:logging",
+        "@com_google_googlesql//googlesql/base:logging",
     ],
 )
 
@@ -123,9 +125,9 @@ cc_test(
     deps = [
         ":errors",
         "//third_party/spanner_pg/postgres_includes",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -153,7 +155,7 @@ cc_library(
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/base:die_if_null",
+        "@com_google_googlesql//googlesql/base:die_if_null",
     ],
     alwayslink = 1,
 )
@@ -180,8 +182,8 @@ cc_test(
         "//third_party/spanner_pg/util:valid_memory_context_fixture",
         "@com_google_absl//absl/log:scoped_mock_log",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

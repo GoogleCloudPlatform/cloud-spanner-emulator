@@ -36,7 +36,7 @@
 #include <memory>
 #include <string>
 
-#include "zetasql/public/interval_value.h"
+#include "googlesql/public/interval_value.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
 #include "absl/strings/string_view.h"
@@ -54,14 +54,14 @@ absl::StatusOr<int32_t> PgToDate(absl::string_view date_string,
                                  absl::string_view date_format);
 
 // Subtracts a number of days from a date. The resulting date is validated to be
-// within the bounds of `::zetasql::types::kDateMin` and
-// `::zetasql::types::kDateMax`. If the date is out of bounds an invalid
+// within the bounds of `::googlesql::types::kDateMin` and
+// `::googlesql::types::kDateMax`. If the date is out of bounds an invalid
 // argument error will be returned.
 absl::StatusOr<int32_t> DateMii(int32_t date, int64_t days);
 
 // Adds a number of days from a date. The resulting date is validated to be
-// within the bounds of `::zetasql::types::kDateMin` and
-// `::zetasql::types::kDateMax`. If the date is out of bounds an invalid
+// within the bounds of `::googlesql::types::kDateMin` and
+// `::googlesql::types::kDateMax`. If the date is out of bounds an invalid
 // argument error will be returned.
 absl::StatusOr<int32_t> DatePli(int32_t date, int64_t days);
 
@@ -114,50 +114,50 @@ absl::StatusOr<absl::Cord> PgDateExtract(absl::string_view field,
 
 // Converts interval to string.
 absl::StatusOr<std::string> PgIntervalOut(
-    const zetasql::IntervalValue& interval);
+    const googlesql::IntervalValue& interval);
 
 // Casts a string to an interval.
-absl::StatusOr<zetasql::IntervalValue> PgIntervalIn(
+absl::StatusOr<googlesql::IntervalValue> PgIntervalIn(
     absl::string_view interval_string);
 
 // Adds an interval to a timestamptz.
 // Returns an error if the resulting timestamptz is out of range.
 absl::StatusOr<absl::Time> PgTimestamptzAdd(
-    absl::Time input_time, const zetasql::IntervalValue& interval);
+    absl::Time input_time, const googlesql::IntervalValue& interval);
 
 // Subtracts an interval from a timestamptz.
 // Returns an error if the resulting timestamptz is out of range.
 absl::StatusOr<absl::Time> PgTimestamptzSubtract(
-    absl::Time input_time, const zetasql::IntervalValue& interval);
+    absl::Time input_time, const googlesql::IntervalValue& interval);
 
 // Creates an interval from the given values.
-absl::StatusOr<zetasql::IntervalValue> PgMakeInterval(
+absl::StatusOr<googlesql::IntervalValue> PgMakeInterval(
     int64_t years, int64_t months, int64_t weeks, int64_t days, int64_t hours,
     int64_t minutes, double seconds);
 
 // Multiplies an interval by a double.
-absl::StatusOr<zetasql::IntervalValue> PgIntervalMultiply(
-    const zetasql::IntervalValue& interval, double multiplier);
+absl::StatusOr<googlesql::IntervalValue> PgIntervalMultiply(
+    const googlesql::IntervalValue& interval, double multiplier);
 
 // Divides an interval by a double.
-absl::StatusOr<zetasql::IntervalValue> PgIntervalDivide(
-    const zetasql::IntervalValue& interval, double divisor);
+absl::StatusOr<googlesql::IntervalValue> PgIntervalDivide(
+    const googlesql::IntervalValue& interval, double divisor);
 
 // Extracts a field from an interval.
 absl::StatusOr<absl::Cord> PgIntervalExtract(
-    absl::string_view field, const zetasql::IntervalValue& interval);
+    absl::string_view field, const googlesql::IntervalValue& interval);
 
 // Converts interval to string according to the given format.
 absl::StatusOr<std::unique_ptr<std::string>> PgIntervalToChar(
-    const zetasql::IntervalValue& interval, absl::string_view format);
+    const googlesql::IntervalValue& interval, absl::string_view format);
 
 // Rounds interval precision to microsecond.
 // If the interval has no nano fractions, it is returned as is.
 // If the interval has nano fractions, the fractions are rounded to nearest
 // microsecond. If the nano fraction is exactly half way between two
 // microseconds, it rounds up to next microsecond.
-absl::StatusOr<zetasql::IntervalValue> PgRoundIntervalPrecision(
-    const zetasql::IntervalValue& interval);
+absl::StatusOr<googlesql::IntervalValue> PgRoundIntervalPrecision(
+    const googlesql::IntervalValue& interval);
 
 }  // namespace postgres_translator::function_evaluators
 

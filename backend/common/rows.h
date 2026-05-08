@@ -28,11 +28,11 @@ namespace emulator {
 namespace backend {
 
 // Common row abstraction used by various parts of the backend.
-using Row = absl::flat_hash_map<const Column*, zetasql::Value>;
+using Row = absl::flat_hash_map<const Column*, googlesql::Value>;
 
 // Returns the value from the given Row for the specified column. Returns Null
 // if the specified column was not found.
-zetasql::Value GetColumnValueOrNull(const Row& row,
+googlesql::Value GetColumnValueOrNull(const Row& row,
                                       const Column* const column);
 
 // Returns the column/value map for the given column & value list.

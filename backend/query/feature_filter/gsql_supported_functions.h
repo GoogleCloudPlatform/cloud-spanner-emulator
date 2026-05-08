@@ -17,18 +17,18 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_FEATURE_FILTER_GSQL_SUPPORTED_FUNCTIONS_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_FEATURE_FILTER_GSQL_SUPPORTED_FUNCTIONS_H_
 
-#include "zetasql/public/function.h"
+#include "googlesql/public/function.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/string_view.h"
 
 namespace google::spanner::emulator::backend {
 
-// Returns the list of ZetaSQL built-in functions that are supported in Cloud
+// Returns the list of GoogleSQL built-in functions that are supported in Cloud
 // Spanner.
-const absl::flat_hash_set<absl::string_view>* SupportedZetaSQLFunctions();
+const absl::flat_hash_set<absl::string_view>* SupportedGoogleSQLFunctions();
 
-// Returns true if the function is a supported ZetaSQL builtin function.
-bool IsSupportedZetaSQLFunction(const zetasql::Function& function);
+// Returns true if the function is a supported GoogleSQL builtin function.
+bool IsSupportedGoogleSQLFunction(const googlesql::Function& function);
 
 }  // namespace google::spanner::emulator::backend
 

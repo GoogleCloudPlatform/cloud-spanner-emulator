@@ -19,10 +19,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/simple_catalog.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"
@@ -38,8 +38,8 @@
 #include "backend/schema/updater/schema_validation_context.h"
 #include "backend/schema/updater/sql_expression_validators.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -93,18 +93,18 @@ absl::Status ValidateCheckConstraintSignatureChange(
     absl::string_view modify_action, absl::string_view dependency_name,
     const CheckConstraint* dependent_check_constraint,
     const Table* dependent_table, const Schema* temp_new_schema,
-    zetasql::TypeFactory* type_factory) {
+    googlesql::TypeFactory* type_factory) {
   // Re-analyze the dependent view based on the new definition of the
   // dependency in the temporary new schema.
   absl::flat_hash_set<const SchemaNode*> unused_udf_dependencies;
   absl::flat_hash_set<std::string> unused_dependent_column_names;
-  std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
+  std::vector<googlesql::SimpleTable::NameAndType> name_and_types;
   for (const Column* column : dependent_table->columns()) {
     name_and_types.emplace_back(column->Name(), column->GetType());
   }
 
   auto status = AnalyzeColumnExpression(
-      dependent_check_constraint->expression(), zetasql::types::BoolType(),
+      dependent_check_constraint->expression(), googlesql::types::BoolType(),
       dependent_table, temp_new_schema, type_factory, name_and_types,
       "check constraints", &unused_dependent_column_names,
       /*dependent_sequences=*/nullptr,
@@ -123,24 +123,24 @@ absl::Status ValidateCheckConstraintSignatureChange(
 
 absl::Status CheckConstraintValidator::Validate(
     const CheckConstraint* check_constraint, SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK_NE(check_constraint->table_, nullptr);
+  GOOGLESQL_RET_CHECK_NE(check_constraint->table_, nullptr);
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(check_constraint->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(check_constraint->postgresql_oid().has_value());
   } else {
-    ZETASQL_RET_CHECK(!check_constraint->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!check_constraint->postgresql_oid().has_value());
   }
   // Validates check constraint name.
   // The constraint type is not present to be consistent with production code.
-  ZETASQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateConstraintName(
+  GOOGLESQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateConstraintName(
       check_constraint->table()->Name(), /*constraint_type=*/"",
       check_constraint->Name()));
 
   // The expression must reference at least one non-generated
   // column, whether directly or through a generated column which references a
   // non-generated column.
-  ZETASQL_RETURN_IF_ERROR(ValidateDependsOnNonGenCol(check_constraint));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateDependsOnNonGenCol(check_constraint));
 
-  ZETASQL_RETURN_IF_ERROR(ValidateNotUsingCommitTimestampColumns(check_constraint));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateNotUsingCommitTimestampColumns(check_constraint));
 
   return absl::OkStatus();
 }
@@ -169,20 +169,20 @@ absl::Status CheckConstraintValidator::ValidateUpdate(
 
     const Column* old_dep =
         FindDepColumnInCheckConstraintByName(dep->Name(), old_check_constraint);
-    ZETASQL_RET_CHECK_NE(old_dep, nullptr);
+    GOOGLESQL_RET_CHECK_NE(old_dep, nullptr);
     if (old_dep->GetType() != dep->GetType()) {
       return error::CannotAlterColumnDataTypeWithDependentCheckConstraint(
           dep->Name(), check_constraint->Name());
     }
   }
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(check_constraint->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(old_check_constraint->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK_EQ(check_constraint->postgresql_oid().value(),
+    GOOGLESQL_RET_CHECK(check_constraint->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(old_check_constraint->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK_EQ(check_constraint->postgresql_oid().value(),
                  old_check_constraint->postgresql_oid().value());
   } else {
-    ZETASQL_RET_CHECK(!check_constraint->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(!old_check_constraint->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!check_constraint->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!old_check_constraint->postgresql_oid().has_value());
   }
 
   for (const SchemaNode* dep : check_constraint->udf_dependencies()) {
@@ -210,7 +210,7 @@ absl::Status CheckConstraintValidator::ValidateUpdate(
       }
       // No need to check modifications on index dependencies as indexes
       // cannot currently be altered.
-      ZETASQL_RETURN_IF_ERROR(ValidateCheckConstraintSignatureChange(
+      GOOGLESQL_RETURN_IF_ERROR(ValidateCheckConstraintSignatureChange(
           modify_action, dependency_name, check_constraint,
           check_constraint->table(), context->tmp_new_schema(),
           context->type_factory()));

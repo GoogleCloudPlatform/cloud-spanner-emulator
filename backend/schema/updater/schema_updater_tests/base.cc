@@ -26,7 +26,7 @@
 #include "absl/types/span.h"
 #include "backend/schema/parser/ddl_parser.h"
 #include "backend/schema/updater/schema_updater.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -65,8 +65,8 @@ absl::StatusOr<std::unique_ptr<const Schema>> SchemaUpdaterTest::UpdateSchema(
     ddl::DDLStatement ddl_statement;
     ABSL_CHECK_NE(pg_schema_printer_.get(), nullptr);  // Crash OK
     for (const std::string& statement : statements) {
-      ZETASQL_RETURN_IF_ERROR(ddl::ParseDDLStatement(statement, &ddl_statement));
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_RETURN_IF_ERROR(ddl::ParseDDLStatement(statement, &ddl_statement));
+      GOOGLESQL_ASSIGN_OR_RETURN(
           std::vector<std::string> pg_ddl,
           pg_schema_printer_->PrintDDLStatementForEmulator(ddl_statement));
       pg_ddl_statements.push_back(absl::StrJoin(pg_ddl, " "));

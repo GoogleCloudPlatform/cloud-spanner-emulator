@@ -32,8 +32,8 @@
 #ifndef DATATYPES_EXTENDED_PG_JSONB_TYPE_H_
 #define DATATYPES_EXTENDED_PG_JSONB_TYPE_H_
 
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/value.h"
 #include "absl/flags/declare.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
@@ -47,29 +47,29 @@ namespace datatypes {
 const SpannerExtendedType* GetPgJsonbType();
 
 // Returns a global static instance of an ARRAY<PG.JSONB> type.
-const zetasql::ArrayType* GetPgJsonbArrayType();
+const googlesql::ArrayType* GetPgJsonbArrayType();
 
-// Create a zetasql::Value from the unnormalized input ASCII string format
+// Create a googlesql::Value from the unnormalized input ASCII string format
 // `denormalized_jsonb`
-absl::StatusOr<zetasql::Value> CreatePgJsonbValue(
+absl::StatusOr<googlesql::Value> CreatePgJsonbValue(
     absl::string_view denormalized_jsonb);
 
 // Create PG.JSONB value in a valid memory context which is required for calling
 // PG code. This function is intended to be used in tests where a memory context
 // is sometimes not initialized.
-absl::StatusOr<zetasql::Value> CreatePgJsonbValueWithMemoryContext(
+absl::StatusOr<googlesql::Value> CreatePgJsonbValueWithMemoryContext(
     absl::string_view jsonb_string);
 
-// Create a zetasql::Value from the normalized input ASCII string format
+// Create a googlesql::Value from the normalized input ASCII string format
 // `normalized_jsonb`
-zetasql::Value CreatePgJsonbValueFromNormalized(
+googlesql::Value CreatePgJsonbValueFromNormalized(
     const absl::Cord& normalized_jsonb);
 
 // Retrieves the normalized ASCII string representation of PG.JSONB
-// value from the ZetaSQL `value`. Returns error if `value` doesn't contain
+// value from the GoogleSQL `value`. Returns error if `value` doesn't contain
 // non-NULL value of PG.JSONB.
 absl::StatusOr<absl::Cord> GetPgJsonbNormalizedValue(
-    const zetasql::Value& value);
+    const googlesql::Value& value);
 
 }  // namespace datatypes
 }  // namespace postgres_translator::spangres

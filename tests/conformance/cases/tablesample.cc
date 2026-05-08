@@ -25,19 +25,19 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class TablesampleTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
-    ZETASQL_EXPECT_OK(SetSchema({
+    GOOGLESQL_EXPECT_OK(SetSchema({
         R"(
           CREATE TABLE Entries(
             Id     INT64 NOT NULL,
           ) PRIMARY KEY (Id)
         )",
     }));
-    ZETASQL_EXPECT_OK(MultiInsert("Entries", {"Id"},
+    GOOGLESQL_EXPECT_OK(MultiInsert("Entries", {"Id"},
                           {{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}}));
     return absl::OkStatus();
   }

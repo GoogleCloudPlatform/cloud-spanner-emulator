@@ -36,17 +36,17 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/id_string.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_column.h"
+#include "googlesql/public/id_string.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_column.h"
 #include "absl/memory/memory.h"
-#include "zetasql/base/map_util.h"
+#include "googlesql/base/map_util.h"
 
 namespace postgres_translator {
 
 SelectColumnTransformState* SelectListTransformState::AddSelectColumn(
-    const TargetEntry* entry, zetasql::IdString alias, bool has_aggregation,
-    std::unique_ptr<const zetasql::ResolvedExpr> resolved_expr) {
+    const TargetEntry* entry, googlesql::IdString alias, bool has_aggregation,
+    std::unique_ptr<const googlesql::ResolvedExpr> resolved_expr) {
   auto select_column_state = std::make_unique<SelectColumnTransformState>(
       entry, alias, has_aggregation, std::move(resolved_expr));
 
@@ -59,9 +59,9 @@ SelectColumnTransformState* SelectListTransformState::AddSelectColumn(
   return raw_ptr;
 }
 
-const zetasql::ResolvedColumnList
+const googlesql::ResolvedColumnList
 SelectListTransformState::resolved_column_list() const {
-  zetasql::ResolvedColumnList resolved_column_list;
+  googlesql::ResolvedColumnList resolved_column_list;
   resolved_column_list.reserve(select_column_state_list_.size());
   for (const std::unique_ptr<SelectColumnTransformState>& select_column_state :
        select_column_state_list_) {
@@ -71,11 +71,11 @@ SelectListTransformState::resolved_column_list() const {
 }
 
 void TransformerInfo::AddGroupByComputedColumnIfNeeded(
-    const zetasql::ResolvedColumn& column,
-    std::unique_ptr<const zetasql::ResolvedExpr> expr) {
+    const googlesql::ResolvedColumn& column,
+    std::unique_ptr<const googlesql::ResolvedExpr> expr) {
   group_by_info_.has_group_by = true;
   auto new_column =
-      zetasql::MakeResolvedComputedColumn(column, std::move(expr));
+      googlesql::MakeResolvedComputedColumn(column, std::move(expr));
   group_by_info_.group_by_columns_to_compute.push_back(std::move(new_column));
 }
 

@@ -22,7 +22,7 @@
 #include "absl/status/statusor.h"
 #include "frontend/common/uris.h"
 #include "frontend/entities/instance.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -32,19 +32,19 @@ namespace frontend {
 absl::StatusOr<std::shared_ptr<Instance>> GetInstance(
     RequestContext* ctx, const std::string& instance_uri) {
   absl::string_view project_id, instance_id;
-  ZETASQL_RETURN_IF_ERROR(ParseInstanceUri(instance_uri, &project_id, &instance_id));
+  GOOGLESQL_RETURN_IF_ERROR(ParseInstanceUri(instance_uri, &project_id, &instance_id));
   return ctx->env()->instance_manager()->GetInstance(instance_uri);
 }
 
 absl::StatusOr<std::shared_ptr<Database>> GetDatabase(
     RequestContext* ctx, const std::string& database_uri) {
   absl::string_view project_id, instance_id, database_id;
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ParseDatabaseUri(database_uri, &project_id, &instance_id, &database_id));
   // Note that databases aren't tied to instances as per the current
   // implementation in emulator. The check below only verifies that the
   // instances do exist for client unit tests to produce correct output.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Instance> instance,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Instance> instance,
                    GetInstance(ctx, MakeInstanceUri(project_id, instance_id)));
   return ctx->env()->database_manager()->GetDatabase(database_uri);
 }
@@ -55,9 +55,9 @@ absl::StatusOr<std::shared_ptr<Session>> GetSession(
   // the session URI and the database for this session is valid, even though
   // they are not used after that.
   absl::string_view project_id, instance_id, database_id, session_id;
-  ZETASQL_RETURN_IF_ERROR(ParseSessionUri(session_uri, &project_id, &instance_id,
+  GOOGLESQL_RETURN_IF_ERROR(ParseSessionUri(session_uri, &project_id, &instance_id,
                                   &database_id, &session_id));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::shared_ptr<Database> database,
       GetDatabase(ctx, MakeDatabaseUri(MakeInstanceUri(project_id, instance_id),
                                        database_id)));

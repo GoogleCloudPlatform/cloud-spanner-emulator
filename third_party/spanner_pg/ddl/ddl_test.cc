@@ -33,10 +33,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -57,8 +57,8 @@ namespace {
 using ::google::spanner::emulator::backend::ddl::DDLStatementList;
 using ::testing::ElementsAre;
 using ::testing::SizeIs;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 class DdlTest : public testing::Test {
  protected:
@@ -89,7 +89,7 @@ TEST_F(DdlTest, NoStatement) {
   interfaces::ParserBatchOutput parsed_statements =
       base_helper_.Parser()->ParseBatch(
           interfaces::ParserParamsBuilder(input).Build());
-  ZETASQL_ASSERT_OK(parsed_statements.global_status());
+  GOOGLESQL_ASSERT_OK(parsed_statements.global_status());
   ASSERT_EQ(parsed_statements.output().size(), 1);
 
   EXPECT_THAT(
@@ -213,6 +213,25 @@ TEST_F(DdlTest, DisableAnalyze) {
                               "<ANALYZE> statement is not supported."));
 }
 
+TEST_F(DdlTest, DisableCreateFunction) {
+  const std::string input = "CREATE FUNCTION test() RETURNS integer RETURN 1";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+  ABSL_CHECK_OK(parsed_statements.output().front());
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_create_function = false});
+
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "<CREATE FUNCTION> statement is not supported."));
+}
+
 TEST_F(DdlTest, DisableCreateView) {
   const std::string input = "CREATE VIEW test AS SELECT 1";
 
@@ -274,7 +293,7 @@ TEST_F(DdlTest, PrintCreateDatabase) {
   create_stmt->set_db_name("test_db");
   absl::StatusOr<std::vector<std::string>> result =
       base_helper_.SchemaPrinter()->PrintDDLStatements(input);
-  ZETASQL_ASSERT_OK(result);
+  GOOGLESQL_ASSERT_OK(result);
   ASSERT_EQ(result->size(), 1);
   EXPECT_EQ(result->at(0), "CREATE DATABASE test_db");
 }
@@ -291,7 +310,7 @@ TEST_F(DdlTest, PrintingDefaultOrderedPrimaryKeys) {
   key_part->set_key_name("id");
   key_part->set_order(google::spanner::emulator::backend::ddl::KeyPartClause::ASC_NULLS_LAST);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<std::string> printed,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<std::string> printed,
                        base_helper_.SchemaPrinter()->PrintDDLStatements(input));
   ASSERT_EQ(printed.size(), 1);
   EXPECT_EQ(printed[0],
@@ -320,7 +339,7 @@ TEST_F(DdlTest, DISABLED_ErrorPrintingOrderedPrimaryKeys) {
 
 TEST(TranslationUtilsTest, QuoteIdentifier) {
   // Memory arena is required for PG quote_identifier to allocate against.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<interfaces::PGArena> arena,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<interfaces::PGArena> arena,
                        MemoryContextPGArena::Init(nullptr));
 
   CheckIdentifierQuoting("");
@@ -342,7 +361,7 @@ TEST(TranslationUtilsTest, QuoteIdentifier) {
 
 TEST(TranslationUtilsTest, QuoteStringLiteral) {
   // Memory arena is required for PG simple_quote_literal to allocate against.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<interfaces::PGArena> arena,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<interfaces::PGArena> arena,
                        MemoryContextPGArena::Init(nullptr));
 
   CheckStringLiteralQuoting("");
@@ -363,7 +382,7 @@ TEST_F(DdlTest, TTLDayBoundary) {
   interfaces::ParserBatchOutput parsed_statements =
       base_helper_.Parser()->ParseBatch(
           interfaces::ParserParamsBuilder(input).Build());
-  ZETASQL_EXPECT_OK(parsed_statements.global_status());
+  GOOGLESQL_EXPECT_OK(parsed_statements.global_status());
   EXPECT_EQ(parsed_statements.output().size(), 1);
 
   // Translate the parse tree to an SDL proto, which should work.
@@ -379,7 +398,7 @@ void ArrayJsonbBlockOptionTest(const DdlTestHelper& test_helper,
   interfaces::ParserBatchOutput parsed_statements =
       test_helper.Parser()->ParseBatch(
           interfaces::ParserParamsBuilder(input).Build());
-  ZETASQL_ASSERT_OK(parsed_statements.global_status());
+  GOOGLESQL_ASSERT_OK(parsed_statements.global_status());
   EXPECT_EQ(parsed_statements.output().size(), 1);
 
   // When enable_array_jsonb_type is disabled, the translation should fail.
@@ -396,7 +415,7 @@ void ArrayJsonbBlockOptionTest(const DdlTestHelper& test_helper,
   statements = test_helper.Translator()->Translate(
       parsed_statements,
       {.enable_jsonb_type = true, .enable_array_jsonb_type = true});
-  ZETASQL_EXPECT_OK(statements);
+  GOOGLESQL_EXPECT_OK(statements);
 }
 
 TEST_F(DdlTest, ArrayJsonbBlock) {
@@ -915,7 +934,7 @@ TEST_F(DdlTest, PrintDDLStatementForEmulator) {
 
   absl::StatusOr<std::vector<std::string>> result =
       base_helper_.SchemaPrinter()->PrintDDLStatementForEmulator(ddl);
-  ASSERT_THAT(result, zetasql_base::testing::IsOkAndHolds(
+  ASSERT_THAT(result, googlesql_base::testing::IsOkAndHolds(
                           testing::ElementsAre("CREATE TABLE users (\n"
                                                "  user_id bigint NOT NULL,\n"
                                                "  name character varying,\n"
@@ -934,7 +953,7 @@ TEST_F(DdlTest, PrintTypeForEmulator) {
 
   absl::StatusOr<std::string> result =
       base_helper_.SchemaPrinter()->PrintTypeForEmulator(column);
-  ASSERT_THAT(result, zetasql_base::testing::IsOkAndHolds("bigint"));
+  ASSERT_THAT(result, googlesql_base::testing::IsOkAndHolds("bigint"));
 }
 
 TEST_F(DdlTest, PrintRowDeletionPolicyForEmulator) {
@@ -950,7 +969,7 @@ TEST_F(DdlTest, PrintRowDeletionPolicyForEmulator) {
   absl::StatusOr<std::string> result =
       base_helper_.SchemaPrinter()->PrintRowDeletionPolicyForEmulator(policy);
   ASSERT_THAT(result,
-              zetasql_base::testing::IsOkAndHolds("INTERVAL '7 DAYS' ON user_id"));
+              googlesql_base::testing::IsOkAndHolds("INTERVAL '7 DAYS' ON user_id"));
 }
 
 TEST_F(DdlTest, DisableDefaultTimeZone) {
@@ -978,7 +997,7 @@ TEST_F(DdlTest, EnableDefaultTimeZone) {
   ABSL_CHECK_OK(parsed_statements.global_status());
   ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements,
       base_helper_.Translator()->Translate(parsed_statements,
                                            {.enable_default_time_zone = true}));
@@ -997,6 +1016,44 @@ TEST_F(DdlTest, EnableDefaultTimeZone) {
                 .options(0)
                 .string_value(),
             "UTC");
+}
+
+TEST_F(DdlTest, AlterTableIfExists) {
+  const std::string input = "ALTER TABLE IF EXISTS t ADD COLUMN c bigint";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(
+          parsed_statements, {.enable_alter_table_if_exists = true});
+
+  GOOGLESQL_ASSERT_OK(statements);
+  ASSERT_EQ(statements->statement_size(), 1);
+  EXPECT_TRUE(statements->statement(0).has_alter_table());
+  EXPECT_EQ(statements->statement(0).alter_table().existence_modifier(),
+            google::spanner::emulator::backend::ddl::IF_EXISTS);
+}
+
+TEST_F(DdlTest, AlterTableIfExistsDisabled) {
+  const std::string input = "ALTER TABLE IF EXISTS t ADD COLUMN c bigint";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements, {});
+
+  EXPECT_THAT(
+      statements,
+      StatusIs(absl::StatusCode::kFailedPrecondition,
+               "<IF [NOT] EXISTS> is not supported in <ALTER> statement."));
 }
 
 }  // namespace

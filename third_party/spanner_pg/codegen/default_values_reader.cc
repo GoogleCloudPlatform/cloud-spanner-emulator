@@ -42,8 +42,8 @@
 #include "absl/status/statusor.h"
 #include "nlohmann/json.hpp"
 #include "third_party/spanner_pg/codegen/default_values_embed.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 using JSON = ::nlohmann::json;
 
@@ -51,16 +51,16 @@ namespace postgres_translator {
 
 namespace {
 absl::StatusOr<uint32_t> ParseProcOid(const JSON& json_entry) {
-  ZETASQL_RET_CHECK(json_entry.find("proc_oid") != json_entry.end())
+  GOOGLESQL_RET_CHECK(json_entry.find("proc_oid") != json_entry.end())
       << "ERROR: proc_oid entry could not be found";
-  ZETASQL_RET_CHECK(json_entry.at("proc_oid").is_number_integer())
+  GOOGLESQL_RET_CHECK(json_entry.at("proc_oid").is_number_integer())
       << "ERROR: proc_oid is not an integer number (proc_oid = "
       << json_entry.at("proc_oid") << ")";
 
   int64_t oid = json_entry.at("proc_oid");
-  ZETASQL_RET_CHECK(oid <= std::numeric_limits<uint32_t>::max())
+  GOOGLESQL_RET_CHECK(oid <= std::numeric_limits<uint32_t>::max())
       << "ERROR: proc_oid overflow (proc_oid = " << oid << ")";
-  ZETASQL_RET_CHECK(oid >= std::numeric_limits<uint32_t>::min())
+  GOOGLESQL_RET_CHECK(oid >= std::numeric_limits<uint32_t>::min())
       << "ERROR: proc_oid underflow (proc_oid = " << oid << ")";
 
   return oid;
@@ -68,17 +68,17 @@ absl::StatusOr<uint32_t> ParseProcOid(const JSON& json_entry) {
 
 absl::StatusOr<std::vector<std::string>> ParseDefaultValues(
     const JSON& json_entry) {
-  ZETASQL_RET_CHECK(json_entry.find("default_values") != json_entry.end())
+  GOOGLESQL_RET_CHECK(json_entry.find("default_values") != json_entry.end())
       << "ERROR: default_values entry could not be found";
-  ZETASQL_RET_CHECK(json_entry.at("default_values").is_array())
+  GOOGLESQL_RET_CHECK(json_entry.at("default_values").is_array())
       << "ERROR: default_values is not an array (default_values = "
       << json_entry.at("default_values") << ")";
-  ZETASQL_RET_CHECK(!json_entry.at("default_values").empty())
+  GOOGLESQL_RET_CHECK(!json_entry.at("default_values").empty())
       << "ERROR: default_values is empty";
 
   std::vector<std::string> result;
   for (const auto& default_value : json_entry.at("default_values")) {
-    ZETASQL_RET_CHECK(default_value.is_string())
+    GOOGLESQL_RET_CHECK(default_value.is_string())
         << "ERROR: default_values element is not a string (element = "
         << default_value << ")";
     result.push_back(default_value);
@@ -96,16 +96,16 @@ GetProcsDefaultValues(std::string_view json_string) {
   JSON json_document =
       JSON::parse(json_string, /*cb=*/nullptr, /*allow_exceptions=*/false,
                   /*ignore_comments=*/true);
-  ZETASQL_RET_CHECK(!json_document.is_discarded())
+  GOOGLESQL_RET_CHECK(!json_document.is_discarded())
       << "ERROR: failed to parse default values JSON: " << json_string;
-  ZETASQL_RET_CHECK(json_document.is_array())
+  GOOGLESQL_RET_CHECK(json_document.is_array())
       << "ERROR: the PostgreSQL default values json document is not an array";
 
   for (const auto& json_entry : json_document) {
-    ZETASQL_ASSIGN_OR_RETURN(uint32_t proc_oid, ParseProcOid(json_entry));
-    ZETASQL_ASSIGN_OR_RETURN(std::vector<std::string> default_values,
+    GOOGLESQL_ASSIGN_OR_RETURN(uint32_t proc_oid, ParseProcOid(json_entry));
+    GOOGLESQL_ASSIGN_OR_RETURN(std::vector<std::string> default_values,
                      ParseDefaultValues(json_entry));
-    ZETASQL_RET_CHECK(!result.contains(proc_oid))
+    GOOGLESQL_RET_CHECK(!result.contains(proc_oid))
         << "ERROR: duplicate OID found when building PostgreSQL default "
            "values: "
         << proc_oid;

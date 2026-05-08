@@ -35,7 +35,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/flags/flag.h"
 #include "google/protobuf/text_format.h"
 
@@ -50,7 +50,7 @@ namespace {
 using testing::Eq;
 using testing::IsEmpty;
 using testing::SizeIs;
-using zetasql_base::testing::IsOkAndHolds;
+using googlesql_base::testing::IsOkAndHolds;
 
 TEST(SpangresFunctionFilterTest, RemovesManuallyRegisteredFunctions) {
   FunctionProto fn;
@@ -94,7 +94,7 @@ TEST(SpangresFunctionFilterTest, RemovesCatalogDisabledSignatures) {
       )pb",
       &fn));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const std::vector<FunctionProto>& result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const std::vector<FunctionProto>& result,
                        FilterEnabledFunctionsAndSignatures({fn}));
   ASSERT_THAT(result, SizeIs(1));
   ASSERT_THAT(result[0].signatures(), SizeIs(1));

@@ -21,7 +21,7 @@
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/types/optional.h"
@@ -29,7 +29,7 @@
 #include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
 #include "grpcpp/client_context.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -45,7 +45,7 @@ using ::google::spanner::emulator::test::proto::Partially;
 using grpc::Status;
 using testing::MatchesRegex;
 using test::proto::IgnoringRepeatedFieldOrdering;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class InstanceApiTest : public test::ServerTest {
  protected:
@@ -74,7 +74,7 @@ class InstanceApiTest : public test::ServerTest {
 
   absl::Status CreateInstance(const absl::string_view instance_id) {
     longrunning::Operation operation;
-    ZETASQL_RETURN_IF_ERROR(CreateInstance(instance_id, &operation));
+    GOOGLESQL_RETURN_IF_ERROR(CreateInstance(instance_id, &operation));
     return WaitForOperation(operation.name(), &operation);
   }
 
@@ -101,7 +101,7 @@ TEST_F(InstanceApiTest, ListInstanceConfigs) {
   request.set_parent(test_project_uri_);
   instance_api::ListInstanceConfigsResponse response;
   grpc::ClientContext context;
-  ZETASQL_EXPECT_OK(test_env()->instance_admin_client()->ListInstanceConfigs(
+  GOOGLESQL_EXPECT_OK(test_env()->instance_admin_client()->ListInstanceConfigs(
       &context, request, &response));
   ASSERT_EQ(response.instance_configs_size(), 1);
 }
@@ -111,7 +111,7 @@ TEST_F(InstanceApiTest, GetInstanceConfig) {
   request.set_name(MakeInstanceConfigUri(test_project_name_, kTestConfigId));
   instance_api::InstanceConfig response;
   grpc::ClientContext context;
-  ZETASQL_EXPECT_OK(test_env()->instance_admin_client()->GetInstanceConfig(
+  GOOGLESQL_EXPECT_OK(test_env()->instance_admin_client()->GetInstanceConfig(
       &context, request, &response));
 }
 
@@ -146,8 +146,8 @@ TEST_F(InstanceApiTest, CreateInstanceWithInvalidName) {
 
 TEST_F(InstanceApiTest, CreateInstance) {
   longrunning::Operation operation;
-  ZETASQL_EXPECT_OK(CreateInstance(test_instance_name_, &operation));
-  ZETASQL_EXPECT_OK(WaitForOperation(operation.name(), &operation));
+  GOOGLESQL_EXPECT_OK(CreateInstance(test_instance_name_, &operation));
+  GOOGLESQL_EXPECT_OK(WaitForOperation(operation.name(), &operation));
   EXPECT_THAT(
       operation, Partially(EqualsProto(R"pb(
         name: "projects/test-project/instances/test-instance/operations/_auto0"
@@ -168,16 +168,16 @@ TEST_F(InstanceApiTest, CreateInstance) {
 }
 
 TEST_F(InstanceApiTest, InstanceAlreadyExists) {
-  ZETASQL_EXPECT_OK(CreateInstance(test_instance_name_));
+  GOOGLESQL_EXPECT_OK(CreateInstance(test_instance_name_));
   EXPECT_THAT(CreateInstance(test_instance_name_),
               StatusIs(absl::StatusCode::kAlreadyExists,
                        MatchesRegex(".*Instance already exists.*")));
 }
 
 TEST_F(InstanceApiTest, GetInstance) {
-  ZETASQL_EXPECT_OK(CreateInstance(test_instance_name_));
+  GOOGLESQL_EXPECT_OK(CreateInstance(test_instance_name_));
   instance_api::Instance instance;
-  ZETASQL_EXPECT_OK(GetInstance(test_instance_name_, &instance));
+  GOOGLESQL_EXPECT_OK(GetInstance(test_instance_name_, &instance));
   EXPECT_TRUE(instance.has_create_time());
   EXPECT_TRUE(instance.has_update_time());
   EXPECT_THAT(instance, Partially(EqualsProto(R"pb(
@@ -194,10 +194,10 @@ TEST_F(InstanceApiTest, GetInstance) {
 }
 
 TEST_F(InstanceApiTest, ListInstances) {
-  ZETASQL_EXPECT_OK(CreateInstance("test-instance-1"));
-  ZETASQL_EXPECT_OK(CreateInstance("test-instance-2"));
+  GOOGLESQL_EXPECT_OK(CreateInstance("test-instance-1"));
+  GOOGLESQL_EXPECT_OK(CreateInstance("test-instance-2"));
   instance_api::ListInstancesResponse response;
-  ZETASQL_EXPECT_OK(ListInstances(test_project_uri_, 0 /*page_size*/, "" /*page_token*/,
+  GOOGLESQL_EXPECT_OK(ListInstances(test_project_uri_, 0 /*page_size*/, "" /*page_token*/,
                           &response));
   EXPECT_EQ(response.instances_size(), 2);
   EXPECT_TRUE(response.instances().at(0).has_create_time());
@@ -231,14 +231,14 @@ TEST_F(InstanceApiTest, ListsPaginatedInstances) {
   int32_t page_size = 5;
   int32_t last_page_size = 3;
   for (int i = 0; i < page_size + last_page_size; i++) {
-    ZETASQL_EXPECT_OK(CreateInstance(absl::StrCat(test_instance_name_, i)));
+    GOOGLESQL_EXPECT_OK(CreateInstance(absl::StrCat(test_instance_name_, i)));
   }
 
   // List instances from test-instance with page_size being 5, i.e., only 5
   // instances test-instance0, test-instance1,..., test-instance4 should be
   // returned with next_page_token pointing to test-instance5.
   instance_api::ListInstancesResponse response;
-  ZETASQL_EXPECT_OK(ListInstances(test_project_uri_, page_size, "" /*page_token*/,
+  GOOGLESQL_EXPECT_OK(ListInstances(test_project_uri_, page_size, "" /*page_token*/,
                           &response));
   EXPECT_EQ(response.instances_size(), page_size);
   for (int i = 0; i < page_size; i++) {
@@ -251,7 +251,7 @@ TEST_F(InstanceApiTest, ListsPaginatedInstances) {
   // Using the next_page_token pointing to test-instance5, list next at most 5
   // instances test-instance5, test-instance6 and test-instance7.
   instance_api::ListInstancesResponse response2;
-  ZETASQL_EXPECT_OK(ListInstances(test_instance_uri_, page_size,
+  GOOGLESQL_EXPECT_OK(ListInstances(test_instance_uri_, page_size,
                           response.next_page_token(), &response2));
   EXPECT_EQ(response2.instances_size(), last_page_size);
   for (int i = 0; i < last_page_size; i++) {
@@ -263,12 +263,12 @@ TEST_F(InstanceApiTest, ListsPaginatedInstances) {
 }
 
 TEST_F(InstanceApiTest, DeleteInstance) {
-  ZETASQL_EXPECT_OK(CreateInstance(test_instance_name_));
+  GOOGLESQL_EXPECT_OK(CreateInstance(test_instance_name_));
   instance_api::DeleteInstanceRequest request;
   request.set_name(test_instance_uri_);
   protobuf::Empty response;
   grpc::ClientContext context;
-  ZETASQL_EXPECT_OK(test_env()->instance_admin_client()->DeleteInstance(
+  GOOGLESQL_EXPECT_OK(test_env()->instance_admin_client()->DeleteInstance(
       &context, request, &response));
   instance_api::Instance instance;
   EXPECT_THAT(GetInstance(test_instance_name_, &instance),

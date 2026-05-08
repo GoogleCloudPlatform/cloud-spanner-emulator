@@ -25,8 +25,8 @@
 #include "backend/datamodel/key_range.h"
 #include "backend/storage/iterator.h"
 #include "common/errors.h"
+#include "googlesql/base/status_macros.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -45,11 +45,11 @@ absl::Status ForeignKeyReferencingVerifier::Verify(const ActionContext* ctx,
   // Check that the corresponding row exists in the referenced index. Exclude
   // any extra columns from the primary key that are not used by the foreign
   // key.
-  Key key(std::vector<zetasql::Value>(
+  Key key(std::vector<googlesql::Value>(
       op.key.column_values().begin(),
       op.key.column_values().begin() +
           foreign_key_->referencing_columns().size()));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       bool exists,
       ctx->store()->PrefixExists(foreign_key_->referenced_data_table(), key));
   if (!exists) {
@@ -72,7 +72,7 @@ absl::Status ForeignKeyReferencedVerifier::Verify(const ActionContext* ctx,
   // Check that the corresponding row does not exist in the referencing index.
   // Exclude any extra columns from the primary key that are not used by the
   // foreign key.
-  Key key(std::vector<zetasql::Value>(
+  Key key(std::vector<googlesql::Value>(
       op.key.column_values().begin(),
       op.key.column_values().begin() +
           foreign_key_->referencing_columns().size()));
@@ -80,11 +80,11 @@ absl::Status ForeignKeyReferencedVerifier::Verify(const ActionContext* ctx,
   // It is possible that a deleted key is inserted back in the same transaction
   // later. So check whether the key is really deleted before validating the
   // foreign key.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       bool referenced_key_exists,
       ctx->store()->PrefixExists(foreign_key_->referenced_data_table(), key));
   if (!referenced_key_exists) {
-    ZETASQL_ASSIGN_OR_RETURN(bool referencing_key_exists,
+    GOOGLESQL_ASSIGN_OR_RETURN(bool referencing_key_exists,
                      ctx->store()->PrefixExists(
                          foreign_key_->referencing_data_table(), key));
     if (referencing_key_exists) {

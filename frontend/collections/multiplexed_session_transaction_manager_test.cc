@@ -19,10 +19,10 @@
 #include <memory>
 #include <utility>
 
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -45,7 +45,7 @@ namespace emulator {
 namespace frontend {
 namespace {
 
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 constexpr char kDatabaseUri[] =
     "projects/test-project/instances/test-instance/databases/test-database";
@@ -57,7 +57,7 @@ namespace spanner_api = ::google::spanner::v1;
 class MultiplexedSessionTransactionManagerTest : public testing::Test {
  protected:
   void SetUp() override {
-    type_factory_ = std::make_unique<zetasql::TypeFactory>();
+    type_factory_ = std::make_unique<googlesql::TypeFactory>();
     lock_manager_ = std::make_unique<backend::LockManager>(&clock_);
     storage_ = std::make_unique<backend::InMemoryStorage>();
     versioned_catalog_ = std::make_unique<backend::VersionedCatalog>(
@@ -87,7 +87,7 @@ class MultiplexedSessionTransactionManagerTest : public testing::Test {
   Clock clock_;
 
   // The type factory must outlive the type objects that it has made.
-  std::unique_ptr<zetasql::TypeFactory> type_factory_;
+  std::unique_ptr<googlesql::TypeFactory> type_factory_;
 
   // Internal state of database exposed for the purpose of testing.
   std::unique_ptr<backend::LockManager> lock_manager_;
@@ -114,9 +114,9 @@ TEST_F(MultiplexedSessionTransactionManagerTest, ValidateTransactionAdded) {
   std::shared_ptr<Transaction> txn_to_add = std::make_shared<Transaction>(
       std::move(backend_txn), nullptr, options, Transaction::Usage::kMultiUse);
 
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       mux_txn_manager.AddToCurrentTransactions(txn_to_add, kDatabaseUri, 1));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Transaction> txn_from_manager,
       mux_txn_manager.GetCurrentTransactionOnMultiplexedSession(kDatabaseUri,
                                                                 1));
@@ -124,7 +124,7 @@ TEST_F(MultiplexedSessionTransactionManagerTest, ValidateTransactionAdded) {
   // Check that the transaction is not cleared here since its neither closed nor
   // has become stale
   mux_txn_manager.ClearOldTransactions();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Transaction> txn_from_manager_2,
       mux_txn_manager.GetCurrentTransactionOnMultiplexedSession(kDatabaseUri,
                                                                 1));
@@ -145,7 +145,7 @@ TEST_F(MultiplexedSessionTransactionManagerTest, ClearStaleTransactions) {
   std::shared_ptr<Transaction> txn_to_add = std::make_shared<Transaction>(
       std::move(backend_txn), nullptr, spanner_api::TransactionOptions(),
       Transaction::Usage::kMultiUse);
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       mux_txn_manager.AddToCurrentTransactions(txn_to_add, kDatabaseUri, 1));
   // Sleep for 4 seconds to make this transaction stale.
   absl::SleepFor(absl::Seconds(4));
@@ -169,7 +169,7 @@ TEST_F(MultiplexedSessionTransactionManagerTest, ClearClosedTransactions) {
   std::shared_ptr<Transaction> txn_to_add = std::make_shared<Transaction>(
       std::move(backend_txn), nullptr, spanner_api::TransactionOptions(),
       Transaction::Usage::kMultiUse);
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       mux_txn_manager.AddToCurrentTransactions(txn_to_add, kDatabaseUri, 1));
   // Close the transaction.
   txn_to_add->Close();
@@ -199,18 +199,18 @@ TEST_F(MultiplexedSessionTransactionManagerTest, TransactionCollision) {
       std::move(backend_txn2), nullptr, options, Transaction::Usage::kMultiUse);
 
   // Add both transactions to the manager.
-  ZETASQL_ASSERT_OK(mux_txn_manager.AddToCurrentTransactions(txn1, kDatabaseUri, 1));
-  ZETASQL_ASSERT_OK(mux_txn_manager.AddToCurrentTransactions(txn2, kDatabaseUri2, 1));
+  GOOGLESQL_ASSERT_OK(mux_txn_manager.AddToCurrentTransactions(txn1, kDatabaseUri, 1));
+  GOOGLESQL_ASSERT_OK(mux_txn_manager.AddToCurrentTransactions(txn2, kDatabaseUri2, 1));
 
   // Verify we can retrieve them correctly.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Transaction> txn_from_manager1,
       mux_txn_manager.GetCurrentTransactionOnMultiplexedSession(kDatabaseUri,
                                                                 1));
   ASSERT_EQ(txn_from_manager1->id(), 1);
   ASSERT_EQ(txn_from_manager1, txn1);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Transaction> txn_from_manager2,
       mux_txn_manager.GetCurrentTransactionOnMultiplexedSession(kDatabaseUri2,
                                                                 1));

@@ -20,10 +20,10 @@
 #include <memory>
 #include <string>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/table_valued_function.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/table_valued_function.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/container/flat_hash_set.h"
 #include "backend/common/case.h"
 #include "backend/schema/catalog/schema.h"
@@ -43,17 +43,17 @@ class FunctionCatalog {
  public:
   // catalog_name allows tests to override the catalog name.
   // Overriding the catalog name is required for some PG dialect testing.
-  explicit FunctionCatalog(zetasql::TypeFactory* type_factory,
+  explicit FunctionCatalog(googlesql::TypeFactory* type_factory,
                            const std::string& catalog_name =
                                kCloudSpannerEmulatorFunctionCatalogName,
                            const backend::Schema* schema = nullptr);
   void GetFunction(const std::string& name,
-                   const zetasql::Function** output) const;
+                   const googlesql::Function** output) const;
   void GetFunctions(
-      absl::flat_hash_set<const zetasql::Function*>* output) const;
+      absl::flat_hash_set<const googlesql::Function*>* output) const;
   void GetTableValuedFunction(
       const std::string& name,
-      const zetasql::TableValuedFunction** output) const;
+      const googlesql::TableValuedFunction** output) const;
 
   void SetLatestSchema(const backend::Schema* schema) {
     latest_schema_ = schema;
@@ -62,38 +62,42 @@ class FunctionCatalog {
   const backend::Schema* GetLatestSchema() const { return latest_schema_; }
 
  private:
-  void AddZetaSQLBuiltInFunctions(zetasql::TypeFactory* type_factory);
+  void AddGoogleSQLBuiltInFunctions(googlesql::TypeFactory* type_factory);
   void AddPGLambdaFunctions();
   void AddSpannerFunctions();
+  void AddGraphSafeToJsonSignatures();
   void AddMlFunctions();
-  void AddSearchFunctions(zetasql::TypeFactory* type_factory);
+  void AddSearchFunctions(googlesql::TypeFactory* type_factory);
 
   void AddSpannerPGFunctions();
   void AddFunctionAliases();
 
-  std::unique_ptr<zetasql::Function> GetPGToCharFunction(
+  std::unique_ptr<googlesql::Function> GetPGToCharFunction(
       const std::string& catalog_name);
 
-  std::unique_ptr<zetasql::Function> GetPGExtractFunction(
+  std::unique_ptr<googlesql::Function> GetPGExtractFunction(
       const std::string& catalog_name);
 
-  std::unique_ptr<zetasql::Function> GetPGCastToTimestampFunction(
+  std::unique_ptr<googlesql::Function> GetPGCastToTimestampFunction(
       const std::string& catalog_name);
 
-  std::unique_ptr<zetasql::Function> GetPGCastToStringFunction(
+  std::unique_ptr<googlesql::Function> GetPGCastToStringFunction(
       const std::string& catalog_name);
 
-  std::unique_ptr<zetasql::Function> GetInternalSequenceStateFunction(
+  std::unique_ptr<googlesql::Function> GetPGDateTruncFunction(
       const std::string& catalog_name);
 
-  std::unique_ptr<zetasql::Function> GetTableColumnIdentityStateFunction(
+  std::unique_ptr<googlesql::Function> GetInternalSequenceStateFunction(
       const std::string& catalog_name);
 
-  std::unique_ptr<zetasql::Function> GetNextSequenceValueFunction(
+  std::unique_ptr<googlesql::Function> GetTableColumnIdentityStateFunction(
       const std::string& catalog_name);
 
-  CaseInsensitiveStringMap<std::unique_ptr<zetasql::Function>> functions_;
-  CaseInsensitiveStringMap<std::unique_ptr<zetasql::TableValuedFunction>>
+  std::unique_ptr<googlesql::Function> GetNextSequenceValueFunction(
+      const std::string& catalog_name);
+
+  CaseInsensitiveStringMap<std::unique_ptr<googlesql::Function>> functions_;
+  CaseInsensitiveStringMap<std::unique_ptr<googlesql::TableValuedFunction>>
       table_valued_functions_;
   const std::string catalog_name_;
   // A pointer to the latest schema, since some functions need to access it

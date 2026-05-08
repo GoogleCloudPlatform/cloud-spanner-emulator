@@ -31,12 +31,14 @@
 
 #include "third_party/spanner_pg/shims/timezone_helper.h"
 
+#include <cstdlib>
+
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 
 namespace postgres_translator {
 
@@ -44,36 +46,36 @@ constexpr inline absl::string_view gmt_timezone = "GMT";
 constexpr inline absl::string_view utc_timezone = "UTC";
 
 absl::Status InitTimezone(const char* time_zone_name) {
-  ZETASQL_RET_CHECK_NE(CurrentMemoryContext, nullptr)
+  GOOGLESQL_RET_CHECK_NE(CurrentMemoryContext, nullptr)
       << "Must set up memory contexts on this thread before initializing "
          "timezone data. See MemoryContextManager.";
-  ZETASQL_RET_CHECK_EQ(session_timezone, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(session_timezone, nullptr);
 
   if (time_zone_name && *time_zone_name &&
       absl::string_view(time_zone_name) != gmt_timezone &&
       absl::string_view(time_zone_name) != utc_timezone) {
-    ZETASQL_ASSIGN_OR_RETURN(session_timezone, CheckedPgTZSet(time_zone_name));
+    GOOGLESQL_ASSIGN_OR_RETURN(session_timezone, CheckedPgTZSet(time_zone_name));
     log_timezone = session_timezone;
   } else {
     // Initializes session_timezone as "GMT".
-    ZETASQL_RETURN_IF_ERROR(CheckedPgTimezoneInitialize());
+    GOOGLESQL_RETURN_IF_ERROR(CheckedPgTimezoneInitialize());
   }
-  ZETASQL_RET_CHECK_NE(session_timezone, nullptr);
-  ZETASQL_RET_CHECK_NE(log_timezone, nullptr);
+  GOOGLESQL_RET_CHECK_NE(session_timezone, nullptr);
+  GOOGLESQL_RET_CHECK_NE(log_timezone, nullptr);
   return absl::OkStatus();
 }
 
 absl::Status InitTimezoneOffset(int32_t gmt_offset) {
-  ZETASQL_RET_CHECK_NE(CurrentMemoryContext, nullptr)
+  GOOGLESQL_RET_CHECK_NE(CurrentMemoryContext, nullptr)
       << "Must set up memory contexts on this thread before initializing "
          "timezone data. See MemoryContextManager.";
-  ZETASQL_RET_CHECK_EQ(session_timezone, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(session_timezone, nullptr);
 
-  ZETASQL_ASSIGN_OR_RETURN(session_timezone, CheckedPgTZOffsetSet(gmt_offset));
+  GOOGLESQL_ASSIGN_OR_RETURN(session_timezone, CheckedPgTZOffsetSet(gmt_offset));
   log_timezone = session_timezone;
 
-  ZETASQL_RET_CHECK_NE(session_timezone, nullptr);
-  ZETASQL_RET_CHECK_NE(log_timezone, nullptr);
+  GOOGLESQL_RET_CHECK_NE(session_timezone, nullptr);
+  GOOGLESQL_RET_CHECK_NE(log_timezone, nullptr);
   return absl::OkStatus();
 }
 
@@ -81,7 +83,7 @@ void CleanupTimezone() {
   session_timezone = nullptr;
   log_timezone = nullptr;
   if (gmtptr != nullptr) {
-    pfree(gmtptr);
+    free(gmtptr);
     gmtptr = nullptr;
   }
   ClearTimezoneHashtablePointer();

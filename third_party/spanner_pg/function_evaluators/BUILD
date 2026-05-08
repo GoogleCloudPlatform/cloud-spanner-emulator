@@ -86,9 +86,9 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:cord",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/public:interval_value",
-        "@com_google_zetasql//zetasql/public:value",
-        "@com_google_zetasql//zetasql/public/functions:date_time_util",
+        "@com_google_googlesql//googlesql/public:interval_value",
+        "@com_google_googlesql//googlesql/public:value",
+        "@com_google_googlesql//googlesql/public/functions:date_time_util",
     ],
 )
 

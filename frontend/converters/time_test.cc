@@ -20,7 +20,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/time/time.h"
@@ -36,8 +36,8 @@ namespace {
 using ::google::protobuf::Duration;
 using ::google::protobuf::Timestamp;
 using ::google::spanner::emulator::test::EqualsProto;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 TEST(TimestampToProtoConversionTest, UnixEpoch) {
   EXPECT_THAT(TimestampToProto(absl::UnixEpoch()),
@@ -45,7 +45,7 @@ TEST(TimestampToProtoConversionTest, UnixEpoch) {
 }
 
 TEST(TimestampToProtoConversionTest, UniversalEpoch) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_value,
                        TimestampToProto(absl::UniversalEpoch()));
   EXPECT_LT(proto_value.seconds(), 0);
   EXPECT_EQ(proto_value.nanos(), 0);
@@ -54,13 +54,13 @@ TEST(TimestampToProtoConversionTest, UniversalEpoch) {
 TEST(TimestampToProtoConversionTest, MinAllowedValue) {
   absl::Time time =
       absl::FromCivil(absl::CivilSecond(1, 1, 1, 0, 0, 0), absl::UTCTimeZone());
-  ZETASQL_ASSERT_OK(TimestampToProto(time));
+  GOOGLESQL_ASSERT_OK(TimestampToProto(time));
 }
 
 TEST(TimestampToProtoConversionTest, MaxAllowedValue) {
   absl::Time time = absl::FromCivil(absl::CivilSecond(9999, 12, 31, 23, 59, 59),
                                     absl::UTCTimeZone());
-  ZETASQL_ASSERT_OK(TimestampToProto(time));
+  GOOGLESQL_ASSERT_OK(TimestampToProto(time));
 }
 
 TEST(TimestampToProtoConversionTest, PositiveTimeInNanoSeconds) {
@@ -113,7 +113,7 @@ TEST(TimestampFromProtoConversionTest, MinAllowedValue) {
   Timestamp timestamp;
   timestamp.set_seconds(seconds);
   timestamp.set_nanos(0);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto time, TimestampFromProto(timestamp));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto time, TimestampFromProto(timestamp));
   EXPECT_EQ(time, absl::FromUnixSeconds(seconds));
 }
 
@@ -122,7 +122,7 @@ TEST(TimestampFromProtoConversionTest, MaxAllowedValue) {
   Timestamp timestamp;
   timestamp.set_seconds(seconds);
   timestamp.set_nanos(0);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto time, TimestampFromProto(timestamp));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto time, TimestampFromProto(timestamp));
   EXPECT_EQ(time, absl::FromUnixSeconds(seconds));
 }
 
@@ -172,14 +172,14 @@ TEST(DurationFromProtoConversionTest, MinAllowedValue) {
   Duration duration;
   duration.set_seconds(-315576000000);
   duration.set_nanos(-999999999);
-  ZETASQL_ASSERT_OK(DurationFromProto(duration));
+  GOOGLESQL_ASSERT_OK(DurationFromProto(duration));
 }
 
 TEST(DurationFromProtoConversionTest, MaxAllowedValue) {
   Duration duration;
   duration.set_seconds(315576000000);
   duration.set_nanos(999999999);
-  ZETASQL_ASSERT_OK(DurationFromProto(duration));
+  GOOGLESQL_ASSERT_OK(DurationFromProto(duration));
 }
 
 TEST(DurationFromProtoConversionTest, LessThanMinAllowedValue) {

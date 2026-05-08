@@ -31,30 +31,30 @@
 
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type_deserializer.h"
 
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/types/extended_type.h"
-#include "zetasql/public/types/type_deserializer.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/types/extended_type.h"
+#include "googlesql/public/types/type_deserializer.h"
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/errors/error_catalog.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 
 namespace postgres_translator::spangres {
 namespace datatypes {
 
-absl::StatusOr<const zetasql::ExtendedType*>
+absl::StatusOr<const googlesql::ExtendedType*>
 SpannerExtendedTypeDeserializer::Deserialize(
-    const zetasql::TypeProto& type_proto,
-    const zetasql::TypeDeserializer& type_deserializer) const {
-  ZETASQL_RET_CHECK_EQ(type_proto.type_kind(), zetasql::TypeKind::TYPE_EXTENDED);
+    const googlesql::TypeProto& type_proto,
+    const googlesql::TypeDeserializer& type_deserializer) const {
+  GOOGLESQL_RET_CHECK_EQ(type_proto.type_kind(), googlesql::TypeKind::TYPE_EXTENDED);
   if (type_proto.extended_type_name() ==
-      GetPgJsonbType()->TypeName(zetasql::PRODUCT_EXTERNAL)) {
+      GetPgJsonbType()->TypeName(googlesql::PRODUCT_EXTERNAL)) {
     return GetPgJsonbType();
   }
   if (type_proto.extended_type_name() ==
-      GetPgNumericType()->TypeName(zetasql::PRODUCT_EXTERNAL)) {
+      GetPgNumericType()->TypeName(googlesql::PRODUCT_EXTERNAL)) {
     return GetPgNumericType();
   }
   return ::spangres::syntax_error_or_access_rule_violation ::

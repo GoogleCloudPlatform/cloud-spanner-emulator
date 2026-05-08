@@ -35,15 +35,15 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/function.pb.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/function.pb.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/strings/str_join.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
@@ -56,10 +56,10 @@ namespace {
 
 using ::testing::Eq;
 
-const zetasql::Type* gsql_bool = zetasql::TypeFactory().get_bool();
-const zetasql::Type* gsql_double = zetasql::TypeFactory().get_double();
-const zetasql::Type* gsql_int64 = zetasql::TypeFactory().get_int64();
-const zetasql::Type* gsql_string = zetasql::TypeFactory().get_string();
+const googlesql::Type* gsql_bool = googlesql::TypeFactory().get_bool();
+const googlesql::Type* gsql_double = googlesql::TypeFactory().get_double();
+const googlesql::Type* gsql_int64 = googlesql::TypeFactory().get_int64();
+const googlesql::Type* gsql_string = googlesql::TypeFactory().get_string();
 
 MATCHER_P(PostgresFunctionArgumentsEq, other, "") {
   if (arg.postgres_function_name() != other.postgres_function_name()) {
@@ -134,8 +134,8 @@ MATCHER_P(PostgresFunctionArgumentsEq, other, "") {
       return false;
     }
 
-    const zetasql::FunctionSignature& arg_sig = arg_sig_args.signature();
-    const zetasql::FunctionSignature& other_sig = other_sig_args.signature();
+    const googlesql::FunctionSignature& arg_sig = arg_sig_args.signature();
+    const googlesql::FunctionSignature& other_sig = other_sig_args.signature();
     if (arg_sig.options().is_deprecated() !=
         other_sig.options().is_deprecated()) {
       *result_listener << "where the expected signature_arguments[" << i
@@ -149,15 +149,15 @@ MATCHER_P(PostgresFunctionArgumentsEq, other, "") {
       *result_listener << "where the expected signature_arguments[" << i
                        << "].signature.return_type "
                        << other_sig.result_type().type()->TypeName(
-                              zetasql::PRODUCT_EXTERNAL)
+                              googlesql::PRODUCT_EXTERNAL)
                        << " != "
                        << arg_sig.result_type().type()->TypeName(
-                              zetasql::PRODUCT_EXTERNAL);
+                              googlesql::PRODUCT_EXTERNAL);
       return false;
     }
 
-    const zetasql::FunctionArgumentTypeList& arg_args = arg_sig.arguments();
-    const zetasql::FunctionArgumentTypeList& other_args =
+    const googlesql::FunctionArgumentTypeList& arg_args = arg_sig.arguments();
+    const googlesql::FunctionArgumentTypeList& other_args =
         other_sig.arguments();
     if (arg_args.size() != other_args.size()) {
       *result_listener << "where the expected signature_arguments[" << i
@@ -170,18 +170,18 @@ MATCHER_P(PostgresFunctionArgumentsEq, other, "") {
         *result_listener
             << "where the expected signature_arguments[" << i
             << "].signature.arguments[" << j << "].type "
-            << other_args[j].type()->TypeName(zetasql::PRODUCT_EXTERNAL)
+            << other_args[j].type()->TypeName(googlesql::PRODUCT_EXTERNAL)
             << " != "
-            << arg_args[j].type()->TypeName(zetasql::PRODUCT_EXTERNAL);
+            << arg_args[j].type()->TypeName(googlesql::PRODUCT_EXTERNAL);
         return false;
       }
       if (arg_args[j].cardinality() != other_args[j].cardinality()) {
         *result_listener << "where the expected signature_argument[" << i
                          << "].signature.arguments[" << j << "].cardinality "
-                         << zetasql::FunctionEnums::ArgumentCardinality_Name(
+                         << googlesql::FunctionEnums::ArgumentCardinality_Name(
                                 other_args[j].cardinality())
                          << " != "
-                         << zetasql::FunctionEnums::ArgumentCardinality_Name(
+                         << googlesql::FunctionEnums::ArgumentCardinality_Name(
                                 arg_args[j].cardinality());
         return false;
       }
@@ -241,7 +241,7 @@ TEST_F(TestSpangresFunctionMapper, MapsMetaTypes) {
       )pb",
       &fn));
 
-  ZETASQL_ASSERT_OK(mapper_->ToPostgresFunctionArguments(fn));
+  GOOGLESQL_ASSERT_OK(mapper_->ToPostgresFunctionArguments(fn));
 }
 
 TEST_F(TestSpangresFunctionMapper, MapsFunctionWithMultipleSignatures) {
@@ -295,7 +295,7 @@ TEST_F(TestSpangresFunctionMapper, MapsFunctionWithMultipleSignatures) {
       )pb",
       &fn));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PostgresFunctionArguments> result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<PostgresFunctionArguments> result,
                        mapper_->ToPostgresFunctionArguments(fn));
   ASSERT_THAT(result.size(), Eq(1));
 
@@ -303,36 +303,36 @@ TEST_F(TestSpangresFunctionMapper, MapsFunctionWithMultipleSignatures) {
       result[0],
       PostgresFunctionArgumentsEq(PostgresFunctionArguments(
           "textregexeq", "regexp_contains",
-          {PostgresFunctionSignatureArguments(zetasql::FunctionSignature(
+          {PostgresFunctionSignatureArguments(googlesql::FunctionSignature(
                gsql_bool,
                {{gsql_string,
-                 zetasql::FunctionArgumentTypeOptions()
+                 googlesql::FunctionArgumentTypeOptions()
                      .set_argument_name(
                          "required_arg1",
-                         zetasql::FunctionEnums::POSITIONAL_ONLY)
-                     .set_cardinality(zetasql::FunctionEnums::REQUIRED)},
+                         googlesql::FunctionEnums::POSITIONAL_ONLY)
+                     .set_cardinality(googlesql::FunctionEnums::REQUIRED)},
                 {gsql_string,
-                 zetasql::FunctionArgumentTypeOptions()
+                 googlesql::FunctionArgumentTypeOptions()
                      .set_argument_name(
                          "required_arg2",
-                         zetasql::FunctionEnums::POSITIONAL_ONLY)
-                     .set_cardinality(zetasql::FunctionEnums::REQUIRED)}},
+                         googlesql::FunctionEnums::POSITIONAL_ONLY)
+                     .set_cardinality(googlesql::FunctionEnums::REQUIRED)}},
                /*context_ptr=*/nullptr)),
-           PostgresFunctionSignatureArguments(zetasql::FunctionSignature(
+           PostgresFunctionSignatureArguments(googlesql::FunctionSignature(
                gsql_bool,
-               {{zetasql::SignatureArgumentKind::ARG_TYPE_ARBITRARY,
-                 zetasql::FunctionEnums::REPEATED}},
+               {{googlesql::SignatureArgumentKind::ARG_TYPE_ARBITRARY,
+                 googlesql::FunctionEnums::REPEATED}},
                /*context_id=*/0,
-               zetasql::FunctionSignatureOptions().set_is_deprecated(true))),
-           PostgresFunctionSignatureArguments(zetasql::FunctionSignature(
+               googlesql::FunctionSignatureOptions().set_is_deprecated(true))),
+           PostgresFunctionSignatureArguments(googlesql::FunctionSignature(
                gsql_bool,
                {gsql_string,
                 {gsql_string,
-                 zetasql::FunctionArgumentTypeOptions()
+                 googlesql::FunctionArgumentTypeOptions()
                      .set_argument_name(
                          "optional_arg",
-                         zetasql::FunctionEnums::POSITIONAL_OR_NAMED)
-                     .set_cardinality(zetasql::FunctionEnums::OPTIONAL)}},
+                         googlesql::FunctionEnums::POSITIONAL_OR_NAMED)
+                     .set_cardinality(googlesql::FunctionEnums::OPTIONAL)}},
                /*context_ptr=*/nullptr))})));
 }
 
@@ -377,7 +377,7 @@ TEST_F(TestSpangresFunctionMapper, MapsSpannerNamespacedFunction) {
       )pb",
       &fn));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PostgresFunctionArguments> result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<PostgresFunctionArguments> result,
                        mapper_->ToPostgresFunctionArguments(fn));
   ASSERT_THAT(result.size(), Eq(1));
   EXPECT_THAT(result[0],
@@ -385,18 +385,18 @@ TEST_F(TestSpangresFunctionMapper, MapsSpannerNamespacedFunction) {
                   "bit_reverse", "bit_reverse",
                   {
                       PostgresFunctionSignatureArguments(
-                          zetasql::FunctionSignature(gsql_int64,
+                          googlesql::FunctionSignature(gsql_int64,
                                                        {gsql_int64, gsql_bool},
                                                        /*context_ptr=*/nullptr),
                           /*has_mapped_function=*/true,
                           /*explicit_mapped_function_name=*/"", 50001),
                       PostgresFunctionSignatureArguments(
-                          zetasql::FunctionSignature(gsql_int64, {gsql_int64},
+                          googlesql::FunctionSignature(gsql_int64, {gsql_int64},
                                                        /*context_ptr=*/nullptr),
                           /*has_mapped_function=*/true,
                           /*explicit_mapped_function_name=*/"", 50002),
                   },
-                  zetasql::Function::SCALAR, "spanner")));
+                  googlesql::Function::SCALAR, "spanner")));
 }
 
 }  // namespace

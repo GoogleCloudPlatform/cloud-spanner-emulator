@@ -18,8 +18,8 @@
 
 #include <string>
 
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/type.pb.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.pb.h"
 #include "absl/status/status.h"
 #include "absl/strings/substitute.h"
 #include "backend/schema/graph/schema_graph_editor.h"

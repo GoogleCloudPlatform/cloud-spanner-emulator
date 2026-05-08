@@ -17,7 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_STORAGE_STORAGE_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_STORAGE_STORAGE_H_
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
@@ -42,13 +42,13 @@ class Storage {
 
   // Returns the column values for the given key at the specified timestamp.
   // Returns NOT_FOUND if the given key does not exist. For a given row if the
-  // column value is not set, it returns an invalid zetasql::Value, i.e. one
+  // column value is not set, it returns an invalid googlesql::Value, i.e. one
   // for which is_valid() is false. Column values are always set in order of the
   // columns defined in column_ids.
   virtual absl::Status Lookup(absl::Time timestamp, const TableID& table_id,
                               const Key& key,
                               const std::vector<ColumnID>& column_ids,
-                              std::vector<zetasql::Value>* values) const = 0;
+                              std::vector<googlesql::Value>* values) const = 0;
 
   // Returns zero or more rows for given key range. Keys are returned in
   // sorted order. See comments on StorageIterator for more details. KeyRange
@@ -65,7 +65,7 @@ class Storage {
   virtual absl::Status Write(absl::Time timestamp, const TableID& table_id,
                              const Key& key,
                              const std::vector<ColumnID>& column_ids,
-                             const std::vector<zetasql::Value>& values) = 0;
+                             const std::vector<googlesql::Value>& values) = 0;
 
   // Marks the given key range as deleted at the specified timestamp. Column
   // values at older timestamps are still accessible via Read and Lookup.

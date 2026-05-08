@@ -23,12 +23,12 @@
 
 #include "google/spanner/v1/type.pb.h"
 #include "google/protobuf/descriptor.pb.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/types/array_type.h"
-#include "zetasql/public/types/struct_type.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/types/array_type.h"
+#include "googlesql/public/types/struct_type.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -38,7 +38,7 @@
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -47,25 +47,25 @@ namespace frontend {
 
 namespace {
 
-using zetasql::StructType;
-using zetasql::types::BoolType;
-using zetasql::types::BytesType;
-using zetasql::types::DateType;
-using zetasql::types::DoubleType;
-using zetasql::types::EmptyStructType;
-using zetasql::types::FloatType;
-using zetasql::types::Int64ArrayType;
-using zetasql::types::Int64Type;
-using zetasql::types::IntervalArrayType;
-using zetasql::types::IntervalType;
-using zetasql::types::JsonArrayType;
-using zetasql::types::JsonType;
-using zetasql::types::NumericArrayType;
-using zetasql::types::NumericType;
-using zetasql::types::StringType;
-using zetasql::types::TimestampType;
-using zetasql::types::UuidArrayType;
-using zetasql::types::UuidType;
+using googlesql::StructType;
+using googlesql::types::BoolType;
+using googlesql::types::BytesType;
+using googlesql::types::DateType;
+using googlesql::types::DoubleType;
+using googlesql::types::EmptyStructType;
+using googlesql::types::FloatType;
+using googlesql::types::Int64ArrayType;
+using googlesql::types::Int64Type;
+using googlesql::types::IntervalArrayType;
+using googlesql::types::IntervalType;
+using googlesql::types::JsonArrayType;
+using googlesql::types::JsonType;
+using googlesql::types::NumericArrayType;
+using googlesql::types::NumericType;
+using googlesql::types::StringType;
+using googlesql::types::TimestampType;
+using googlesql::types::UuidArrayType;
+using googlesql::types::UuidType;
 using postgres_translator::spangres::datatypes::GetPgJsonbArrayType;
 using postgres_translator::spangres::datatypes::GetPgJsonbType;
 using postgres_translator::spangres::datatypes::GetPgNumericArrayType;
@@ -99,50 +99,50 @@ class TypeProtos : public ::testing::Test {
     auto insert_proto_types = std::vector<std::string>{};
     insert_proto_types.push_back("customer.app.User");
     insert_proto_types.push_back("customer.app.State");
-    ZETASQL_ASSIGN_OR_RETURN(auto builder, backend::ProtoBundle::Builder::New(
+    GOOGLESQL_ASSIGN_OR_RETURN(auto builder, backend::ProtoBundle::Builder::New(
                                        GenerateProtoDescriptorBytesAsString()));
-    ZETASQL_RETURN_IF_ERROR(builder->InsertTypes(insert_proto_types));
-    ZETASQL_ASSIGN_OR_RETURN(auto proto_bundle, builder->Build());
+    GOOGLESQL_RETURN_IF_ERROR(builder->InsertTypes(insert_proto_types));
+    GOOGLESQL_ASSIGN_OR_RETURN(auto proto_bundle, builder->Build());
     return proto_bundle;
   }
 };
 
 TEST_F(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
-  zetasql::TypeFactory factory;
-  const zetasql::Type* str_int_pair_type;
-  ZETASQL_ASSERT_OK(factory.MakeStructType(
+  googlesql::TypeFactory factory;
+  const googlesql::Type* str_int_pair_type;
+  GOOGLESQL_ASSERT_OK(factory.MakeStructType(
       {StructType::StructField("str", factory.get_string()),
        StructType::StructField("int", factory.get_int64())},
       &str_int_pair_type));
 
-  const zetasql::Type* array_struct_type;
-  ZETASQL_ASSERT_OK(factory.MakeArrayType(str_int_pair_type, &array_struct_type));
+  const googlesql::Type* array_struct_type;
+  GOOGLESQL_ASSERT_OK(factory.MakeArrayType(str_int_pair_type, &array_struct_type));
 
-  const zetasql::Type* array_empty_struct_type;
-  ZETASQL_ASSERT_OK(factory.MakeArrayType(EmptyStructType(), &array_empty_struct_type));
+  const googlesql::Type* array_empty_struct_type;
+  GOOGLESQL_ASSERT_OK(factory.MakeArrayType(EmptyStructType(), &array_empty_struct_type));
 
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, SetUpProtoBundle());
-  const zetasql::Type* proto_type;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, SetUpProtoBundle());
+  const googlesql::Type* proto_type;
   std::string proto_type_fqn = "customer.app.User";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto descriptor,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto descriptor,
                        proto_bundle->GetTypeDescriptor(proto_type_fqn));
-  ZETASQL_ASSERT_OK(factory.MakeProtoType(descriptor, &proto_type));
+  GOOGLESQL_ASSERT_OK(factory.MakeProtoType(descriptor, &proto_type));
 
-  const zetasql::Type* enum_type;
+  const googlesql::Type* enum_type;
   std::string proto_enum_type_fqn = "customer.app.State";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto enum_descriptor,
       proto_bundle->GetEnumTypeDescriptor(proto_enum_type_fqn));
-  ZETASQL_ASSERT_OK(factory.MakeEnumType(enum_descriptor, &enum_type));
+  GOOGLESQL_ASSERT_OK(factory.MakeEnumType(enum_descriptor, &enum_type));
 
-  const zetasql::Type* array_proto_type;
-  ZETASQL_ASSERT_OK(factory.MakeArrayType(proto_type, &array_proto_type));
+  const googlesql::Type* array_proto_type;
+  GOOGLESQL_ASSERT_OK(factory.MakeArrayType(proto_type, &array_proto_type));
 
-  const zetasql::Type* array_enum_type;
-  ZETASQL_ASSERT_OK(factory.MakeArrayType(enum_type, &array_enum_type));
+  const googlesql::Type* array_enum_type;
+  GOOGLESQL_ASSERT_OK(factory.MakeArrayType(enum_type, &array_enum_type));
 
-  std::vector<std::pair<const zetasql::Type*, std::string>> test_cases{
+  std::vector<std::pair<const googlesql::Type*, std::string>> test_cases{
       {BoolType(), "code: BOOL"},
       {Int64Type(), "code: INT64"},
       {GetPgOidType(), "code: INT64 type_annotation: PG_OID"},
@@ -239,12 +239,12 @@ TEST_F(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
         )"},
   };
   for (const auto& entry : test_cases) {
-    const zetasql::Type* expected_type = entry.first;
+    const googlesql::Type* expected_type = entry.first;
     const std::string& expected_type_pb_txt = entry.second;
 
     // Check proto -> type conversion.
-    const zetasql::Type* actual_type;
-    ZETASQL_EXPECT_OK(TypeFromProto(PARSE_TEXT_PROTO(expected_type_pb_txt), &factory,
+    const googlesql::Type* actual_type;
+    GOOGLESQL_EXPECT_OK(TypeFromProto(PARSE_TEXT_PROTO(expected_type_pb_txt), &factory,
                             &actual_type
                             ,
                             proto_bundle
@@ -256,7 +256,7 @@ TEST_F(TypeProtos, ConvertsBasicTypesBetweenTypesAndProtos) {
 
     // Check type -> proto conversions
     google::spanner::v1::Type actual_type_pb;
-    ZETASQL_EXPECT_OK(TypeToProto(expected_type, &actual_type_pb));
+    GOOGLESQL_EXPECT_OK(TypeToProto(expected_type, &actual_type_pb));
     EXPECT_THAT(actual_type_pb, test::EqualsProto(expected_type_pb_txt))
         << "When encoding {" << expected_type->DebugString() << "}";
   }
@@ -266,20 +266,20 @@ TEST_F(TypeProtos, DoesNotConvertUnknownTypesToProtos) {
   google::spanner::v1::Type actual_type_pb;
   EXPECT_EQ(
       absl::StatusCode::kInternal,
-      TypeToProto(zetasql::types::Int32ArrayType(), &actual_type_pb).code());
+      TypeToProto(googlesql::types::Int32ArrayType(), &actual_type_pb).code());
 }
 
 TEST(ValueProtos, DoesNotConvertUnknownProtosToTypes) {
   google::spanner::v1::Type unspecified_type_pb;
-  zetasql::TypeFactory factory;
-  const zetasql::Type* actual_type;
+  googlesql::TypeFactory factory;
+  const googlesql::Type* actual_type;
   EXPECT_EQ(absl::StatusCode::kInvalidArgument,
             TypeFromProto(unspecified_type_pb, &factory, &actual_type).code());
 }
 
 TEST_F(TypeProtos, DoesNotConvertProtoArrayTypeWithUnspecifiedElementType) {
-  zetasql::TypeFactory factory;
-  const zetasql::Type* actual_type;
+  googlesql::TypeFactory factory;
+  const googlesql::Type* actual_type;
   EXPECT_EQ(
       absl::StatusCode::kInvalidArgument,
       TypeFromProto(PARSE_TEXT_PROTO("code: ARRAY"), &factory, &actual_type)

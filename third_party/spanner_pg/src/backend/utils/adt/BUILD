@@ -29,9 +29,9 @@
 # MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #------------------------------------------------------------------------------
 
-load("@com_google_zetasql//bazel:bison.bzl", "genyacc")
-load("@com_google_zetasql//bazel:flex.bzl", "genlex")
+load("@com_google_googlesql//bazel:bison.bzl", "genyacc")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_hdl//dependency_support/com_github_westes_flex:flex.bzl", "genlex")
 
 
 
@@ -188,8 +188,8 @@ cc_test(
     srcs = ["pg_locale_test.cc"],
     deps = [
         "//third_party/spanner_pg/src/backend:backend_with_stub_shims",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 

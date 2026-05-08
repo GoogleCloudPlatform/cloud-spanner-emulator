@@ -34,7 +34,7 @@
 
 #include <memory>
 
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/catalog.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
@@ -71,22 +71,22 @@ namespace postgres_translator {
 // EXPECT_THAT(GetCatalogAdapter(),
 //             StatusIs(absl::StatusCode::kInternal,
 //                      HasSubstr("is not initialized")));
-// zetasql::EnumerableCatalog* engine_provided_catalog =
+// googlesql::EnumerableCatalog* engine_provided_catalog =
 //             GetSpangresTestCatalog();
 // std::unique_ptr<EngineUserCatalog> engine_user_catalog =
 //             std::make_unique<SpangresUserCatalog>(engine_provided_catalog);
 // EngineSystemCatalog* engine_system_catalog = GetSpangresTestSystemCatalog()
 // auto analyzer_options = GetSpangresTestAnalyzerOptions();
 // {
-//    ZETASQL_ASSIGN_OR_RETURN(auto holder,
+//    GOOGLESQL_ASSIGN_OR_RETURN(auto holder,
 //                     CatalogAdapterHolder::Create(
 //                         std::move(engine_user_catalog),
 //                         engine_system_catalog), analyzer_options);
 //
 //    // The thread-local catalog adapter is now initialized.
-//    ZETASQL_ASSIGN_OR_RETURN(CatalogAdapter* catalog_adapter, GetCatalogAdapter());
-//    // The thread-local ZetaSQL catalog is also initialized.
-//    ZETASQL_RETURN_IF_ERROR(catalog_adapter->GetEngineUserCatalog()
+//    GOOGLESQL_ASSIGN_OR_RETURN(CatalogAdapter* catalog_adapter, GetCatalogAdapter());
+//    // The thread-local GoogleSQL catalog is also initialized.
+//    GOOGLESQL_RETURN_IF_ERROR(catalog_adapter->GetEngineUserCatalog()
 //                    ->FindTable({"KeyValue"}, &key_value_table));
 // }
 // // The holder goes out of scope, the thread-local catalog adapter is now
@@ -104,7 +104,7 @@ class CatalogAdapterHolder {
   static absl::StatusOr<std::unique_ptr<CatalogAdapterHolder>> Create(
       std::unique_ptr<EngineUserCatalog> engine_user_catalog,
       EngineSystemCatalog* engine_system_catalog,
-      const zetasql::AnalyzerOptions& analyzer_options,
+      const googlesql::AnalyzerOptions& analyzer_options,
       absl::flat_hash_map<int, int> token_locations = {});
 
   static absl::StatusOr<std::unique_ptr<CatalogAdapterHolder>> Create(

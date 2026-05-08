@@ -20,7 +20,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -36,7 +36,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class PartitionReadsTest
     : public DatabaseTest,
@@ -59,13 +59,13 @@ class PartitionReadsTest
     spanner_api::CreateSessionRequest request;
     request.set_database(std::string(database()->FullName()));  // NOLINT
     spanner_api::Session response;
-    ZETASQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
+    GOOGLESQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
     return response;
   }
 
   void PopulateDatabase() {
     // Write fixure data to use in partition reads test.
-    ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+    GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(
         "INSERT INTO Users(UserId, Name, Age) Values (1, 'Levin', 27), "
         "(2, 'Mark', 32), (10, 'Douglas', 31)")}));
   }
@@ -92,7 +92,7 @@ TEST_P(PartitionReadsTest, CannotReadWithoutSession) {
 }
 
 TEST_P(PartitionReadsTest, CannotReadWithoutTransaction) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
 
   spanner_api::PartitionReadRequest partition_read_request;
   partition_read_request.set_session(session.name());
@@ -105,7 +105,7 @@ TEST_P(PartitionReadsTest, CannotReadWithoutTransaction) {
 }
 
 TEST_P(PartitionReadsTest, CannotReadUsingSingleUseTransaction) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
 
   spanner_api::PartitionReadRequest partition_read_request =
       PARSE_TEXT_PROTO(absl::Substitute(
@@ -133,7 +133,7 @@ TEST_P(PartitionReadsTest, CannotReadUsingBeginReadWriteTransaction) {
 
 TEST_P(PartitionReadsTest, CannotReadUsingExistingReadWriteTransaction) {
   Transaction txn{Transaction::ReadWriteOptions{}};
-  ZETASQL_ASSERT_OK(Read(txn, "Users", {"UserId", "Name"}, KeySet::All()));
+  GOOGLESQL_ASSERT_OK(Read(txn, "Users", {"UserId", "Name"}, KeySet::All()));
 
   // PartitionRead using an already started read-write transaction fails.
   EXPECT_THAT(PartitionRead(txn, "Users", KeySet::All(), {"UserId", "Name"}),
@@ -162,7 +162,7 @@ TEST_P(PartitionReadsTest, CanReadUsingPartitionToken) {
 
   Transaction txn{Transaction::ReadOnlyOptions{}};
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<ReadPartition> partitions,
       PartitionRead(txn, "Users", KeySet::All(), {"UserId", "Name"}));
 
@@ -176,7 +176,7 @@ TEST_P(PartitionReadsTest, CanReadRangeUsingPartitionToken) {
 
   Transaction txn{Transaction::ReadOnlyOptions{}};
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<ReadPartition> partitions,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<ReadPartition> partitions,
                        PartitionRead(txn, "Users", ClosedClosed(Key(1), Key(2)),
                                      {"UserId", "Name"}));
 
@@ -190,7 +190,7 @@ TEST_P(PartitionReadsTest, CanReuseTransactionForPartitionReads) {
   Transaction txn{Transaction::ReadOnlyOptions{}};
 
   {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         std::vector<ReadPartition> partitions,
         PartitionRead(txn, "Users", ClosedClosed(Key(1), Key(2)),
                       {"UserId", "Name"}));
@@ -198,7 +198,7 @@ TEST_P(PartitionReadsTest, CanReuseTransactionForPartitionReads) {
   }
 
   {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         std::vector<ReadPartition> partitions,
         PartitionRead(txn, "Users", OpenClosed(Key(1), Key(10)),
                       {"UserId", "Name"}));
@@ -207,7 +207,7 @@ TEST_P(PartitionReadsTest, CanReuseTransactionForPartitionReads) {
 }
 
 TEST_P(PartitionReadsTest, CannotSetReadLimitWithPartitionToken) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
 
   spanner_api::PartitionReadRequest partition_read_request =
       PARSE_TEXT_PROTO(absl::Substitute(
@@ -224,7 +224,7 @@ TEST_P(PartitionReadsTest, CannotSetReadLimitWithPartitionToken) {
   spanner_api::PartitionResponse partition_read_response;
   {
     grpc::ClientContext context;
-    ZETASQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
+    GOOGLESQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
                                           &partition_read_response));
   }
 
@@ -244,7 +244,7 @@ TEST_P(PartitionReadsTest, CannotSetReadLimitWithPartitionToken) {
   {
     grpc::ClientContext context;
     spanner_api::ResultSet read_response;
-    ZETASQL_EXPECT_OK(raw_client()->Read(&context, read_request, &read_response));
+    GOOGLESQL_EXPECT_OK(raw_client()->Read(&context, read_request, &read_response));
   }
 
   // Validate that Read with partition_token only succeeds.
@@ -254,7 +254,7 @@ TEST_P(PartitionReadsTest, CannotSetReadLimitWithPartitionToken) {
   {
     grpc::ClientContext context;
     spanner_api::ResultSet read_response;
-    ZETASQL_EXPECT_OK(raw_client()->Read(&context, read_request, &read_response));
+    GOOGLESQL_EXPECT_OK(raw_client()->Read(&context, read_request, &read_response));
   }
 
   // Validate that limit cannot be passed with partition_token.
@@ -268,7 +268,7 @@ TEST_P(PartitionReadsTest, CannotSetReadLimitWithPartitionToken) {
 }
 
 TEST_P(PartitionReadsTest, CannotReadWithDifferentSession) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
 
   spanner_api::PartitionReadRequest partition_read_request =
       PARSE_TEXT_PROTO(absl::Substitute(
@@ -285,14 +285,14 @@ TEST_P(PartitionReadsTest, CannotReadWithDifferentSession) {
   spanner_api::PartitionResponse partition_read_response;
   {
     grpc::ClientContext context;
-    ZETASQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
+    GOOGLESQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
                                           &partition_read_response));
   }
   ASSERT_GT(partition_read_response.partitions().size(), 0);
 
   // Validate that a different session cannot be used for read using partition
   // token than the one used for partition read.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto read_session, CreateSession());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto read_session, CreateSession());
   spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(absl::Substitute(
       R"(
         session: "$0"
@@ -313,7 +313,7 @@ TEST_P(PartitionReadsTest, CannotReadWithDifferentSession) {
 }
 
 TEST_P(PartitionReadsTest, CannotReadWithDifferentTransaction) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
 
   spanner_api::PartitionReadRequest partition_read_request =
       PARSE_TEXT_PROTO(absl::Substitute(
@@ -330,7 +330,7 @@ TEST_P(PartitionReadsTest, CannotReadWithDifferentTransaction) {
   spanner_api::PartitionResponse partition_read_response;
   {
     grpc::ClientContext context;
-    ZETASQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
+    GOOGLESQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
                                           &partition_read_response));
   }
   ASSERT_GT(partition_read_response.partitions().size(), 0);
@@ -357,7 +357,7 @@ TEST_P(PartitionReadsTest, CannotReadWithDifferentTransaction) {
 }
 
 TEST_P(PartitionReadsTest, CannotReadWithDifferentTable) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
 
   spanner_api::PartitionReadRequest partition_read_request =
       PARSE_TEXT_PROTO(absl::Substitute(
@@ -374,7 +374,7 @@ TEST_P(PartitionReadsTest, CannotReadWithDifferentTable) {
   spanner_api::PartitionResponse partition_read_response;
   {
     grpc::ClientContext context;
-    ZETASQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
+    GOOGLESQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
                                           &partition_read_response));
   }
   ASSERT_GT(partition_read_response.partitions().size(), 0);
@@ -400,7 +400,7 @@ TEST_P(PartitionReadsTest, CannotReadWithDifferentTable) {
 }
 
 TEST_P(PartitionReadsTest, CannotReadWithDifferentIndex) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
 
   spanner_api::PartitionReadRequest partition_read_request =
       PARSE_TEXT_PROTO(absl::Substitute(
@@ -418,7 +418,7 @@ TEST_P(PartitionReadsTest, CannotReadWithDifferentIndex) {
   spanner_api::PartitionResponse partition_read_response;
   {
     grpc::ClientContext context;
-    ZETASQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
+    GOOGLESQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
                                           &partition_read_response));
   }
   ASSERT_GT(partition_read_response.partitions().size(), 0);
@@ -445,7 +445,7 @@ TEST_P(PartitionReadsTest, CannotReadWithDifferentIndex) {
 }
 
 TEST_P(PartitionReadsTest, CannotReadWithDifferentKeySet) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
 
   spanner_api::PartitionReadRequest partition_read_request =
       PARSE_TEXT_PROTO(absl::Substitute(
@@ -462,7 +462,7 @@ TEST_P(PartitionReadsTest, CannotReadWithDifferentKeySet) {
   spanner_api::PartitionResponse partition_read_response;
   {
     grpc::ClientContext context;
-    ZETASQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
+    GOOGLESQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
                                           &partition_read_response));
   }
   ASSERT_GT(partition_read_response.partitions().size(), 0);
@@ -489,7 +489,7 @@ TEST_P(PartitionReadsTest, CannotReadWithDifferentKeySet) {
 }
 
 TEST_P(PartitionReadsTest, CannotReadWithDifferentColumns) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
 
   spanner_api::PartitionReadRequest partition_read_request =
       PARSE_TEXT_PROTO(absl::Substitute(
@@ -506,7 +506,7 @@ TEST_P(PartitionReadsTest, CannotReadWithDifferentColumns) {
   spanner_api::PartitionResponse partition_read_response;
   {
     grpc::ClientContext context;
-    ZETASQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
+    GOOGLESQL_ASSERT_OK(raw_client()->PartitionRead(&context, partition_read_request,
                                           &partition_read_response));
   }
   ASSERT_GT(partition_read_response.partitions().size(), 0);

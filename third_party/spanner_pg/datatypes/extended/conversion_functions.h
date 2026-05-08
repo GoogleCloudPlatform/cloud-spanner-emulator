@@ -32,7 +32,7 @@
 #ifndef DATATYPES_EXTENDED_CONVERSION_FUNCTIONS_H_
 #define DATATYPES_EXTENDED_CONVERSION_FUNCTIONS_H_
 
-#include "zetasql/public/function.h"
+#include "googlesql/public/function.h"
 
 namespace postgres_translator::spangres {
 namespace datatypes {
@@ -41,7 +41,7 @@ namespace datatypes {
 // conversion is a convenience conversion function meant for converting to/from
 // Spangres types. For Spangres types, the query engine should be relied on for
 // casting implementation rather than the conversion functions.
-const zetasql::Function* GetGenericConversionFunction();
+const googlesql::Function* GetGenericConversionFunction();
 
 }  // namespace datatypes
 }  // namespace postgres_translator::spangres

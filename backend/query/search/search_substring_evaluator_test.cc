@@ -20,10 +20,10 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
@@ -38,7 +38,7 @@ namespace query {
 namespace search {
 
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 // The test suite focuses on verifying the safety code that handles unexpected
 // input for SearchSubstringEvaluator class since they indicate abnormal status
@@ -46,9 +46,9 @@ using zetasql_base::testing::StatusIs;
 // function) are covered in search_test.cc.
 
 TEST(SearchSubstringEvaluatorTest, EvaluateWrongSearchColumnType) {
-  std::vector<zetasql::Value> args;
-  args.push_back(zetasql::Value::Bool(false));
-  args.push_back(zetasql::Value::String("test"));
+  std::vector<googlesql::Value> args;
+  args.push_back(googlesql::Value::Bool(false));
+  args.push_back(googlesql::Value::String("test"));
 
   EXPECT_THAT(
       SearchSubstringEvaluator::Evaluate(args),
@@ -59,9 +59,9 @@ TEST(SearchSubstringEvaluatorTest, EvaluateWrongSearchColumnType) {
 }
 
 TEST(SearchSubstringEvaluatorTest, EvaluateWrongSearchQueryType) {
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   args.push_back(TokenListFromStrings({}));
-  args.push_back(zetasql::Value::Bool(false));
+  args.push_back(googlesql::Value::Bool(false));
 
   EXPECT_THAT(SearchSubstringEvaluator::Evaluate(args),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -69,11 +69,11 @@ TEST(SearchSubstringEvaluatorTest, EvaluateWrongSearchQueryType) {
 }
 
 TEST(SearchSubstringEvaluatorTest, EvaluateOnWrongTokenList) {
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   const auto fulltext_tokenlist =
-      PlainFullTextTokenizer::Tokenize({zetasql::Value::String("fulltext")});
+      PlainFullTextTokenizer::Tokenize({googlesql::Value::String("fulltext")});
   args.push_back(*fulltext_tokenlist);
-  args.push_back(zetasql::Value::String("test"));
+  args.push_back(googlesql::Value::String("test"));
 
   EXPECT_THAT(
       SearchSubstringEvaluator::Evaluate(args),
@@ -83,18 +83,18 @@ TEST(SearchSubstringEvaluatorTest, EvaluateOnWrongTokenList) {
 }
 
 TEST(SearchSubstringEvaluatorTest, EvaluateOnNullTokenList) {
-  std::vector<zetasql::Value> args;
-  args.push_back(zetasql::Value::NullTokenList());
-  args.push_back(zetasql::Value::String("test"));
+  std::vector<googlesql::Value> args;
+  args.push_back(googlesql::Value::NullTokenList());
+  args.push_back(googlesql::Value::String("test"));
 
   const auto result = SearchSubstringEvaluator::Evaluate(args);
   EXPECT_TRUE(result->is_null());
 }
 
 TEST(SearchSubstringEvaluatorTest, EvaluateOnEmptyTokenList) {
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   args.push_back(TokenListFromStrings({""}));
-  args.push_back(zetasql::Value::String("test"));
+  args.push_back(googlesql::Value::String("test"));
 
   EXPECT_THAT(
       SearchSubstringEvaluator::Evaluate(args),
@@ -112,9 +112,9 @@ using SubstringTokenizerSignatureTest =
 
 TEST_P(SubstringTokenizerSignatureTest, TestTokenizerSignature) {
   const SubstringTokenizerSignatureTestCase& test_case = GetParam();
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   args.push_back(TokenListFromStrings({test_case.tokenizer_sig}));
-  args.push_back(zetasql::Value::String("test"));
+  args.push_back(googlesql::Value::String("test"));
 
   EXPECT_THAT(SearchSubstringEvaluator::Evaluate(args),
               StatusIs(absl::StatusCode::kInternal));
@@ -145,13 +145,13 @@ TEST_P(BasicSubstringEvaluatorTest, BasicEvaluateSearch) {
   tokens.insert(tokens.end(), test_case.list_of_tokens.begin(),
                 test_case.list_of_tokens.end());
 
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   args.push_back(TokenListFromStrings(tokens));
-  args.push_back(zetasql::Value::String(test_case.query));
+  args.push_back(googlesql::Value::String(test_case.query));
 
-  absl::StatusOr<zetasql::Value> result =
+  absl::StatusOr<googlesql::Value> result =
       SearchSubstringEvaluator::Evaluate(args);
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
   EXPECT_EQ(result.value().bool_value(), test_case.expected_result);
 };
 
@@ -182,13 +182,13 @@ TEST_P(SubstringLengthTest, TestSubstringLength) {
   tokens.insert(tokens.end(), test_case.list_of_tokens.begin(),
                 test_case.list_of_tokens.end());
 
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   args.push_back(TokenListFromStrings(tokens));
-  args.push_back(zetasql::Value::String(test_case.query));
+  args.push_back(googlesql::Value::String(test_case.query));
 
-  absl::StatusOr<zetasql::Value> result =
+  absl::StatusOr<googlesql::Value> result =
       SearchSubstringEvaluator::Evaluate(args);
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
   EXPECT_EQ(result.value().bool_value(), test_case.expected_result);
 };
 
@@ -205,10 +205,10 @@ TEST_F(BasicSubstringEvaluatorTest, RelativeSearchTypeNotMatch) {
   tokens.push_back("substring-4-1-0-1");  // supports 'word_prefix'
   tokens.push_back("google");
 
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   args.push_back(TokenListFromStrings(tokens));
-  args.push_back(zetasql::Value::String("oo"));
-  args.push_back(zetasql::Value::String("word_suffix"));
+  args.push_back(googlesql::Value::String("oo"));
+  args.push_back(googlesql::Value::String("word_suffix"));
 
   EXPECT_THAT(SearchSubstringEvaluator::Evaluate(args),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -217,16 +217,16 @@ TEST_F(BasicSubstringEvaluatorTest, RelativeSearchTypeNotMatch) {
 
   // No match for "word_prefix"
   args.pop_back();
-  args.push_back(zetasql::Value::String("word_prefix"));
-  absl::StatusOr<zetasql::Value> result =
+  args.push_back(googlesql::Value::String("word_prefix"));
+  absl::StatusOr<googlesql::Value> result =
       SearchSubstringEvaluator::Evaluate(args);
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
   EXPECT_EQ(result.value().bool_value(), false);
 
   // Got hit if relative_search_type is not specified.
   args.pop_back();
   result = SearchSubstringEvaluator::Evaluate(args);
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
   EXPECT_EQ(result.value().bool_value(), true);
 }
 
@@ -235,14 +235,14 @@ TEST_F(BasicSubstringEvaluatorTest, RelativeSearchPhraseInputTooShort) {
   tokens.push_back("substring-6-5-0-16");  // supports 'phrase'
   tokens.push_back("blah");
 
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   args.push_back(TokenListFromStrings(tokens));
-  args.push_back(zetasql::Value::String("la"));
-  args.push_back(zetasql::Value::String("phrase"));
+  args.push_back(googlesql::Value::String("la"));
+  args.push_back(googlesql::Value::String("phrase"));
 
-  absl::StatusOr<zetasql::Value> result =
+  absl::StatusOr<googlesql::Value> result =
       SearchSubstringEvaluator::Evaluate(args);
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
   EXPECT_EQ(result.value().bool_value(), false);
 }
 

@@ -36,8 +36,8 @@
 #include <functional>
 #include <string>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 
@@ -48,8 +48,8 @@ inline constexpr char kDefaultTimeZone[] = "America/Los_Angeles";
 
 void InitializePGTimezoneToDefault();
 
-zetasql::FunctionEvaluator PGFunctionEvaluator(
-    const zetasql::FunctionEvaluator& function,
+googlesql::FunctionEvaluator PGFunctionEvaluator(
+    const googlesql::FunctionEvaluator& function,
     const std::function<void()>& on_compute_begin =
         InitializePGTimezoneToDefault,
     const std::function<void()>& on_compute_end = []() {});
@@ -57,13 +57,13 @@ zetasql::FunctionEvaluator PGFunctionEvaluator(
 // This function calls `F_JSONB_ARRAY_ELEMENT_TEXT` to compute the results on
 // arguments `jsonb` and `element`. The function returns `Value::String`
 // (`Value::NullString` to represent a SQL null).
-absl::StatusOr<zetasql::Value> EmulatorJsonbArrayElementText(
+absl::StatusOr<googlesql::Value> EmulatorJsonbArrayElementText(
     absl::string_view jsonb, int32_t element);
 
 // This function calls `F_JSONB_OBJECT_FIELD_TEXT` to compute the results on
 // arguments `jsonb` and `key`. The function returns `Value::String`
 // (`Value::NullString` to represent a SQL null).
-absl::StatusOr<zetasql::Value> EmulatorJsonbObjectFieldText(
+absl::StatusOr<googlesql::Value> EmulatorJsonbObjectFieldText(
     absl::string_view jsonb, absl::string_view key);
 
 }  // namespace postgres_translator

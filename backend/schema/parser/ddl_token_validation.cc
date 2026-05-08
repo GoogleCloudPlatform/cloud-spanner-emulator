@@ -19,7 +19,7 @@
 #include "backend/schema/parser/DDLParserConstants.h"
 #include "backend/schema/parser/Token.h"
 #include "backend/schema/parser/ddl_token_validation_utils.h"
-#include "zetasql/public/strings.h"
+#include "googlesql/public/strings.h"
 #include "absl/status/status.h"
 
 namespace google {

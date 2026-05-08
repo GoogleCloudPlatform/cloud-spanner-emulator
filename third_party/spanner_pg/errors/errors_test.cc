@@ -32,7 +32,7 @@
 #include "third_party/spanner_pg/errors/errors.h"
 
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 
 namespace spanner {
@@ -62,7 +62,7 @@ TEST(Errors, MapPGErrorCodeToCanonicalCode) {
   EXPECT_EQ(CanonicalCode(ERRCODE_DATA_EXCEPTION),
             absl::StatusCode::kInvalidArgument);
   EXPECT_EQ(CanonicalCode(ERRCODE_STATEMENT_TOO_COMPLEX),
-            absl::StatusCode::kResourceExhausted);
+            absl::StatusCode::kOutOfRange);
   EXPECT_EQ(CanonicalCode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
             absl::StatusCode::kOutOfRange);
   EXPECT_EQ(CanonicalCode(0), absl::StatusCode::kUnknown);

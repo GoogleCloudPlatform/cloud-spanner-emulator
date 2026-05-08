@@ -31,9 +31,9 @@
 
 #include "third_party/spanner_pg/util/unittest_utils.h"
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
@@ -79,7 +79,7 @@ std::string PrintPhases(int phases) {
 }
 
 absl::StatusOr<List*> ParseFromPostgres(const std::string& sql) {
-  ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserOutput parser_output,
+  GOOGLESQL_ASSIGN_OR_RETURN(interfaces::ParserOutput parser_output,
                    CheckedPgRawParserFullOutput(sql.c_str()));
   List* parse_tree = parser_output.parse_tree();
   if (list_length(parse_tree) != 1) {
@@ -90,7 +90,7 @@ absl::StatusOr<List*> ParseFromPostgres(const std::string& sql) {
 
 absl::StatusOr<Query*> AnalyzeFromPostgresForTest(
     const std::string& sql, List* parse_tree,
-    const zetasql::AnalyzerOptions& analyzer_options) {
+    const googlesql::AnalyzerOptions& analyzer_options) {
   if (parse_tree == nullptr) {
     return absl::InternalError(
         "There is no valid PostgreSQL parse tree to analyze.");
@@ -101,28 +101,28 @@ absl::StatusOr<Query*> AnalyzeFromPostgresForTest(
         "There is no valid thread-local thread_memory_reservation.");
   }
 
-  // Transform the prepared statement parameter types from ZetaSQL types to
+  // Transform the prepared statement parameter types from GoogleSQL types to
   // PostgreSQL type oids.
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
-  const std::map<std::string, const zetasql::Type*> gsql_param_types =
+  GOOGLESQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
+  const std::map<std::string, const googlesql::Type*> gsql_param_types =
       analyzer_options.query_parameters();
 
   Oid* pg_param_types;
   int num_params = 0;
-  ZETASQL_ASSIGN_OR_RETURN(pg_param_types,
+  GOOGLESQL_ASSIGN_OR_RETURN(pg_param_types,
                    Transformer::BuildPgParameterTypeList(
                        *catalog_adapter, gsql_param_types, &num_params));
 
   RawStmt* raw_stmt = linitial_node(RawStmt, parse_tree);
-  ZETASQL_ASSIGN_OR_RETURN(Query * query_tree, CheckedPgParseAnalyzeVarparams(
+  GOOGLESQL_ASSIGN_OR_RETURN(Query * query_tree, CheckedPgParseAnalyzeVarparams(
       raw_stmt, sql.c_str(), &pg_param_types, &num_params));
   return query_tree;
 }
 
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
 ParseAnalyzeAndTransformStatement(const std::string& sql,
-                                  const zetasql::AnalyzerOptions& options) {
+                                  const googlesql::AnalyzerOptions& options) {
   std::unique_ptr<EngineBuiltinFunctionCatalog> function_catalog =
       GetSpangresTestBuiltinFunctionCatalog(options.language());
   std::vector<std::string> analyze_query_trees;
@@ -133,56 +133,56 @@ ParseAnalyzeAndTransformStatement(const std::string& sql,
                                   /*query_id=*/1);
 }
 
-absl::Status ParseAndAnalyzeFromZetaSQLForTest(
-    const std::string& sql, zetasql::TypeFactory* type_factory,
-    std::unique_ptr<const zetasql::AnalyzerOutput>* gsql_output) {
-  zetasql::AnalyzerOptions analyzer_options =
+absl::Status ParseAndAnalyzeFromGoogleSQLForTest(
+    const std::string& sql, googlesql::TypeFactory* type_factory,
+    std::unique_ptr<const googlesql::AnalyzerOutput>* gsql_output) {
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
-  return ParseAndAnalyzeFromZetaSQLForTest(sql, type_factory,
+  return ParseAndAnalyzeFromGoogleSQLForTest(sql, type_factory,
                                              analyzer_options, gsql_output);
 }
 
-absl::Status ParseAndAnalyzeFromZetaSQLForTest(
-    const std::string& sql, zetasql::TypeFactory* type_factory,
-    const zetasql::AnalyzerOptions& analyzer_options,
-    std::unique_ptr<const zetasql::AnalyzerOutput>* gsql_output) {
+absl::Status ParseAndAnalyzeFromGoogleSQLForTest(
+    const std::string& sql, googlesql::TypeFactory* type_factory,
+    const googlesql::AnalyzerOptions& analyzer_options,
+    std::unique_ptr<const googlesql::AnalyzerOutput>* gsql_output) {
   if (type_factory == nullptr) {
     return absl::InternalError(
-        "A valid zetasql::TypeFactory object is needed to analyze a "
-        "ZetaSQL string.");
+        "A valid googlesql::TypeFactory object is needed to analyze a "
+        "GoogleSQL string.");
   }
 
   if (gsql_output == nullptr) {
     return absl::InternalError(
-        "A valid zetasql::AnalyzerOutput object is needed to analyze a "
-        "ZetaSQL string.");
+        "A valid googlesql::AnalyzerOutput object is needed to analyze a "
+        "GoogleSQL string.");
   }
 
-  zetasql::EnumerableCatalog* engine_provided_catalog =
+  googlesql::EnumerableCatalog* engine_provided_catalog =
       GetSpangresTestSpannerUserCatalog();
 
-  return zetasql::AnalyzeStatement(sql, analyzer_options,
+  return googlesql::AnalyzeStatement(sql, analyzer_options,
                                      engine_provided_catalog, type_factory,
                                      gsql_output);
 }
 
-absl::StatusOr<const zetasql::Type*> ParseTypeName(const std::string& type) {
+absl::StatusOr<const googlesql::Type*> ParseTypeName(const std::string& type) {
   if (type == "int64") {
-    return zetasql::types::Int64Type();
+    return googlesql::types::Int64Type();
   } else if (type == "double") {
-    return zetasql::types::DoubleType();
+    return googlesql::types::DoubleType();
   } else if (type == "float") {
-    return zetasql::types::FloatType();
+    return googlesql::types::FloatType();
   } else if (type == "string") {
-    return zetasql::types::StringType();
+    return googlesql::types::StringType();
   } else if (type == "bool") {
-    return zetasql::types::BoolType();
+    return googlesql::types::BoolType();
   } else if (type == "bytes") {
-    return zetasql::types::BytesType();
+    return googlesql::types::BytesType();
   } else if (type == "timestamp") {
-    return zetasql::types::TimestampType();
+    return googlesql::types::TimestampType();
   } else if (type == "date") {
-    return zetasql::types::DateType();
+    return googlesql::types::DateType();
   } else if (type == "pg_jsonb") {
     return postgres_translator::spangres::types::PgJsonbMapping()
         ->mapped_type();
@@ -192,21 +192,21 @@ absl::StatusOr<const zetasql::Type*> ParseTypeName(const std::string& type) {
   } else if (type == "pg_oid") {
     return postgres_translator::spangres::types::PgOidMapping()->mapped_type();
   } else if (type == "int64_array") {
-    return zetasql::types::Int64ArrayType();
+    return googlesql::types::Int64ArrayType();
   } else if (type == "double_array") {
-    return zetasql::types::DoubleArrayType();
+    return googlesql::types::DoubleArrayType();
   } else if (type == "float_array") {
-    return zetasql::types::FloatArrayType();
+    return googlesql::types::FloatArrayType();
   } else if (type == "string_array") {
-    return zetasql::types::StringType();
+    return googlesql::types::StringType();
   } else if (type == "bool_array") {
-    return zetasql::types::BoolType();
+    return googlesql::types::BoolType();
   } else if (type == "bytes_array") {
-    return zetasql::types::BytesType();
+    return googlesql::types::BytesType();
   } else if (type == "timestamp_array") {
-    return zetasql::types::TimestampArrayType();
+    return googlesql::types::TimestampArrayType();
   } else if (type == "date_array") {
-    return zetasql::types::DateArrayType();
+    return googlesql::types::DateArrayType();
   } else if (type == "pg_numeric_array") {
     return postgres_translator::spangres::types::PgNumericArrayMapping()
         ->mapped_type();
@@ -224,14 +224,14 @@ absl::StatusOr<const zetasql::Type*> ParseTypeName(const std::string& type) {
 
 absl::Status ParseParameters(
     const std::string& parameters,
-    std::map<std::string, const zetasql::Type*>& result) {
+    std::map<std::string, const googlesql::Type*>& result) {
   std::vector<std::string> parameter_list =
       absl::StrSplit(parameters, ',', absl::SkipEmpty());
   for (const std::string& parameter : parameter_list) {
     std::vector<std::string> name_type =
         absl::StrSplit(parameter, '=', absl::SkipEmpty());
-    ZETASQL_RET_CHECK_EQ(name_type.size(), 2);
-    ZETASQL_ASSIGN_OR_RETURN(const zetasql::Type* type, ParseTypeName(name_type[1]));
+    GOOGLESQL_RET_CHECK_EQ(name_type.size(), 2);
+    GOOGLESQL_ASSIGN_OR_RETURN(const googlesql::Type* type, ParseTypeName(name_type[1]));
     result.insert({name_type[0], type});
   }
   return absl::OkStatus();
@@ -239,8 +239,8 @@ absl::Status ParseParameters(
 
 absl::StatusOr<Query*> BuildPgQuery(
     const std::string& sql,
-    const zetasql::AnalyzerOptions& analyzer_options) {
-  ZETASQL_ASSIGN_OR_RETURN(List* pg_parse_tree,
+    const googlesql::AnalyzerOptions& analyzer_options) {
+  GOOGLESQL_ASSIGN_OR_RETURN(List* pg_parse_tree,
                    spangres::test::ParseFromPostgres(sql));
 
   if (pg_parse_tree == nullptr) {
@@ -256,13 +256,13 @@ absl::StatusOr<Query*> BuildPgQuery(const std::string& sql) {
   return BuildPgQuery(sql, spangres::test::GetSpangresTestAnalyzerOptions());
 }
 
-absl::StatusOr<std::unique_ptr<zetasql::ResolvedStatement>>
+absl::StatusOr<std::unique_ptr<googlesql::ResolvedStatement>>
 ForwardTransformQuery(const std::string& sql,
-                      const zetasql::AnalyzerOptions& analyzer_options) {
+                      const googlesql::AnalyzerOptions& analyzer_options) {
   // Run the parser and analyzer
   std::unique_ptr<CatalogAdapterHolder> adapter_holder =
       spangres::test::GetSpangresTestCatalogAdapterHolder(analyzer_options);
-  ZETASQL_ASSIGN_OR_RETURN(const Query* pg_output, BuildPgQuery(sql, analyzer_options));
+  GOOGLESQL_ASSIGN_OR_RETURN(const Query* pg_output, BuildPgQuery(sql, analyzer_options));
 
   // Run the forward transformer
   auto transformer = std::make_unique<ForwardTransformer>(

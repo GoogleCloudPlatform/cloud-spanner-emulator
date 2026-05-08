@@ -38,7 +38,7 @@
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::function_evaluators {
 
@@ -47,11 +47,11 @@ void CleanupPostgresNumberCache() { CleanupNumberCache(); }
 absl::StatusOr<std::string> Int8ToChar(int64_t value,
                                        absl::string_view number_format) {
   Datum value_in_datum = Int64GetDatum(value);
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum number_format_in_datum,
       CheckedPgStringToDatum(std::string(number_format).c_str(), TEXTOID));
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum formatted_number_datum,
       postgres_translator::CheckedOidFunctionCall2(
           F_TO_CHAR_INT8_TEXT, value_in_datum, number_format_in_datum));
@@ -62,11 +62,11 @@ absl::StatusOr<std::string> Int8ToChar(int64_t value,
 absl::StatusOr<std::string> Float8ToChar(double value,
                                          absl::string_view number_format) {
   Datum value_in_datum = Float8GetDatum(value);
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum number_format_in_datum,
       CheckedPgStringToDatum(std::string(number_format).c_str(), TEXTOID));
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum formatted_number_datum,
       postgres_translator::CheckedOidFunctionCall2(
           F_TO_CHAR_FLOAT8_TEXT, value_in_datum, number_format_in_datum));
@@ -77,11 +77,11 @@ absl::StatusOr<std::string> Float8ToChar(double value,
 absl::StatusOr<std::string> Float4ToChar(float value,
                                          absl::string_view number_format) {
   Datum value_in_datum = Float4GetDatum(value);
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum number_format_in_datum,
       CheckedPgStringToDatum(std::string(number_format).c_str(), TEXTOID));
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum formatted_number_datum,
       postgres_translator::CheckedOidFunctionCall2(
           F_TO_CHAR_FLOAT4_TEXT, value_in_datum, number_format_in_datum));
@@ -95,15 +95,15 @@ absl::StatusOr<std::string> NumericToChar(
   Datum numeric_in_cstring = CStringGetDatum(numeric_string.c_str());
   Datum numeric_in_typelem = ObjectIdGetDatum(NUMERICOID);
   Datum numeric_in_typmod = ObjectIdGetDatum(-1);  // default typmod
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in_datum,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in_datum,
                    postgres_translator::CheckedOidFunctionCall3(
                        F_NUMERIC_IN, numeric_in_cstring, numeric_in_typelem,
                        numeric_in_typmod));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum number_format_in_datum,
       CheckedPgStringToDatum(std::string(number_format).c_str(), TEXTOID));
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum formatted_number_datum,
       postgres_translator::CheckedOidFunctionCall2(
           F_TO_CHAR_NUMERIC_TEXT, numeric_in_datum, number_format_in_datum));
@@ -113,20 +113,20 @@ absl::StatusOr<std::string> NumericToChar(
 
 absl::StatusOr<std::unique_ptr<std::string>> NumericToNumber(
     absl::string_view value, absl::string_view number_format) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum value_in_datum,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum value_in_datum,
                    CheckedPgStringToDatum(std::string(value).c_str(), TEXTOID));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum number_format_in_datum,
       CheckedPgStringToDatum(std::string(number_format).c_str(), TEXTOID));
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum result_numeric_datum,
       postgres_translator::CheckedNullableOidFunctionCall2(
           F_TO_NUMBER, value_in_datum, number_format_in_datum));
 
   if (result_numeric_datum == (Datum)NULL) return nullptr;
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result_cstring_datum,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result_cstring_datum,
                    postgres_translator::CheckedOidFunctionCall1(
                        F_NUMERIC_OUT, result_numeric_datum));
   return std::make_unique<std::string>(DatumGetCString(result_cstring_datum));

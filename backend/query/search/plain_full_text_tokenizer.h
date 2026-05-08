@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -32,8 +32,8 @@ namespace search {
 
 class PlainFullTextTokenizer {
  public:
-  static absl::StatusOr<zetasql::Value> Tokenize(
-      absl::Span<const zetasql::Value> args);
+  static absl::StatusOr<googlesql::Value> Tokenize(
+      absl::Span<const googlesql::Value> args);
 
  private:
   static absl::Status TokenizeString(absl::string_view str,

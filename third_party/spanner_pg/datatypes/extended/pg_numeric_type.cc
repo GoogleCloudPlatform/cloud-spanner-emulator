@@ -37,16 +37,16 @@
 #include <vector>
 
 #include "google/spanner/v1/type.pb.h"
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/types/extended_type.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/types/type_modifiers.h"
-#include "zetasql/public/types/type_parameters.h"
-#include "zetasql/public/types/value_equality_check_options.h"
-#include "zetasql/public/value_content.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/types/extended_type.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/types/type_modifiers.h"
+#include "googlesql/public/types/type_parameters.h"
+#include "googlesql/public/types/value_equality_check_options.h"
+#include "googlesql/public/value_content.h"
 #include "absl/flags/flag.h"
 #include "absl/hash/hash.h"
 #include "absl/log/check.h"
@@ -61,9 +61,9 @@
 #include "third_party/spanner_pg/interface/pg_arena_factory.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
-#include "zetasql/base/compact_reference_counted.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/compact_reference_counted.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace {
   constexpr absl::string_view kNestedMemoryReservationHoldersError =
@@ -72,17 +72,17 @@ namespace {
 
 namespace postgres_translator::spangres::datatypes {
 
-using LanguageOptions = ::zetasql::LanguageOptions;
-using ProductMode = ::zetasql::ProductMode;
-using TypeModifiers = ::zetasql::TypeModifiers;
-using TypeParameters = ::zetasql::TypeParameters;
-using TypeParameterValue = ::zetasql::TypeParameterValue;
-using TypeProto = ::zetasql::TypeProto;
-using ValueContent = ::zetasql::ValueContent;
-using ValueProto = ::zetasql::ValueProto;
+using LanguageOptions = ::googlesql::LanguageOptions;
+using ProductMode = ::googlesql::ProductMode;
+using TypeModifiers = ::googlesql::TypeModifiers;
+using TypeParameters = ::googlesql::TypeParameters;
+using TypeParameterValue = ::googlesql::TypeParameterValue;
+using TypeProto = ::googlesql::TypeProto;
+using ValueContent = ::googlesql::ValueContent;
+using ValueProto = ::googlesql::ValueProto;
 using TypeAnnotationCode = ::google::spanner::v1::TypeAnnotationCode;
 
-using zetasql_base::refcount::CompactReferenceCounted;
+using googlesql_base::refcount::CompactReferenceCounted;
 
 // PgNumericRef is ref counted wrapper around an encoded pg_numeric value.
 class PgNumericRef final : public CompactReferenceCounted<PgNumericRef> {
@@ -130,11 +130,11 @@ class PgNumericType : public SpannerExtendedType {
 
   absl::StatusOr<std::string> TypeNameWithModifiers(
       const TypeModifiers& type_modifiers, ProductMode mode) const override {
-    ZETASQL_RET_CHECK(type_modifiers.collation().Empty());
+    GOOGLESQL_RET_CHECK(type_modifiers.collation().Empty());
     if (type_modifiers.type_parameters().IsEmpty()) {
       return ShortTypeName(/*unused=*/mode);
     }
-    ZETASQL_RET_CHECK_OK(ValidateResolvedTypeParameters(
+    GOOGLESQL_RET_CHECK_OK(ValidateResolvedTypeParameters(
         type_modifiers.type_parameters(), /*mode=*/mode));
     return absl::StrCat(ShortTypeName(mode), "(",
                         type_modifiers.type_parameters()
@@ -155,8 +155,8 @@ class PgNumericType : public SpannerExtendedType {
     if (type_parameter_values.size() == 2 &&
         type_parameter_values.at(0).GetValue().has_int64_value() &&
         type_parameter_values.at(1).GetValue().has_int64_value()) {
-      return zetasql::TypeParameters::MakeExtendedTypeParameters(
-          zetasql::ExtendedTypeParameters(
+      return googlesql::TypeParameters::MakeExtendedTypeParameters(
+          googlesql::ExtendedTypeParameters(
               {type_parameter_values.at(0).GetValue(),
                type_parameter_values.at(1).GetValue()}));
     }
@@ -168,13 +168,13 @@ class PgNumericType : public SpannerExtendedType {
 
   absl::Status ValidateResolvedTypeParameters(
       const TypeParameters& type_parameters, ProductMode mode) const override {
-    ZETASQL_RET_CHECK(type_parameters.IsExtendedTypeParameters())
+    GOOGLESQL_RET_CHECK(type_parameters.IsExtendedTypeParameters())
         << type_parameters.DebugString();
-    const zetasql::ExtendedTypeParameters& params =
+    const googlesql::ExtendedTypeParameters& params =
         type_parameters.extended_type_parameters();
-    ZETASQL_RET_CHECK_EQ(params.num_parameters(), 2);
-    ZETASQL_RET_CHECK(params.parameter(0).has_int64_value());
-    ZETASQL_RET_CHECK(params.parameter(1).has_int64_value());
+    GOOGLESQL_RET_CHECK_EQ(params.num_parameters(), 2);
+    GOOGLESQL_RET_CHECK(params.parameter(0).has_int64_value());
+    GOOGLESQL_RET_CHECK(params.parameter(1).has_int64_value());
     return absl::OkStatus();
   }
 
@@ -186,8 +186,8 @@ class PgNumericType : public SpannerExtendedType {
   absl::Status SerializeToProtoAndDistinctFileDescriptorsImpl(
       const BuildFileDescriptorSetMapOptions& options, TypeProto* type_proto,
       FileDescriptorSetMap* file_descriptor_set_map) const override {
-    type_proto->set_type_kind(zetasql::TypeKind::TYPE_EXTENDED);
-    type_proto->set_extended_type_name(TypeName(zetasql::PRODUCT_EXTERNAL));
+    type_proto->set_type_kind(googlesql::TypeKind::TYPE_EXTENDED);
+    type_proto->set_extended_type_name(TypeName(googlesql::PRODUCT_EXTERNAL));
     return absl::OkStatus();
   }
 
@@ -220,7 +220,7 @@ class PgNumericType : public SpannerExtendedType {
   void DebugStringImpl(bool details, TypeOrStringVector* stack,
                        std::string* debug_string) const override {
     absl::StrAppend(debug_string,
-                    ShortTypeName(/*unused=*/zetasql::PRODUCT_EXTERNAL));
+                    ShortTypeName(/*unused=*/googlesql::PRODUCT_EXTERNAL));
   }
 
   void CopyValueContent(const ValueContent& from,
@@ -263,12 +263,12 @@ class PgNumericType : public SpannerExtendedType {
     // - InvalidOid: unused argument
     // - Int32GetDatum(-1): typmod -1 (unlimited/unknown), i.e. numeric without
     // typmod
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         Datum lhs_numeric,
         postgres_translator::CheckedOidFunctionCall3(
             F_NUMERIC_IN, CStringGetDatum(lhs_normalized_str.c_str()),
             ObjectIdGetDatum(InvalidOid), Int32GetDatum(-1)));
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         Datum rhs_numeric,
         postgres_translator::CheckedOidFunctionCall3(
             F_NUMERIC_IN, CStringGetDatum(rhs_normalized_str.c_str()),
@@ -279,7 +279,7 @@ class PgNumericType : public SpannerExtendedType {
     // - lhs_numeric: lhs numeric datum
     // - rhs_numeric: rhs numeric datum
     // - numeric_cmp_result: comparison result datum
-    ZETASQL_ASSIGN_OR_RETURN(Datum numeric_cmp_result,
+    GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_cmp_result,
                      postgres_translator::CheckedOidFunctionCall2(
                          F_NUMERIC_CMP, lhs_numeric, rhs_numeric));
     return DatumGetInt32(numeric_cmp_result);
@@ -287,7 +287,7 @@ class PgNumericType : public SpannerExtendedType {
 
   bool ValueContentEquals(
       const ValueContent& x, const ValueContent& y,
-      const zetasql::ValueEqualityCheckOptions& options) const override {
+      const googlesql::ValueEqualityCheckOptions& options) const override {
     absl::StatusOr<int32_t> comparison_result = CollatedCompare(
         x.GetAs<PgNumericRef*>()->value(), y.GetAs<PgNumericRef*>()->value());
     if (!comparison_result.ok()) {
@@ -338,14 +338,14 @@ class PgNumericType : public SpannerExtendedType {
   absl::Status SerializeValueContent(const ValueContent& value,
                                      ValueProto* value_proto) const override {
     return absl::InvalidArgumentError(
-        absl::StrCat(ShortTypeName(/*unused=*/zetasql::PRODUCT_EXTERNAL),
+        absl::StrCat(ShortTypeName(/*unused=*/googlesql::PRODUCT_EXTERNAL),
                      " does not support serializing value content."));
   }
 
   absl::Status DeserializeValueContent(const ValueProto& value_proto,
                                        ValueContent* value) const override {
     return absl::InvalidArgumentError(
-        absl::StrCat(ShortTypeName(/*unused=*/zetasql::PRODUCT_EXTERNAL),
+        absl::StrCat(ShortTypeName(/*unused=*/googlesql::PRODUCT_EXTERNAL),
                      " does not support deserializing value content."));
   }
 };
@@ -355,9 +355,9 @@ const SpannerExtendedType* GetPgNumericType() {
   return s_pg_numeric_type;
 }
 
-const zetasql::ArrayType* GetPgNumericArrayType() {
-  static const zetasql::ArrayType* s_pg_numeric_arr_type = []() {
-    const zetasql::ArrayType* pg_numeric_array_type = nullptr;
+const googlesql::ArrayType* GetPgNumericArrayType() {
+  static const googlesql::ArrayType* s_pg_numeric_arr_type = []() {
+    const googlesql::ArrayType* pg_numeric_array_type = nullptr;
     ABSL_CHECK_OK(GetTypeFactory()->MakeArrayType(GetPgNumericType(),
                                              &pg_numeric_array_type));
     return pg_numeric_array_type;
@@ -365,39 +365,39 @@ const zetasql::ArrayType* GetPgNumericArrayType() {
   return s_pg_numeric_arr_type;
 }
 
-absl::StatusOr<zetasql::Value> CreatePgNumericValue(
+absl::StatusOr<googlesql::Value> CreatePgNumericValue(
     absl::string_view readable_numeric) {
-  ZETASQL_ASSIGN_OR_RETURN(std::string normalized_numeric,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string normalized_numeric,
                    common::NormalizePgNumeric(readable_numeric));
   absl::Cord normalized(normalized_numeric);
-  return zetasql::Value::Extended(
+  return googlesql::Value::Extended(
       GetPgNumericType(),
-      zetasql::ValueContent::Create(new PgNumericRef(normalized)));
+      googlesql::ValueContent::Create(new PgNumericRef(normalized)));
 }
 
-absl::StatusOr<zetasql::Value> CreatePgNumericValueWithMemoryContext(
+absl::StatusOr<googlesql::Value> CreatePgNumericValueWithMemoryContext(
     absl::string_view numeric_string) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
       postgres_translator::interfaces::CreatePGArena(nullptr));
   return CreatePgNumericValue(numeric_string);
 }
 
-absl::StatusOr<zetasql::Value> CreatePgNumericValueWithPrecisionAndScale(
+absl::StatusOr<googlesql::Value> CreatePgNumericValueWithPrecisionAndScale(
     absl::string_view readable_numeric, int64_t precision, int64_t scale) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::string normalized_numeric,
       common::NormalizePgNumeric(readable_numeric, precision, scale));
   absl::Cord normalized(normalized_numeric);
-  return zetasql::Value::Extended(
+  return googlesql::Value::Extended(
       GetPgNumericType(),
-      zetasql::ValueContent::Create(new PgNumericRef(normalized)));
+      googlesql::ValueContent::Create(new PgNumericRef(normalized)));
 }
 
 absl::StatusOr<absl::Cord> GetPgNumericNormalizedValue(
-    const zetasql::Value& value) {
-  ZETASQL_RET_CHECK(!value.is_null());
-  ZETASQL_RET_CHECK(value.type() == GetPgNumericType());
+    const googlesql::Value& value) {
+  GOOGLESQL_RET_CHECK(!value.is_null());
+  GOOGLESQL_RET_CHECK(value.type() == GetPgNumericType());
   return value.extended_value().GetAs<PgNumericRef*>()->value();
 }
 

@@ -19,11 +19,11 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "backend/query/search/plain_full_text_tokenizer.h"
@@ -33,11 +33,11 @@
 namespace google::spanner::emulator::backend::query::search {
 
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
-void ValidateTokenlistConcat(zetasql::Value tokenlist1,
-                             zetasql::Value tokenlist2,
-                             zetasql::Value concat_tokenlist) {
+void ValidateTokenlistConcat(googlesql::Value tokenlist1,
+                             googlesql::Value tokenlist2,
+                             googlesql::Value concat_tokenlist) {
   std::vector<std::string> expected_tokens;
   const auto tokenlist1_tokens = StringsFromTokenList(tokenlist1);
   const auto tokenlist2_tokens = StringsFromTokenList(tokenlist2);
@@ -53,15 +53,15 @@ void ValidateTokenlistConcat(zetasql::Value tokenlist1,
 
 TEST(TokenlistConcatTest, ConcatFulltext) {
   const auto tokenlist1 =
-      PlainFullTextTokenizer::Tokenize({zetasql::Value::String("foo bar")});
+      PlainFullTextTokenizer::Tokenize({googlesql::Value::String("foo bar")});
   const auto tokenlist2 = PlainFullTextTokenizer::Tokenize(
-      {zetasql::Value::String("hello world")});
+      {googlesql::Value::String("hello world")});
 
   // Create a tokenlist array. null tokenlist will be ignored.
-  absl::StatusOr<zetasql::Value> tokenlist_array =
-      zetasql::Value::MakeArray(
-          zetasql::types::TokenListArrayType(),
-          {tokenlist1.value(), zetasql::Value::NullTokenList(),
+  absl::StatusOr<googlesql::Value> tokenlist_array =
+      googlesql::Value::MakeArray(
+          googlesql::types::TokenListArrayType(),
+          {tokenlist1.value(), googlesql::Value::NullTokenList(),
            tokenlist2.value()});
   const auto concat_tokenlist =
       TokenlistConcat::Concat({tokenlist_array.value()});
@@ -71,12 +71,12 @@ TEST(TokenlistConcatTest, ConcatFulltext) {
 
 TEST(TokenlistConcatTest, ConcatSubstring) {
   const auto tokenlist1 =
-      SubstringTokenizer::Tokenize({zetasql::Value::String("foobar")});
+      SubstringTokenizer::Tokenize({googlesql::Value::String("foobar")});
   const auto tokenlist2 =
-      SubstringTokenizer::Tokenize({zetasql::Value::String("helloworld")});
+      SubstringTokenizer::Tokenize({googlesql::Value::String("helloworld")});
 
-  absl::StatusOr<zetasql::Value> tokenlist_array =
-      zetasql::Value::MakeArray(zetasql::types::TokenListArrayType(),
+  absl::StatusOr<googlesql::Value> tokenlist_array =
+      googlesql::Value::MakeArray(googlesql::types::TokenListArrayType(),
                                   {tokenlist1.value(), tokenlist2.value()});
   const auto concat_tokenlist =
       TokenlistConcat::Concat({tokenlist_array.value()});
@@ -86,19 +86,19 @@ TEST(TokenlistConcatTest, ConcatSubstring) {
 
 TEST(TokenlistConcatTest, ConcatNull) {
   const auto concat_tokenlist = TokenlistConcat::Concat(
-      {zetasql::Value::Null(zetasql::types::TokenListArrayType())});
+      {googlesql::Value::Null(googlesql::types::TokenListArrayType())});
   EXPECT_TRUE(concat_tokenlist->is_null());
 }
 
 TEST(TokenlistConcatTest, UnmatchSubstringSignature) {
   const auto tokenlist1 = SubstringTokenizer::Tokenize(
-      {zetasql::Value::String("foobar"), zetasql::Value::Int64(3),
-       zetasql::Value::Int64(2)});
+      {googlesql::Value::String("foobar"), googlesql::Value::Int64(3),
+       googlesql::Value::Int64(2)});
   const auto tokenlist2 = SubstringTokenizer::Tokenize(
-      {zetasql::Value::String("foobar"), zetasql::Value::Int64(4),
-       zetasql::Value::Int64(1)});
-  absl::StatusOr<zetasql::Value> tokenlist_array =
-      zetasql::Value::MakeArray(zetasql::types::TokenListArrayType(),
+      {googlesql::Value::String("foobar"), googlesql::Value::Int64(4),
+       googlesql::Value::Int64(1)});
+  absl::StatusOr<googlesql::Value> tokenlist_array =
+      googlesql::Value::MakeArray(googlesql::types::TokenListArrayType(),
                                   {tokenlist1.value(), tokenlist2.value()});
   EXPECT_THAT(
       TokenlistConcat::Concat({tokenlist_array.value()}),

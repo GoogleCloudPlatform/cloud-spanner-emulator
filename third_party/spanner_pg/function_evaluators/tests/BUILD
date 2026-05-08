@@ -69,8 +69,8 @@ cc_test(
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:timezone_helper",
         "@com_google_absl//absl/time",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -86,9 +86,9 @@ cc_test(
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:timezone_helper",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public/types:timestamp_util",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public/types:timestamp_util",
     ],
 )
 
@@ -104,9 +104,9 @@ cc_test(
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:timezone_helper",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public/types:timestamp_util",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public/types:timestamp_util",
     ],
 )
 
@@ -122,9 +122,9 @@ cc_test(
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:timezone_helper",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public/types:timestamp_util",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public/types:timestamp_util",
     ],
 )
 
@@ -137,9 +137,9 @@ cc_test(
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public/types:timestamp_util",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public/types:timestamp_util",
     ],
 )
 
@@ -152,9 +152,9 @@ cc_test(
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public/types:timestamp_util",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public/types:timestamp_util",
     ],
 )
 
@@ -167,8 +167,8 @@ cc_test(
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -185,8 +185,8 @@ cc_test(
         "//third_party/spanner_pg/shims:stub_memory_reservation_manager",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -199,8 +199,8 @@ cc_test(
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -213,8 +213,8 @@ cc_test(
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -228,8 +228,8 @@ cc_test(
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -243,8 +243,8 @@ cc_test(
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -261,8 +261,8 @@ cc_test(
         "//third_party/spanner_pg/shims:timezone_helper",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -275,8 +275,8 @@ cc_test(
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -290,8 +290,8 @@ cc_test(
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -305,8 +305,8 @@ cc_test(
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -319,8 +319,8 @@ cc_test(
     deps = [
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -334,8 +334,8 @@ cc_test(
         ":test_base",
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -351,8 +351,8 @@ cc_test(
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -368,8 +368,8 @@ cc_test(
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -386,8 +386,8 @@ cc_test(
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -403,8 +403,8 @@ cc_test(
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -420,8 +420,8 @@ cc_test(
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -437,8 +437,8 @@ cc_test(
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -454,9 +454,9 @@ cc_test(
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:value",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 
@@ -471,8 +471,8 @@ cc_test(
         "//third_party/spanner_pg/datatypes/extended:pg_jsonb_type",
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -487,9 +487,9 @@ cc_test(
         "//third_party/spanner_pg/datatypes/common:numeric_core",
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:value",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 
@@ -505,8 +505,8 @@ cc_test(
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -522,8 +522,8 @@ cc_test(
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -539,8 +539,8 @@ cc_test(
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -557,8 +557,8 @@ cc_test(
         "//third_party/spanner_pg/postgres_includes",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -574,8 +574,8 @@ cc_test(
         "//third_party/spanner_pg/interface:pg_evaluators",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -592,9 +592,9 @@ cc_test(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:interval_value",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public:interval_value",
     ],
 )

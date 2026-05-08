@@ -17,25 +17,25 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_DATAMODEL_VALUE_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_DATAMODEL_VALUE_H_
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
 
-// We reuse the zetasql::Value class from ZetaSQL, but it does not provide
+// We reuse the googlesql::Value class from GoogleSQL, but it does not provide
 // operator overloads as part of the library so we define them in our namespace
 // for convenience.
-inline bool operator==(const zetasql::Value& v1, const zetasql::Value& v2) {
+inline bool operator==(const googlesql::Value& v1, const googlesql::Value& v2) {
   return v1.Equals(v2);
 }
-inline bool operator<(const zetasql::Value& v1, const zetasql::Value& v2) {
+inline bool operator<(const googlesql::Value& v1, const googlesql::Value& v2) {
   return v1.LessThan(v2);
 }
 
 // ValueList is a simple array of Values.
-typedef std::vector<zetasql::Value> ValueList;
+typedef std::vector<googlesql::Value> ValueList;
 
 }  // namespace backend
 }  // namespace emulator

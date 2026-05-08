@@ -27,7 +27,7 @@ cc_library(
     name = "value",
     hdrs = ["value.h"],
     deps = [
-        "@com_google_zetasql//zetasql/public:value",
+        "@com_google_googlesql//googlesql/public:value",
     ],
 )
 
@@ -36,8 +36,8 @@ cc_library(
     srcs = ["key.cc"],
     hdrs = ["key.h"],
     deps = [
-        "@com_google_zetasql//zetasql/public:numeric_value",
-        "@com_google_zetasql//zetasql/public:value",
+        "@com_google_googlesql//googlesql/public:numeric_value",
+        "@com_google_googlesql//googlesql/public:value",
     ],
 )
 
@@ -50,8 +50,8 @@ cc_test(
         "//tests/common:proto_matchers",
         "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -72,8 +72,8 @@ cc_test(
         "//tests/common:proto_matchers",
         "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -97,8 +97,8 @@ cc_test(
         "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/flags:flag",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -110,9 +110,9 @@ cc_library(
         "//common:feature_flags",
         "//third_party/spanner_pg/datatypes/extended:spanner_extended_type",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
-        "@com_google_zetasql//zetasql/public:options_cc_proto",
-        "@com_google_zetasql//zetasql/public:type",
-        "@com_google_zetasql//zetasql/public:type_cc_proto",
+        "@com_google_googlesql//googlesql/public:options_cc_proto",
+        "@com_google_googlesql//googlesql/public:type",
+        "@com_google_googlesql//googlesql/public:type_cc_proto",
     ],
 )
 
@@ -127,8 +127,8 @@ cc_test(
         "//third_party/spanner_pg/test_catalog",
         "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:type",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public:type",
     ],
 )

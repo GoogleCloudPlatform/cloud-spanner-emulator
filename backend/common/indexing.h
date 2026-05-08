@@ -17,7 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_COMMON_INDEXING_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_COMMON_INDEXING_H_
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "backend/common/rows.h"
 #include "backend/datamodel/key.h"

@@ -16,7 +16,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "common/feature_flags.h"
@@ -29,7 +29,7 @@ namespace emulator {
 namespace test {
 namespace {
 
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 // How to read the acronyms in this file
 // FK - Foreign Key
@@ -67,12 +67,12 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(ForeignKeyActionsTest, ReferencedPK_ReferencingPK) {
   // Referenced key: [1].
   // Referencing key: [1].
-  ZETASQL_ASSERT_OK(Insert("referencedpk", {"referenced_pk"}, {1}));
-  ZETASQL_ASSERT_OK(Insert("referencedpk", {"referenced_pk"}, {2}));
-  ZETASQL_ASSERT_OK(Insert("referencingpk_pk", {"referencing_pk"}, {1}));
-  ZETASQL_ASSERT_OK(Insert("referencingpk_pk", {"referencing_pk"}, {2}));
+  GOOGLESQL_ASSERT_OK(Insert("referencedpk", {"referenced_pk"}, {1}));
+  GOOGLESQL_ASSERT_OK(Insert("referencedpk", {"referenced_pk"}, {2}));
+  GOOGLESQL_ASSERT_OK(Insert("referencingpk_pk", {"referencing_pk"}, {1}));
+  GOOGLESQL_ASSERT_OK(Insert("referencingpk_pk", {"referencing_pk"}, {2}));
   // Delete Referenced key: [1] cascade delete Referencing key: [1].
-  ZETASQL_EXPECT_OK(Commit({MakeDelete("referencedpk", Singleton(1))}));
+  GOOGLESQL_EXPECT_OK(Commit({MakeDelete("referencedpk", Singleton(1))}));
   EXPECT_THAT(ReadAll("referencingpk_pk", {"referencing_pk"}),
               IsOkAndHoldsRows({{2}}));
 }
@@ -93,7 +93,7 @@ TEST_P(ForeignKeyActionsTest, ReferencedPK_ReferencingPK_NoRestrictionWithDml) {
   // transaction under different flush boundaries. Each DML statement in the
   // transaction converts into mutations and flushes separately, therefore FK
   // transaction restriction should not stop this transaction.
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("INSERT INTO referencedpk (referenced_pk) Values (1)"),
        SqlStatement("INSERT INTO referencedpk (referenced_pk) Values (2)"),
        SqlStatement("DELETE FROM referencedpk WHERE referenced_pk = 1")}));
@@ -101,7 +101,7 @@ TEST_P(ForeignKeyActionsTest, ReferencedPK_ReferencingPK_NoRestrictionWithDml) {
 
 TEST_P(ForeignKeyActionsTest,
        ReferencedPK_ReferencingPK_Restriction_WithEmptyRangeDelete) {
-  ZETASQL_ASSERT_OK(Insert("referencedpk", {"referenced_pk"}, {1}));
+  GOOGLESQL_ASSERT_OK(Insert("referencedpk", {"referenced_pk"}, {1}));
   // You can not insert and delete the same referenced row within the same
   // transaction irrespective of the order of the mutations.
   EXPECT_THAT(Commit({
@@ -118,8 +118,8 @@ TEST_P(ForeignKeyActionsTest,
 TEST_P(ForeignKeyActionsTest, ReferencedPK_ReferencingPK_NoRestriction) {
   // You can delete a referenced row and insert the different referenced value
   // within the same transaction.
-  ZETASQL_ASSERT_OK(Insert("referencedpk", {"referenced_pk"}, {1}));
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Insert("referencedpk", {"referenced_pk"}, {1}));
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeInsert("referencedpk", {"referenced_pk"}, 2),
       MakeDelete("referencedpk", Singleton(1)),
       MakeInsert("referencingpk_pk", {"referencing_pk"}, 2),
@@ -134,12 +134,12 @@ TEST_P(ForeignKeyActionsTest, ReferencedPK_ReferencingPK_NoRestriction) {
 TEST_P(ForeignKeyActionsTest, ReferencedPK_ReferencingNonPK) {
   // Referenced key: [1].
   // Referencing key: [1].
-  ZETASQL_ASSERT_OK(Insert("referencedpk", {"referenced_pk"}, {1}));
-  ZETASQL_ASSERT_OK(Insert("referencedpk", {"referenced_pk"}, {2}));
-  ZETASQL_ASSERT_OK(Insert("referencingnonpk_pk", {"pk", "val"}, {10, 1}));
-  ZETASQL_ASSERT_OK(Insert("referencingnonpk_pk", {"pk", "val"}, {20, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("referencedpk", {"referenced_pk"}, {1}));
+  GOOGLESQL_ASSERT_OK(Insert("referencedpk", {"referenced_pk"}, {2}));
+  GOOGLESQL_ASSERT_OK(Insert("referencingnonpk_pk", {"pk", "val"}, {10, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("referencingnonpk_pk", {"pk", "val"}, {20, 2}));
   // Delete Referenced key: [1] cascade delete Referencing key: [1].
-  ZETASQL_EXPECT_OK(Commit({MakeDelete("referencedpk", Singleton(1))}));
+  GOOGLESQL_EXPECT_OK(Commit({MakeDelete("referencedpk", Singleton(1))}));
   EXPECT_THAT(ReadAll("referencingnonpk_pk", {"pk", "val"}),
               IsOkAndHoldsRows({{20, 2}}));
 }
@@ -147,16 +147,16 @@ TEST_P(ForeignKeyActionsTest, ReferencedPK_ReferencingNonPK) {
 TEST_P(ForeignKeyActionsTest, ReferencedNonPK_ReferencingPK) {
   // Referenced key: [1].
   // Referencing key: [1].
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencednonpk", {"referenced_pk", "referenced_col"}, {1, "A"}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencednonpk", {"referenced_pk", "referenced_col"}, {2, "B"}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencingpk_nonpk", {"referencing_pk", "val"}, {"A", 10}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencingpk_nonpk", {"referencing_pk", "val"}, {"B", 20}));
   // Delete Referenced key: [1] cascade delete Referencing key: [1].
-  ZETASQL_EXPECT_OK(Commit({MakeDelete("referencednonpk", Singleton(1))}));
+  GOOGLESQL_EXPECT_OK(Commit({MakeDelete("referencednonpk", Singleton(1))}));
   EXPECT_THAT(ReadAll("referencingpk_nonpk", {"referencing_pk"}),
               IsOkAndHoldsRows({{"B"}}));
 }
@@ -164,14 +164,14 @@ TEST_P(ForeignKeyActionsTest, ReferencedNonPK_ReferencingPK) {
 TEST_P(ForeignKeyActionsTest, ReferencedNonPK_ReferencingNonPK) {
   // Referenced key: [1].
   // Referencing key: [1].
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencednonpk", {"referenced_pk", "referenced_col"}, {1, "A"}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencednonpk", {"referenced_pk", "referenced_col"}, {2, "B"}));
-  ZETASQL_ASSERT_OK(Insert("referencingnonpk_nonpk", {"pk", "val_str"}, {10, "A"}));
-  ZETASQL_ASSERT_OK(Insert("referencingnonpk_nonpk", {"pk", "val_str"}, {20, "B"}));
+  GOOGLESQL_ASSERT_OK(Insert("referencingnonpk_nonpk", {"pk", "val_str"}, {10, "A"}));
+  GOOGLESQL_ASSERT_OK(Insert("referencingnonpk_nonpk", {"pk", "val_str"}, {20, "B"}));
   // Delete Referenced key: [1] cascade delete Referencing key: [1].
-  ZETASQL_EXPECT_OK(Commit({MakeDelete("referencednonpk", Singleton(1))}));
+  GOOGLESQL_EXPECT_OK(Commit({MakeDelete("referencednonpk", Singleton(1))}));
   EXPECT_THAT(ReadAll("referencingnonpk_nonpk", {"pk"}),
               IsOkAndHoldsRows({{20}}));
 }
@@ -180,7 +180,7 @@ TEST_P(ForeignKeyActionsTest, ReferencedPK_ReferencingPK_DESC_OutOfOrder) {
   if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP() << "Primary key DESC is not supported in PostgreSQL";
   } else {
-    ZETASQL_EXPECT_OK(SetSchema({
+    GOOGLESQL_EXPECT_OK(SetSchema({
         R"(CREATE TABLE referencedpk1 (
             referenced_pk1 INT64 NOT NULL,
             referenced_pk2 INT64 NOT NULL,
@@ -195,14 +195,14 @@ TEST_P(ForeignKeyActionsTest, ReferencedPK_ReferencingPK_DESC_OutOfOrder) {
           ) PRIMARY KEY (referenced_pk1 DESC, referenced_pk2)
         )"}));
   }
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencedpk1", {"referenced_pk1", "referenced_pk2"}, {1, 3}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencedpk1", {"referenced_pk1", "referenced_pk2"}, {2, 1}));
-  ZETASQL_ASSERT_OK(Insert("referencingpk_desc_referencedpk_outoforder",
+  GOOGLESQL_ASSERT_OK(Insert("referencingpk_desc_referencedpk_outoforder",
                    {"referenced_pk1", "referenced_pk2"}, {1, 2}));
 
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeDelete("referencedpk1", OpenClosed(Key(0), Key(2))),
   }));
 
@@ -217,7 +217,7 @@ TEST_P(ForeignKeyActionsTest, ReferencingPK_DESC_ReferencedNonPK) {
   if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP() << "Primary key DESC is not supported in PostgreSQL";
   } else {
-    ZETASQL_EXPECT_OK(SetSchema({
+    GOOGLESQL_EXPECT_OK(SetSchema({
         R"(
           CREATE TABLE referencednonpk1 (
             referenced_pk INT64 NOT NULL,
@@ -231,14 +231,14 @@ TEST_P(ForeignKeyActionsTest, ReferencingPK_DESC_ReferencedNonPK) {
           ) PRIMARY KEY (referenced_pk DESC)
         )"}));
   }
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencednonpk1", {"referenced_pk", "referenced_col"}, {1, 3}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencednonpk1", {"referenced_pk", "referenced_col"}, {2, 1}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencingpk_desc_referencednonpk", {"referenced_pk"}, {1}));
 
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeDelete("referencednonpk1", OpenClosed(Key(0), Key(2))),
   }));
 
@@ -250,9 +250,9 @@ TEST_P(ForeignKeyActionsTest, ReferencingPK_DESC_ReferencedNonPK) {
 
 TEST_P(ForeignKeyActionsTest, ReferencedNonPK_ReferencingNonPK_Restriction) {
   // Referenced key: [1, "A"], [2, "B"].
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencednonpk", {"referenced_pk", "referenced_col"}, {1, "A"}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencednonpk", {"referenced_pk", "referenced_col"}, {2, "B"}));
 
   // You can not update and delete the same referenced row within the same
@@ -272,9 +272,9 @@ TEST_P(ForeignKeyActionsTest, ReferencedNonPK_ReferencingNonPK_Restriction) {
 TEST_P(ForeignKeyActionsTest,
        ReferencedNonPK_ReferencingNonPK_RestrictionWithReplaceMutation) {
   // Referenced key: [1, "A"], [2, "B"].
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencednonpk", {"referenced_pk", "referenced_col"}, {1, "A"}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencednonpk", {"referenced_pk", "referenced_col"}, {2, "B"}));
 
   // You can not replace and delete the same referenced row within the same
@@ -289,13 +289,13 @@ TEST_P(ForeignKeyActionsTest,
 
 TEST_P(ForeignKeyActionsTest, ReferencedNonPK_ReferencingNonPK_NoRestriction) {
   // Referenced key: [1, "A"], [2, "B"].
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencednonpk", {"referenced_pk", "referenced_col"}, {1, "A"}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencednonpk", {"referenced_pk", "referenced_col"}, {2, "B"}));
   // You can delete a referenced row and update a different referenced row
   // within the same transaction.
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeUpdate("referencednonpk", {"referenced_pk", "referenced_col"}, 2,
                  "C"),
       MakeDelete("referencednonpk", Singleton(1)),
@@ -312,13 +312,13 @@ TEST_P(
     ForeignKeyActionsTest,
     ReferencedNonPK_ReferencingNonPK_NoRestriction_ReferencedColumnNotInvolve) {
   // Referenced key: [1, "A"], [2, "B"].
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencednonpk", {"referenced_pk", "referenced_col"}, {1, "A"}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("referencednonpk", {"referenced_pk", "referenced_col"}, {2, "B"}));
   // You can delete a referenced row and update a different referenced row
   // within the same transaction.
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeUpdate("referencednonpk", {"referenced_pk"}, 2),
       MakeDelete("referencednonpk", Singleton(1)),
       MakeInsert("referencingnonpk_nonpk", {"pk", "val_str"}, 10, "B"),
@@ -334,14 +334,14 @@ TEST_P(
     ForeignKeyActionsTest,
     ReferencedNonPKNoAction_ReferencingNonPKNoAction_NoRestriction_OnDelete) {
   // Referenced key: [1, "A"], [2, "B"].
-  ZETASQL_ASSERT_OK(Insert("referencednonpk_noaction",
+  GOOGLESQL_ASSERT_OK(Insert("referencednonpk_noaction",
                    {"referenced_pk", "referenced_col"}, {1, "A"}));
-  ZETASQL_ASSERT_OK(Insert("referencednonpk_noaction",
+  GOOGLESQL_ASSERT_OK(Insert("referencednonpk_noaction",
                    {"referenced_pk", "referenced_col"}, {2, "B"}));
 
   // When table has FK with no action, update and delete the same referenced row
   // within the same transaction is allowed.
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeUpdate("referencednonpk_noaction",
                  {"referenced_pk", "referenced_col"}, 2, "C"),
       MakeDelete("referencednonpk_noaction", OpenClosed(Key(1), Key(2))),
@@ -359,13 +359,13 @@ TEST_P(
     ForeignKeyActionsTest,
     ReferencedNonPKNoAction_ReferencingNonPKNoAction_NoRestriction_OnReplace) {
   // Referenced key: [1, "A"], [2, "B"].
-  ZETASQL_ASSERT_OK(Insert("referencednonpk_noaction",
+  GOOGLESQL_ASSERT_OK(Insert("referencednonpk_noaction",
                    {"referenced_pk", "referenced_col"}, {1, "A"}));
-  ZETASQL_ASSERT_OK(Insert("referencednonpk_noaction",
+  GOOGLESQL_ASSERT_OK(Insert("referencednonpk_noaction",
                    {"referenced_pk", "referenced_col"}, {2, "B"}));
   // You can not replace and delete the same referenced row within the same
   // transaction.
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeReplace("referencednonpk_noaction",
                   {"referenced_pk", "referenced_col"}, 2, "C"),
       MakeDelete("referencednonpk_noaction", OpenClosed(Key(1), Key(2))),
@@ -383,7 +383,7 @@ TEST_P(ForeignKeyActionsTest, Chain_Interleave_ReferencingPK) {
   // This test verifies that interleave works correctly when the referencing
   // columns in the last table are the primary key.
   if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_EXPECT_OK(SetSchema({
+    GOOGLESQL_EXPECT_OK(SetSchema({
         R"(CREATE TABLE group1_level1 (
             group1_level1_pk varchar NOT NULL,
             PRIMARY KEY (group1_level1_pk)
@@ -406,7 +406,7 @@ TEST_P(ForeignKeyActionsTest, Chain_Interleave_ReferencingPK) {
         )"}));
 
   } else {
-    ZETASQL_EXPECT_OK(SetSchema({
+    GOOGLESQL_EXPECT_OK(SetSchema({
         R"(CREATE TABLE group1_level1 (
             group1_level1_pk STRING(MAX) NOT NULL,
           ) PRIMARY KEY (group1_level1_pk)
@@ -427,19 +427,19 @@ TEST_P(ForeignKeyActionsTest, Chain_Interleave_ReferencingPK) {
         )"}));
   }
 
-  ZETASQL_ASSERT_OK(Insert("group1_level1", {"group1_level1_pk"}, {"ABC"}));
-  ZETASQL_ASSERT_OK(Insert("group1_level1", {"group1_level1_pk"}, {"XYZ"}));
-  ZETASQL_ASSERT_OK(Insert("group1_level2", {"group1_level1_pk", "group1_level2_pk"},
+  GOOGLESQL_ASSERT_OK(Insert("group1_level1", {"group1_level1_pk"}, {"ABC"}));
+  GOOGLESQL_ASSERT_OK(Insert("group1_level1", {"group1_level1_pk"}, {"XYZ"}));
+  GOOGLESQL_ASSERT_OK(Insert("group1_level2", {"group1_level1_pk", "group1_level2_pk"},
                    {"ABC", 100}));
-  ZETASQL_ASSERT_OK(Insert("group1_level2", {"group1_level1_pk", "group1_level2_pk"},
+  GOOGLESQL_ASSERT_OK(Insert("group1_level2", {"group1_level1_pk", "group1_level2_pk"},
                    {"XYZ", 200}));
-  ZETASQL_ASSERT_OK(Insert("group2_level1", {"group2_level1_pk1", "group2_level1_pk2"},
+  GOOGLESQL_ASSERT_OK(Insert("group2_level1", {"group2_level1_pk1", "group2_level1_pk2"},
                    {"ABC", 100}));
-  ZETASQL_ASSERT_OK(Insert("group2_level1", {"group2_level1_pk1", "group2_level1_pk2"},
+  GOOGLESQL_ASSERT_OK(Insert("group2_level1", {"group2_level1_pk1", "group2_level1_pk2"},
                    {"XYZ", 200}));
   // Delete Referenced key: ["ABC"] cascade delete from the interleave child
   // table and the referencing table.
-  ZETASQL_EXPECT_OK(Commit({MakeDelete("group1_level1", Singleton("ABC"))}));
+  GOOGLESQL_EXPECT_OK(Commit({MakeDelete("group1_level1", Singleton("ABC"))}));
   EXPECT_THAT(
       ReadAll("group2_level1", {"group2_level1_pk1", "group2_level1_pk2"}),
       IsOkAndHoldsRows({{"XYZ", 200}}));
@@ -448,7 +448,7 @@ TEST_P(ForeignKeyActionsTest, Chain_Interleave_ReferencingPK) {
 TEST_P(ForeignKeyActionsTest, Chain_ForeignKeyForeignKeyInterleave) {
   // This test verifies that the chain FK->FK->Interleave works correctly.
   if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_EXPECT_OK(SetSchema({
+    GOOGLESQL_EXPECT_OK(SetSchema({
         R"(CREATE TABLE group1_level1 (
         group1_level1_pk varchar NOT NULL,
         PRIMARY KEY (group1_level1_pk)
@@ -477,7 +477,7 @@ TEST_P(ForeignKeyActionsTest, Chain_ForeignKeyForeignKeyInterleave) {
       ) INTERLEAVE IN PARENT group3_level1 ON DELETE CASCADE
         )"}));
   } else {
-    ZETASQL_EXPECT_OK(SetSchema({
+    GOOGLESQL_EXPECT_OK(SetSchema({
         R"(CREATE TABLE group1_level1 (
         group1_level1_pk STRING(MAX) NOT NULL,
       ) PRIMARY KEY (group1_level1_pk)
@@ -504,23 +504,23 @@ TEST_P(ForeignKeyActionsTest, Chain_ForeignKeyForeignKeyInterleave) {
         )"}));
   }
 
-  ZETASQL_ASSERT_OK(Insert("group1_level1", {"group1_level1_pk"}, {"ABC"}));
-  ZETASQL_ASSERT_OK(Insert("group1_level1", {"group1_level1_pk"}, {"XYZ"}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(Insert("group1_level1", {"group1_level1_pk"}, {"ABC"}));
+  GOOGLESQL_ASSERT_OK(Insert("group1_level1", {"group1_level1_pk"}, {"XYZ"}));
+  GOOGLESQL_ASSERT_OK(
       Insert("group2_level1", {"group2_level1_pk", "val_str"}, {1, "ABC"}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("group2_level1", {"group2_level1_pk", "val_str"}, {2, "XYZ"}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("group3_level1", {"group3_level1_pk", "val_int"}, {"ABC", 1}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       Insert("group3_level1", {"group3_level1_pk", "val_int"}, {"XYZ", 2}));
-  ZETASQL_ASSERT_OK(Insert("group3_level2", {"group3_level1_pk", "group3_level2_pk"},
+  GOOGLESQL_ASSERT_OK(Insert("group3_level2", {"group3_level1_pk", "group3_level2_pk"},
                    {"ABC", 10}));
-  ZETASQL_ASSERT_OK(Insert("group3_level2", {"group3_level1_pk", "group3_level2_pk"},
+  GOOGLESQL_ASSERT_OK(Insert("group3_level2", {"group3_level1_pk", "group3_level2_pk"},
                    {"XYZ", 20}));
   // Delete Referenced key: ["ABC"] cascade delete from the referencing table
   // and the interleave child table.
-  ZETASQL_EXPECT_OK(Commit({MakeDelete("group1_level1", Singleton("ABC"))}));
+  GOOGLESQL_EXPECT_OK(Commit({MakeDelete("group1_level1", Singleton("ABC"))}));
   EXPECT_THAT(
       ReadAll("group3_level2", {"group3_level1_pk", "group3_level2_pk"}),
       IsOkAndHoldsRows({{"XYZ", 20}}));

@@ -20,10 +20,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "backend/database/database.h"
 #include "backend/schema/updater/schema_updater.h"
@@ -31,7 +31,7 @@
 #include "backend/transaction/read_write_transaction.h"
 #include "common/clock.h"
 #include "tests/common/scoped_feature_flags_setter.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -40,8 +40,8 @@ namespace backend {
 namespace {
 
 using google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
-using zetasql::values::Int64;
-using zetasql_base::testing::StatusIs;
+using googlesql::values::Int64;
+using googlesql_base::testing::StatusIs;
 
 constexpr char kDatabaseId[] = "test-db";
 
@@ -58,12 +58,12 @@ class CheckConstraintVerifiersTest : public ::testing::Test {
           B INT64,
           C INT64 AS (A + B) STORED,
         ) PRIMARY KEY(A))"};
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         database_,
         Database::Create(&clock_, kDatabaseId,
                          SchemaChangeOperation{.statements = statements}));
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(
                              ReadWriteOptions(), RetryState()));
 
@@ -76,19 +76,19 @@ class CheckConstraintVerifiersTest : public ::testing::Test {
     m.AddWriteOp(MutationOpType::kInsert, "T", {"A", "B"},
                  {{Int64(3), Int64(1)}});
     m.AddWriteOp(MutationOpType::kInsert, "T", {"A", "B"},
-                 {{Int64(4), zetasql::values::NullInt64()}});
+                 {{Int64(4), googlesql::values::NullInt64()}});
     // Value of B is not present. This is to verify that it will be converted to
     // NULL in check_constraint_verifiers.
     m.AddWriteOp(MutationOpType::kInsert, "T", {"A"}, {{Int64(5)}});
-    ZETASQL_ASSERT_OK(txn->Write(m));
-    ZETASQL_ASSERT_OK(txn->Commit());
+    GOOGLESQL_ASSERT_OK(txn->Write(m));
+    GOOGLESQL_ASSERT_OK(txn->Commit());
   }
 
   absl::Status UpdateSchema(absl::Span<const std::string> statements) {
     int succesful;
     absl::Status status;
     absl::Time timestamp;
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         database_->UpdateSchema(SchemaChangeOperation{.statements = statements},
                                 &succesful, &timestamp, &status));
     return status;
@@ -105,11 +105,11 @@ class CheckConstraintVerifiersTest : public ::testing::Test {
 };
 
 TEST_F(CheckConstraintVerifiersTest, ValidExistingData) {
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       UpdateSchema({"ALTER TABLE T"
                     " ADD CONSTRAINT a_gt_zero CHECK(A > 0)"}));
 
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       UpdateSchema({"ALTER TABLE T"
                     " ADD CONSTRAINT c_gt_zero CHECK(C > 0)"}));
 }

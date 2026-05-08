@@ -22,11 +22,11 @@
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
@@ -45,15 +45,15 @@ namespace {
 
 using ::google::spanner::emulator::test::TestRowCursor;
 using ::google::spanner::v1::PartialResultSet;
-using zetasql::types::BoolType;
-using zetasql::types::Int64Type;
-using zetasql::types::StringArrayType;
-using zetasql::types::StringType;
-using zetasql::types::TimestampType;
-using zetasql::values::Bool;
-using zetasql::values::Int64;
-using zetasql::values::String;
-using zetasql::values::Timestamp;
+using googlesql::types::BoolType;
+using googlesql::types::Int64Type;
+using googlesql::types::StringArrayType;
+using googlesql::types::StringType;
+using googlesql::types::TimestampType;
+using googlesql::values::Bool;
+using googlesql::values::Int64;
+using googlesql::values::String;
+using googlesql::values::Timestamp;
 using testing::ElementsAre;
 using test::EqualsProto;
 
@@ -81,7 +81,7 @@ class PgChangeStreamResultConverterTest : public testing::Test {
 TEST_F(PgChangeStreamResultConverterTest,
        PopulateFixedOutputColumnTypeMetadataForFirstResponse) {
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results,
                        ConvertHeartbeatTimestampToJson(
                            now_, /*tvf_name=*/kDummyChangeStreamJsonTvf,
                            /*expect_metadata=*/true));
@@ -107,7 +107,7 @@ TEST_F(PgChangeStreamResultConverterTest,
 TEST_F(PgChangeStreamResultConverterTest,
        ConvertHearbeatTimestampToChangeRecordResultSetProto) {
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       results,
       google::spanner::emulator::frontend::ConvertHeartbeatTimestampToJson(
           now_, /*tvf_name=*/kDummyChangeStreamJsonTvf));
@@ -120,9 +120,9 @@ TEST_F(PgChangeStreamResultConverterTest,
                resume_token: "$1"
           )pb",
           now_, kChangeStreamDummyResumeToken))));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
                                             results, /*columns_per_row=*/1));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
                        test::GetChangeStreamRecordsFromResultSet(result_set));
   ASSERT_EQ(change_recods.child_partition_records.size(), 0);
   ASSERT_EQ(change_recods.heartbeat_records.size(), 1);
@@ -133,19 +133,19 @@ TEST_F(PgChangeStreamResultConverterTest,
 
 TEST_F(PgChangeStreamResultConverterTest,
        ConvertInitialPartitionTableRowCursorToMultipleChangeRecordsResultSet) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto parents_array_val,
-      zetasql::Value::MakeArray(StringArrayType(), {String("parent1")}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+      googlesql::Value::MakeArray(StringArrayType(), {String("parent1")}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto parents_array_val2,
-      zetasql::Value::MakeArray(StringArrayType(), {String("parent2")}));
+      googlesql::Value::MakeArray(StringArrayType(), {String("parent2")}));
   TestRowCursor cursor(
       {"start_time", "partition_token", "parents"},
       {TimestampType(), StringType(), StringArrayType()},
       {{Timestamp(now_), String("token1"), parents_array_val},
        {Timestamp(now_), String("token2"), parents_array_val2}});
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results,
                        ConvertPartitionTableRowCursorToJson(
                            &cursor, /*initial_start_time=*/one_min_from_now_,
                            /*tvf_name=*/kDummyChangeStreamJsonTvf,
@@ -183,9 +183,9 @@ TEST_F(PgChangeStreamResultConverterTest,
   EXPECT_EQ(JSON::parse(expected_json2),
             JSON::parse(results[0].values(1).string_value()));
   EXPECT_EQ(results[0].resume_token(), kChangeStreamDummyResumeToken);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
                                             results, /*columns_per_row=*/1));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
                        test::GetChangeStreamRecordsFromResultSet(result_set));
   ASSERT_EQ(change_recods.child_partition_records.size(), 2);
   ASSERT_EQ(change_recods.heartbeat_records.size(), 0);
@@ -194,15 +194,15 @@ TEST_F(PgChangeStreamResultConverterTest,
 
 TEST_F(PgChangeStreamResultConverterTest,
        ConvertMoveEventPartitionTableRowCursorToChangeRecordResultSet) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto parents_array_val,
-      zetasql::Value::MakeArray(StringArrayType(), {String("move_token1")}));
+      googlesql::Value::MakeArray(StringArrayType(), {String("move_token1")}));
   TestRowCursor cursor(
       {"start_time", "partition_token", "parents"},
       {TimestampType(), StringType(), StringArrayType()},
       {{Timestamp(now_), String("token1"), parents_array_val}});
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results,
                        ConvertPartitionTableRowCursorToJson(
                            &cursor, /*initial_start_time=*/std::nullopt,
                            /*tvf_name=*/kDummyChangeStreamJsonTvf,
@@ -225,9 +225,9 @@ TEST_F(PgChangeStreamResultConverterTest,
   EXPECT_EQ(JSON::parse(expected_json),
             JSON::parse(results[0].values(0).string_value()));
   EXPECT_EQ(results[0].resume_token(), kChangeStreamDummyResumeToken);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
                                             results, /*columns_per_row=*/1));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
                        test::GetChangeStreamRecordsFromResultSet(result_set));
   ASSERT_EQ(change_recods.child_partition_records.size(), 1);
   ASSERT_EQ(change_recods.heartbeat_records.size(), 0);
@@ -236,23 +236,23 @@ TEST_F(PgChangeStreamResultConverterTest,
 
 TEST_F(PgChangeStreamResultConverterTest,
        ConvertMergeEventPartitionTableRowCursorToChangeRecordResultSet) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto parents_array_val,
-      zetasql::Value::MakeArray(
+      googlesql::Value::MakeArray(
           StringArrayType(), {String("merge_token1"), String("merge_token2")}));
   TestRowCursor cursor(
       {"start_time", "partition_token", "parents"},
       {TimestampType(), StringType(), StringArrayType()},
       {{Timestamp(now_), String("token1"), parents_array_val}});
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results,
                        ConvertPartitionTableRowCursorToJson(
                            &cursor, /*initial_start_time=*/std::nullopt,
                            /*tvf_name=*/kDummyChangeStreamJsonTvf,
                            /*expect_metadata=*/false));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
                                             results, /*columns_per_row=*/1));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
                        test::GetChangeStreamRecordsFromResultSet(result_set));
   const std::string expected_json = absl::Substitute(R"json({
     "child_partitions_record": {
@@ -279,23 +279,23 @@ TEST_F(PgChangeStreamResultConverterTest,
 
 TEST_F(PgChangeStreamResultConverterTest,
        ConvertSplitEventPartitionTableRowCursorToChangeRecordResultSet) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto parents_array_val,
-      zetasql::Value::MakeArray(StringArrayType(), {String("parent_token")}));
+      googlesql::Value::MakeArray(StringArrayType(), {String("parent_token")}));
   TestRowCursor cursor(
       {"start_time", "partition_token", "parents"},
       {TimestampType(), StringType(), StringArrayType()},
       {{Timestamp(now_), String("split_token1"), parents_array_val},
        {Timestamp(now_), String("split_token2"), parents_array_val}});
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results,
                        ConvertPartitionTableRowCursorToJson(
                            &cursor, /*initial_start_time=*/std::nullopt,
                            /*tvf_name=*/kDummyChangeStreamJsonTvf,
                            /*expect_metadata=*/false));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
                                             results, /*columns_per_row=*/1));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
                        test::GetChangeStreamRecordsFromResultSet(result_set));
   const std::string expected_json = absl::Substitute(R"json({
     "child_partitions_record": {
@@ -326,36 +326,36 @@ TEST_F(PgChangeStreamResultConverterTest,
 
 TEST_F(PgChangeStreamResultConverterTest,
        ConvertNewValuesDataTableRowCursorToChangeRecordResultSet) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto col_types_name_arr_val,
-      zetasql::Value::MakeArray(StringArrayType(),
+      googlesql::Value::MakeArray(StringArrayType(),
                                   {String("IsPrimaryUser"), String("UserId")}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto col_types_type_arr_val,
-      zetasql::Value::MakeArray(
+      googlesql::Value::MakeArray(
           StringArrayType(),
           {String("{\"code\":\"BOOL\"}"), String("{\"code\":\"STRING\"}")}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto col_types_is_primary_key_arr_val,
-      zetasql::Value::MakeArray(zetasql::types::BoolArrayType(),
+      googlesql::Value::MakeArray(googlesql::types::BoolArrayType(),
                                   {Bool(false), Bool(true)}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto col_types_ordinal_position_arr_val,
-      zetasql::Value::MakeArray(zetasql::types::Int64ArrayType(),
+      googlesql::Value::MakeArray(googlesql::types::Int64ArrayType(),
                                   {Int64(1), Int64(2)}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto mods_keys,
-      zetasql::Value::MakeArray(StringArrayType(),
+      googlesql::Value::MakeArray(StringArrayType(),
                                   {String("{\"UserId\": \"User2\"}"),
                                    String("{\"UserId\": \"User2\"}")}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto mods_new_values,
-      zetasql::Value::MakeArray(
+      googlesql::Value::MakeArray(
           StringArrayType(),
           {String("{\"IsPrimaryUser\": true,\"UserId\": \"User2\"}"),
            String("{\"IsPrimaryUser\": false}")}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto mods_old_values,
-                       zetasql::Value::MakeArray(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto mods_old_values,
+                       googlesql::Value::MakeArray(
                            StringArrayType(), {String("{}"), String("{}")}));
   TestRowCursor cursor(
       {"partition_token", "commit_timestamp", "server_transaction_id",
@@ -378,7 +378,7 @@ TEST_F(PgChangeStreamResultConverterTest,
         String("NEW_VALUES"), Int64(3), Int64(2), String("test_tag"),
         Bool(false)}});
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results,
                        ConvertDataTableRowCursorToJson(
                            &cursor, /*tvf_name=*/kDummyChangeStreamJsonTvf,
                            /*expect_metadata=*/true));
@@ -439,9 +439,9 @@ TEST_F(PgChangeStreamResultConverterTest,
   EXPECT_EQ(JSON::parse(expected_json),
             JSON::parse(results[0].values(0).string_value()));
   EXPECT_EQ(results[0].resume_token(), kChangeStreamDummyResumeToken);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
                                             results, /*columns_per_row=*/1));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_recods,
                        test::GetChangeStreamRecordsFromResultSet(result_set));
   ASSERT_EQ(change_recods.child_partition_records.size(), 0);
   ASSERT_EQ(change_recods.heartbeat_records.size(), 0);

@@ -31,10 +31,10 @@
 
 #include "third_party/spanner_pg/catalog/type.h"
 
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/memory/memory.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
@@ -47,12 +47,12 @@ namespace postgres_translator::spangres::test {
 namespace {
 
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 using TypeTransformerTest = ::postgres_translator::TransformerTest;
 
 TEST_F(TypeTransformerTest, PgToGsql_Bool) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Type* gsql_type,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const googlesql::Type* gsql_type,
                        forward_transformer_->BuildGsqlType(BOOLOID));
   EXPECT_TRUE(gsql_type->IsBool());
 }
@@ -65,9 +65,9 @@ TEST_F(TypeTransformerTest, PgToGsql_Unsupported) {
 
 TEST_F(TypeTransformerTest, InvalidParameterNames) {
   // Invalid parameter name.
-  std::map<std::string, const zetasql::Type*> parameter_types = {
-      {"param1", zetasql::types::BoolType()},
-      {"p2", zetasql::types::Int64Type()}};
+  std::map<std::string, const googlesql::Type*> parameter_types = {
+      {"param1", googlesql::types::BoolType()},
+      {"p2", googlesql::types::Int64Type()}};
   int num_params = 0;
 
   std::unique_ptr<CatalogAdapter> adapter =
@@ -77,13 +77,13 @@ TEST_F(TypeTransformerTest, InvalidParameterNames) {
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Invalid parameter name: param1")));
 
-  parameter_types = {{"p1p", zetasql::types::BoolType()}};
+  parameter_types = {{"p1p", googlesql::types::BoolType()}};
   EXPECT_THAT(Transformer::BuildPgParameterTypeList(*adapter, parameter_types,
                                                     &num_params),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Invalid parameter name: p1p")));
 
-  parameter_types = {{"p", zetasql::types::BoolType()}};
+  parameter_types = {{"p", googlesql::types::BoolType()}};
   EXPECT_THAT(Transformer::BuildPgParameterTypeList(*adapter, parameter_types,
                                                     &num_params),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -93,15 +93,15 @@ TEST_F(TypeTransformerTest, InvalidParameterNames) {
 TEST_F(TypeTransformerTest, MissingParameterNames) {
   // Missing type for parameter p2. The returned array should contain 0 for the
   // unspecified parameter.
-  std::map<std::string, const zetasql::Type*> parameter_types = {
-    {"p1", zetasql::types::BoolType()},
-    {"p3", zetasql::types::Int64Type()}};
+  std::map<std::string, const googlesql::Type*> parameter_types = {
+    {"p1", googlesql::types::BoolType()},
+    {"p3", googlesql::types::Int64Type()}};
   int num_params = 0;
 
   std::unique_ptr<CatalogAdapter> adapter =
       GetSpangresTestCatalogAdapter(analyzer_options_);
   Oid* parameter_oids;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(parameter_oids,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(parameter_oids,
                        Transformer::BuildPgParameterTypeList(
                            *adapter, parameter_types, &num_params));
   EXPECT_EQ(parameter_oids[0], BOOLOID);
@@ -109,8 +109,8 @@ TEST_F(TypeTransformerTest, MissingParameterNames) {
   EXPECT_EQ(parameter_oids[2], INT8OID);
   EXPECT_EQ(num_params, 3);
 
-  parameter_types = {{"p4", zetasql::types::BoolType()}};
-  ZETASQL_ASSERT_OK_AND_ASSIGN(parameter_oids,
+  parameter_types = {{"p4", googlesql::types::BoolType()}};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(parameter_oids,
                        Transformer::BuildPgParameterTypeList(
                            *adapter, parameter_types, &num_params));
   EXPECT_EQ(parameter_oids[0], 0);
@@ -120,11 +120,11 @@ TEST_F(TypeTransformerTest, MissingParameterNames) {
   EXPECT_EQ(num_params, 4);
 
   parameter_types = {
-    {"p2", zetasql::types::BoolType()},
-    {"p4", zetasql::types::Int64Type()},
-    {"p6", zetasql::types::DateType()},
+    {"p2", googlesql::types::BoolType()},
+    {"p4", googlesql::types::Int64Type()},
+    {"p6", googlesql::types::DateType()},
   };
-  ZETASQL_ASSERT_OK_AND_ASSIGN(parameter_oids,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(parameter_oids,
                        Transformer::BuildPgParameterTypeList(
                            *adapter, parameter_types, &num_params));
   EXPECT_EQ(parameter_oids[0], 0);
@@ -137,10 +137,10 @@ TEST_F(TypeTransformerTest, MissingParameterNames) {
 }
 
 TEST_F(TypeTransformerTest, InvalidParameterTypes) {
-  std::map<std::string, const zetasql::Type*> parameter_types = {
-      {"p1", zetasql::types::BoolType()},
-      {"p2", zetasql::types::Int64Type()},
-      {"p3", zetasql::types::NumericType()}};
+  std::map<std::string, const googlesql::Type*> parameter_types = {
+      {"p1", googlesql::types::BoolType()},
+      {"p2", googlesql::types::Int64Type()},
+      {"p3", googlesql::types::NumericType()}};
   int num_params = 0;
 
   std::unique_ptr<CatalogAdapter> adapter =
@@ -148,22 +148,22 @@ TEST_F(TypeTransformerTest, InvalidParameterTypes) {
   EXPECT_THAT(Transformer::BuildPgParameterTypeList(*adapter, parameter_types,
                                                     &num_params),
               StatusIs(absl::StatusCode::kUnimplemented,
-                       HasSubstr("Unsupported ZetaSQL Type")));
+                       HasSubstr("Unsupported GoogleSQL Type")));
 }
 
 TEST_F(TypeTransformerTest, ValidParameters) {
-  std::map<std::string, const zetasql::Type*> parameter_types = {
-      {"p2", zetasql::types::BoolType()},
-      {"p3", zetasql::types::Int64Type()},
+  std::map<std::string, const googlesql::Type*> parameter_types = {
+      {"p2", googlesql::types::BoolType()},
+      {"p3", googlesql::types::Int64Type()},
       {"p4",
        postgres_translator::spangres::types::PgNumericMapping()->mapped_type()},
-      {"p1", zetasql::types::DoubleType()}};
+      {"p1", googlesql::types::DoubleType()}};
 
   std::unique_ptr<CatalogAdapter> adapter =
       GetSpangresTestCatalogAdapter(analyzer_options_);
   Oid* parameter_oids;
   int num_params = 0;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(parameter_oids,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(parameter_oids,
                        Transformer::BuildPgParameterTypeList(
                            *adapter, parameter_types, &num_params));
   EXPECT_EQ(parameter_oids[0], FLOAT8OID);

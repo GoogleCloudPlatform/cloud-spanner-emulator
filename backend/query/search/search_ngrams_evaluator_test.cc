@@ -21,10 +21,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "backend/query/search/plain_full_text_tokenizer.h"
@@ -38,14 +38,14 @@ namespace query {
 namespace search {
 
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 TEST(SearchNgramsEvaluatorTest, EvaluateWrongSearchColumnType) {
-  std::vector<zetasql::Value> args;
-  args.push_back(zetasql::Value::Bool(false));
-  args.push_back(zetasql::Value::String("test"));
-  args.push_back(zetasql::Value::Int64(0));
-  args.push_back(zetasql::Value::Double(0));
+  std::vector<googlesql::Value> args;
+  args.push_back(googlesql::Value::Bool(false));
+  args.push_back(googlesql::Value::String("test"));
+  args.push_back(googlesql::Value::Int64(0));
+  args.push_back(googlesql::Value::Double(0));
 
   EXPECT_THAT(
       SearchNgramsEvaluator::Evaluate(args),
@@ -56,11 +56,11 @@ TEST(SearchNgramsEvaluatorTest, EvaluateWrongSearchColumnType) {
 }
 
 TEST(SearchNgramsEvaluatorTest, EvaluateWrongSearchQueryType) {
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   args.push_back(TokenListFromStrings({}));
-  args.push_back(zetasql::Value::Bool(false));
-  args.push_back(zetasql::Value::Int64(0));
-  args.push_back(zetasql::Value::Double(0));
+  args.push_back(googlesql::Value::Bool(false));
+  args.push_back(googlesql::Value::Int64(0));
+  args.push_back(googlesql::Value::Double(0));
 
   EXPECT_THAT(SearchNgramsEvaluator::Evaluate(args),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -68,13 +68,13 @@ TEST(SearchNgramsEvaluatorTest, EvaluateWrongSearchQueryType) {
 }
 
 TEST(SearchNgramsEvaluatorTest, EvaluateOnWrongTokenList) {
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   const auto fulltext_tokenlist =
-      PlainFullTextTokenizer::Tokenize({zetasql::Value::String("fulltext")});
+      PlainFullTextTokenizer::Tokenize({googlesql::Value::String("fulltext")});
   args.push_back(*fulltext_tokenlist);
-  args.push_back(zetasql::Value::String("test"));
-  args.push_back(zetasql::Value::Int64(0));
-  args.push_back(zetasql::Value::Double(0));
+  args.push_back(googlesql::Value::String("test"));
+  args.push_back(googlesql::Value::Int64(0));
+  args.push_back(googlesql::Value::Double(0));
 
   EXPECT_THAT(
       SearchNgramsEvaluator::Evaluate(args),
@@ -85,22 +85,22 @@ TEST(SearchNgramsEvaluatorTest, EvaluateOnWrongTokenList) {
 }
 
 TEST(SearchNgramsEvaluatorTest, EvaluateOnNullTokenList) {
-  std::vector<zetasql::Value> args;
-  args.push_back(zetasql::Value::NullTokenList());
-  args.push_back(zetasql::Value::String("test"));
-  args.push_back(zetasql::Value::Int64(0));
-  args.push_back(zetasql::Value::Double(0));
+  std::vector<googlesql::Value> args;
+  args.push_back(googlesql::Value::NullTokenList());
+  args.push_back(googlesql::Value::String("test"));
+  args.push_back(googlesql::Value::Int64(0));
+  args.push_back(googlesql::Value::Double(0));
 
   const auto result = SearchNgramsEvaluator::Evaluate(args);
   EXPECT_TRUE(result->is_null());
 }
 
 TEST(SearchNgramsEvaluatorTest, EvaluateOnEmptyTokenList) {
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   args.push_back(TokenListFromStrings({""}));
-  args.push_back(zetasql::Value::String("test"));
-  args.push_back(zetasql::Value::Int64(0));
-  args.push_back(zetasql::Value::Double(0));
+  args.push_back(googlesql::Value::String("test"));
+  args.push_back(googlesql::Value::Int64(0));
+  args.push_back(googlesql::Value::Double(0));
 
   EXPECT_THAT(
       SearchNgramsEvaluator::Evaluate(args),
@@ -119,11 +119,11 @@ using TokenizerSignatureTest =
 
 TEST_P(TokenizerSignatureTest, TestTokenizerSignature) {
   const TokenizerSignatureTestCase& test_case = GetParam();
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   args.push_back(TokenListFromStrings({test_case.tokenizer_sig}));
-  args.push_back(zetasql::Value::String("test"));
-  args.push_back(zetasql::Value::Int64(0));
-  args.push_back(zetasql::Value::Double(0));
+  args.push_back(googlesql::Value::String("test"));
+  args.push_back(googlesql::Value::Int64(0));
+  args.push_back(googlesql::Value::Double(0));
 
   EXPECT_THAT(SearchNgramsEvaluator::Evaluate(args),
               StatusIs(absl::StatusCode::kInternal));
@@ -154,22 +154,22 @@ using SearchNgramsEvaluatorTest =
 TEST_P(SearchNgramsEvaluatorTest, TestSearchNgramsEvaluate) {
   const SearchNgramsEvaluatorTestCase& test_case = GetParam();
 
-  zetasql::Value query = zetasql::Value::String(test_case.query);
-  zetasql::Value min_ngrams =
+  googlesql::Value query = googlesql::Value::String(test_case.query);
+  googlesql::Value min_ngrams =
       test_case.min_ngrams.has_value()
-          ? zetasql::Value::Int64(test_case.min_ngrams.value())
-          : zetasql::Value::NullInt64();
-  zetasql::Value min_ngrams_percent =
+          ? googlesql::Value::Int64(test_case.min_ngrams.value())
+          : googlesql::Value::NullInt64();
+  googlesql::Value min_ngrams_percent =
       test_case.min_ngrams_percent.has_value()
-          ? zetasql::Value::Double(test_case.min_ngrams_percent.value())
-          : zetasql::Value::NullDouble();
+          ? googlesql::Value::Double(test_case.min_ngrams_percent.value())
+          : googlesql::Value::NullDouble();
 
-  std::vector<zetasql::Value> args{TokenListFromStrings(test_case.tokens),
+  std::vector<googlesql::Value> args{TokenListFromStrings(test_case.tokens),
                                      query, min_ngrams, min_ngrams_percent};
 
-  absl::StatusOr<zetasql::Value> result =
+  absl::StatusOr<googlesql::Value> result =
       SearchNgramsEvaluator::Evaluate(args);
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
   EXPECT_EQ(result.value().bool_value(), test_case.expected_result);
 };
 

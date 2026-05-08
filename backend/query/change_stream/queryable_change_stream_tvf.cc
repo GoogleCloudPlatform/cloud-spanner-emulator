@@ -21,17 +21,17 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/types/array_type.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/types/array_type.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/substitute.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "common/constants.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -39,24 +39,24 @@ namespace emulator {
 namespace backend {
 absl::StatusOr<std::unique_ptr<QueryableChangeStreamTvf>>
 QueryableChangeStreamTvf::Create(const std::string& tvf_name,
-                                 const zetasql::AnalyzerOptions options,
-                                 zetasql::Catalog* catalog,
-                                 zetasql::TypeFactory* type_factory,
+                                 const googlesql::AnalyzerOptions options,
+                                 googlesql::Catalog* catalog,
+                                 googlesql::TypeFactory* type_factory,
                                  bool is_pg) {
-  std::vector<zetasql::FunctionArgumentType> args;
-  std::vector<zetasql::TVFSchemaColumn> output_columns;
-  std::vector<std::pair<std::string, const zetasql::Type*>> columns;
-  const zetasql::Type* output_type = nullptr;
+  std::vector<googlesql::FunctionArgumentType> args;
+  std::vector<googlesql::TVFSchemaColumn> output_columns;
+  std::vector<std::pair<std::string, const googlesql::Type*>> columns;
+  const googlesql::Type* output_type = nullptr;
   if (is_pg) {
     output_type =
         postgres_translator::spangres::types::PgJsonbMapping()->mapped_type();
   } else {
-    ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeType(
+    GOOGLESQL_RETURN_IF_ERROR(googlesql::AnalyzeType(
         absl::Substitute(kChangeStreamTvfOutputFormat, "JSON"), options,
         catalog, type_factory, &output_type));
   }
-  const zetasql::ArrayType* read_options_array;
-  ZETASQL_RETURN_IF_ERROR(type_factory->MakeArrayType(type_factory->get_string(),
+  const googlesql::ArrayType* read_options_array;
+  GOOGLESQL_RETURN_IF_ERROR(type_factory->MakeArrayType(type_factory->get_string(),
                                               &read_options_array));
   columns.emplace_back(
       std::make_pair(kChangeStreamTvfOutputColumn, output_type));
@@ -72,22 +72,22 @@ QueryableChangeStreamTvf::Create(const std::string& tvf_name,
       std::make_pair(kChangeStreamTvfReadOptions, read_options_array));
 
   for (int i = 0; i < columns.size(); ++i) {
-    std::pair<std::string, const zetasql::Type*> curr_column = columns[i];
+    std::pair<std::string, const googlesql::Type*> curr_column = columns[i];
     if (curr_column.first != kChangeStreamTvfOutputColumn) {
       auto arg_option =
-          zetasql::FunctionArgumentTypeOptions().set_argument_name(
-              curr_column.first, zetasql::kPositionalOrNamed);
-      arg_option.set_cardinality(zetasql::FunctionArgumentType::OPTIONAL);
-      arg_option.set_default(zetasql::values::Null(curr_column.second));
+          googlesql::FunctionArgumentTypeOptions().set_argument_name(
+              curr_column.first, googlesql::kPositionalOrNamed);
+      arg_option.set_cardinality(googlesql::FunctionArgumentType::OPTIONAL);
+      arg_option.set_default(googlesql::values::Null(curr_column.second));
       args.emplace_back(curr_column.second, arg_option);
     } else {
       output_columns.emplace_back(curr_column.first, curr_column.second);
     }
   }
-  zetasql::TVFRelation result_schema(output_columns);
-  const auto result_type = zetasql::FunctionArgumentType::RelationWithSchema(
+  googlesql::TVFRelation result_schema(output_columns);
+  const auto result_type = googlesql::FunctionArgumentType::RelationWithSchema(
       result_schema, /*extra_relation_input_columns_allowed=*/false);
-  const auto signature = zetasql::FunctionSignature(result_type, args,
+  const auto signature = googlesql::FunctionSignature(result_type, args,
                                                       /*context_ptr=*/nullptr);
   return std::make_unique<QueryableChangeStreamTvf>(
       absl::StrSplit(tvf_name, '.'), signature, result_schema);

@@ -18,7 +18,7 @@
 
 #include <string>
 
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
@@ -36,9 +36,9 @@
 #include "backend/schema/catalog/index.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -58,7 +58,7 @@ absl::Status View::DeepClone(SchemaGraphEditor* editor,
                              const SchemaNode* orig) {
   // We just need to propagate the clone event to dependencies.
   for (const SchemaNode*& dep : dependencies_) {
-    ZETASQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dep));
+    GOOGLESQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dep));
     dep = cloned_dep;
   }
   return absl::OkStatus();

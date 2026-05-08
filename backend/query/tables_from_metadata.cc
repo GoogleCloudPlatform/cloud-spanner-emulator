@@ -21,8 +21,8 @@
 #include <string_view>
 #include <vector>
 
-#include "zetasql/public/simple_catalog.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/value.h"
 #include "absl/log/check.h"
 #include "absl/strings/match.h"
 
@@ -33,12 +33,12 @@ namespace backend {
 
 namespace {
 
-std::unique_ptr<zetasql::SimpleTable> MakeEmptyTable(
+std::unique_ptr<googlesql::SimpleTable> MakeEmptyTable(
     std::string_view table_name,
-    std::vector<zetasql::SimpleTable::NameAndType> columns) {
-  auto table = std::make_unique<zetasql::SimpleTable>(table_name, columns);
+    std::vector<googlesql::SimpleTable::NameAndType> columns) {
+  auto table = std::make_unique<googlesql::SimpleTable>(table_name, columns);
 
-  std::vector<std::vector<zetasql::Value>> empty;
+  std::vector<std::vector<googlesql::Value>> empty;
   table.get()->SetContents(empty);
 
   return table;
@@ -46,13 +46,13 @@ std::unique_ptr<zetasql::SimpleTable> MakeEmptyTable(
 
 }  // namespace
 
-absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
+absl::flat_hash_map<std::string, std::unique_ptr<googlesql::SimpleTable>>
 AddTablesFromMetadata(
     const std::vector<ColumnsMetaEntry>& metadata_entries,
-    const absl::flat_hash_map<std::string, const zetasql::Type*>&
+    const absl::flat_hash_map<std::string, const googlesql::Type*>&
         spanner_to_gsql_type,
     const absl::flat_hash_set<std::string>& supported_tables) {
-  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
+  absl::flat_hash_map<std::string, std::unique_ptr<googlesql::SimpleTable>>
       tables_by_name;
   if (metadata_entries.empty()) {
     // No tables to create.
@@ -60,7 +60,7 @@ AddTablesFromMetadata(
   }
 
   std::string table_name = "";
-  std::vector<zetasql::SimpleTable::NameAndType> columns;
+  std::vector<googlesql::SimpleTable::NameAndType> columns;
   for (auto it = metadata_entries.cbegin(); it != metadata_entries.cend();
        ++it) {
     if (absl::StartsWith(it->spanner_type, "ARRAY<STRUCT")) {

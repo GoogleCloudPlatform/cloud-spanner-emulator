@@ -36,7 +36,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
 
 namespace postgres_translator::spangres::datatypes::common::jsonb {
@@ -67,7 +67,7 @@ constexpr char kJSONBStr[] = R"(
 
 TEST_F(JsonbValueTest, JsonbString) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse(R"("foo")", &tree_nodes));
   EXPECT_THAT(jsonb.IsObject(), false);
   EXPECT_THAT(jsonb.IsArray(), false);
@@ -80,7 +80,7 @@ TEST_F(JsonbValueTest, JsonbString) {
 
 TEST_F(JsonbValueTest, JsonbBool) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("true", &tree_nodes));
   EXPECT_THAT(jsonb.IsObject(), false);
   EXPECT_THAT(jsonb.IsArray(), false);
@@ -93,7 +93,7 @@ TEST_F(JsonbValueTest, JsonbBool) {
 
 TEST_F(JsonbValueTest, JsonbObject) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse(R"({"a": 1})", &tree_nodes));
   EXPECT_THAT(jsonb.IsObject(), true);
   EXPECT_THAT(jsonb.IsArray(), false);
@@ -107,7 +107,7 @@ TEST_F(JsonbValueTest, JsonbObject) {
 
 TEST_F(JsonbValueTest, JsonbArray) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse(R"([1, 2, 3])", &tree_nodes));
   EXPECT_THAT(jsonb.IsObject(), false);
   EXPECT_THAT(jsonb.IsArray(), true);
@@ -121,7 +121,7 @@ TEST_F(JsonbValueTest, JsonbArray) {
 
 TEST_F(JsonbValueTest, JsonbNumeric) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("123.456", &tree_nodes));
   EXPECT_THAT(jsonb.IsObject(), false);
   EXPECT_THAT(jsonb.IsArray(), false);
@@ -135,7 +135,7 @@ TEST_F(JsonbValueTest, JsonbNumeric) {
 
 TEST_F(JsonbValueTest, SimpleJsonbObject) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("{\"a\": 1}", &tree_nodes));
   EXPECT_THAT(jsonb.IsObject(), true);
   EXPECT_THAT(jsonb.IsArray(), false);
@@ -159,7 +159,7 @@ TEST_F(JsonbValueTest, SimpleJsonbObject) {
   EXPECT_TRUE(jsonb.RemoveMember("a"));
   EXPECT_FALSE(jsonb.HasMember("a"));
   EXPECT_THAT(jsonb.GetMembers().size(), 0);
-  ZETASQL_EXPECT_OK(jsonb.CreateMemberIfNotExists("a"));
+  GOOGLESQL_EXPECT_OK(jsonb.CreateMemberIfNotExists("a"));
   auto null_member = jsonb.GetMemberIfExists("a");
   EXPECT_TRUE(null_member.has_value());
   EXPECT_TRUE(jsonb.RemoveMember("a"));
@@ -169,7 +169,7 @@ TEST_F(JsonbValueTest, SimpleJsonbObject) {
 
 TEST_F(JsonbValueTest, EmptyObject) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("{}", &tree_nodes));
   EXPECT_THAT(jsonb.IsObject(), true);
   EXPECT_THAT(jsonb.IsArray(), false);
@@ -182,13 +182,13 @@ TEST_F(JsonbValueTest, EmptyObject) {
   EXPECT_THAT(jsonb.IsEmpty(), true);
   auto member = jsonb.GetMemberIfExists("a");
   EXPECT_FALSE(member.has_value());
-  ZETASQL_EXPECT_OK(jsonb.CreateMemberIfNotExists("a"));
+  GOOGLESQL_EXPECT_OK(jsonb.CreateMemberIfNotExists("a"));
   EXPECT_TRUE(jsonb.RemoveMember("a"));
 }
 
 TEST_F(JsonbValueTest, NullJson) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("null", &tree_nodes));
   EXPECT_THAT(jsonb.IsObject(), false);
   EXPECT_THAT(jsonb.IsArray(), false);
@@ -230,7 +230,7 @@ TEST_F(JsonbValueTest, CreateEmptyObject) {
 
 TEST_F(JsonbValueTest, ParseJsonbObject) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse(kJSONBStr, &tree_nodes));
   EXPECT_THAT(jsonb.IsObject(), true);
   EXPECT_THAT(jsonb.IsArray(), false);
@@ -280,7 +280,7 @@ TEST_F(JsonbValueTest, ParseJsonbObject) {
 
 TEST_F(JsonbValueTest, JsonbStringsAndNumbers) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse(kJSONBStr, &tree_nodes));
   EXPECT_THAT(jsonb.IsObject(), true);
   EXPECT_TRUE(jsonb.GetMemberIfExists("name").value().IsString());
@@ -308,12 +308,12 @@ TEST_F(JsonbValueTest, JsonbStringsAndNumbers) {
 
 TEST_F(JsonbValueTest, CreateNewMember) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("{}", &tree_nodes));
   EXPECT_THAT(jsonb.IsEmpty(), true);
-  ZETASQL_EXPECT_OK(jsonb.CreateMemberIfNotExists("a"));
+  GOOGLESQL_EXPECT_OK(jsonb.CreateMemberIfNotExists("a"));
   EXPECT_THAT(jsonb.Serialize(), R"({"a": null})");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_value,
                        PgJsonbValue::Parse("[1,2,3]", &tree_nodes));
   jsonb.GetMemberIfExists("a")->SetValue(new_value);
   EXPECT_THAT(jsonb.Serialize(), R"({"a": [1, 2, 3]})");
@@ -322,7 +322,7 @@ TEST_F(JsonbValueTest, CreateNewMember) {
 
 TEST_F(JsonbValueTest, SimpleJsonbArray) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("[1, 2, 3]", &tree_nodes));
   EXPECT_THAT(jsonb.IsObject(), false);
   EXPECT_THAT(jsonb.IsArray(), true);
@@ -336,14 +336,14 @@ TEST_F(JsonbValueTest, SimpleJsonbArray) {
 
 TEST_F(JsonbValueTest, JsonbArrayGettersOnNull) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("null", &tree_nodes));
   EXPECT_FALSE(jsonb.GetArrayElementIfExists(0).has_value());
 }
 
 TEST_F(JsonbValueTest, JsonbArrayGetters) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("[1, 2, 3]", &tree_nodes));
   EXPECT_THAT(jsonb.GetArrayElements().size(), 3);
   // GetArrayElementIfExists.
@@ -360,7 +360,7 @@ TEST_F(JsonbValueTest, JsonbArrayGetters) {
 TEST_F(JsonbValueTest, JsonbArrayInsertElementTest) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
   // Parse the array and check correctness.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue base_array,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue base_array,
                        PgJsonbValue::Parse("[1, 2, 3]", &tree_nodes));
   ASSERT_THAT(base_array.GetArraySize(), 3);
   EXPECT_THAT(base_array.GetArrayElementIfExists(0)->Serialize(), "1");
@@ -369,25 +369,25 @@ TEST_F(JsonbValueTest, JsonbArrayInsertElementTest) {
   EXPECT_THAT(base_array.Serialize(), "[1, 2, 3]");
 
   // Insert one element to the end.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_element_four,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_element_four,
                        PgJsonbValue::Parse("4", &tree_nodes));
-  ZETASQL_ASSERT_OK(base_array.InsertArrayElement(new_element_four, 3));
+  GOOGLESQL_ASSERT_OK(base_array.InsertArrayElement(new_element_four, 3));
   ASSERT_THAT(base_array.GetArraySize(), 4);
   EXPECT_THAT(base_array.GetArrayElementIfExists(3)->Serialize(), "4");
   EXPECT_THAT(base_array.Serialize(), "[1, 2, 3, 4]");
 
   // Insert an element past the end of the array. Should only append to the end.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_element_five,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_element_five,
                        PgJsonbValue::Parse("5", &tree_nodes));
-  ZETASQL_EXPECT_OK(base_array.InsertArrayElement(new_element_five, 10));
+  GOOGLESQL_EXPECT_OK(base_array.InsertArrayElement(new_element_five, 10));
   ASSERT_THAT(base_array.GetArraySize(), 5);
   EXPECT_THAT(base_array.GetArrayElementIfExists(4)->Serialize(), "5");
   EXPECT_THAT(base_array.Serialize(), "[1, 2, 3, 4, 5]");
 
   // Insert element to the beginning of the array.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_element_zero,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_element_zero,
                        PgJsonbValue::Parse("0", &tree_nodes));
-  ZETASQL_ASSERT_OK(base_array.InsertArrayElement(new_element_zero, 0));
+  GOOGLESQL_ASSERT_OK(base_array.InsertArrayElement(new_element_zero, 0));
   ASSERT_THAT(base_array.GetArraySize(), 6);
   EXPECT_THAT(base_array.GetArrayElementIfExists(0)->Serialize(), "0");
   EXPECT_THAT(base_array.GetArrayElementIfExists(1)->Serialize(), "1");
@@ -398,9 +398,9 @@ TEST_F(JsonbValueTest, JsonbArrayInsertElementTest) {
   EXPECT_THAT(base_array.Serialize(), "[0, 1, 2, 3, 4, 5]");
 
   // Insert elements in the middle of the array
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_element_small_object,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_element_small_object,
                        PgJsonbValue::Parse(R"({"a": 1})", &tree_nodes));
-  ZETASQL_ASSERT_OK(base_array.InsertArrayElement(new_element_small_object, 2));
+  GOOGLESQL_ASSERT_OK(base_array.InsertArrayElement(new_element_small_object, 2));
   ASSERT_THAT(base_array.GetArraySize(), 7);
   EXPECT_THAT(base_array.GetArrayElementIfExists(0)->Serialize(), "0");
   EXPECT_THAT(base_array.GetArrayElementIfExists(1)->Serialize(), "1");
@@ -413,7 +413,7 @@ TEST_F(JsonbValueTest, JsonbArrayInsertElementTest) {
 
   // Insert into the array until the max array size.
   while (base_array.GetArraySize() < kJSONBMaxArraySize) {
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         base_array.InsertArrayElement(new_element_zero, kJSONBMaxArraySize));
   }
   ASSERT_THAT(base_array.GetArraySize(), kJSONBMaxArraySize);
@@ -424,14 +424,14 @@ TEST_F(JsonbValueTest, JsonbArrayInsertElementTest) {
   // the max size.
   EXPECT_THAT(
       base_array.InsertArrayElement(new_element_five, kJSONBMaxArraySize),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kOutOfRange,
           absl::StrCat("JSONB array size exceeds the limit of ",
                        kJSONBMaxArraySize)));
   ASSERT_THAT(base_array.GetArraySize(), kJSONBMaxArraySize);
   EXPECT_THAT(
       base_array.InsertArrayElement(new_element_five, kJSONBMaxArraySize / 2),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kOutOfRange,
           absl::StrCat("JSONB array size exceeds the limit of ",
                        kJSONBMaxArraySize)));
@@ -439,33 +439,33 @@ TEST_F(JsonbValueTest, JsonbArrayInsertElementTest) {
 
 TEST_F(JsonbValueTest, JsonbArrayModifyArrayValue) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue object,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue object,
                        PgJsonbValue::Parse(R"({"a": [1,2,4]})", &tree_nodes));
   EXPECT_THAT(object.GetMemberIfExists("a").value().Serialize(), "[1, 2, 4]");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_element_three,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_element_three,
                        PgJsonbValue::Parse("3", &tree_nodes));
-  ZETASQL_ASSERT_OK(object.GetMemberIfExists("a").value().InsertArrayElement(
+  GOOGLESQL_ASSERT_OK(object.GetMemberIfExists("a").value().InsertArrayElement(
       new_element_three, 2));
   EXPECT_THAT(object.GetMemberIfExists("a").value().Serialize(),
               "[1, 2, 3, 4]");
   EXPECT_THAT(object.Serialize(), R"({"a": [1, 2, 3, 4]})");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_element_five,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_element_five,
                        PgJsonbValue::Parse("5", &tree_nodes));
-  ZETASQL_ASSERT_OK(object.GetMemberIfExists("a").value().InsertArrayElement(
+  GOOGLESQL_ASSERT_OK(object.GetMemberIfExists("a").value().InsertArrayElement(
       new_element_five, 1000));
   EXPECT_THAT(object.GetMemberIfExists("a").value().Serialize(),
               "[1, 2, 3, 4, 5]");
   EXPECT_THAT(object.Serialize(), R"({"a": [1, 2, 3, 4, 5]})");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_element_zero,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_element_zero,
                        PgJsonbValue::Parse("0", &tree_nodes));
-  ZETASQL_ASSERT_OK(object.GetMemberIfExists("a").value().InsertArrayElement(
+  GOOGLESQL_ASSERT_OK(object.GetMemberIfExists("a").value().InsertArrayElement(
       new_element_zero, -1000));
   EXPECT_THAT(object.GetMemberIfExists("a").value().Serialize(),
               "[0, 1, 2, 3, 4, 5]");
   EXPECT_THAT(object.Serialize(), R"({"a": [0, 1, 2, 3, 4, 5]})");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_bool_element,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue new_bool_element,
                        PgJsonbValue::Parse("true", &tree_nodes));
-  ZETASQL_ASSERT_OK(object.GetMemberIfExists("a").value().InsertArrayElement(
+  GOOGLESQL_ASSERT_OK(object.GetMemberIfExists("a").value().InsertArrayElement(
       new_bool_element, -2));
   EXPECT_THAT(object.GetMemberIfExists("a").value().Serialize(),
               "[0, 1, 2, 3, true, 4, 5]");
@@ -476,18 +476,18 @@ TEST_F(JsonbValueTest, InaccurateEstimates) {
   // These are test cases where we may lose track of the `max_depth_estimate_`.
   // Make sure that serialization is still correct.
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue base_array,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue base_array,
                        PgJsonbValue::Parse(R"([1, 2, 3])", &tree_nodes));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue insert_object,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue insert_object,
                        PgJsonbValue::Parse(R"({"a": 1})", &tree_nodes));
-  ZETASQL_ASSERT_OK(base_array.InsertArrayElement(insert_object, 0));
+  GOOGLESQL_ASSERT_OK(base_array.InsertArrayElement(insert_object, 0));
   EXPECT_THAT(base_array.Serialize(), R"([{"a": 1}, 1, 2, 3])");
   EXPECT_THAT(base_array.GetArrayElementIfExists(0)->Serialize(), "{\"a\": 1}");
 }
 
 TEST_F(JsonbValueTest, JsonbArrayRemoveElementTest) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue base_array,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue base_array,
                        PgJsonbValue::Parse("[1, 2, 3]", &tree_nodes));
   EXPECT_THAT(base_array.GetArraySize(), 3);
   EXPECT_TRUE(base_array.RemoveArrayElement(0));
@@ -512,7 +512,7 @@ TEST_F(JsonbValueTest, JsonbArrayRemoveElementTest) {
 
 TEST_F(JsonbValueTest, CleanUpJsonbObject) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       PgJsonbValue jsonb,
       PgJsonbValue::Parse(R"({"a": 1, "b": null})", &tree_nodes));
   EXPECT_THAT(jsonb.Serialize(), R"({"a": 1, "b": null})");
@@ -526,7 +526,7 @@ TEST_F(JsonbValueTest, CleanUpJsonbObject) {
 
 TEST_F(JsonbValueTest, CleanUpJsonbObjectMultipleLevels) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb, PgJsonbValue::Parse(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb, PgJsonbValue::Parse(
                                                R"({"a": {"c": null, "d": []},
                               "e": null, "f": {}, "g": []})",
                                                &tree_nodes));
@@ -573,21 +573,21 @@ TEST_F(JsonbValueTest, CleanUpJsonbObjectMultipleLevels) {
 
 TEST_F(JsonbValueTest, PathElementToIndex) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("null", &tree_nodes));
   EXPECT_THAT(jsonb.PathElementToIndex("a", 1),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   "path element at position 1 is not an integer: \"a\""));
 
   int64_t max = std::numeric_limits<int32_t>::max();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int32_t index,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int32_t index,
                        jsonb.PathElementToIndex(absl::StrCat(max), 1));
   EXPECT_EQ(index, max);
   // For any index that is greater than max int32_t return an error.
   EXPECT_THAT(
       jsonb.PathElementToIndex(absl::StrCat(max + 1), 1),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
           absl::StrCat("path element at position 1 is not an integer: \"",
                        max + 1, "\"")));
@@ -605,7 +605,7 @@ std::optional<PgJsonbValue> FindAtPathHelper(
 
 TEST_F(JsonbValueTest, FindAtPath) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       PgJsonbValue jsonb,
       PgJsonbValue::Parse(R"({"a": {"b": ["hello", [1,2,3]]}})", &tree_nodes));
   EXPECT_THAT(FindAtPathHelper(jsonb, {"a", "b"})->Serialize(),
@@ -621,7 +621,7 @@ TEST_F(JsonbValueTest, FindAtPath) {
   EXPECT_EQ(FindAtPathHelper(jsonb, {"a", "b", "-10"}), std::nullopt);
   // Fail if path index at array is not integer
   EXPECT_THAT(jsonb.FindAtPath({"a", "b", "32a"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   "path element at position 3 is not an integer: \"32a\""));
   EXPECT_EQ(FindAtPathHelper(
@@ -632,7 +632,7 @@ TEST_F(JsonbValueTest, FindAtPath) {
   EXPECT_EQ(FindAtPathHelper(jsonb, {"d"}), std::nullopt);
   // String at array index.
   EXPECT_THAT(jsonb.FindAtPath({"a", "b", "hi"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   "path element at position 3 is not an integer: \"hi\""));
   EXPECT_EQ(FindAtPathHelper(
@@ -645,21 +645,21 @@ TEST_F(JsonbValueTest, FindAtPath) {
 
 TEST(DeathTest, JsonbString) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse(R"("foo")", &tree_nodes));
   EXPECT_DEATH(jsonb.RemoveMember("a"), "Expected object but got string");
 }
 
 TEST(DeathTest, JsonbBool) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("true", &tree_nodes));
   EXPECT_DEATH(jsonb.GetMembers(), "Expected object, null but got scalar");
 }
 
 TEST(DeathTest, SimpleJsonbArray) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("[1, 2, 3]", &tree_nodes));
   EXPECT_DEATH(absl::Status status = jsonb.CreateMemberIfNotExists("a"),
                "Expected object but got array");
@@ -667,14 +667,14 @@ TEST(DeathTest, SimpleJsonbArray) {
 
 TEST(DeathTest, JsonbGetArrayOnNull) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("null", &tree_nodes));
   EXPECT_DEATH(jsonb.GetArrayElements(), "Expected array but got null");
 }
 
 TEST_F(JsonbValueTest, JsonbObjectWithSpecialCharactersInKeys) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       PgJsonbValue jsonb,
       PgJsonbValue::Parse(R"({ "\n_is_ascii":   10, "\t_is_ascii":  9.0})",
                           &tree_nodes));
@@ -697,7 +697,7 @@ TEST_F(JsonbValueTest, JsonbObjectWithSpecialCharactersInKeys) {
 
   EXPECT_TRUE(jsonb.RemoveMember("\n_is_ascii"));
   EXPECT_FALSE(jsonb.GetMemberIfExists("\n_is_ascii").has_value());
-  ZETASQL_EXPECT_OK(jsonb.CreateMemberIfNotExists("\n_is_ascii"));
+  GOOGLESQL_EXPECT_OK(jsonb.CreateMemberIfNotExists("\n_is_ascii"));
   EXPECT_THAT(jsonb.GetMemberIfExists("\n_is_ascii").value().Serialize(),
               "null");
 
@@ -707,7 +707,7 @@ TEST_F(JsonbValueTest, JsonbObjectWithSpecialCharactersInKeys) {
 
 TEST_F(JsonbValueTest, JsonbObjectWithSpecialCharactersInValues) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       PgJsonbValue jsonb,
       PgJsonbValue::Parse(R"({ "\n_0": "\t_0" , "\t_1":  "\n_1" })",
                           &tree_nodes));
@@ -720,7 +720,7 @@ TEST_F(JsonbValueTest, JsonbObjectWithSpecialCharactersInValues) {
 
 TEST_F(JsonbValueTest, JsonbArrayWithSpecialCharacters) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       PgJsonbValue jsonb,
       PgJsonbValue::Parse(R"([ "\n_0", "\t_1" ])", &tree_nodes));
   EXPECT_THAT(jsonb.IsArray(), true);
@@ -733,16 +733,16 @@ TEST_F(JsonbValueTest, JsonbArrayWithSpecialCharacters) {
 
 TEST_F(JsonbValueTest, JsonbSetValue) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("{\"a\": 1}", &tree_nodes));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_two,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_two,
                        PgJsonbValue::Parse("{\"b\": 2}", &tree_nodes));
   jsonb.SetValue(jsonb_two);
   EXPECT_THAT(jsonb.Serialize(), "{\"b\": 2}");
-  ZETASQL_EXPECT_OK(jsonb.CreateMemberIfNotExists("a"));
+  GOOGLESQL_EXPECT_OK(jsonb.CreateMemberIfNotExists("a"));
   EXPECT_THAT(jsonb.Serialize(), "{\"a\": null, \"b\": 2}");
   EXPECT_THAT(jsonb_two.Serialize(), "{\"b\": 2}");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_three,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_three,
                        PgJsonbValue::Parse("3", &tree_nodes));
   jsonb.GetMemberIfExists("a").value().SetValue(jsonb_three);
   EXPECT_THAT(jsonb.Serialize(), "{\"a\": 3, \"b\": 2}");
@@ -754,9 +754,9 @@ TEST_F(JsonbValueTest, JsonbSetValue) {
 TEST_F(JsonbValueTest, JsonbSetValueWithDifferentArena) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
   std::vector<std::unique_ptr<TreeNode>> tree_nodes_two;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("{\"a\": 1}", &tree_nodes));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_two,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_two,
                        PgJsonbValue::Parse("{\"b\": 2}", &tree_nodes_two));
   jsonb.SetValue(jsonb_two);
 }
@@ -764,11 +764,11 @@ TEST_F(JsonbValueTest, JsonbSetValueWithDifferentArena) {
 TEST_F(JsonbValueTest, JsonbSetMemberValue) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
   std::vector<std::unique_ptr<TreeNode>> tree_nodes_two;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("{\"a\": 1}", &tree_nodes));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_two,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_two,
                        PgJsonbValue::Parse("{\"b\": 2}", &tree_nodes_two));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_three,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_three,
                        PgJsonbValue::Parse("3", &tree_nodes_two));
   jsonb.GetMemberIfExists("a").value().SetValue(jsonb_three);
   EXPECT_THAT(jsonb.Serialize(), "{\"a\": 3}");
@@ -778,13 +778,13 @@ TEST_F(JsonbValueTest, JsonbSetMemberValue) {
 
 TEST_F(JsonbValueTest, JsonbSetArrayValue) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb,
                        PgJsonbValue::Parse("[1, 2, 3]", &tree_nodes));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_two,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_two,
                        PgJsonbValue::Parse("[4, 5, 6]", &tree_nodes));
   jsonb.SetValue(jsonb_two);
   EXPECT_THAT(jsonb.Serialize(), "[4, 5, 6]");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_three,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_three,
                        PgJsonbValue::Parse("3", &tree_nodes));
   jsonb.GetArrayElements()[0].SetValue(jsonb_three);
   EXPECT_THAT(jsonb.Serialize(), "[3, 5, 6]");

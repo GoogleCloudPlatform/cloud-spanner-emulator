@@ -21,14 +21,14 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/json_value.h"
-#include "zetasql/public/value.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/json_value.h"
+#include "googlesql/public/value.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "absl/status/status.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -45,7 +45,7 @@ bool IsANNFunction(std::string function_name) {
 }
 
 absl::Status ANNFunctionsRewriter::VisitResolvedFunctionCall(
-    const zetasql::ResolvedFunctionCall* node) {
+    const googlesql::ResolvedFunctionCall* node) {
   if (!IsANNFunction(node->function()->Name())) {
     return CopyVisitResolvedFunctionCall(node);
   }
@@ -53,42 +53,42 @@ absl::Status ANNFunctionsRewriter::VisitResolvedFunctionCall(
     return error::ApproxDistanceFunctionOptionsRequired(
         node->function()->Name());
   }
-  ZETASQL_RET_CHECK(node->argument_list_size() == 3);
-  const zetasql::ResolvedExpr* argument_for_placeholder =
+  GOOGLESQL_RET_CHECK(node->argument_list_size() == 3);
+  const googlesql::ResolvedExpr* argument_for_placeholder =
       node->argument_list().back().get();
-  if (!argument_for_placeholder->Is<zetasql::ResolvedLiteral>()) {
+  if (!argument_for_placeholder->Is<googlesql::ResolvedLiteral>()) {
     return error::ApproxDistanceFunctionOptionMustBeLiteral(
         node->function()->Name());
   }
-  const zetasql::Value& placeholder_value =
-      argument_for_placeholder->GetAs<zetasql::ResolvedLiteral>()->value();
-  ZETASQL_RET_CHECK(placeholder_value.has_content());
+  const googlesql::Value& placeholder_value =
+      argument_for_placeholder->GetAs<googlesql::ResolvedLiteral>()->value();
+  GOOGLESQL_RET_CHECK(placeholder_value.has_content());
 
-  if (placeholder_value.type_kind() == zetasql::TYPE_JSON) {
-    zetasql::JSONValueConstRef json_value = placeholder_value.json_value();
+  if (placeholder_value.type_kind() == googlesql::TYPE_JSON) {
+    googlesql::JSONValueConstRef json_value = placeholder_value.json_value();
     if (!json_value.HasMember("num_leaves_to_search")) {
       return error::ApproxDistanceFunctionInvalidJsonOption(
           node->function()->Name());
     }
-    zetasql::JSONValueConstRef leaves_json =
+    googlesql::JSONValueConstRef leaves_json =
         json_value.GetMember("num_leaves_to_search");
     if (!leaves_json.IsUInt64()) {
       return error::ApproxDistanceFunctionInvalidJsonOption(
           node->function()->Name());
     }
   }
-  std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list;
-  zetasql::FunctionArgumentTypeList argument_types;
+  std::vector<std::unique_ptr<googlesql::ResolvedExpr>> argument_list;
+  googlesql::FunctionArgumentTypeList argument_types;
   for (int i = 0; i < node->signature().arguments().size() - 1; ++i) {
-    ZETASQL_ASSIGN_OR_RETURN(argument_list.emplace_back(),
+    GOOGLESQL_ASSIGN_OR_RETURN(argument_list.emplace_back(),
                      Copy(node->argument_list(i)));
     argument_types.push_back(node->signature().argument(i));
   }
-  zetasql::FunctionSignature new_signature(
+  googlesql::FunctionSignature new_signature(
       node->signature().result_type(), argument_types,
       node->signature().context_id(), node->signature().options());
-  std::unique_ptr<zetasql::ResolvedFunctionCall> new_node =
-      zetasql::MakeResolvedFunctionCall(
+  std::unique_ptr<googlesql::ResolvedFunctionCall> new_node =
+      googlesql::MakeResolvedFunctionCall(
           node->type(), node->function(), new_signature,
           std::move(argument_list), node->error_mode());
   ann_functions_.insert(new_node.get());

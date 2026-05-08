@@ -18,7 +18,7 @@
 #include "google/iam/v1/policy.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
 
@@ -41,7 +41,7 @@ TEST_F(PolicyApiTest, PolicyApiIsNotImplementedForInstances) {
     grpc::ClientContext ctx;
     EXPECT_THAT(test_env()->instance_admin_client()->SetIamPolicy(&ctx, request,
                                                                   &response),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kUnimplemented,
                     testing::MatchesRegex(".*does not support IAM.*")));
   }
@@ -53,7 +53,7 @@ TEST_F(PolicyApiTest, PolicyApiIsNotImplementedForInstances) {
     grpc::ClientContext ctx;
     EXPECT_THAT(test_env()->instance_admin_client()->GetIamPolicy(&ctx, request,
                                                                   &response),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kUnimplemented,
                     testing::MatchesRegex(".*does not support IAM.*")));
   }
@@ -65,7 +65,7 @@ TEST_F(PolicyApiTest, PolicyApiIsNotImplementedForInstances) {
     grpc::ClientContext ctx;
     EXPECT_THAT(test_env()->instance_admin_client()->TestIamPermissions(
                     &ctx, request, &response),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kUnimplemented,
                     testing::MatchesRegex(".*does not support IAM.*")));
   }
@@ -79,7 +79,7 @@ TEST_F(PolicyApiTest, PolicyApiIsNotImplementedForDatabases) {
     grpc::ClientContext ctx;
     EXPECT_THAT(test_env()->database_admin_client()->SetIamPolicy(&ctx, request,
                                                                   &response),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kUnimplemented,
                     testing::MatchesRegex(".*does not support IAM.*")));
   }
@@ -91,7 +91,7 @@ TEST_F(PolicyApiTest, PolicyApiIsNotImplementedForDatabases) {
     grpc::ClientContext ctx;
     EXPECT_THAT(test_env()->database_admin_client()->GetIamPolicy(&ctx, request,
                                                                   &response),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kUnimplemented,
                     testing::MatchesRegex(".*does not support IAM.*")));
   }
@@ -103,7 +103,7 @@ TEST_F(PolicyApiTest, PolicyApiIsNotImplementedForDatabases) {
     grpc::ClientContext ctx;
     EXPECT_THAT(test_env()->database_admin_client()->TestIamPermissions(
                     &ctx, request, &response),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kUnimplemented,
                     testing::MatchesRegex(".*does not support IAM.*")));
   }

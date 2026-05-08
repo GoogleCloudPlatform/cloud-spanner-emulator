@@ -87,7 +87,7 @@ void ClearTimezoneHashtablePointer();
 extern __thread PGDLLIMPORT pg_tz *session_timezone;
 extern __thread PGDLLIMPORT pg_tz *log_timezone;
 // Make gmtptr global so that it can be cleaned up.
-static __thread struct state *gmtptr;
+extern __thread struct state *gmtptr;
 /* SPANGRES END */
 
 extern void pg_timezone_initialize(void);

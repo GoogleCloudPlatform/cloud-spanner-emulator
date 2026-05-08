@@ -20,13 +20,13 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "common/feature_flags.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -36,7 +36,7 @@ namespace test {
 namespace {
 
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 class ViewsTest
     : public DatabaseTest,
@@ -46,12 +46,12 @@ class ViewsTest
         EmulatorFeatureFlags::Flags{
             .enable_views = true,
         });
-    ZETASQL_RETURN_IF_ERROR(SetSchemaFromFile("views.test"));
+    GOOGLESQL_RETURN_IF_ERROR(SetSchemaFromFile("views.test"));
 
     // Populate the table with some data.
     std::vector<ValueRow> rows = {{1, 2}, {3, 4}, {5, 6}, {7, 8}};
     for (const auto& row : rows) {
-      ZETASQL_ASSIGN_OR_RETURN(auto _, Insert("t", {"k", "v"}, row));
+      GOOGLESQL_ASSIGN_OR_RETURN(auto _, Insert("t", {"k", "v"}, row));
     }
     return absl::OkStatus();
   }
@@ -80,7 +80,7 @@ TEST_P(ViewsTest, SampleSomeRows) {
               IsOkAndHoldsUnorderedRows({{"HI"}}));
 }
 
-TEST_P(ViewsTest, SimpleQuery) { ZETASQL_EXPECT_OK(Query("SELECT * FROM v_bool")); }
+TEST_P(ViewsTest, SimpleQuery) { GOOGLESQL_EXPECT_OK(Query("SELECT * FROM v_bool")); }
 
 TEST_P(ViewsTest, SimpleQueryFromTable) {
   EXPECT_THAT(Query("SELECT * FROM v_table"),
@@ -122,13 +122,13 @@ TEST_P(ViewsTest, InformationSchemaVisibility) {
       "SELECT TABLE_NAME, VIEW_DEFINITION "
       "FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_NAME = 'v'";
 
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"(CREATE VIEW v SQL SECURITY INVOKER AS SELECT true AS t, false AS f)",
   }));
   // User-created views are visible in the information schema.
   EXPECT_THAT(Query(sql), IsOkAndHoldsUnorderedRows(
                               {{"v", "SELECT true AS t, false AS f"}}));
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"(CREATE OR REPLACE VIEW v SQL SECURITY INVOKER AS SELECT t.k FROM t)",
   }));
   // Replaced views are updated in the information schema.
@@ -139,7 +139,7 @@ TEST_P(ViewsTest, InformationSchemaVisibility) {
   EXPECT_THAT(Query(sql),
               IsOkAndHoldsUnorderedRows({{"v", expected_definition}}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(DROP VIEW v)"}));
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(DROP VIEW v)"}));
   // User-created views are no longer visible in the information schema.
   EXPECT_THAT(Query(sql), IsOkAndHoldsUnorderedRows({}));
 }

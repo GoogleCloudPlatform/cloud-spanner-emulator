@@ -34,11 +34,11 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/function.pb.h"
+#include "googlesql/public/function.pb.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_join.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 
@@ -50,7 +50,7 @@ absl::Status CheckAllSignaturesHaveNamespacedPaths(
   for (int i = 0; i < function.signatures_size(); ++i) {
     const FunctionSignatureProto& signature = function.signatures(i);
     for (const auto& pg_name_path : signature.postgresql_name_paths()) {
-      ZETASQL_RET_CHECK(pg_name_path.name_path().size() == 2)
+      GOOGLESQL_RET_CHECK(pg_name_path.name_path().size() == 2)
           << "Function " << name << " signature[" << i
           << "] postgresql_name_path must have 2 parts (namespace and name), "
              "got: "
@@ -63,7 +63,7 @@ absl::Status CheckAllSignaturesHaveNamespacedPaths(
 absl::Status CheckAtLeastOneSignature(const FunctionProto& function) {
   std::string name =
       absl::StrJoin(function.mapped_name_path().name_path(), ".");
-  ZETASQL_RET_CHECK(function.signatures_size() > 0)
+  GOOGLESQL_RET_CHECK(function.signatures_size() > 0)
       << "Function " << name << " must have at least one signature";
   return absl::OkStatus();
 }
@@ -75,15 +75,15 @@ absl::Status CheckAllNamedArgumentsHaveName(const FunctionProto& function) {
     const FunctionSignatureProto& signature = function.signatures(i);
     for (int j = 0; j < signature.arguments_size(); ++j) {
       const FunctionArgumentProto& arg = signature.arguments(j);
-      zetasql::FunctionEnums::NamedArgumentKind named_kind =
+      googlesql::FunctionEnums::NamedArgumentKind named_kind =
           arg.named_argument_kind();
-      if (named_kind == zetasql::FunctionEnums::POSITIONAL_OR_NAMED ||
-          named_kind == zetasql::FunctionEnums::NAMED_ONLY) {
-        ZETASQL_RET_CHECK(!arg.name().empty())
+      if (named_kind == googlesql::FunctionEnums::POSITIONAL_OR_NAMED ||
+          named_kind == googlesql::FunctionEnums::NAMED_ONLY) {
+        GOOGLESQL_RET_CHECK(!arg.name().empty())
             << "Function " << name << " signature[" << i << "].arguments[" << j
             << "].name must be defined, since the named argument kind is set "
                "to "
-            << zetasql::FunctionEnums::NamedArgumentKind_Name(named_kind);
+            << googlesql::FunctionEnums::NamedArgumentKind_Name(named_kind);
       }
     }
   }
@@ -95,9 +95,9 @@ absl::Status CheckAllNamedArgumentsHaveName(const FunctionProto& function) {
 absl::Status ValidateCatalogFunctions(
     const std::vector<FunctionProto>& functions) {
   for (const auto& function : functions) {
-    ZETASQL_RETURN_IF_ERROR(CheckAtLeastOneSignature(function));
-    ZETASQL_RETURN_IF_ERROR(CheckAllSignaturesHaveNamespacedPaths(function));
-    ZETASQL_RETURN_IF_ERROR(CheckAllNamedArgumentsHaveName(function));
+    GOOGLESQL_RETURN_IF_ERROR(CheckAtLeastOneSignature(function));
+    GOOGLESQL_RETURN_IF_ERROR(CheckAllSignaturesHaveNamespacedPaths(function));
+    GOOGLESQL_RETURN_IF_ERROR(CheckAllNamedArgumentsHaveName(function));
   }
 
   return absl::OkStatus();

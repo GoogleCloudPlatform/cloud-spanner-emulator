@@ -37,10 +37,10 @@
 #include <limits>
 #include <string>
 
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
+#include "googlesql/base/no_destructor.h"
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -62,52 +62,52 @@ namespace types {
 
 class PostgresNumericMapping : public PostgresTypeMapping {
  public:
-  PostgresNumericMapping(const zetasql::TypeFactory* factory)
+  PostgresNumericMapping(const googlesql::TypeFactory* factory)
       : PostgresTypeMapping(factory, NUMERICOID) {}
 
-  const zetasql::Type* mapped_type() const override {
+  const googlesql::Type* mapped_type() const override {
     return postgres_translator::spangres::datatypes::GetPgNumericType();
   }
 
-  absl::StatusOr<zetasql::Value> MakeGsqlValue(
+  absl::StatusOr<googlesql::Value> MakeGsqlValue(
       const Const* pg_const) const override {
-    ZETASQL_RET_CHECK_EQ(pg_const->consttypmod, -1)
+    GOOGLESQL_RET_CHECK_EQ(pg_const->consttypmod, -1)
         << "Typmod seen for numeric constant. Typmod: "
         << pg_const->consttypmod;
 
     if (pg_const->constisnull) {
-      return zetasql::Value::Null(
+      return googlesql::Value::Null(
           postgres_translator::spangres::datatypes::GetPgNumericType());
     }
-    ZETASQL_ASSIGN_OR_RETURN(Datum numeric, CheckedOidFunctionCall1(
+    GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric, CheckedOidFunctionCall1(
         F_NUMERIC_OUT, pg_const->constvalue));
     absl::string_view string_value = DatumGetCString(numeric);
     return postgres_translator::spangres::datatypes::CreatePgNumericValue(
         string_value);
   }
 
-  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+  absl::StatusOr<googlesql::Value> MakeGsqlValueFromStringConst(
       const absl::string_view& string_const) const override {
     return absl::UnimplementedError(
         "Numeric default values are not supported");
   }
 
   absl::StatusOr<Const*> MakePgConst(
-      const zetasql::Value& val) const override {
+      const googlesql::Value& val) const override {
     // Pg.Numeric is stored in memory as a readable string and is converted via
     // Postgres function into a PgConst.
     std::string readable_numeric;
     if (val.is_null()) {
       readable_numeric = "0";
     } else {
-        ZETASQL_ASSIGN_OR_RETURN(absl::Cord normalized_numeric,
+        GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord normalized_numeric,
                          postgres_translator::spangres::datatypes::
                              GetPgNumericNormalizedValue(val));
         readable_numeric.reserve(normalized_numeric.size());
         absl::CopyCordToString(normalized_numeric, &readable_numeric);
     }
 
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         Datum const_value,
         CheckedOidFunctionCall3(
             F_NUMERIC_IN, CStringGetDatum(readable_numeric.data()),
@@ -118,33 +118,33 @@ class PostgresNumericMapping : public PostgresTypeMapping {
 
 class PostgresJsonbMapping : public PostgresTypeMapping {
  public:
-  PostgresJsonbMapping(const zetasql::TypeFactory* factory)
+  PostgresJsonbMapping(const googlesql::TypeFactory* factory)
       : PostgresTypeMapping(factory, JSONBOID) {}
 
-  const zetasql::Type* mapped_type() const override {
+  const googlesql::Type* mapped_type() const override {
     return postgres_translator::spangres::datatypes::GetPgJsonbType();
   }
 
-  absl::StatusOr<zetasql::Value> MakeGsqlValue(
+  absl::StatusOr<googlesql::Value> MakeGsqlValue(
       const Const* pg_const) const override {
     if (pg_const->constisnull) {
-      return zetasql::Value::Null(
+      return googlesql::Value::Null(
           postgres_translator::spangres::datatypes::GetPgJsonbType());
     }
     return MakeGsqlValueFromDatum(pg_const->constvalue);
   }
 
-  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+  absl::StatusOr<googlesql::Value> MakeGsqlValueFromStringConst(
       const absl::string_view& string_const) const override {
     if (string_const == "null") {
-      return zetasql::Value::Null(
+      return googlesql::Value::Null(
           postgres_translator::spangres::datatypes::GetPgJsonbType());
     }
     if (RE2::FullMatch(string_const, R"(^'.*'$)")) {
       // Strip the leading and trailing single quotes.
       std::string stripped_string = (std::string) string_const.substr(
           1, string_const.size() - 2);
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           Datum const_value, CheckedOidFunctionCall1(
               F_JSONB_IN, CStringGetDatum(stripped_string.c_str())));
       return MakeGsqlValueFromDatum(const_value);
@@ -154,17 +154,17 @@ class PostgresJsonbMapping : public PostgresTypeMapping {
   }
 
   absl::StatusOr<Const*> MakePgConst(
-      const zetasql::Value& val) const override {
+      const googlesql::Value& val) const override {
     Datum const_value = 0;
     if (!val.is_null()) {
-      ZETASQL_ASSIGN_OR_RETURN(absl::Cord normalized_jsonb,
+      GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord normalized_jsonb,
                            postgres_translator::spangres::datatypes::
                                GetPgJsonbNormalizedValue(val));
       std::string normalized_jsonb_str;
       normalized_jsonb_str.reserve(normalized_jsonb.size());
       absl::CopyCordToString(normalized_jsonb, &normalized_jsonb_str);
       Datum conval = CStringGetDatum(normalized_jsonb_str.c_str());
-      ZETASQL_ASSIGN_OR_RETURN(const_value,
+      GOOGLESQL_ASSIGN_OR_RETURN(const_value,
                        CheckedOidFunctionCall1(F_JSONB_IN, conval));
     }
 
@@ -179,8 +179,8 @@ class PostgresJsonbMapping : public PostgresTypeMapping {
   }
 
  private:
-  absl::StatusOr<zetasql::Value> MakeGsqlValueFromDatum(Datum datum) const {
-    ZETASQL_ASSIGN_OR_RETURN(Datum jsonb, CheckedOidFunctionCall1(F_JSONB_OUT, datum));
+  absl::StatusOr<googlesql::Value> MakeGsqlValueFromDatum(Datum datum) const {
+    GOOGLESQL_ASSIGN_OR_RETURN(Datum jsonb, CheckedOidFunctionCall1(F_JSONB_OUT, datum));
     return postgres_translator::spangres::datatypes::CreatePgJsonbValue(
         DatumGetCString(jsonb));
   }
@@ -188,17 +188,17 @@ class PostgresJsonbMapping : public PostgresTypeMapping {
 
 class PostgresOidMapping : public PostgresTypeMapping {
  public:
-  PostgresOidMapping(const zetasql::TypeFactory* factory)
+  PostgresOidMapping(const googlesql::TypeFactory* factory)
       : PostgresTypeMapping(factory, OIDOID) {}
 
-  const zetasql::Type* mapped_type() const override {
+  const googlesql::Type* mapped_type() const override {
     return postgres_translator::spangres::datatypes::GetPgOidType();
   }
 
-  absl::StatusOr<zetasql::Value> MakeGsqlValue(
+  absl::StatusOr<googlesql::Value> MakeGsqlValue(
       const Const* pg_const) const override {
     if (pg_const->constisnull) {
-      return zetasql::Value::Null(
+      return googlesql::Value::Null(
           postgres_translator::spangres::datatypes::GetPgOidType());
     }
     // oidout simply calls sprintf. Skipping in favor of accessing the const
@@ -207,17 +207,17 @@ class PostgresOidMapping : public PostgresTypeMapping {
         DatumGetObjectId(pg_const->constvalue));
   }
 
-  absl::StatusOr<zetasql::Value> MakeGsqlValueFromStringConst(
+  absl::StatusOr<googlesql::Value> MakeGsqlValueFromStringConst(
       const absl::string_view& string_const) const override {
     return absl::UnimplementedError(
         "OID default values are not supported");
   }
 
   absl::StatusOr<Const*> MakePgConst(
-      const zetasql::Value& val) const override {
+      const googlesql::Value& val) const override {
     Datum const_value = 0;
     if (!val.is_null()) {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           uint64_t oid,
               postgres_translator::spangres::datatypes::GetPgOidValue(val));
       // PostgreSQL oid values are uint32_t.
@@ -227,7 +227,7 @@ class PostgresOidMapping : public PostgresTypeMapping {
       }
       std::string oid_str = absl::StrCat(oid);
       Datum conval = CStringGetDatum(oid_str.c_str());
-      ZETASQL_ASSIGN_OR_RETURN(const_value, CheckedOidFunctionCall1(F_OIDIN, conval));
+      GOOGLESQL_ASSIGN_OR_RETURN(const_value, CheckedOidFunctionCall1(F_OIDIN, conval));
     }
 
     return CheckedPgMakeConst(
@@ -242,13 +242,13 @@ class PostgresOidMapping : public PostgresTypeMapping {
 };
 
 const PostgresTypeMapping* PgNumericMapping() {
-  static const zetasql_base::NoDestructor<PostgresNumericMapping> s_pg_numeric_mapping(
+  static const googlesql_base::NoDestructor<PostgresNumericMapping> s_pg_numeric_mapping(
       GetTypeFactory());
   return s_pg_numeric_mapping.get();
 }
 
 const PostgresTypeMapping* PgNumericArrayMapping() {
-  static const zetasql_base::NoDestructor<PostgresExtendedArrayMapping>
+  static const googlesql_base::NoDestructor<PostgresExtendedArrayMapping>
       s_pg_numeric_array_mapping(
           /*type_factory=*/GetTypeFactory(), /*array_type_oid=*/NUMERICARRAYOID,
           /*element_type=*/types::PgNumericMapping(), /*mapped_type=*/
@@ -258,13 +258,13 @@ const PostgresTypeMapping* PgNumericArrayMapping() {
 }
 
 const PostgresTypeMapping* PgJsonbMapping() {
-  static const zetasql_base::NoDestructor<PostgresJsonbMapping> s_pg_jsonb_mapping(
+  static const googlesql_base::NoDestructor<PostgresJsonbMapping> s_pg_jsonb_mapping(
       GetTypeFactory());
   return s_pg_jsonb_mapping.get();
 }
 
 const PostgresTypeMapping* PgJsonbArrayMapping() {
-  static const zetasql_base::NoDestructor<PostgresExtendedArrayMapping>
+  static const googlesql_base::NoDestructor<PostgresExtendedArrayMapping>
       s_pg_jsonb_array_mapping(
           /*type_factory=*/GetTypeFactory(), /*array_type_oid=*/JSONBARRAYOID,
           /*element_type=*/types::PgJsonbMapping(), /*mapped_type=*/
@@ -274,13 +274,13 @@ const PostgresTypeMapping* PgJsonbArrayMapping() {
 }
 
 const PostgresTypeMapping* PgOidMapping() {
-  static const zetasql_base::NoDestructor<PostgresOidMapping> s_pg_oid_mapping(
+  static const googlesql_base::NoDestructor<PostgresOidMapping> s_pg_oid_mapping(
       GetTypeFactory());
   return s_pg_oid_mapping.get();
 }
 
 const PostgresTypeMapping* PgOidArrayMapping() {
-  static const zetasql_base::NoDestructor<PostgresExtendedArrayMapping>
+  static const googlesql_base::NoDestructor<PostgresExtendedArrayMapping>
       s_pg_oid_array_mapping(
           /*type_factory=*/GetTypeFactory(), /*array_type_oid=*/OIDARRAYOID,
           /*element_type=*/types::PgOidMapping(), /*mapped_type=*/

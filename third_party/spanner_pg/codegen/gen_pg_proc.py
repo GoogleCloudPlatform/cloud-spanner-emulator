@@ -50,17 +50,24 @@ CATALOG_FILEPATH = (
 )
 TEMPLATE_FILENAME = "pg_proc.dat.jinja2"
 POSITIONAL_ONLY_ARG = 1
+MODE_SCALAR = 1
+MODE_AGGREGATE = 2
+MODE_ANALYTIC = 3
 
 
-def _create_pg_proc_entry(signature, pg_name_path):
+def _create_pg_proc_entry(signature, pg_name_path, mode):
   """Creates a single pg_proc.dat entry from the signature and name path.
 
   Args:
     signature: The signature to create the entry from.
     pg_name_path: The PostgreSQL name path to create the entry from.
+    mode: The function mode.
 
   Returns:
     A single entry to be added in pg_proc.dat
+
+  Raises:
+    NotImplementedError: if the function mode is not supported.
   """
   argtypes = [arg.type.name for arg in signature.arguments]
   has_named_arguments = any(
@@ -73,11 +80,23 @@ def _create_pg_proc_entry(signature, pg_name_path):
         (arg.name if arg.named_argument_kind != POSITIONAL_ONLY_ARG else "")
         for arg in signature.arguments
     ]
+  if mode == MODE_SCALAR:
+    prokind = "f"
+  elif mode == MODE_AGGREGATE:
+    prokind = "a"
+  elif mode == MODE_ANALYTIC:
+    prokind = "w"
+  else:
+    raise NotImplementedError(
+        f"Function signature {pg_name_path.name_path[1]} has unknown mode"
+        f" {mode}"
+    )
   return {
       "oid": signature.oid,
       "proname": pg_name_path.name_path[1],
       "pronamespace": pg_name_path.name_path[0],
       "prolang": "spanner_internal",
+      "prokind": prokind,
       "prorettype": signature.return_type.name,
       "proargtypes": argtypes,
       "proargnames": argnames,
@@ -108,7 +127,9 @@ def generate_pg_proc_dat():
         if pg_name_path.name_path[0] == "pg":
           continue
 
-        pg_proc_entries.append(_create_pg_proc_entry(signature, pg_name_path))
+        pg_proc_entries.append(
+            _create_pg_proc_entry(signature, pg_name_path, function.mode)
+        )
 
   # Open jinja2 template file
   jinja_env = jinja2.Environment(

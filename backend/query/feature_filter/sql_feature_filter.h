@@ -17,21 +17,21 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_FEATURE_FILTER_SQL_FEATURE_FILTER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_FEATURE_FILTER_SQL_FEATURE_FILTER_H_
 
-#include "zetasql/public/language_options.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "absl/status/status.h"
 #include "backend/query/feature_filter/sql_features_view.h"
 
 namespace google::spanner::emulator::backend {
 absl::Status FilterResolvedFunction(
-    const zetasql::LanguageOptions& language_options,
+    const googlesql::LanguageOptions& language_options,
     const SqlFeaturesView& query_features,
-    const zetasql::ResolvedFunctionCall& function_call);
+    const googlesql::ResolvedFunctionCall& function_call);
 absl::Status FilterResolvedAggregateFunction(
     const SqlFeaturesView& query_features,
-    const zetasql::ResolvedAggregateFunctionCall& aggregate_function);
+    const googlesql::ResolvedAggregateFunctionCall& aggregate_function);
 absl::Status FilterSafeModeFunction(
-    const zetasql::ResolvedFunctionCallBase& function_call);
+    const googlesql::ResolvedFunctionCallBase& function_call);
 
 }  // namespace google::spanner::emulator::backend
 

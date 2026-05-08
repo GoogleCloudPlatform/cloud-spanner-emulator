@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "backend/query/search/tokenizer.h"
 
 namespace google {
@@ -31,14 +31,14 @@ namespace backend {
 namespace query {
 namespace search {
 
-void CheckResult(absl::StatusOr<zetasql::Value>& result) {
-  ZETASQL_EXPECT_OK(result.status());
+void CheckResult(absl::StatusOr<googlesql::Value>& result) {
+  GOOGLESQL_EXPECT_OK(result.status());
 
   // For exact_match tokenized column, since no operation is supported on the
   // column, we don't store original text but only the tokenizer information.
-  zetasql::Value token_list = result.value();
+  googlesql::Value token_list = result.value();
   EXPECT_TRUE(token_list.type()->IsTokenList());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
   ASSERT_EQ(tokens.size(), 1);
   EXPECT_EQ(tokens[0], "bool");
 }
@@ -47,15 +47,15 @@ TEST(BoolTokenizerTest, TestTokenize) {
   std::vector<bool> original_values = {true, false};
 
   for (auto b : original_values) {
-    absl::StatusOr<zetasql::Value> result =
-        BoolTokenizer::Tokenize({zetasql::Value::Bool(b)});
+    absl::StatusOr<googlesql::Value> result =
+        BoolTokenizer::Tokenize({googlesql::Value::Bool(b)});
     CheckResult(result);
   }
 }
 
 TEST(BoolTokenizerTest, TestTokenizeNull) {
-  absl::StatusOr<zetasql::Value> result =
-      BoolTokenizer::Tokenize({zetasql::Value::NullBool()});
+  absl::StatusOr<googlesql::Value> result =
+      BoolTokenizer::Tokenize({googlesql::Value::NullBool()});
   CheckResult(result);
 }
 

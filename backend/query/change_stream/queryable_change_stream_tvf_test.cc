@@ -18,12 +18,12 @@
 
 #include <memory>
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "backend/query/analyzer_options.h"
@@ -53,13 +53,13 @@ class QueryableChangeStreamTvfTest : public testing::Test {
 
  protected:
   absl::Status AnalyzeStatement(absl::string_view sql) {
-    std::unique_ptr<const zetasql::AnalyzerOutput> output{};
-    return zetasql::AnalyzeStatement(sql, analyzer_options_, catalog_.get(),
+    std::unique_ptr<const googlesql::AnalyzerOutput> output{};
+    return googlesql::AnalyzeStatement(sql, analyzer_options_, catalog_.get(),
                                        &type_factory_, &output);
   }
   std::unique_ptr<const Schema> schema_ = nullptr;
-  zetasql::TypeFactory type_factory_;
-  zetasql::AnalyzerOptions analyzer_options_;
+  googlesql::TypeFactory type_factory_;
+  googlesql::AnalyzerOptions analyzer_options_;
   const FunctionCatalog fn_catalog_;
   std::unique_ptr<Catalog> catalog_;
 };
@@ -68,7 +68,7 @@ TEST_F(QueryableChangeStreamTvfTest, CreateChangeStreamTvfOk) {
   const auto* schema_change_stream =
       schema_->FindChangeStream("change_stream_test_table");
   ASSERT_NE(schema_change_stream, nullptr);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto queryable_tvf,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto queryable_tvf,
                        QueryableChangeStreamTvf::Create(
                            schema_change_stream->tvf_name(), analyzer_options_,
                            catalog_.get(), &type_factory_, false));
@@ -78,14 +78,14 @@ TEST_F(QueryableChangeStreamTvfTest, CreateChangeStreamTvfOk) {
 }
 
 TEST_F(QueryableChangeStreamTvfTest, AnalyzeChangeStreamTvfQueryPositionalArg) {
-  ZETASQL_EXPECT_OK(AnalyzeStatement(
+  GOOGLESQL_EXPECT_OK(AnalyzeStatement(
       "SELECT * FROM "
       "READ_change_stream_test_table ( '2022-09-27T12:30:00.123456Z', "
       "NULL, NULL, 1000 )"));
 }
 
 TEST_F(QueryableChangeStreamTvfTest, AnalyzeChangeStreamTvfQueryNamedArg) {
-  ZETASQL_EXPECT_OK(AnalyzeStatement(
+  GOOGLESQL_EXPECT_OK(AnalyzeStatement(
       "SELECT ChangeRecord FROM READ_change_stream_test_table ( "
       "start_timestamp=>'2022-09-27T12:30:00.123456Z', end_timestamp=>NULL, "
       "partition_token=>NULL, heartbeat_milliseconds=>1000 )"));
@@ -99,7 +99,7 @@ TEST_F(QueryableChangeStreamTvfTest,
       "NULL, NULL, 1000 )");
   EXPECT_THAT(
       status,
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
           testing::HasSubstr(
               "Could not cast literal \"not_a_timestamp\" to type TIMESTAMP")));
@@ -113,7 +113,7 @@ TEST_F(QueryableChangeStreamTvfTest,
       " NULL, 1000 )");
   EXPECT_THAT(
       status,
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
           testing::HasSubstr(
               "No matching signature for READ_change_stream_test_table")));
@@ -125,7 +125,7 @@ TEST_F(QueryableChangeStreamTvfTest,
       "SELECT * FROM "
       "READ_change_stream_null_table ( '2022-09-27T12:30:00.123456Z', "
       " NULL, NULL, 1000 )");
-  EXPECT_THAT(status, zetasql_base::testing::StatusIs(
+  EXPECT_THAT(status, googlesql_base::testing::StatusIs(
                           absl::StatusCode::kInvalidArgument,
                           testing::HasSubstr("Table-valued function not found: "
                                              "READ_change_stream_null_table")));
@@ -139,7 +139,7 @@ TEST_F(QueryableChangeStreamTvfTest,
       "partition_string=>NULL, heartbeat_milliseconds=>1000 )");
   EXPECT_THAT(
       status,
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
           testing::HasSubstr(
               "Named argument partition_string not found in signature")));

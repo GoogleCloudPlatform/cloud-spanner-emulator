@@ -21,7 +21,7 @@
 #include "absl/time/time.h"
 #include "common/errors.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -67,20 +67,20 @@ absl::StatusOr<google::protobuf::Timestamp> TimestampToProto(absl::Time time) {
   google::protobuf::Timestamp proto;
   proto.set_seconds(s);
   proto.set_nanos((time - absl::FromUnixSeconds(s)) / absl::Nanoseconds(1));
-  ZETASQL_RETURN_IF_ERROR(Validate(proto));
+  GOOGLESQL_RETURN_IF_ERROR(Validate(proto));
   return proto;
 }
 
 absl::StatusOr<absl::Time> TimestampFromProto(
     const google::protobuf::Timestamp& proto) {
-  ZETASQL_RETURN_IF_ERROR(Validate(proto));
+  GOOGLESQL_RETURN_IF_ERROR(Validate(proto));
   return absl::FromUnixSeconds(proto.seconds()) +
          absl::Nanoseconds(proto.nanos());
 }
 
 absl::StatusOr<absl::Duration> DurationFromProto(
     const google::protobuf::Duration& proto) {
-  ZETASQL_RETURN_IF_ERROR(Validate(proto));
+  GOOGLESQL_RETURN_IF_ERROR(Validate(proto));
   return absl::Seconds(proto.seconds()) + absl::Nanoseconds(proto.nanos());
 }
 

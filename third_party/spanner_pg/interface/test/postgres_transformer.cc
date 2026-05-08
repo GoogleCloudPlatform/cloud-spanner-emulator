@@ -38,13 +38,13 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/base/logging.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/analyzer_output.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/base/logging.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/analyzer_output.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -66,8 +66,8 @@
 #include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"
 #include "third_party/spanner_pg/shims/timezone_helper.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 
@@ -89,11 +89,11 @@ absl::string_view MessageForProgressLevel(
 
 }  // namespace
 
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
 ParseAndAnalyzeSQLString(
-    const std::string& sql, zetasql::EnumerableCatalog* catalog,
+    const std::string& sql, googlesql::EnumerableCatalog* catalog,
     std::unique_ptr<EngineBuiltinFunctionCatalog> function_catalog,
-    const zetasql::AnalyzerOptions& analyzer_options,
+    const googlesql::AnalyzerOptions& analyzer_options,
     std::vector<std::string>* analyze_query_trees,
     const uint64_t query_id
 ) {
@@ -110,14 +110,14 @@ ParseAndAnalyzeSQLString(
                                query_id
   ](const Query* query) -> absl::Status {
             // Test serializer and deserializer for a Query Tree.
-            ZETASQL_ASSIGN_OR_RETURN(char* serialized_query,
+            GOOGLESQL_ASSIGN_OR_RETURN(char* serialized_query,
                              CheckedPgNodeToString(query),
                              _ << "failed to serialize the analyzed query.");
 
-            ZETASQL_RETURN_IF_ERROR(CheckedPgStringToNode(serialized_query).status())
+            GOOGLESQL_RETURN_IF_ERROR(CheckedPgStringToNode(serialized_query).status())
                 << "failed to deserialize the analyzed query.";
 
-            ZETASQL_ASSIGN_OR_RETURN(
+            GOOGLESQL_ASSIGN_OR_RETURN(
                 serialized_query,
                 CheckedPgPrettyFormatNodeDump(serialized_query),
                 _ << "failed to pretty format the serialized query.");
@@ -127,7 +127,7 @@ ParseAndAnalyzeSQLString(
             return absl::OkStatus();
           })
           .Build());
-  ZETASQL_RETURN_IF_ERROR(status_or_result.status())
+  GOOGLESQL_RETURN_IF_ERROR(status_or_result.status())
       << MessageForProgressLevel(progress);
 
   return status_or_result;

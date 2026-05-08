@@ -31,7 +31,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
@@ -41,13 +41,13 @@ namespace postgres_translator::function_evaluators {
 namespace {
 
 using spangres::datatypes::CreatePgJsonbValue;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
-static zetasql::Value CreatePgJsonbNullValue() {
-  static const zetasql::Type* gsql_pg_jsonb =
+static googlesql::Value CreatePgJsonbNullValue() {
+  static const googlesql::Type* gsql_pg_jsonb =
       spangres::datatypes::GetPgJsonbType();
-  return zetasql::values::Null(gsql_pg_jsonb);
+  return googlesql::values::Null(gsql_pg_jsonb);
 }
 
 class JsonbObjectFieldTest : public PgEvaluatorTest {};

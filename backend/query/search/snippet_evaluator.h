@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
@@ -37,7 +37,7 @@ namespace search {
 class SnippetEvaluator {
  public:
   static absl::StatusOr<std::optional<std::string>> Evaluate(
-      absl::Span<const zetasql::Value> args);
+      absl::Span<const googlesql::Value> args);
 
  private:
   static constexpr int64_t kDefaultMaxSnippetLength = 160;

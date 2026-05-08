@@ -2,7 +2,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 
 extern "C" {
   extern struct lconv* PGLC_localeconv(void);

@@ -17,12 +17,13 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_ACCESS_WRITE_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_ACCESS_WRITE_H_
 
+#include <map>
 #include <ostream>
 #include <string>
 #include <vector>
 
-#include "zetasql/public/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "backend/datamodel/key_set.h"
 #include "backend/datamodel/value.h"
@@ -71,6 +72,9 @@ struct MutationOp {
   std::vector<std::string> columns;
   std::vector<ValueList> rows;
 
+  // Map tracking fallback values evaluated by GoogleSQL
+  std::map<std::string, googlesql::Value> fallback_default_values;
+
   // Mutation data for kDelete.
   KeySet key_set;
 
@@ -96,6 +100,10 @@ class Mutation {
 
   // Adds a Delete MutationOp to this Mutation.
   void AddDeleteOp(const std::string& table, const KeySet& key_set);
+
+  // Sets fallback default values on the most recently added op.
+  void SetLastOpFallbackDefaultValues(
+      std::map<std::string, googlesql::Value> fallback_default_values);
 
  private:
   std::vector<MutationOp> ops_;

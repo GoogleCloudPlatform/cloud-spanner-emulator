@@ -33,10 +33,10 @@
 
 #include <memory>
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/utility/utility.h"
 #include "third_party/spanner_pg/interface/parser_interface.h"
 
@@ -45,21 +45,21 @@ namespace interfaces {
 
 namespace {
 
-std::unique_ptr<zetasql::AnalyzerOptions> CreateDefaultAnalyzerOptions() {
-  auto default_options = std::make_unique<zetasql::AnalyzerOptions>();
+std::unique_ptr<googlesql::AnalyzerOptions> CreateDefaultAnalyzerOptions() {
+  auto default_options = std::make_unique<googlesql::AnalyzerOptions>();
   default_options->CreateDefaultArenasIfNotSet();
   return default_options;
 }
 
-const zetasql::AnalyzerOptions& DefaultAnalyzerOptions() {
-  static const zetasql::AnalyzerOptions* default_options =
+const googlesql::AnalyzerOptions& DefaultAnalyzerOptions() {
+  static const googlesql::AnalyzerOptions* default_options =
       CreateDefaultAnalyzerOptions().release();
   return *default_options;
 }
 
 }  // namespace
 
-const zetasql::AnalyzerOptions&
+const googlesql::AnalyzerOptions&
 TranslatorCommonParams::googlesql_analyzer_options() const {
   return analyzer_options_ == nullptr ? DefaultAnalyzerOptions()
                                       : *analyzer_options_;
@@ -92,7 +92,7 @@ const std::string* TranslateParsedQueryParams::serialized_parse_tree() const {
 
 TranslateQueryParams::TranslateQueryParams(
     absl::string_view sql_expression, ParserInterface* parser,
-    zetasql::EnumerableCatalog* engine_user_catalog,
+    googlesql::EnumerableCatalog* engine_user_catalog,
     std::unique_ptr<EngineBuiltinFunctionCatalog>
         engine_builtin_function_catalog)
     : common_params_(sql_expression, engine_user_catalog,

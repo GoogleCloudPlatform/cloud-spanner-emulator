@@ -37,7 +37,7 @@
 #include "frontend/converters/reads.h"
 #include "frontend/converters/time.h"
 #include "frontend/entities/transaction.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -99,9 +99,9 @@ absl::Status Session::ToProto(spanner_api::Session* session,
   if (include_labels) {
     session->mutable_labels()->insert(labels_.begin(), labels_.end());
   }
-  ZETASQL_ASSIGN_OR_RETURN(*session->mutable_create_time(),
+  GOOGLESQL_ASSIGN_OR_RETURN(*session->mutable_create_time(),
                    TimestampToProto(create_time_));
-  ZETASQL_ASSIGN_OR_RETURN(*session->mutable_approximate_last_use_time(),
+  GOOGLESQL_ASSIGN_OR_RETURN(*session->mutable_approximate_last_use_time(),
                    TimestampToProto(approximate_last_use_time_));
   session->set_multiplexed(multiplexed_);
   return absl::OkStatus();
@@ -129,13 +129,13 @@ backend::RetryState Session::MakeRetryState(
 absl::StatusOr<std::shared_ptr<Transaction>> Session::CreateMultiUseTransaction(
     const spanner_api::TransactionOptions& options,
     const TransactionActivation& activation) {
-  ZETASQL_RETURN_IF_ERROR(ValidateMultiUseTransactionOptions(options));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateMultiUseTransactionOptions(options));
 
   absl::MutexLock lock(&mu_);
   // Move-convert unique pointer returned by CreateTransaction to shared pointer
   // since session will also hold a reference to multi-use transaction object
   // for future uses.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::shared_ptr<Transaction> txn,
       CreateTransaction(options, Transaction::Usage::kMultiUse,
                         MakeRetryState(options, /*is_single_use_txn=*/false)));
@@ -145,7 +145,7 @@ absl::StatusOr<std::shared_ptr<Transaction>> Session::CreateMultiUseTransaction(
       return error::Internal(
           "Transaction manager is null on a multiplexed session");
     }
-    ZETASQL_RETURN_IF_ERROR(mux_txn_manager_->AddToCurrentTransactions(
+    GOOGLESQL_RETURN_IF_ERROR(mux_txn_manager_->AddToCurrentTransactions(
         txn, database_->database_uri(), txn->id()));
     // If the last clear time is older than staleness duration, clear the txn
     // map.
@@ -178,7 +178,7 @@ absl::StatusOr<std::shared_ptr<Transaction>> Session::CreateMultiUseTransaction(
 absl::StatusOr<std::unique_ptr<Transaction>>
 Session::CreateSingleUseTransaction(
     const spanner_api::TransactionOptions& options) {
-  ZETASQL_RETURN_IF_ERROR(ValidateSingleUseTransactionOptions(options));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateSingleUseTransactionOptions(options));
 
   absl::MutexLock lock(&mu_);
   return CreateTransaction(options, Transaction::Usage::kSingleUse,
@@ -210,11 +210,11 @@ absl::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadOnly(
     const spanner_api::TransactionOptions& options,
     const Transaction::Usage& usage) {
   // Populate read options.
-  ZETASQL_ASSIGN_OR_RETURN(backend::ReadOnlyOptions read_only_options,
+  GOOGLESQL_ASSIGN_OR_RETURN(backend::ReadOnlyOptions read_only_options,
                    ReadOnlyOptionsFromProto(options.read_only()));
 
   // Create a new backend read only transaction.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<backend::ReadOnlyTransaction> read_only_transaction,
       database_->backend()->CreateReadOnlyTransaction(read_only_options));
   return std::make_unique<Transaction>(std::move(read_only_transaction),
@@ -225,11 +225,16 @@ absl::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadOnly(
 absl::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadWrite(
     const spanner_api::TransactionOptions& options,
     const Transaction::Usage& usage, const backend::RetryState& retry_state) {
+  // Populate read write options.
+  backend::ReadWriteOptions read_write_options;
+  read_write_options.exclude_txn_from_change_streams =
+      options.exclude_txn_from_change_streams();
+
   // Create a new backend read write transaction.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<backend::ReadWriteTransaction> read_write_transaction,
-      database_->backend()->CreateReadWriteTransaction(
-          backend::ReadWriteOptions(), retry_state));
+      database_->backend()->CreateReadWriteTransaction(read_write_options,
+                                                       retry_state));
 
   return std::make_unique<Transaction>(std::move(read_write_transaction),
                                        database_->backend()->query_engine(),
@@ -275,17 +280,17 @@ absl::StatusOr<std::shared_ptr<Transaction>> Session::FindOrInitTransaction(
   std::shared_ptr<Transaction> txn;
   switch (selector.selector_case()) {
     case spanner_api::TransactionSelector::SelectorCase::kBegin: {
-      ZETASQL_ASSIGN_OR_RETURN(txn, CreateMultiUseTransaction(
+      GOOGLESQL_ASSIGN_OR_RETURN(txn, CreateMultiUseTransaction(
                                 selector.begin(),
                                 TransactionActivation::kInitializeAndActivate));
       break;
     }
     case spanner_api::TransactionSelector::SelectorCase::kId: {
-      ZETASQL_ASSIGN_OR_RETURN(txn, FindAndUseTransaction(selector.id()));
+      GOOGLESQL_ASSIGN_OR_RETURN(txn, FindAndUseTransaction(selector.id()));
       break;
     }
     case spanner_api::TransactionSelector::SelectorCase::kSingleUse: {
-      ZETASQL_ASSIGN_OR_RETURN(txn, CreateSingleUseTransaction(selector.single_use()));
+      GOOGLESQL_ASSIGN_OR_RETURN(txn, CreateSingleUseTransaction(selector.single_use()));
       break;
     }
     default:
@@ -294,7 +299,7 @@ absl::StatusOr<std::shared_ptr<Transaction>> Session::FindOrInitTransaction(
       spanner_api::TransactionOptions options;
       options.mutable_read_only()->set_strong(true);
       options.mutable_read_only()->set_return_read_timestamp(false);
-      ZETASQL_ASSIGN_OR_RETURN(txn, CreateSingleUseTransaction(options));
+      GOOGLESQL_ASSIGN_OR_RETURN(txn, CreateSingleUseTransaction(options));
   }
   return txn;
 }

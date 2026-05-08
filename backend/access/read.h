@@ -21,8 +21,8 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "backend/datamodel/key_set.h"
 #include "absl/status/status.h"
@@ -74,13 +74,13 @@ std::ostream& operator<<(std::ostream& out, const ReadArg& arg);
 //
 // Usage:
 //     std::unique_ptr<RowCursor> cursor;
-//     ZETASQL_RETURN_IF_ERROR(SomeMethodThatYieldsA(&cursor));
+//     GOOGLESQL_RETURN_IF_ERROR(SomeMethodThatYieldsA(&cursor));
 //     while (cursor->Next()) {
 //       for (int i = 0; i < cursor->NumColumns(); ++i) {
-//         const zetasql::value& value = cursor->ColumnValue(i);
+//         const googlesql::value& value = cursor->ColumnValue(i);
 //       }
 //     }
-//     ZETASQL_RETURN_IF_ERROR(cursor->Status());
+//     GOOGLESQL_RETURN_IF_ERROR(cursor->Status());
 class RowCursor {
  public:
   virtual ~RowCursor() {}
@@ -103,11 +103,11 @@ class RowCursor {
 
   // Returns the value at the specified column of the current row. A call to
   // ColumnValue() is only valid if a previous call to Next() returned true.
-  virtual const zetasql::Value ColumnValue(int i) const = 0;
+  virtual const googlesql::Value ColumnValue(int i) const = 0;
 
   // Returns the type of the specified column. Types are owned by the database's
   // TypeFactory and not by the RowCursor.
-  virtual const zetasql::Type* ColumnType(int i) const = 0;
+  virtual const googlesql::Type* ColumnType(int i) const = 0;
 };
 
 // RowReader defines an abstract interface for reading rows from a database.

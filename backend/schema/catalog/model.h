@@ -24,7 +24,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/types/type.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/types/span.h"
@@ -39,7 +39,7 @@ class Model : public SchemaNode {
  public:
   struct ModelColumn {
     std::string name;
-    const zetasql::Type* type = nullptr;
+    const googlesql::Type* type = nullptr;
     bool is_explicit;
     std::optional<bool> is_required;
   };

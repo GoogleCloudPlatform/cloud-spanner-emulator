@@ -34,8 +34,8 @@ import unittest
 # Get filepaths for binaries used in the emulator gcloud tests.
 r = runfiles.Create()
 GCLOUD_BINARY = os.environ.get('GCLOUD_DIR') + '/gcloud'
-GATEWAY_BINARY = r.Rlocation('com_google_cloud_spanner_emulator/binaries/gateway_main_/gateway_main')
-EMULATOR_BINARY = r.Rlocation('com_google_cloud_spanner_emulator/binaries/emulator_main')
+GATEWAY_BINARY = r.Rlocation('_main/binaries/gateway_main_/gateway_main')
+EMULATOR_BINARY = r.Rlocation('_main/binaries/emulator_main')
 
 
 class TestCase(unittest.TestCase):

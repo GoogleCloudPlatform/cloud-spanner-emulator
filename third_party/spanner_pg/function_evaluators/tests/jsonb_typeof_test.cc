@@ -31,10 +31,10 @@
 
 #include <string>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/datatypes/common/numeric_core.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
@@ -43,44 +43,44 @@
 namespace postgres_translator::function_evaluators {
 namespace {
 
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 class JsonbTypeofTest : public PgEvaluatorTest {};
 
 TEST_F(JsonbTypeofTest, ReturnsTypeString) {
   EXPECT_THAT(JsonbTypeof("null"),
-              IsOkAndHolds(zetasql::Value::String("null")));
+              IsOkAndHolds(googlesql::Value::String("null")));
   EXPECT_THAT(JsonbTypeof("[null, null]"),
-              IsOkAndHolds(zetasql::Value::String("array")));
+              IsOkAndHolds(googlesql::Value::String("array")));
   EXPECT_THAT(JsonbTypeof("[1,2,3.56]"),
-              IsOkAndHolds(zetasql::Value::String("array")));
+              IsOkAndHolds(googlesql::Value::String("array")));
   EXPECT_THAT(JsonbTypeof(R"([{"a": "abc"}, {"x": "xyz"}])"),
-              IsOkAndHolds(zetasql::Value::String("array")));
+              IsOkAndHolds(googlesql::Value::String("array")));
   EXPECT_THAT(JsonbTypeof(R"("hello")"),
-              IsOkAndHolds(zetasql::Value::String("string")));
+              IsOkAndHolds(googlesql::Value::String("string")));
   EXPECT_THAT(JsonbTypeof(R"("")"),
-              IsOkAndHolds(zetasql::Value::String("string")));
+              IsOkAndHolds(googlesql::Value::String("string")));
   EXPECT_THAT(JsonbTypeof(R"("nan")"),
-              IsOkAndHolds(zetasql::Value::String("string")));
+              IsOkAndHolds(googlesql::Value::String("string")));
   EXPECT_THAT(JsonbTypeof(R"({ "a" : { "b" : [null, 3.5, -214215, true] } })"),
-              IsOkAndHolds(zetasql::Value::String("object")));
+              IsOkAndHolds(googlesql::Value::String("object")));
   EXPECT_THAT(JsonbTypeof(R"({ "a" : [null, null] })"),
-              IsOkAndHolds(zetasql::Value::String("object")));
+              IsOkAndHolds(googlesql::Value::String("object")));
   EXPECT_THAT(JsonbTypeof("-18446744073709551615124125"),
-              IsOkAndHolds(zetasql::Value::String("number")));
+              IsOkAndHolds(googlesql::Value::String("number")));
   EXPECT_THAT(JsonbTypeof("18446744073709551615124125"),
-              IsOkAndHolds(zetasql::Value::String("number")));
+              IsOkAndHolds(googlesql::Value::String("number")));
   EXPECT_THAT(JsonbTypeof("0.00"),
-              IsOkAndHolds(zetasql::Value::String("number")));
+              IsOkAndHolds(googlesql::Value::String("number")));
   EXPECT_THAT(JsonbTypeof(postgres_translator::spangres::datatypes::common::
                               MaxJsonbNumericString()),
-              IsOkAndHolds(zetasql::Value::String("number")));
+              IsOkAndHolds(googlesql::Value::String("number")));
 
   EXPECT_THAT(JsonbTypeof("true"),
-              IsOkAndHolds(zetasql::Value::String("boolean")));
+              IsOkAndHolds(googlesql::Value::String("boolean")));
   EXPECT_THAT(JsonbTypeof("false"),
-              IsOkAndHolds(zetasql::Value::String("boolean")));
+              IsOkAndHolds(googlesql::Value::String("boolean")));
 }
 
 TEST_F(JsonbTypeofTest, ReturnsErrorWhenInvalidArgumentIsGiven) {

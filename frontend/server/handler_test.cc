@@ -20,7 +20,7 @@
 #include "google/spanner/v1/spanner.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 
 namespace google {
@@ -52,7 +52,7 @@ TEST(HandlerRegisterer, RegistersUnaryGRPCHandler) {
   RequestContext ctx(nullptr, nullptr);
   google::spanner::v1::CreateSessionRequest request;
   google::spanner::v1::Session response;
-  ZETASQL_EXPECT_OK(handler->Run(&ctx, &request, &response));
+  GOOGLESQL_EXPECT_OK(handler->Run(&ctx, &request, &response));
   EXPECT_EQ("Hello, World!", response.name());
 }
 
@@ -98,7 +98,7 @@ TEST(HandlerRegisterer, RegistersServerStreamingGRPCHandler) {
   google::spanner::v1::ReadRequest request;
   TestServerWriter<google::spanner::v1::PartialResultSet> writer;
 
-  ZETASQL_EXPECT_OK(handler->Run(&ctx, &request, &writer));
+  GOOGLESQL_EXPECT_OK(handler->Run(&ctx, &request, &writer));
   ASSERT_EQ(2, writer.messages().size());
   EXPECT_EQ("Hello", writer.messages().at(0).resume_token());
   EXPECT_EQ("World", writer.messages().at(1).resume_token());

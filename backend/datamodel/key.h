@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 
 namespace google {
 namespace spanner {
@@ -48,27 +48,27 @@ class Key {
   Key();
 
   // Constructs a key with initial column values.
-  explicit Key(std::vector<zetasql::Value> columns);
+  explicit Key(std::vector<googlesql::Value> columns);
 
   // Adds a column to the key.
-  void AddColumn(zetasql::Value value, bool desc = false,
+  void AddColumn(googlesql::Value value, bool desc = false,
                  bool is_nulls_last = false);
 
   // Returns the number of columns in a key.
   int NumColumns() const;
 
   // Sets the column at a specific index.
-  void SetColumnValue(int i, zetasql::Value value);
+  void SetColumnValue(int i, googlesql::Value value);
   void SetColumnDescending(int i, bool value);
   void SetColumnNullsLast(int i, bool value);
 
   // Returns the column at a specific index.
-  const zetasql::Value& ColumnValue(int i) const;
+  const googlesql::Value& ColumnValue(int i) const;
   bool IsColumnDescending(int i) const;
   bool IsColumnNullsLast(int i) const;
 
   // Returns all column values in the key.
-  const std::vector<zetasql::Value>& column_values() const {
+  const std::vector<googlesql::Value>& column_values() const {
     return columns_;
   }
 
@@ -105,7 +105,7 @@ class Key {
 
  private:
   // Individual columns that make up the key.
-  std::vector<zetasql::Value> columns_;
+  std::vector<googlesql::Value> columns_;
 
   // Key metadata.
   bool is_infinity_ = false;

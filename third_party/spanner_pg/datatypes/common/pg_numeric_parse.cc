@@ -43,8 +43,8 @@
 #include "absl/strings/substitute.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::spangres::datatypes::common {
 
@@ -58,7 +58,7 @@ absl::StatusOr<std::string> NormalizePgNumeric(absl::string_view readable_value,
   // - readable_value: numeric as string
   // - InvalidOid: unused argument
   // - typmod: precision and scale
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum numeric_in_result,
       postgres_translator::CheckedOidFunctionCall3(
           F_NUMERIC_IN,
@@ -69,7 +69,7 @@ absl::StatusOr<std::string> NormalizePgNumeric(absl::string_view readable_value,
   // function `numeric_out`
   // - numeric_out_oid_: the OID value of `numeric_out` function
   // - numeric_in_result: numeric datum
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_out_result,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_out_result,
                    postgres_translator::CheckedOidFunctionCall1(
                        F_NUMERIC_OUT, numeric_in_result));
   std::string pg_normalized = DatumGetCString(numeric_out_result);
@@ -77,7 +77,7 @@ absl::StatusOr<std::string> NormalizePgNumeric(absl::string_view readable_value,
   // Spanner does not support Infinity/-Infinity PG.NUMERIC.
   const char kInfString[] = "Infinity";
   const char kNegInfString[] = "-Infinity";
-  ZETASQL_RET_CHECK(pg_normalized != kInfString && pg_normalized != kNegInfString)
+  GOOGLESQL_RET_CHECK(pg_normalized != kInfString && pg_normalized != kNegInfString)
       .SetErrorCode(absl::StatusCode::kInvalidArgument)
       << absl::Substitute("Invalid NUMERIC value: $0.", pg_normalized);
   return pg_normalized;
@@ -92,7 +92,7 @@ absl::StatusOr<int32_t> GetTypeModifier(int64_t precision, int64_t scale = 0) {
                                       CStringGetDatum(scale_str.c_str())};
 
   // Create bool `nulls` array corresponding to `typmod_vector`.
-  ZETASQL_ASSIGN_OR_RETURN(void* p, CheckedPgPalloc(2 * sizeof(bool)));
+  GOOGLESQL_ASSIGN_OR_RETURN(void* p, CheckedPgPalloc(2 * sizeof(bool)));
   bool* nulls = reinterpret_cast<bool*>(p);
   nulls[0] = false;
   nulls[1] = false;
@@ -102,18 +102,18 @@ absl::StatusOr<int32_t> GetTypeModifier(int64_t precision, int64_t scale = 0) {
   int16_t elmlen;
   bool elmbyval;
   char elmalign;
-  ZETASQL_RETURN_IF_ERROR(CheckedPgGetTyplenbyvalalign(element_typid, &elmlen,
+  GOOGLESQL_RETURN_IF_ERROR(CheckedPgGetTyplenbyvalalign(element_typid, &elmlen,
                                                &elmbyval, &elmalign));
   int dims = 2;  // `typmod_vector` dim of 2 elements precision and scale
   int lower_bounds = 1;
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       ArrayType * pg_array,
       CheckedPgConstructMdArray(typmod_vector.data(), nulls, /*ndims=*/1, &dims,
                                 &lower_bounds, element_typid, elmlen, elmbyval,
                                 elmalign));
 
   // Get int32_t typmod datum
-  ZETASQL_ASSIGN_OR_RETURN(Datum numerictypmodin_result,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numerictypmodin_result,
                    postgres_translator::CheckedOidFunctionCall1(
                        F_NUMERICTYPMODIN, PointerGetDatum(pg_array)));
 
@@ -129,14 +129,14 @@ absl::StatusOr<std::string> NormalizePgNumeric(
 absl::StatusOr<std::string> NormalizePgNumeric(absl::string_view readable_value,
                                                int64_t precision,
                                                int64_t scale) {
-  ZETASQL_ASSIGN_OR_RETURN(int32_t numeric_typmod, GetTypeModifier(precision, scale));
+  GOOGLESQL_ASSIGN_OR_RETURN(int32_t numeric_typmod, GetTypeModifier(precision, scale));
 
   return NormalizePgNumeric(readable_value, numeric_typmod);
 }
 
 absl::StatusOr<bool> ValidatePrecisionAndScale(int64_t precision,
                                                int64_t scale) {
-  ZETASQL_RETURN_IF_ERROR(GetTypeModifier(precision, scale).status());
+  GOOGLESQL_RETURN_IF_ERROR(GetTypeModifier(precision, scale).status());
   return true;
 }
 

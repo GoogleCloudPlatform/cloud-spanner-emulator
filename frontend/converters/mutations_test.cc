@@ -21,11 +21,11 @@
 #include "google/spanner/v1/mutation.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "backend/access/write.h"
@@ -44,13 +44,13 @@ namespace frontend {
 
 namespace {
 
-using zetasql::Value;
-using zetasql_base::testing::StatusIs;
+using googlesql::Value;
+using googlesql_base::testing::StatusIs;
 
 class AccessProtosTest : public testing::Test {
  public:
   AccessProtosTest()
-      : type_factory_(std::make_unique<zetasql::TypeFactory>()),
+      : type_factory_(std::make_unique<googlesql::TypeFactory>()),
         schema_(test::CreateSchemaWithOneTable(type_factory_.get())) {}
 
  protected:
@@ -69,7 +69,7 @@ class AccessProtosTest : public testing::Test {
   }
 
   // The type factory must outlive the type objects that it has made.
-  const std::unique_ptr<zetasql::TypeFactory> type_factory_;
+  const std::unique_ptr<googlesql::TypeFactory> type_factory_;
   const std::unique_ptr<const backend::Schema> schema_;
 };
 
@@ -113,7 +113,7 @@ TEST_F(AccessProtosTest, CanCreateMutationFromProto) {
   *mutation_pb.Add()->mutable_delete_() = delete_mutation;
 
   backend::Mutation mutation;
-  ZETASQL_EXPECT_OK(MutationFromProto(*schema_.get(), mutation_pb, &mutation));
+  GOOGLESQL_EXPECT_OK(MutationFromProto(*schema_.get(), mutation_pb, &mutation));
 
   EXPECT_EQ(mutation.ops().size(), 5);
   EXPECT_EQ(mutation.ops()[0].type, backend::MutationOpType::kInsert);
@@ -126,22 +126,22 @@ TEST_F(AccessProtosTest, CanCreateMutationFromProto) {
   EXPECT_EQ(mutation.ops()[0].columns.size(), 1);
   EXPECT_EQ(mutation.ops()[0].rows.size(), 1);
   EXPECT_EQ(mutation.ops()[0].columns[0], "int64_col");
-  EXPECT_EQ(mutation.ops()[0].rows[0][0], zetasql::values::Int64(123));
+  EXPECT_EQ(mutation.ops()[0].rows[0][0], googlesql::values::Int64(123));
 
   EXPECT_EQ(mutation.ops()[1].columns.size(), 1);
   EXPECT_EQ(mutation.ops()[1].rows.size(), 1);
   EXPECT_EQ(mutation.ops()[1].columns[0], "int64_col");
-  EXPECT_EQ(mutation.ops()[1].rows[0][0], zetasql::values::Int64(456));
+  EXPECT_EQ(mutation.ops()[1].rows[0][0], googlesql::values::Int64(456));
 
   EXPECT_EQ(mutation.ops()[2].columns.size(), 1);
   EXPECT_EQ(mutation.ops()[2].rows.size(), 1);
   EXPECT_EQ(mutation.ops()[2].columns[0], "int64_col");
-  EXPECT_EQ(mutation.ops()[2].rows[0][0], zetasql::values::Int64(789));
+  EXPECT_EQ(mutation.ops()[2].rows[0][0], googlesql::values::Int64(789));
 
   EXPECT_EQ(mutation.ops()[3].columns.size(), 1);
   EXPECT_EQ(mutation.ops()[3].rows.size(), 1);
   EXPECT_EQ(mutation.ops()[3].columns[0], "int64_col");
-  EXPECT_EQ(mutation.ops()[3].rows[0][0], zetasql::values::Int64(1111));
+  EXPECT_EQ(mutation.ops()[3].rows[0][0], googlesql::values::Int64(1111));
 
   EXPECT_EQ(mutation.ops()[4].columns.size(), 0);
   EXPECT_EQ(mutation.ops()[4].rows.size(), 0);

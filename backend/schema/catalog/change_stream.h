@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"

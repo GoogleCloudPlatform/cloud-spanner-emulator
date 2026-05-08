@@ -35,7 +35,7 @@
 #include <string>
 #include <type_traits>
 
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/types/type.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
@@ -47,11 +47,11 @@
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/transformer/forward_transformer.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 
-absl::StatusOr<const zetasql::Type*> ForwardTransformer::BuildGsqlType(
+absl::StatusOr<const googlesql::Type*> ForwardTransformer::BuildGsqlType(
     const Oid pg_type_oid) {
   if (pg_type_oid == UNKNOWNOID) {
     return absl::InvalidArgumentError(
@@ -63,7 +63,7 @@ absl::StatusOr<const zetasql::Type*> ForwardTransformer::BuildGsqlType(
   const PostgresTypeMapping* pg_type_mapping =
       engine_system_catalog->GetType(pg_type_oid);
   if (pg_type_mapping == nullptr) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const char* type_name,
         PgBootstrapCatalog::Default()->GetFormattedTypeName(pg_type_oid));
     return absl::UnimplementedError(

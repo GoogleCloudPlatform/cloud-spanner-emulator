@@ -18,7 +18,7 @@
 #include <string>
 
 #include "absl/flags/parse.h"
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
@@ -69,7 +69,7 @@ std::string PopulateInfoSchemaColumnsMetadata(const DatabaseDialect& dialect) {
   std::string metadata_code = absl::Substitute(
       R"(inline const std::vector<ColumnsMetaEntry>& $0ColumnsMetadata() {
   // clang-format off
-  static const zetasql_base::NoDestructor<std::vector<ColumnsMetaEntry>>
+  static const googlesql_base::NoDestructor<std::vector<ColumnsMetaEntry>>
       kColumnsMetadata({
 )",
       prefix);
@@ -87,7 +87,7 @@ std::string PopulateInfoSchemaColumnsMetadata(const DatabaseDialect& dialect) {
   options.set_comment('#');
   CFileReader file_reader = CFileReader(metadata_file);
   CsvReader csv_reader(&file_reader, options);
-  ZETASQL_VLOG(csv_reader.status().ok())
+  GOOGLESQL_VLOG(csv_reader.status().ok())
       << "Error reading csv file:" << csv_reader.status();
   absl::StrAppend(&metadata_code, "  // NOLINTBEGIN(whitespace/line_length)\n");
   for (CsvRecord record; csv_reader.ReadRecord(record);) {
@@ -105,7 +105,7 @@ std::string PopulateInfoSchemaColumnsMetadata(const DatabaseDialect& dialect) {
 }
 
 )");
-  ZETASQL_VLOG(csv_reader.Close()) << csv_reader.status();
+  GOOGLESQL_VLOG(csv_reader.Close()) << csv_reader.status();
   return metadata_code;
 }
 
@@ -118,7 +118,7 @@ std::string PopulateInfoSchemaColumnsMetadataForIndex(
   std::string metadata_for_index_code = absl::Substitute(
       R"(inline const std::vector<IndexColumnsMetaEntry>& $0IndexColumnsMetadata() {
   // clang-format off
-  static const zetasql_base::NoDestructor<std::vector<IndexColumnsMetaEntry>>
+  static const googlesql_base::NoDestructor<std::vector<IndexColumnsMetaEntry>>
       kColumnsMetadataForIndex({
 )",
       prefix);
@@ -138,7 +138,7 @@ std::string PopulateInfoSchemaColumnsMetadataForIndex(
   options.set_comment('#');
   CFileReader file_reader = CFileReader(metadata_file);
   CsvReader csv_reader(&file_reader, options);
-  ZETASQL_VLOG(csv_reader.status().ok())
+  GOOGLESQL_VLOG(csv_reader.status().ok())
       << "Error reading csv file:" << csv_reader.status();
   absl::StrAppend(&metadata_for_index_code,
                   "  // NOLINTBEGIN(whitespace/line_length)\n");
@@ -164,7 +164,7 @@ std::string PopulateInfoSchemaColumnsMetadataForIndex(
 
 )");
 
-  ZETASQL_VLOG(csv_reader.Close()) << csv_reader.status();
+  GOOGLESQL_VLOG(csv_reader.Close()) << csv_reader.status();
   return metadata_for_index_code;
 }
 
@@ -181,7 +181,7 @@ std::string PopulateSpannerSysColumnsMetadata() {
 inline const std::vector<SpannerSysColumnsMetaEntry>&
 SpannerSysColumnsMetadata() {
   // clang-format off
-  static const zetasql_base::NoDestructor<std::vector<SpannerSysColumnsMetaEntry>>
+  static const googlesql_base::NoDestructor<std::vector<SpannerSysColumnsMetaEntry>>
       kSpannerSysColumnsMetadata({
 )";
 
@@ -195,7 +195,7 @@ SpannerSysColumnsMetadata() {
                                "spanner_type", "ordinal_position"});
   CFileReader file_reader = CFileReader(kSpannerSysColumnsMetadata);
   CsvReader csv_reader(&file_reader, options);
-  ZETASQL_VLOG(csv_reader.status().ok())
+  GOOGLESQL_VLOG(csv_reader.status().ok())
       << "Error reading csv file:" << csv_reader.status();
   absl::StrAppend(&metadata_code, "  // NOLINTBEGIN(whitespace/line_length)\n");
   for (CsvRecord record; csv_reader.ReadRecord(record);) {
@@ -215,7 +215,7 @@ SpannerSysColumnsMetadata() {
 }
 
 )");
-  ZETASQL_VLOG(csv_reader.Close()) << csv_reader.status();
+  GOOGLESQL_VLOG(csv_reader.Close()) << csv_reader.status();
   return metadata_code;
 }
 
@@ -223,7 +223,7 @@ std::string PopulatePGCatalogColumnsMetadata() {
   std::string metadata_code =
       R"(inline const std::vector<ColumnsMetaEntry>& PGCatalogColumnsMetadata() {
   // clang-format off
-  static const zetasql_base::NoDestructor<std::vector<ColumnsMetaEntry>>
+  static const googlesql_base::NoDestructor<std::vector<ColumnsMetaEntry>>
       kPGCatalogColumnsMetadata({
 )";
 
@@ -237,7 +237,7 @@ std::string PopulatePGCatalogColumnsMetadata() {
       {"table_name", "column_name", "is_nullable", "spanner_type"});
   CFileReader file_reader = CFileReader(kPGCatalogColumnsMetadata);
   CsvReader csv_reader(&file_reader, options);
-  ZETASQL_VLOG(csv_reader.status().ok())  // crash ok
+  GOOGLESQL_VLOG(csv_reader.status().ok())  // crash ok
       << "Error reading csv file:" << csv_reader.status();
   absl::StrAppend(&metadata_code, "  // NOLINTBEGIN(whitespace/line_length)\n");
   for (CsvRecord record; csv_reader.ReadRecord(record);) {
@@ -255,7 +255,7 @@ std::string PopulatePGCatalogColumnsMetadata() {
 }
 
 )");
-  ZETASQL_VLOG(csv_reader.Close()) << csv_reader.status();  // crash ok
+  GOOGLESQL_VLOG(csv_reader.Close()) << csv_reader.status();  // crash ok
   return metadata_code;
 }
 
@@ -269,7 +269,7 @@ int main(int argc, char* argv[]) {
 #include <string>
 #include <vector>
 
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/base/no_destructor.h"
 
 // WARNING -  DO NOT EDIT
 // AUTOGENERATED FILE USING BUILD RULE:

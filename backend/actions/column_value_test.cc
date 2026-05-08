@@ -24,14 +24,14 @@
 #include <string_view>
 #include <vector>
 
-#include "zetasql/public/functions/string.h"
-#include "zetasql/public/json_value.h"
-#include "zetasql/public/numeric_value.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/functions/string.h"
+#include "googlesql/public/json_value.h"
+#include "googlesql/public/numeric_value.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/random/distributions.h"
@@ -59,47 +59,47 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::values::Bool;
-using zetasql::values::Bytes;
-using zetasql::values::BytesArray;
-using zetasql::values::Date;
-using zetasql::values::Double;
-using zetasql::values::Float;
-using zetasql::values::Int64;
-using zetasql::values::Json;
-using zetasql::values::NullBool;
-using zetasql::values::NullBytes;
-using zetasql::values::NullDate;
-using zetasql::values::NullDouble;
-using zetasql::values::NullFloat;
-using zetasql::values::NullInt64;
-using zetasql::values::NullJson;
-using zetasql::values::NullNumeric;
-using zetasql::values::NullString;
-using zetasql::values::NullTimestamp;
-using zetasql::values::Numeric;
-using zetasql::values::String;
-using zetasql::values::StringArray;
-using zetasql::values::Timestamp;
+using googlesql::values::Bool;
+using googlesql::values::Bytes;
+using googlesql::values::BytesArray;
+using googlesql::values::Date;
+using googlesql::values::Double;
+using googlesql::values::Float;
+using googlesql::values::Int64;
+using googlesql::values::Json;
+using googlesql::values::NullBool;
+using googlesql::values::NullBytes;
+using googlesql::values::NullDate;
+using googlesql::values::NullDouble;
+using googlesql::values::NullFloat;
+using googlesql::values::NullInt64;
+using googlesql::values::NullJson;
+using googlesql::values::NullNumeric;
+using googlesql::values::NullString;
+using googlesql::values::NullTimestamp;
+using googlesql::values::Numeric;
+using googlesql::values::String;
+using googlesql::values::StringArray;
+using googlesql::values::Timestamp;
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 struct Values {
-  zetasql::Value int64_col = Int64(1);
-  zetasql::Value bool_col = Bool(true);
-  zetasql::Value date_col = Date(2);
-  zetasql::Value float_col = Float(2.0);
-  zetasql::Value double_col = Double(2.0);
-  zetasql::Value string_col = String("test");
-  zetasql::Value bytes_col = Bytes("01234");
-  zetasql::Value timestamp_col = Timestamp(absl::Now());
-  zetasql::Value array_string_col = StringArray({"test"});
-  zetasql::Value array_bytes_col = BytesArray({"01234"});
-  zetasql::Value numeric_col =
-      Numeric(zetasql::NumericValue::FromStringStrict("1234567890.123456789")
+  googlesql::Value int64_col = Int64(1);
+  googlesql::Value bool_col = Bool(true);
+  googlesql::Value date_col = Date(2);
+  googlesql::Value float_col = Float(2.0);
+  googlesql::Value double_col = Double(2.0);
+  googlesql::Value string_col = String("test");
+  googlesql::Value bytes_col = Bytes("01234");
+  googlesql::Value timestamp_col = Timestamp(absl::Now());
+  googlesql::Value array_string_col = StringArray({"test"});
+  googlesql::Value array_bytes_col = BytesArray({"01234"});
+  googlesql::Value numeric_col =
+      Numeric(googlesql::NumericValue::FromStringStrict("1234567890.123456789")
                   .value());
-  zetasql::Value json_col = Json(
-      zetasql::JSONValue::ParseJSONString("{\"key\":\"value\"}").value());
+  googlesql::Value json_col = Json(
+      googlesql::JSONValue::ParseJSONString("{\"key\":\"value\"}").value());
 };
 
 class ColumnValueTest : public test::ActionsTest {
@@ -160,7 +160,7 @@ class ColumnValueTest : public test::ActionsTest {
 
  protected:
   // Test components.
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_;
 
   // Test variables.
@@ -171,7 +171,7 @@ class ColumnValueTest : public test::ActionsTest {
 
 TEST_F(ColumnValueTest, ValidateNotNullColumns) {
   Values values;
-  ZETASQL_EXPECT_OK(ValidateInsert(values));
+  GOOGLESQL_EXPECT_OK(ValidateInsert(values));
   {
     Values values;
     values.int64_col = NullInt64();
@@ -256,7 +256,7 @@ TEST_F(ColumnValueTest, ValidateNotNullColumns) {
 
 TEST_F(ColumnValueTest, ValidateColumnsAreCorrectTypes) {
   Values values;
-  ZETASQL_EXPECT_OK(ValidateInsert(values));
+  GOOGLESQL_EXPECT_OK(ValidateInsert(values));
   {
     Values values;
     values.int64_col = String("");
@@ -356,7 +356,7 @@ TEST_F(ColumnValueTest, ValidateColumnsAreCorrectTypes) {
 }
 
 TEST_F(ColumnValueTest, ValidateKeyDoesNotContainNullValuesForDelete) {
-  ZETASQL_EXPECT_OK(validator_->Validate(ctx(), Delete(table_, Key({Int64(1)}))));
+  GOOGLESQL_EXPECT_OK(validator_->Validate(ctx(), Delete(table_, Key({Int64(1)}))));
 
   EXPECT_THAT(validator_->Validate(ctx(), Delete(table_, Key({NullInt64()}))),
               StatusIs(absl::StatusCode::kFailedPrecondition));
@@ -369,8 +369,8 @@ TEST_F(ColumnValueTest, ValidateStringLength) {
 
   {
     values.string_col = String(max);
-    ZETASQL_EXPECT_OK(ValidateInsert(values));
-    ZETASQL_EXPECT_OK(ValidateUpdate(values));
+    GOOGLESQL_EXPECT_OK(ValidateInsert(values));
+    GOOGLESQL_EXPECT_OK(ValidateUpdate(values));
   }
   {
     values.string_col = String(exceed_max);
@@ -388,8 +388,8 @@ TEST_F(ColumnValueTest, ValidateBytesLength) {
 
   {
     values.bytes_col = Bytes(max);
-    ZETASQL_EXPECT_OK(ValidateInsert(values));
-    ZETASQL_EXPECT_OK(ValidateUpdate(values));
+    GOOGLESQL_EXPECT_OK(ValidateInsert(values));
+    GOOGLESQL_EXPECT_OK(ValidateUpdate(values));
   }
   {
     values.bytes_col = Bytes(exceed_max);
@@ -407,8 +407,8 @@ TEST_F(ColumnValueTest, ValidateArrayStringLength) {
 
   {
     values.array_string_col = StringArray({max, max, max});
-    ZETASQL_EXPECT_OK(ValidateInsert(values));
-    ZETASQL_EXPECT_OK(ValidateUpdate(values));
+    GOOGLESQL_EXPECT_OK(ValidateInsert(values));
+    GOOGLESQL_EXPECT_OK(ValidateUpdate(values));
   }
   {
     values.array_string_col = StringArray({exceed_max, exceed_max, exceed_max});
@@ -426,8 +426,8 @@ TEST_F(ColumnValueTest, ValidateArrayBytesLength) {
 
   {
     values.array_bytes_col = BytesArray({max, max, max});
-    ZETASQL_EXPECT_OK(ValidateInsert(values));
-    ZETASQL_EXPECT_OK(ValidateUpdate(values));
+    GOOGLESQL_EXPECT_OK(ValidateInsert(values));
+    GOOGLESQL_EXPECT_OK(ValidateUpdate(values));
   }
   {
     values.array_bytes_col = BytesArray({exceed_max, exceed_max, exceed_max});
@@ -455,12 +455,12 @@ TEST_F(ColumnValueTest, ValidateUTF8StringEncoding) {
   {
     std::string encoded_str;
     absl::Status error;
-    zetasql::functions::CodePointsToString(code_points, &encoded_str, &error);
+    googlesql::functions::CodePointsToString(code_points, &encoded_str, &error);
     EXPECT_EQ(error, absl::OkStatus());
     Values values;
     values.string_col = String(encoded_str);
-    ZETASQL_EXPECT_OK(ValidateInsert(values));
-    ZETASQL_EXPECT_OK(ValidateUpdate(values));
+    GOOGLESQL_EXPECT_OK(ValidateInsert(values));
+    GOOGLESQL_EXPECT_OK(ValidateUpdate(values));
   }
 
   // Check all 0's
@@ -468,12 +468,12 @@ TEST_F(ColumnValueTest, ValidateUTF8StringEncoding) {
   {
     std::string encoded_str;
     absl::Status error;
-    zetasql::functions::CodePointsToString(code_points, &encoded_str, &error);
+    googlesql::functions::CodePointsToString(code_points, &encoded_str, &error);
     EXPECT_EQ(error, absl::OkStatus());
     Values values;
     values.string_col = String(encoded_str);
-    ZETASQL_EXPECT_OK(ValidateInsert(values));
-    ZETASQL_EXPECT_OK(ValidateUpdate(values));
+    GOOGLESQL_EXPECT_OK(ValidateInsert(values));
+    GOOGLESQL_EXPECT_OK(ValidateUpdate(values));
   }
 
   // Check some invalid encodings
@@ -554,7 +554,7 @@ class PlacementKeyColumnValueTest : public test::ActionsTest {
 
  protected:
   // Test components.
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_;
 
   // Test variables.
@@ -565,7 +565,7 @@ class PlacementKeyColumnValueTest : public test::ActionsTest {
 
 TEST_F(PlacementKeyColumnValueTest, ValidatePlacementKeyColumn) {
   Values values;
-  ZETASQL_EXPECT_OK(ValidateInsert(values));
+  GOOGLESQL_EXPECT_OK(ValidateInsert(values));
   {
     Values values;
     values.string_col = NullString();

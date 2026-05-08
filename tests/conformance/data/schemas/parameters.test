@@ -1,0 +1,37 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE test_table(
+  Key INT64,
+  BoolValue BOOL,
+  IntValue INT64,
+  DoubleValue FLOAT64,
+  StrValue STRING(MAX),
+  ByteValue BYTES(MAX),
+  TimestampValue TIMESTAMP,
+  DateValue DATE,
+  BoolArray ARRAY<BOOL>,
+  IntArray ARRAY<INT64>,
+  DoubleArray ARRAY<FLOAT64>,
+  StrArray ARRAY<STRING(MAX)>,
+  ByteArray ARRAY<BYTES(MAX)>,
+  TimestampArray ARRAY<TIMESTAMP>,
+  DateArray ARRAY<DATE>
+) PRIMARY KEY(Key)
+===
+@Dialect=POSTGRESQL
+CREATE TABLE test_table(
+  Key bigint primary key,
+  BoolValue boolean,
+  IntValue bigint,
+  DoubleValue double precision,
+  StrValue text,
+  ByteValue bytea,
+  TimestampValue timestamptz,
+  DateValue date,
+  BoolArray boolean[],
+  IntArray bigint[],
+  DoubleArray double precision[],
+  StrArray text[],
+  ByteArray bytea[],
+  TimestampArray timestamptz[],
+  DateArray date[]
+)

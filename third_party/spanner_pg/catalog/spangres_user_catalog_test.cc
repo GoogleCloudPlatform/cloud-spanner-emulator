@@ -33,10 +33,10 @@
 
 #include <memory>
 
-#include "zetasql/public/table_valued_function.h"
+#include "googlesql/public/table_valued_function.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/flags/flag.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -48,7 +48,7 @@
 namespace postgres_translator {
 class EngineUserCatalogTestPeer{
  public:
-  static zetasql::EnumerableCatalog* engine_provided_catalog(
+  static googlesql::EnumerableCatalog* engine_provided_catalog(
       const spangres::SpangresUserCatalog* catalog) {
     return catalog->engine_provided_catalog_;
   }
@@ -59,16 +59,16 @@ namespace {
 
 using ::postgres_translator::spangres::test::GetSpangresTestSpannerUserCatalog;
 using ::postgres_translator::spangres::test::GetSpangresTestSystemCatalog;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 TEST(FindTable, SchemaNameMappingPublic) {
   auto catalog = std::make_unique<SpangresUserCatalog>(
       GetSpangresTestSpannerUserCatalog());
 
   // "public" can be used to find table in the top level schema.
-  const zetasql::Table* table;
-  ZETASQL_EXPECT_OK(catalog->FindTable({"public", "keyvalue"}, &table));
+  const googlesql::Table* table;
+  GOOGLESQL_EXPECT_OK(catalog->FindTable({"public", "keyvalue"}, &table));
   EXPECT_NE(table, nullptr);
   EXPECT_EQ(table->FullName(), "keyvalue");
 
@@ -83,13 +83,13 @@ TEST(FindTable, SchemaNameMappingSuccessfulQueries) {
 
   // information_schema queries should return pg_information_schema tables
   // because of the default mapping in the catalog constructor.
-  const zetasql::Table* pg_info_schema_schemata_mapped = nullptr;
-  ZETASQL_EXPECT_OK(user_catalog->FindTable({"information_schema", "schemata"},
+  const googlesql::Table* pg_info_schema_schemata_mapped = nullptr;
+  GOOGLESQL_EXPECT_OK(user_catalog->FindTable({"information_schema", "schemata"},
                                     &pg_info_schema_schemata_mapped));
   EXPECT_NE(pg_info_schema_schemata_mapped, nullptr);
 
   // Verify existence of PG column in the returned table.
-  const zetasql::Column* pg_column =
+  const googlesql::Column* pg_column =
       pg_info_schema_schemata_mapped->FindColumnByName(
           "default_character_set_catalog");
   EXPECT_NE(pg_column, nullptr);
@@ -99,7 +99,7 @@ TEST(FindTable, SchemaNameMappingSuccessfulQueries) {
 TEST(FindTable, ReturnsErrorWhenCatalogNameIsSpecified) {
   auto user_catalog = std::make_unique<SpangresUserCatalog>(
       GetSpangresTestSpannerUserCatalog());
-  const zetasql::Table* table = nullptr;
+  const googlesql::Table* table = nullptr;
 
   // Access table using catalog_name prefix.
   EXPECT_THAT(user_catalog->FindTable(
@@ -115,7 +115,7 @@ TEST(FindTable, SchemaNameMappingHideInternalSchema) {
 
   // Direct access to pg_information_schema in user queries should not be
   // allowed because it is an internal implementation detail that could change.
-  const zetasql::Table* table = nullptr;
+  const googlesql::Table* table = nullptr;
   EXPECT_THAT(
       user_catalog->FindTable({"pg_information_schema", "schemata"}, &table),
       StatusIs(absl::StatusCode::kNotFound));
@@ -143,13 +143,13 @@ TEST(FindTable, SchemaNameMappingCaseSensitivity) {
   // have lowercase names.
 
   // lowercase schema name should succeed.
-  const zetasql::Table* schemata_table = nullptr;
-  ZETASQL_EXPECT_OK(user_catalog->FindTable({"information_schema", "schemata"},
+  const googlesql::Table* schemata_table = nullptr;
+  GOOGLESQL_EXPECT_OK(user_catalog->FindTable({"information_schema", "schemata"},
                                     &schemata_table));
   EXPECT_NE(schemata_table, nullptr);
 
   // Mixedcase schema name should fail
-  const zetasql::Table* null_table = nullptr;
+  const googlesql::Table* null_table = nullptr;
   EXPECT_THAT(
       user_catalog->FindTable({"Information_Schema", "schemata"}, &null_table),
       StatusIs(absl::StatusCode::kNotFound));
@@ -170,8 +170,8 @@ TEST(FindTable, SchemaNameMappingCaseSensitivity) {
 
   // The test for a table with the "SPANNER_SYS" schema should return true,
   // since it was added to the upper case schema list.
-  const zetasql::Table* stats_table;
-  ZETASQL_EXPECT_OK(catalog->FindTable({"SPANNER_SYS", "QUERY_STATS_TOP_MINUTE"},
+  const googlesql::Table* stats_table;
+  GOOGLESQL_EXPECT_OK(catalog->FindTable({"SPANNER_SYS", "QUERY_STATS_TOP_MINUTE"},
                                &stats_table));
   EXPECT_NE(stats_table, nullptr);
   EXPECT_EQ(stats_table->FullName(), "SPANNER_SYS.QUERY_STATS_TOP_MINUTE");
@@ -180,10 +180,10 @@ TEST(FindTable, SchemaNameMappingCaseSensitivity) {
       std::vector<std::string>({"SPANNER_SYS", "QUERY_STATS_TOP_MINUTE"}));
   absl::StatusOr<bool> in_stats_path =
       catalog->InUppercaseCatalogPath(stats_table);
-  ZETASQL_EXPECT_OK(in_stats_path.status());
+  GOOGLESQL_EXPECT_OK(in_stats_path.status());
   EXPECT_TRUE(in_stats_path.value());
 
-  ZETASQL_EXPECT_OK(catalog->FindTable({"spanner_sys", "query_stats_top_minute"},
+  GOOGLESQL_EXPECT_OK(catalog->FindTable({"spanner_sys", "query_stats_top_minute"},
                                &stats_table));
   EXPECT_NE(stats_table, nullptr);
   EXPECT_EQ(stats_table->FullName(), "SPANNER_SYS.QUERY_STATS_TOP_MINUTE");
@@ -191,29 +191,29 @@ TEST(FindTable, SchemaNameMappingCaseSensitivity) {
       catalog->GetCatalogPathForTable(stats_table),
       std::vector<std::string>({"SPANNER_SYS", "QUERY_STATS_TOP_MINUTE"}));
   in_stats_path = catalog->InUppercaseCatalogPath(stats_table);
-  ZETASQL_EXPECT_OK(in_stats_path.status());
+  GOOGLESQL_EXPECT_OK(in_stats_path.status());
   EXPECT_TRUE(in_stats_path.value());
 
   // The test for the keyvalue table will return false because it has an empty
   // schema.
-  const zetasql::Table* kv_table;
-  ZETASQL_EXPECT_OK(catalog->FindTable({"keyvalue"}, &kv_table));
+  const googlesql::Table* kv_table;
+  GOOGLESQL_EXPECT_OK(catalog->FindTable({"keyvalue"}, &kv_table));
   EXPECT_NE(kv_table, nullptr);
   EXPECT_EQ(kv_table->FullName(), "keyvalue");
   absl::StatusOr<bool> in_kv_path = catalog->InUppercaseCatalogPath(kv_table);
-  ZETASQL_EXPECT_OK(in_kv_path.status());
+  GOOGLESQL_EXPECT_OK(in_kv_path.status());
   EXPECT_FALSE(in_kv_path.value());
 
   // The test for a table with the "information_schema" schema should return
   // false since the schema was not added to the uppercase schema list.
-  const zetasql::Table* info_table;
-  ZETASQL_EXPECT_OK(
+  const googlesql::Table* info_table;
+  GOOGLESQL_EXPECT_OK(
       catalog->FindTable({"information_schema", "schemata"}, &info_table));
   EXPECT_NE(info_table, nullptr);
   EXPECT_EQ(info_table->FullName(), "pg_information_schema.schemata");
   absl::StatusOr<bool> in_info_path =
       catalog->InUppercaseCatalogPath(info_table);
-  ZETASQL_EXPECT_OK(in_info_path.status());
+  GOOGLESQL_EXPECT_OK(in_info_path.status());
   EXPECT_FALSE(in_info_path.value());
 }
 
@@ -222,8 +222,8 @@ TEST(FindTable, SchemaNameMappingCaseSensitivity) {
   TEST(FindTable, DISABLED_GetTableNameFromGsqlTable) {
   auto catalog = std::make_unique<SpangresUserCatalog>(
       GetSpangresTestSpannerUserCatalog());
-  const zetasql::Table* table;
-  ZETASQL_EXPECT_OK(catalog->FindTable({"spanner_sys", "query_stats_top_minute"},
+  const googlesql::Table* table;
+  GOOGLESQL_EXPECT_OK(catalog->FindTable({"spanner_sys", "query_stats_top_minute"},
                                &table));
   // Table's own name is upper case.
   EXPECT_NE(table, nullptr);
@@ -234,20 +234,20 @@ TEST(FindTable, SchemaNameMappingCaseSensitivity) {
       catalog->GetTableNameForGsqlTable(*table),
       IsOkAndHolds(TableName({"spanner_sys", "query_stats_top_minute"})));
 
-  ZETASQL_EXPECT_OK(catalog->FindTable({"keyvalue"}, &table));
+  GOOGLESQL_EXPECT_OK(catalog->FindTable({"keyvalue"}, &table));
   EXPECT_NE(table, nullptr);
   EXPECT_THAT(
       catalog->GetTableNameForGsqlTable(*table),
       IsOkAndHolds(TableName({"keyvalue"})));
 
   // Table with mixed case names is preserved.
-  ZETASQL_EXPECT_OK(catalog->FindTable({"AllSpangresTypes"}, &table));
+  GOOGLESQL_EXPECT_OK(catalog->FindTable({"AllSpangresTypes"}, &table));
   EXPECT_NE(table, nullptr);
   EXPECT_THAT(
       catalog->GetTableNameForGsqlTable(*table),
       IsOkAndHolds(TableName({"AllSpangresTypes"})));
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       catalog->FindTable({"information_schema", "schemata"}, &table));
   EXPECT_NE(table, nullptr);
   EXPECT_EQ(table->FullName(), "pg_information_schema.schemata");
@@ -256,7 +256,7 @@ TEST(FindTable, SchemaNameMappingCaseSensitivity) {
       catalog->GetTableNameForGsqlTable(*table),
       IsOkAndHolds(TableName({"information_schema", "schemata"})));
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       EngineUserCatalogTestPeer::engine_provided_catalog(catalog.get())
           ->FindTable({"information_schema", "schemata"}, &table));
   EXPECT_NE(table, nullptr);
@@ -277,8 +277,8 @@ TEST(FindTable, SchemaNameMappingCaseSensitivity) {
   auto catalog = std::make_unique<SpangresUserCatalog>(
       GetSpangresTestSpannerUserCatalog());
 
-  const zetasql::Table* stats_table;
-  ZETASQL_EXPECT_OK(catalog->FindTable({"SPANNER_SYS", "QUERY_STATS_TOP_MINUTE"},
+  const googlesql::Table* stats_table;
+  GOOGLESQL_EXPECT_OK(catalog->FindTable({"SPANNER_SYS", "QUERY_STATS_TOP_MINUTE"},
                                &stats_table));
 
   EXPECT_EQ(
@@ -288,8 +288,8 @@ TEST(FindTable, SchemaNameMappingCaseSensitivity) {
   EXPECT_NE(catalog->GetCatalogPathForTable(stats_table),
             std::vector<std::string>({"keyvalue"}));
 
-  const zetasql::Table* kv_table;
-  ZETASQL_EXPECT_OK(catalog->FindTable({"keyvalue"}, &kv_table));
+  const googlesql::Table* kv_table;
+  GOOGLESQL_EXPECT_OK(catalog->FindTable({"keyvalue"}, &kv_table));
   EXPECT_EQ(catalog->GetCatalogPathForTable(kv_table),
             std::vector<std::string>({"keyvalue"}));
 }
@@ -298,10 +298,10 @@ TEST(FindTableValuedFunction, FindChangeStreamTVFNotUDF) {
   auto catalog = absl::make_unique<SpangresUserCatalog>(
       GetSpangresTestSpannerUserCatalog());
 
-  const zetasql::TableValuedFunction* tvf;
+  const googlesql::TableValuedFunction* tvf;
   // Matching the Spanner (SqlCatalog) engine-provided catalog with the prod
   // SpangresUserCatalog, we should correctly identify our TVF as a UDF.
-  ZETASQL_EXPECT_OK(catalog->FindTableValuedFunction(
+  GOOGLESQL_EXPECT_OK(catalog->FindTableValuedFunction(
       {"read_json_keyvalue_change_stream"}, &tvf));
   EXPECT_NE(tvf, nullptr);
 }

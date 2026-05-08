@@ -21,10 +21,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "backend/query/search/tokenizer.h"
@@ -37,7 +37,7 @@ namespace query {
 namespace search {
 
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 struct NgramsTokenizerTestCase {
   std::vector<std::string> original_strs;
@@ -53,32 +53,32 @@ using NgramsTokenizerTest = ::testing::TestWithParam<NgramsTokenizerTestCase>;
 TEST_P(NgramsTokenizerTest, TestTokenize) {
   const NgramsTokenizerTestCase& test_case = GetParam();
 
-  zetasql::Value value;
+  googlesql::Value value;
   if (test_case.is_array_input) {
-    value = zetasql::values::StringArray(test_case.original_strs);
+    value = googlesql::values::StringArray(test_case.original_strs);
   } else {
-    value = zetasql::Value::String(test_case.original_strs[0]);
+    value = googlesql::Value::String(test_case.original_strs[0]);
   }
 
-  zetasql::Value ngram_max =
+  googlesql::Value ngram_max =
       test_case.ngram_size_max.has_value()
-          ? zetasql::Value::Int64(test_case.ngram_size_max.value())
-          : zetasql::Value::NullInt64();
-  zetasql::Value ngram_min =
+          ? googlesql::Value::Int64(test_case.ngram_size_max.value())
+          : googlesql::Value::NullInt64();
+  googlesql::Value ngram_min =
       test_case.ngram_size_min.has_value()
-          ? zetasql::Value::Int64(test_case.ngram_size_min.value())
-          : zetasql::Value::NullInt64();
+          ? googlesql::Value::Int64(test_case.ngram_size_min.value())
+          : googlesql::Value::NullInt64();
 
-  std::vector<zetasql::Value> args{value, ngram_max, ngram_min};
+  std::vector<googlesql::Value> args{value, ngram_max, ngram_min};
 
-  absl::StatusOr<zetasql::Value> result = NgramsTokenizer::Tokenize(args);
-  ZETASQL_EXPECT_OK(result.status());
+  absl::StatusOr<googlesql::Value> result = NgramsTokenizer::Tokenize(args);
+  GOOGLESQL_EXPECT_OK(result.status());
 
-  zetasql::Value token_list = result.value();
+  googlesql::Value token_list = result.value();
   EXPECT_TRUE(token_list.type()->IsTokenList());
 
   auto get_tokens = StringsFromTokenList(token_list);
-  ZETASQL_EXPECT_OK(get_tokens.status());
+  GOOGLESQL_EXPECT_OK(get_tokens.status());
 
   // Always expect the tokenlist has at least one token
   // which stores tokenizer information.
@@ -155,10 +155,10 @@ using NgramsTokenizerErrorTest =
 TEST_P(NgramsTokenizerErrorTest, TestNgramValues) {
   const NgramsTokenizerArgErrorTestCase& test_case = GetParam();
 
-  std::vector<zetasql::Value> args;
-  args.push_back(zetasql::Value::String("test_ngram_values"));
-  args.push_back(zetasql::Value::Int64(test_case.ngram_size_max));
-  args.push_back(zetasql::Value::Int64(test_case.ngram_size_min));
+  std::vector<googlesql::Value> args;
+  args.push_back(googlesql::Value::String("test_ngram_values"));
+  args.push_back(googlesql::Value::Int64(test_case.ngram_size_max));
+  args.push_back(googlesql::Value::Int64(test_case.ngram_size_min));
 
   EXPECT_THAT(NgramsTokenizer::Tokenize(args),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -175,16 +175,16 @@ INSTANTIATE_TEST_SUITE_P(
     }));
 
 TEST(NgramsTokenizerTest, NullInputValue) {
-  absl::StatusOr<zetasql::Value> result =
-      NgramsTokenizer::Tokenize({zetasql::Value::NullString()});
-  ZETASQL_EXPECT_OK(result.status());
+  absl::StatusOr<googlesql::Value> result =
+      NgramsTokenizer::Tokenize({googlesql::Value::NullString()});
+  GOOGLESQL_EXPECT_OK(result.status());
 
-  zetasql::Value token_list = result.value();
+  googlesql::Value token_list = result.value();
   EXPECT_TRUE(token_list.type()->IsTokenList());
 
   // Always expect the tokenlist has at least one token
   // which stores tokenizer information.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
   ASSERT_EQ(tokens.size(), 1);
   EXPECT_EQ("ngrams-4-1-1", tokens[0]);
 }

@@ -19,8 +19,8 @@
 
 #include <string>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/strings/string_view.h"
 #include "backend/schema/catalog/udf.h"
 
@@ -30,22 +30,23 @@ namespace emulator {
 namespace backend {
 
 constexpr absl::string_view kSqlUdfGroup = "SQL_UDF";
+constexpr absl::string_view kRemoteUdfGroupName = "REMOTE_UDF";
 
-// A wrapper over Udf class which implements zetasql::Function.
+// A wrapper over Udf class which implements googlesql::Function.
 // QueryableUdf has a reference to the backend Udf.
-class QueryableUdf : public zetasql::Function {
+class QueryableUdf : public googlesql::Function {
  public:
   explicit QueryableUdf(const backend::Udf* backend_udf,
                         std::string default_time_zone,
-                        zetasql::Catalog* catalog = nullptr,
-                        zetasql::TypeFactory* type_factory = nullptr);
+                        googlesql::Catalog* catalog = nullptr,
+                        googlesql::TypeFactory* type_factory = nullptr);
 
   const backend::Udf* wrapped_udf() const { return wrapped_udf_; }
 
  private:
-  static zetasql::FunctionOptions CreateFunctionOptions(
+  static googlesql::FunctionOptions CreateFunctionOptions(
       const backend::Udf* udf, std::string default_time_zone,
-      zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory);
+      googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory);
 
   // The underlying Udf object which backs the QueryableUdf.
   const backend::Udf* wrapped_udf_;

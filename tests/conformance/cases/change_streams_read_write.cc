@@ -24,7 +24,7 @@
 #include "google/spanner/v1/spanner.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
@@ -37,10 +37,11 @@
 #include "google/cloud/spanner/mutations.h"
 #include "google/cloud/spanner/numeric.h"
 #include "google/cloud/spanner/timestamp.h"
+#include "google/cloud/spanner/uuid.h"
 #include "common/clock.h"
 #include "tests/common/change_streams.h"
 #include "tests/conformance/common/database_test_base.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -55,7 +56,7 @@ using ReplaceMutationBuilder = cloud::spanner::ReplaceMutationBuilder;
 class ChangeStreamTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchema({
+    GOOGLESQL_RETURN_IF_ERROR(SetSchema({
         R"(
           CREATE TABLE Accounts(
             AccountId     INT64 NOT NULL,
@@ -100,6 +101,7 @@ class ChangeStreamTest : public DatabaseTest {
             arrayStr ARRAY<STRING(MAX)>,
             arrayJson ARRAY<JSON>,
             float32Val FLOAT32,
+            uuidVal UUID,
           ) PRIMARY KEY(intVal)
         )",
         R"(
@@ -112,7 +114,8 @@ class ChangeStreamTest : public DatabaseTest {
             stringVal STRING(MAX),
             numericVal NUMERIC,
             timestampVal TIMESTAMP,
-          ) PRIMARY KEY(intVal,boolVal,bytesVal,dateVal,float64Val,stringVal,numericVal,timestampVal)
+            uuidVal UUID,
+          ) PRIMARY KEY(intVal,boolVal,bytesVal,dateVal,float64Val,stringVal,numericVal,timestampVal,uuidVal)
         )",
         R"(
            CREATE TABLE ASTable (
@@ -138,7 +141,7 @@ class ChangeStreamTest : public DatabaseTest {
           CREATE CHANGE STREAM StreamSpecifiedColumns FOR Users2(Name,Age)
         )",
     }));
-    ZETASQL_ASSIGN_OR_RETURN(test_session_uri_,
+    GOOGLESQL_ASSIGN_OR_RETURN(test_session_uri_,
                      CreateTestSession(raw_client(), database()));
     return absl::OkStatus();
   }
@@ -148,7 +151,7 @@ class ChangeStreamTest : public DatabaseTest {
 
   absl::StatusOr<std::vector<DataChangeRecord>> GetDataRecordsFromStartToNow(
       absl::Time start, std::string change_stream_name) {
-    ZETASQL_ASSIGN_OR_RETURN(std::vector<std::string> active_tokens,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::vector<std::string> active_tokens,
                      GetActiveTokenFromInitialQuery(
                          database_api::GOOGLE_STANDARD_SQL, start,
                          change_stream_name, test_session_uri_, raw_client()));
@@ -160,7 +163,7 @@ class ChangeStreamTest : public DatabaseTest {
           "SELECT * FROM "
           "READ_$0 ('$1','$2', '$3', 300000 )",
           change_stream_name, start, end, partition_token);
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           test::ChangeStreamRecords change_records,
           ExecuteChangeStreamQuery(sql, test_session_uri_, raw_client()));
       merged_data_change_records.insert(
@@ -179,11 +182,11 @@ TEST_F(ChangeStreamTest, SingleInsertVerifyDataChangeRecordContentNewValues) {
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_insert.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -246,11 +249,11 @@ TEST_F(ChangeStreamTest,
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_insert.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -306,7 +309,7 @@ TEST_F(ChangeStreamTest,
 }
 
 TEST_F(ChangeStreamTest, SingleInsertVerifyDataChangeRecordContentNewRow) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamUsers SET OPTIONS ( value_capture_type = 'NEW_ROW' )
         )",
@@ -317,11 +320,11 @@ TEST_F(ChangeStreamTest, SingleInsertVerifyDataChangeRecordContentNewRow) {
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_insert.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -383,18 +386,18 @@ TEST_F(ChangeStreamTest, SingleUpdateVerifyDataChangeRecordContentNewValues) {
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   auto mutation_builder_update =
       UpdateMutationBuilder("Users", {"UserId", "Name"});
   rows = {{1, "name1Update"}};
   for (const auto& row : rows) {
     mutation_builder_update.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_update.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -448,18 +451,18 @@ TEST_F(ChangeStreamTest,
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   auto mutation_builder_update =
       UpdateMutationBuilder("Users", {"UserId", "Name"});
   rows = {{1, "name1Update"}};
   for (const auto& row : rows) {
     mutation_builder_update.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_update.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -506,7 +509,7 @@ TEST_F(ChangeStreamTest,
 }
 
 TEST_F(ChangeStreamTest, SingleUpdateVerifyDataChangeRecordContentNewRow) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamAll SET OPTIONS ( value_capture_type = 'NEW_ROW' )
         )",
@@ -517,18 +520,18 @@ TEST_F(ChangeStreamTest, SingleUpdateVerifyDataChangeRecordContentNewRow) {
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   auto mutation_builder_update =
       UpdateMutationBuilder("Users", {"UserId", "Name"});
   rows = {{1, "name1Update"}};
   for (const auto& row : rows) {
     mutation_builder_update.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_update.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -587,7 +590,7 @@ TEST_F(ChangeStreamTest, SingleUpdateVerifyDataChangeRecordContentNewRow) {
 
 TEST_F(ChangeStreamTest,
        SingleUpdateVerifyDataChangeRecordContentNewRowAllColsPopulatedEarlier) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamAll SET OPTIONS ( value_capture_type = 'NEW_ROW' )
         )",
@@ -598,18 +601,18 @@ TEST_F(ChangeStreamTest,
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   auto mutation_builder_update =
       UpdateMutationBuilder("Users", {"UserId", "Name"});
   rows = {{1, "name1Update"}};
   for (const auto& row : rows) {
     mutation_builder_update.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_update.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -673,15 +676,15 @@ TEST_F(ChangeStreamTest, SingleDeleteVerifyDataChangeRecordContentNewValues) {
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   // Delete an existing row generates a DELETE record
   auto mutation_builder_delete = DeleteMutationBuilder(
       "Users", KeySet().AddKey(cloud::spanner::MakeKey(1)));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_delete.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -743,15 +746,15 @@ TEST_F(ChangeStreamTest,
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   // Delete an existing row generates a DELETE record
   auto mutation_builder_delete = DeleteMutationBuilder(
       "Users", KeySet().AddKey(cloud::spanner::MakeKey(1)));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_delete.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -807,7 +810,7 @@ TEST_F(ChangeStreamTest,
 }
 
 TEST_F(ChangeStreamTest, SingleDeleteVerifyDataChangeRecordContentNewRow) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamUsers SET OPTIONS ( value_capture_type = 'NEW_ROW' )
         )",
@@ -818,15 +821,15 @@ TEST_F(ChangeStreamTest, SingleDeleteVerifyDataChangeRecordContentNewRow) {
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   // Delete an existing row generates a DELETE record
   auto mutation_builder_delete = DeleteMutationBuilder(
       "Users", KeySet().AddKey(cloud::spanner::MakeKey(1)));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_delete.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -889,21 +892,21 @@ TEST_F(ChangeStreamTest, InsertRowAlreadyExist) {
   }
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   // 2nd transaction inserting to the same row
   commit_result = Commit({mutation_builder_insert.Build()});
   EXPECT_THAT(commit_result.status(),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kAlreadyExists));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(ChangeStreamTest, DeleteRowNotExisting) {
   auto mutation_builder_delete = DeleteMutationBuilder(
       "Users", KeySet().AddKey(cloud::spanner::MakeKey(1)));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_delete.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 0);
@@ -914,23 +917,25 @@ TEST_F(ChangeStreamTest, DiffDataTypesInKey) {
   auto mutation_builder_insert_friends = InsertMutationBuilder(
       "ScalarTypesAllKeysTable",
       {"intVal", "boolVal", "bytesVal", "dateVal", "float64Val", "stringVal",
-       "numericVal", "timestampVal"});
+       "numericVal", "timestampVal", "uuidVal"});
   std::vector<ValueRow> rows = {
       {1, true,
        cloud::spanner::Bytes(
            cloud::spanner_internal::BytesFromBase64("blue").value()),
        "2014-09-27", 1.1, "stringVal", cloud::spanner::MakeNumeric("1").value(),
-       cloud::spanner::MakeTimestamp(absl::UnixEpoch()).value()}};
+       cloud::spanner::MakeTimestamp(absl::UnixEpoch()).value(),
+       cloud::spanner::MakeUuid("12345678-90ab-cdef-1234-567890abcdef")
+           .value()}};
   for (const auto& row : rows) {
     mutation_builder_insert_friends.AddRow(row);
   }
   // 1 transaction
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_friends.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamScalarTypes"));
   EXPECT_EQ(data_change_records[0].table_name.string_value(),
@@ -1002,6 +1007,14 @@ TEST_F(ChangeStreamTest, DiffDataTypesInKey) {
                     values { string_value: "8" }
                   }
                 }
+                values {
+                  list_value {
+                    values { string_value: "uuidVal" }
+                    values { string_value: "{\"code\":\"UUID\"}" }
+                    values { bool_value: true }
+                    values { string_value: "9" }
+                  }
+                }
               )pb"));
   // mods
   EXPECT_THAT(
@@ -1010,7 +1023,7 @@ TEST_F(ChangeStreamTest, DiffDataTypesInKey) {
           R"pb(values {
                  list_value {
                    values {
-                     string_value: "{\"boolVal\":true,\"bytesVal\":\"blue\",\"dateVal\":\"2014-09-27\",\"float64Val\":1.1,\"intVal\":\"1\",\"numericVal\":\"1\",\"stringVal\":\"stringVal\",\"timestampVal\":\"1970-01-01T00:00:00Z\"}"
+                     string_value: "{\"boolVal\":true,\"bytesVal\":\"blue\",\"dateVal\":\"2014-09-27\",\"float64Val\":1.1,\"intVal\":\"1\",\"numericVal\":\"1\",\"stringVal\":\"stringVal\",\"timestampVal\":\"1970-01-01T00:00:00Z\",\"uuidVal\":\"12345678-90ab-cdef-1234-567890abcdef\"}"
                    }
                    values { string_value: "{}" }
                    values { string_value: "{}" }
@@ -1025,12 +1038,12 @@ TEST_F(ChangeStreamTest, SingleInsertDMLVerifyDataChangeRecordContent) {
   // Test ddl statement1: Even though only UserId is explicitly populated with a
   // value in the dml statement, all other tracked columns will be automatically
   // populated with null values.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto commit_result,
       CommitDml({SqlStatement("INSERT INTO Users (UserId) VALUES (1)")}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -1085,13 +1098,13 @@ TEST_F(ChangeStreamTest, SingleInsertDMLVerifyDataChangeRecordContent) {
                })pb"));
   // Test ddl statement2: Check the inserted string value doesn't have extra
   // quotes
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       commit_result,
       CommitDml({SqlStatement(
           "INSERT INTO Users (UserId, Name) VALUES (2, 'name2')")}));
   commit_timestamp = commit_result.commit_timestamp;
   query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -1108,7 +1121,7 @@ TEST_F(ChangeStreamTest, SingleInsertDMLVerifyDataChangeRecordContent) {
                })pb"));
   // Test ddl statement3: Check the inserted string key value doesn't have extra
   // quotes
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           CREATE TABLE Singer(
             SingerId   INT64 NOT NULL,
@@ -1121,13 +1134,13 @@ TEST_F(ChangeStreamTest, SingleInsertDMLVerifyDataChangeRecordContent) {
           value_capture_type = 'NEW_VALUES' )
         )",
   }));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       commit_result,
       CommitDml({SqlStatement(
           "INSERT INTO Singer (SingerId, Name) VALUES (1, 'name1')")}));
   commit_timestamp = commit_result.commit_timestamp;
   query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamSinger"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -1176,13 +1189,13 @@ TEST_F(ChangeStreamTest, SingleInsertDMLVerifyDataChangeRecordContent) {
 // not in production, so this test is disabled.
 TEST_F(ChangeStreamTest, DISABLED_MultipleDMLVerifyDataChangeRecordContent) {
   // Insert a row with UserId only and then update the row with a age value.
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement("INSERT INTO Users (UserId) VALUES (1)")}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement("INSERT INTO Users (UserId) VALUES (1)")}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto commit_result,
       CommitDml({SqlStatement("UPDATE Users SET Age = 20 WHERE UserId = 1")}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -1239,7 +1252,7 @@ TEST_F(ChangeStreamTest, MultiUpdateSameExistingRowSameTransactionNewValues) {
   }
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   // 2nd transaction
   auto mutation_builder_update =
       UpdateMutationBuilder("Users", {"UserId", "Name"});
@@ -1250,10 +1263,10 @@ TEST_F(ChangeStreamTest, MultiUpdateSameExistingRowSameTransactionNewValues) {
   }
   absl::StatusOr<CommitResult> commit_result2 =
       Commit({mutation_builder_update.Build()});
-  ZETASQL_EXPECT_OK(commit_result2.status());
+  GOOGLESQL_EXPECT_OK(commit_result2.status());
   Timestamp commit_timestamp = commit_result2->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -1325,7 +1338,7 @@ TEST_F(ChangeStreamTest,
   }
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   // 2nd transaction
   auto mutation_builder_update =
       UpdateMutationBuilder("Users", {"UserId", "Name"});
@@ -1336,10 +1349,10 @@ TEST_F(ChangeStreamTest,
   }
   absl::StatusOr<CommitResult> commit_result2 =
       Commit({mutation_builder_update.Build()});
-  ZETASQL_EXPECT_OK(commit_result2.status());
+  GOOGLESQL_EXPECT_OK(commit_result2.status());
   Timestamp commit_timestamp = commit_result2->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -1401,7 +1414,7 @@ TEST_F(ChangeStreamTest,
 
 // Generates 1 DataChangeRecord
 TEST_F(ChangeStreamTest, MultiUpdateSameExistingRowSameTransactionNewRow) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamUsers SET OPTIONS ( value_capture_type = 'NEW_ROW' )
         )",
@@ -1415,7 +1428,7 @@ TEST_F(ChangeStreamTest, MultiUpdateSameExistingRowSameTransactionNewRow) {
   }
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   // 2nd transaction
   auto mutation_builder_update =
       UpdateMutationBuilder("Users", {"UserId", "Name"});
@@ -1426,10 +1439,10 @@ TEST_F(ChangeStreamTest, MultiUpdateSameExistingRowSameTransactionNewRow) {
   }
   absl::StatusOr<CommitResult> commit_result2 =
       Commit({mutation_builder_update.Build()});
-  ZETASQL_EXPECT_OK(commit_result2.status());
+  GOOGLESQL_EXPECT_OK(commit_result2.status());
   Timestamp commit_timestamp = commit_result2->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -1517,10 +1530,10 @@ TEST_F(ChangeStreamTest, InsertUpdateSameRowSameTransaction) {
   // Same transaction
   absl::StatusOr<CommitResult> commit_result = Commit(
       {mutation_builder_insert.Build(), mutation_builder_update.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -1580,7 +1593,7 @@ TEST_F(ChangeStreamTest, InsertUpdateDiffRowSameTransaction) {
   // Commit the 1st transaction
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   // Build the 2nd transaction
   auto mutation_builder_insert_users2 =
       InsertMutationBuilder("Users", {"UserId", "Name"});
@@ -1598,10 +1611,10 @@ TEST_F(ChangeStreamTest, InsertUpdateDiffRowSameTransaction) {
   absl::StatusOr<CommitResult> commit_result2 =
       Commit({mutation_builder_insert_users2.Build(),
               mutation_builder_update_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result2.status());
+  GOOGLESQL_EXPECT_OK(commit_result2.status());
   Timestamp commit_timestamp2 = commit_result2->commit_timestamp;
   absl::Time query_start_time2 = commit_timestamp2.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time2, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 2);
@@ -1700,10 +1713,10 @@ TEST_F(ChangeStreamTest, InsertDeleteSameRowSameTransaction) {
   // 1 transaction
   absl::StatusOr<CommitResult> commit_result = Commit(
       {mutation_builder_insert.Build(), mutation_builder_delete.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 0);
@@ -1731,10 +1744,10 @@ TEST_F(ChangeStreamTest, InsertDeleteInsertDeleteSameRowSameTransaction) {
   absl::StatusOr<CommitResult> commit_result = Commit(
       {mutation_builder_insert.Build(), mutation_builder_delete.Build(),
        mutation_builder_insert_2.Build(), mutation_builder_delete_2.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 0);
@@ -1762,10 +1775,10 @@ TEST_F(ChangeStreamTest, InsertUpdateDeleteSameRowSameTransaction) {
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert.Build(), mutation_builder_update.Build(),
               mutation_builder_delete.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 0);
@@ -1791,10 +1804,10 @@ TEST_F(ChangeStreamTest, InsertDeleteInsertSameRowSameTransaction) {
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert.Build(), mutation_builder_delete.Build(),
               mutation_builder_insert_2.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -1849,7 +1862,7 @@ TEST_F(ChangeStreamTest, UpdateDeleteSameExistingRowSameTransaction) {
   }
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
 
@@ -1861,9 +1874,9 @@ TEST_F(ChangeStreamTest, UpdateDeleteSameExistingRowSameTransaction) {
   }
   auto mutation_builder_delete = DeleteMutationBuilder(
       "Users", KeySet().AddKey(cloud::spanner::MakeKey(4)));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Commit({mutation_builder.Build(), mutation_builder_delete.Build()}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 2);
@@ -1956,7 +1969,7 @@ TEST_F(ChangeStreamTest, UpdateDeleteSameExistingRowSameTransaction) {
 
 TEST_F(ChangeStreamTest,
        InsertToTwoTablesTrackedBySameChangeStreamInSameTransaction) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           CREATE CHANGE STREAM StreamAccountsUsers FOR Accounts,Users OPTIONS ( value_capture_type = 'NEW_VALUES' )
         )",
@@ -1978,10 +1991,10 @@ TEST_F(ChangeStreamTest,
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users.Build(),
               mutation_builder_insert_accounts.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAccountsUsers"));
   ASSERT_EQ(data_change_records.size(), 2);
@@ -2109,10 +2122,10 @@ TEST_F(ChangeStreamTest, InsertToDiffSetsTrackedColsDiffRowsSameTransaction) {
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users_name.Build(),
               mutation_builder_insert_users_age.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -2172,7 +2185,7 @@ TEST_F(ChangeStreamTest, UpdateToDiffSetsTrackedColsSameRowsSameTransaction) {
   // First transaction
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   // Build the 2nd transaction
   auto mutation_builder_update_users_age =
       UpdateMutationBuilder("Users", {"UserId", "Age"});
@@ -2189,10 +2202,10 @@ TEST_F(ChangeStreamTest, UpdateToDiffSetsTrackedColsSameRowsSameTransaction) {
   // Same transaction
   commit_result = Commit({mutation_builder_update_users_age.Build(),
                           mutation_builder_update_users_name.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   EXPECT_EQ(data_change_records[0].table_name.string_value(), "Users");
@@ -2248,7 +2261,7 @@ TEST_F(ChangeStreamTest, UpdateToDiffSetsTrackedColsDiffRowsSameTransaction) {
   // First transaction
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   // Build the 2nd transaction
   auto mutation_builder_update_users_age =
       UpdateMutationBuilder("Users", {"UserId", "Age"});
@@ -2265,10 +2278,10 @@ TEST_F(ChangeStreamTest, UpdateToDiffSetsTrackedColsDiffRowsSameTransaction) {
   // Same transaction
   commit_result = Commit({mutation_builder_update_users_age.Build(),
                           mutation_builder_update_users_name.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   // EXPECT_EQ(data_change_records[0].table_name.string_value(), "Accounts");
@@ -2348,7 +2361,7 @@ TEST_F(ChangeStreamTest, UpdateToDiffSetsTrackedColsDiffRowsSameTransaction) {
 // If a column is tracked by 2 change streams, inserting into the column will
 // generate 2 DataChangeRecords.
 TEST_F(ChangeStreamTest, InsertSameColsTrackedByDiffChangeStreams) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           CREATE CHANGE STREAM StreamUserAge FOR Users(Age) OPTIONS (
           value_capture_type = 'NEW_VALUES' )
@@ -2362,14 +2375,14 @@ TEST_F(ChangeStreamTest, InsertSameColsTrackedByDiffChangeStreams) {
   }
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
   // 1 transaction
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records_user_age,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUserAge"));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records_users,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records_user_age.size(), 1);
@@ -2447,7 +2460,7 @@ TEST_F(ChangeStreamTest, InsertSameColsTrackedByDiffChangeStreams) {
 // and mods only containing values of the tracked columns.
 TEST_F(ChangeStreamTest,
        InsertToTrackedAndUntrackedColsSameRowSameTransaction) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           CREATE CHANGE STREAM StreamUserName FOR Users(Name) OPTIONS ( value_capture_type = 'NEW_VALUES' )
         )",
@@ -2461,10 +2474,10 @@ TEST_F(ChangeStreamTest,
   // 1 transaction
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users_name.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUserName"));
   // EXPECT_EQ(data_change_records[0].table_name.string_value(), "Accounts");
@@ -2502,7 +2515,7 @@ TEST_F(ChangeStreamTest,
 
 // Generate 1 DataChangeRecord.
 TEST_F(ChangeStreamTest, AddTableToChangeStreamTrackAll) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           CREATE TABLE Friends(
             FriendId     INT64 NOT NULL,
@@ -2520,10 +2533,10 @@ TEST_F(ChangeStreamTest, AddTableToChangeStreamTrackAll) {
   }
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_friends.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -2579,10 +2592,10 @@ TEST_F(ChangeStreamTest, ChangeStreamTrackingTableWithCompositeKey) {
   // 1 transaction
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_friends.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamRelation"));
   EXPECT_EQ(data_change_records[0].record_sequence.string_value(), "00000000");
@@ -2652,10 +2665,10 @@ TEST_F(ChangeStreamTest, SingleInsertWithPKOnly) {
   }
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -2713,7 +2726,7 @@ TEST_F(ChangeStreamTest, UpdateWithTheSameValuesAsExistingRow) {
   // Commit the 1st transaction
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   // Update the same row with the same value
   auto mutation_builder_update_users =
       UpdateMutationBuilder("Users", {"UserId", "Name"});
@@ -2724,11 +2737,11 @@ TEST_F(ChangeStreamTest, UpdateWithTheSameValuesAsExistingRow) {
   // Commit the 2nd transaction
   absl::StatusOr<CommitResult> commit_result_update =
       Commit({mutation_builder_update_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result_update.status());
+  GOOGLESQL_EXPECT_OK(commit_result_update.status());
   Timestamp commit_timestamp_update = commit_result_update->commit_timestamp;
   absl::Time query_start_time_update =
       commit_timestamp_update.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time_update, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -2766,7 +2779,7 @@ TEST_F(ChangeStreamTest, UpdateWithTheSameValuesAsExistingRow) {
 }
 
 TEST_F(ChangeStreamTest, UpdateAColumnNotTracked) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           CREATE CHANGE STREAM StreamUserAge FOR Users(Age) OPTIONS (
           value_capture_type = 'NEW_VALUES' )
@@ -2782,7 +2795,7 @@ TEST_F(ChangeStreamTest, UpdateAColumnNotTracked) {
   // Commit the 1st transaction
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   auto mutation_builder_update_users =
       UpdateMutationBuilder("Users", {"UserId", "Name"});
   rows = {{1, "name2"}};
@@ -2792,11 +2805,11 @@ TEST_F(ChangeStreamTest, UpdateAColumnNotTracked) {
   // Commit the 2nd transaction
   absl::StatusOr<CommitResult> commit_result_update =
       Commit({mutation_builder_update_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result_update.status());
+  GOOGLESQL_EXPECT_OK(commit_result_update.status());
   Timestamp commit_timestamp_update = commit_result_update->commit_timestamp;
   absl::Time query_start_time_update =
       commit_timestamp_update.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time_update, "StreamUserAge"));
   ASSERT_EQ(data_change_records.size(), 0);
@@ -2805,7 +2818,7 @@ TEST_F(ChangeStreamTest, UpdateAColumnNotTracked) {
 // Alter StreamUsers to track Accounts and insert into Users and Accounts.
 // Change record is generated only for Accounts
 TEST_F(ChangeStreamTest, AlterChangeStreamTrackingTable) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamUsers SET FOR Accounts
         )",
@@ -2827,10 +2840,10 @@ TEST_F(ChangeStreamTest, AlterChangeStreamTrackingTable) {
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users.Build(),
               mutation_builder_insert_accounts.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -2877,7 +2890,7 @@ TEST_F(ChangeStreamTest, AlterChangeStreamTrackingTable) {
 // Alter the StreamUsers to track nothing and insert into Users to verify no
 // change record is generated.
 TEST_F(ChangeStreamTest, AlterChangeStreamDropForAll) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamUsers DROP FOR ALL
         )",
@@ -2892,10 +2905,10 @@ TEST_F(ChangeStreamTest, AlterChangeStreamDropForAll) {
   // 1 transaction
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 0);
@@ -2906,7 +2919,7 @@ TEST_F(ChangeStreamTest, AlterChangeStreamDropForAll) {
 TEST_F(ChangeStreamTest, IndexBackfillDoesNotGenerateRecords) {
   // Table Users and change stream StreamUsers already exist in the schema. Now
   // create a index for Users.
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           CREATE INDEX UsersByIdName ON Users(UserId, Name)
         )",
@@ -2921,10 +2934,10 @@ TEST_F(ChangeStreamTest, IndexBackfillDoesNotGenerateRecords) {
   // 1 transaction
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -2973,7 +2986,7 @@ TEST_F(ChangeStreamTest, IndexBackfillDoesNotGenerateRecords) {
 // the row. One change record is generated.
 TEST_F(ChangeStreamTest,
        InsertUpdateDeleteToTableTrackedByChangeStreamTrackingPKOnly) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           CREATE CHANGE STREAM StreamUsersId FOR Users() OPTIONS ( value_capture_type = 'NEW_VALUES' )
         )",
@@ -2987,10 +3000,10 @@ TEST_F(ChangeStreamTest,
   // 1st transaction
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsersId"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -3044,10 +3057,10 @@ TEST_F(ChangeStreamTest,
     mutation_builder_update.AddRow(row);
   }
   commit_result = Commit({mutation_builder_update.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   commit_timestamp = commit_result->commit_timestamp;
   query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsersId"));
   ASSERT_EQ(data_change_records.size(), 0);
@@ -3055,10 +3068,10 @@ TEST_F(ChangeStreamTest,
   auto mutation_builder_delete = DeleteMutationBuilder(
       "Users", KeySet().AddKey(cloud::spanner::MakeKey(1)));
   commit_result = Commit({mutation_builder_delete.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   commit_timestamp = commit_result->commit_timestamp;
   query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsersId"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -3109,7 +3122,7 @@ TEST_F(ChangeStreamTest,
 // Insert a new row including the newly added column.
 // One change record is generated.
 TEST_F(ChangeStreamTest, AddColumnToChangeStreamTrackingAll) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER TABLE Users ADD COLUMN Description STRING(MAX)
         )"}));
@@ -3122,10 +3135,10 @@ TEST_F(ChangeStreamTest, AddColumnToChangeStreamTrackingAll) {
   }
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -3191,19 +3204,19 @@ TEST_F(ChangeStreamTest, RangeDeleteExistingRows) {
   // Commit the 1st transaction
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   auto mutation_builder_range_delete =
       DeleteMutationBuilder("Users", KeySet()
                                          .AddKey(cloud::spanner::MakeKey(1))
                                          .AddKey(cloud::spanner::MakeKey(2)));
   absl::StatusOr<CommitResult> commit_result_range_delete =
       Commit({mutation_builder_range_delete.Build()});
-  ZETASQL_EXPECT_OK(commit_result_range_delete.status());
+  GOOGLESQL_EXPECT_OK(commit_result_range_delete.status());
   Timestamp commit_timestamp_range_delete =
       commit_result_range_delete->commit_timestamp;
   absl::Time query_start_time_range_delete =
       commit_timestamp_range_delete.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto data_change_records,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto data_change_records,
                        GetDataRecordsFromStartToNow(
                            query_start_time_range_delete, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -3258,7 +3271,7 @@ TEST_F(ChangeStreamTest, DiffDataTypes) {
       "ScalarTypesTable",
       {"intVal", "boolVal", "bytesVal", "dateVal", "float64Val", "stringVal",
        "numericVal", "timestampVal", "jsonVal", "arrayInt", "arrayStr",
-       "arrayJson", "float32Val"});
+       "arrayJson", "float32Val", "uuidVal"});
   Array<Numeric> numeric_arr{cloud::spanner::MakeNumeric("1").value(),
                              cloud::spanner::MakeNumeric("2").value(),
                              cloud::spanner::MakeNumeric("3").value()};
@@ -3271,17 +3284,19 @@ TEST_F(ChangeStreamTest, DiffDataTypes) {
            cloud::spanner_internal::BytesFromBase64("blue").value()),
        "2014-09-27", 1.1, "stringVal", cloud::spanner::MakeNumeric("1").value(),
        cloud::spanner::MakeTimestamp(absl::UnixEpoch()).value(),
-       Json(R"("Hello world!")"), num_arr, str_arr, json_arr, 3.14f}};
+       Json(R"("Hello world!")"), num_arr, str_arr, json_arr, 3.14f,
+       cloud::spanner::MakeUuid("123e4567-e89b-12d3-a456-426614174000")
+           .value()}};
   for (const auto& row : rows) {
     mutation_builder_insert_friends.AddRow(row);
   }
   // 1 transaction
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_friends.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp = commit_result->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamScalarTypes"));
   EXPECT_EQ(data_change_records[0].table_name.string_value(),
@@ -3400,6 +3415,14 @@ TEST_F(ChangeStreamTest, DiffDataTypes) {
             values { string_value: "13" }
           }
         }
+        values {
+          list_value {
+            values { string_value: "uuidVal" }
+            values { string_value: "{\"code\":\"UUID\"}" }
+            values { bool_value: false }
+            values { string_value: "14" }
+          }
+        }
       )pb"));
   // mods
   EXPECT_THAT(
@@ -3409,7 +3432,7 @@ TEST_F(ChangeStreamTest, DiffDataTypes) {
                  list_value {
                    values { string_value: "{\"intVal\":\"1\"}" }
                    values {
-                     string_value: "{\"arrayInt\":[\"1\",\"2\",\"3\"],\"arrayJson\":[\"\\\"Hello\\\"\",\"\\\"Hi\\\"\"],\"arrayStr\":[\"Hello\",\"Hi\"],\"boolVal\":true,\"bytesVal\":\"blue\",\"dateVal\":\"2014-09-27\",\"float32Val\":3.140000104904175,\"float64Val\":1.1,\"jsonVal\":\"\\\"Hello world!\\\"\",\"numericVal\":\"1\",\"stringVal\":\"stringVal\",\"timestampVal\":\"1970-01-01T00:00:00Z\"}"
+                     string_value: "{\"arrayInt\":[\"1\",\"2\",\"3\"],\"arrayJson\":[\"\\\"Hello\\\"\",\"\\\"Hi\\\"\"],\"arrayStr\":[\"Hello\",\"Hi\"],\"boolVal\":true,\"bytesVal\":\"blue\",\"dateVal\":\"2014-09-27\",\"float32Val\":3.140000104904175,\"float64Val\":1.1,\"jsonVal\":\"\\\"Hello world!\\\"\",\"numericVal\":\"1\",\"stringVal\":\"stringVal\",\"timestampVal\":\"1970-01-01T00:00:00Z\",\"uuidVal\":\"123e4567-e89b-12d3-a456-426614174000\"}"
                    }
                    values { string_value: "{}" }
                  }
@@ -3443,11 +3466,11 @@ TEST_F(ChangeStreamTest, DISABLED_SingleReplaceExistingRow) {
   // Commit the 2nd transaction
   absl::StatusOr<CommitResult> commit_result2 =
       Commit({replace_mutation_builder.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp_replace = commit_result2->commit_timestamp;
   absl::Time query_start_time_replace =
       commit_timestamp_replace.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time_replace, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 2);
@@ -3553,10 +3576,10 @@ TEST_F(ChangeStreamTest, DeleteInsertDeleteExistingRow) {
   absl::StatusOr<CommitResult> commit_result2 = Commit(
       {mutation_builder_delete.Build(), mutation_builder_insert_users.Build(),
        mutation_builder_delete_2.Build()});
-  ZETASQL_EXPECT_OK(commit_result2.status());
+  GOOGLESQL_EXPECT_OK(commit_result2.status());
   Timestamp commit_timestamp = commit_result2->commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -3624,11 +3647,11 @@ TEST_F(ChangeStreamTest, DISABLED_ConsecutiveReplace) {
   // Commit the 2nd transaction
   absl::StatusOr<CommitResult> commit_result2 =
       Commit({replace_mutation_builder.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   Timestamp commit_timestamp_replace = commit_result2->commit_timestamp;
   absl::Time query_start_time_replace =
       commit_timestamp_replace.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time_replace, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 2);
@@ -3717,7 +3740,7 @@ TEST_F(ChangeStreamTest, RangeDeleteNewRowInsertedInTheSameTransaction) {
   // Commit the 1st transaction
   absl::StatusOr<CommitResult> commit_result =
       Commit({mutation_builder_insert_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result.status());
+  GOOGLESQL_EXPECT_OK(commit_result.status());
   // Insert mutation in the second transaction
   mutation_builder_insert_users =
       InsertMutationBuilder("Users", {"UserId", "Name"});
@@ -3733,12 +3756,12 @@ TEST_F(ChangeStreamTest, RangeDeleteNewRowInsertedInTheSameTransaction) {
   absl::StatusOr<CommitResult> commit_result_range_delete =
       Commit({mutation_builder_insert_users.Build(),
               mutation_builder_range_delete.Build()});
-  ZETASQL_EXPECT_OK(commit_result_range_delete.status());
+  GOOGLESQL_EXPECT_OK(commit_result_range_delete.status());
   Timestamp commit_timestamp_range_delete =
       commit_result_range_delete->commit_timestamp;
   absl::Time query_start_time_range_delete =
       commit_timestamp_range_delete.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto data_change_records,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto data_change_records,
                        GetDataRecordsFromStartToNow(
                            query_start_time_range_delete, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -3791,12 +3814,12 @@ TEST_F(ChangeStreamTest, ModValuesOrderByAlphabeticalOrder) {
   // Commit the 1st transaction
   absl::StatusOr<CommitResult> commit_result_insert_users =
       Commit({mutation_builder_insert_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result_insert_users.status());
+  GOOGLESQL_EXPECT_OK(commit_result_insert_users.status());
   Timestamp commit_timestamp_insert_users =
       commit_result_insert_users->commit_timestamp;
   absl::Time query_start_time_insert_users =
       commit_timestamp_insert_users.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto data_change_records,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto data_change_records,
                        GetDataRecordsFromStartToNow(
                            query_start_time_insert_users, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -3858,12 +3881,12 @@ TEST_F(ChangeStreamTest, ModValuesOrderByAlphabeticalOrder) {
   // Commit the 2st transaction
   absl::StatusOr<CommitResult> commit_result_update_users =
       Commit({mutation_builder_update_users.Build()});
-  ZETASQL_EXPECT_OK(commit_result_update_users.status());
+  GOOGLESQL_EXPECT_OK(commit_result_update_users.status());
   Timestamp commit_timestamp_update_users =
       commit_result_update_users->commit_timestamp;
   absl::Time query_start_time_update_users =
       commit_timestamp_update_users.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(data_change_records,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(data_change_records,
                        GetDataRecordsFromStartToNow(
                            query_start_time_update_users, "StreamUsers"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -3940,11 +3963,11 @@ TEST_F(ChangeStreamTest,
   absl::StatusOr<CommitResult> commit_result_insert =
       Commit({mutation_builder_insert_users.Build(),
               mutation_builder_insert_accounts.Build()});
-  ZETASQL_EXPECT_OK(commit_result_insert.status());
+  GOOGLESQL_EXPECT_OK(commit_result_insert.status());
   Timestamp commit_timestamp_insert = commit_result_insert->commit_timestamp;
   absl::Time query_start_time_insert =
       commit_timestamp_insert.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time_insert, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 2);
@@ -3961,11 +3984,11 @@ TEST_F(ChangeStreamTest, GeneratedColumnsAreNotPopulatedInInsert) {
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_insert.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -4021,18 +4044,18 @@ TEST_F(ChangeStreamTest, GeneratedColumnsAreNotPopulatedInUpdate) {
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   auto mutation_builder_update =
       UpdateMutationBuilder("ASTable", {"UserId", "Data"});
   rows = {{1, Json(R"({"a":{"b":999}})")}};
   for (const auto& row : rows) {
     mutation_builder_update.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_update.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -4090,15 +4113,15 @@ TEST_F(ChangeStreamTest, GeneratedColumnsAreNotPopulatedInDelete) {
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   auto mutation_builder_delete = DeleteMutationBuilder(
       "ASTable", KeySet().AddKey(cloud::spanner::MakeKey(1)));
   ;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_delete.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -4148,7 +4171,7 @@ TEST_F(ChangeStreamTest, GeneratedColumnsAreNotPopulatedInDelete) {
 }
 
 TEST_F(ChangeStreamTest, NewRow_GeneratedColumnsAreNotPopulatedInInsert) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamAll SET OPTIONS ( value_capture_type = 'NEW_ROW' )
         )",
@@ -4159,11 +4182,11 @@ TEST_F(ChangeStreamTest, NewRow_GeneratedColumnsAreNotPopulatedInInsert) {
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_insert.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -4213,7 +4236,7 @@ TEST_F(ChangeStreamTest, NewRow_GeneratedColumnsAreNotPopulatedInInsert) {
 }
 
 TEST_F(ChangeStreamTest, NewRow_GeneratedColumnsAreNotPopulatedInUpdate) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamAll SET OPTIONS ( value_capture_type = 'NEW_ROW' )
         )",
@@ -4224,18 +4247,18 @@ TEST_F(ChangeStreamTest, NewRow_GeneratedColumnsAreNotPopulatedInUpdate) {
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   auto mutation_builder_update =
       UpdateMutationBuilder("ASTable", {"UserId", "Data"});
   rows = {{1, Json(R"({"a":{"b":999}})")}};
   for (const auto& row : rows) {
     mutation_builder_update.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_update.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -4285,7 +4308,7 @@ TEST_F(ChangeStreamTest, NewRow_GeneratedColumnsAreNotPopulatedInUpdate) {
 }
 
 TEST_F(ChangeStreamTest, NewRow_GeneratedColumnsAreNotPopulatedInDelete) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamAll SET OPTIONS ( value_capture_type = 'NEW_ROW' )
         )",
@@ -4296,15 +4319,15 @@ TEST_F(ChangeStreamTest, NewRow_GeneratedColumnsAreNotPopulatedInDelete) {
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   auto mutation_builder_delete = DeleteMutationBuilder(
       "ASTable", KeySet().AddKey(cloud::spanner::MakeKey(1)));
   ;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_delete.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -4358,15 +4381,15 @@ TEST_F(ChangeStreamTest,
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   // Delete an existing row generates a DELETE record
   auto mutation_builder_delete = DeleteMutationBuilder(
       "Users2", KeySet().AddKey(cloud::spanner::MakeKey(1)));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_delete.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamSpecifiedColumns"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -4429,18 +4452,18 @@ TEST_F(ChangeStreamTest,
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   auto mutation_builder_update =
       UpdateMutationBuilder("Users2", {"UserId", "Name", "Gender"});
   rows = {{1, "name1Update", "M"}};
   for (const auto& row : rows) {
     mutation_builder_update.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_update.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamSpecifiedColumns"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -4488,7 +4511,7 @@ TEST_F(ChangeStreamTest,
 
 TEST_F(ChangeStreamTest,
        SingleInsertVerifyDataChangeRecordContentNewRowAndOldValues) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamAll SET OPTIONS
           ( value_capture_type = 'NEW_ROW_AND_OLD_VALUES' )
@@ -4500,11 +4523,11 @@ TEST_F(ChangeStreamTest,
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_insert.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -4561,7 +4584,7 @@ TEST_F(ChangeStreamTest,
 
 TEST_F(ChangeStreamTest,
        SingleDeleteVerifyDataChangeRecordContentNewRowAndOldValues) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamAll SET OPTIONS
           ( value_capture_type = 'NEW_ROW_AND_OLD_VALUES' )
@@ -4573,15 +4596,15 @@ TEST_F(ChangeStreamTest,
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   // Delete an existing row generates a DELETE record
   auto mutation_builder_delete = DeleteMutationBuilder(
       "Users", KeySet().AddKey(cloud::spanner::MakeKey(1)));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_delete.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -4638,7 +4661,7 @@ TEST_F(ChangeStreamTest,
 
 TEST_F(ChangeStreamTest,
        SingleUpdateVerifyDataChangeRecordContentNewRowAndOldValues) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamAll SET OPTIONS
           ( value_capture_type = 'NEW_ROW_AND_OLD_VALUES' )
@@ -4650,18 +4673,18 @@ TEST_F(ChangeStreamTest,
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   auto mutation_builder_update =
       UpdateMutationBuilder("Users", {"UserId", "Name"});
   rows = {{1, "name1Update"}};
   for (const auto& row : rows) {
     mutation_builder_update.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_update.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamAll"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -4720,7 +4743,7 @@ TEST_F(ChangeStreamTest,
 
 TEST_F(ChangeStreamTest,
        NewRowAndOldValues_UntrackedUpdatedColumnsAreNotPopulatedInOldValues) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamSpecifiedColumns SET OPTIONS ( value_capture_type = 'NEW_ROW_AND_OLD_VALUES' )
         )",
@@ -4731,18 +4754,18 @@ TEST_F(ChangeStreamTest,
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   auto mutation_builder_update =
       UpdateMutationBuilder("Users2", {"UserId", "Name", "Gender"});
   rows = {{1, "name1Update", "M"}};
   for (const auto& row : rows) {
     mutation_builder_update.AddRow(row);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_update.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamSpecifiedColumns"));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -4801,7 +4824,7 @@ TEST_F(ChangeStreamTest,
 
 TEST_F(ChangeStreamTest,
        NewRowAndOldValues_UntrackedDeletedColumnsAreNotPopulatedInOldValues) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER CHANGE STREAM StreamSpecifiedColumns SET OPTIONS
           ( value_capture_type = 'NEW_ROW_AND_OLD_VALUES' )
@@ -4813,15 +4836,15 @@ TEST_F(ChangeStreamTest,
   for (const auto& row : rows) {
     mutation_builder_insert.AddRow(row);
   }
-  ZETASQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
+  GOOGLESQL_EXPECT_OK(Commit({mutation_builder_insert.Build()}));
   // Delete an existing row generates a DELETE record
   auto mutation_builder_delete = DeleteMutationBuilder(
       "Users2", KeySet().AddKey(cloud::spanner::MakeKey(1)));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result,
                        Commit({mutation_builder_delete.Build()}));
   Timestamp commit_timestamp = commit_result.commit_timestamp;
   absl::Time query_start_time = commit_timestamp.get<absl::Time>().value();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(query_start_time, "StreamSpecifiedColumns"));
   ASSERT_EQ(data_change_records.size(), 1);

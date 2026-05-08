@@ -19,7 +19,7 @@
 
 #include <string>
 
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/catalog.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 
@@ -28,9 +28,9 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-// A wrapper over Sequence class which implements zetasql::Sequence.
+// A wrapper over Sequence class which implements googlesql::Sequence.
 // QueryableSequence has a reference to the backend schema Sequence.
-class QueryableSequence : public zetasql::Sequence {
+class QueryableSequence : public googlesql::Sequence {
  public:
   QueryableSequence(const backend::Sequence* backend_sequence);
 

@@ -24,7 +24,7 @@
 #include <string>
 #include <utility>
 
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/memory/memory.h"
@@ -63,7 +63,7 @@ class Column::Builder {
     return *this;
   }
 
-  Builder& set_type(const zetasql::Type* type) {
+  Builder& set_type(const googlesql::Type* type) {
     instance_->type_ = type;
     return *this;
   }
@@ -203,7 +203,7 @@ class Column::Editor {
 
   const Column* get() const { return instance_; }
 
-  Editor& set_type(const zetasql::Type* type) {
+  Editor& set_type(const googlesql::Type* type) {
     instance_->type_ = type;
     return *this;
   }

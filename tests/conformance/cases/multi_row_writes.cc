@@ -17,7 +17,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/status_matchers.h"
@@ -30,7 +30,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class MultiRowWritesTest
     : public DatabaseTest,
@@ -55,7 +55,7 @@ INSTANTIATE_TEST_SUITE_P(
       return database_api::DatabaseDialect_Name(info.param);
     });
 
-TEST_P(MultiRowWritesTest, CanCommitAnEmptyMutation) { ZETASQL_EXPECT_OK(Commit({})); }
+TEST_P(MultiRowWritesTest, CanCommitAnEmptyMutation) { GOOGLESQL_EXPECT_OK(Commit({})); }
 
 TEST_P(MultiRowWritesTest, InsertSameKeyErrorWithAlreadyExists) {
   EXPECT_THAT(MultiInsert("Users", {"ID"}, {{1}, {1}}),
@@ -64,15 +64,15 @@ TEST_P(MultiRowWritesTest, InsertSameKeyErrorWithAlreadyExists) {
 }
 
 TEST_P(MultiRowWritesTest, InsertOrUpdateSameKeySucceeds) {
-  ZETASQL_EXPECT_OK(MultiInsertOrUpdate("Users", {"ID"}, {{1}, {1}}));
+  GOOGLESQL_EXPECT_OK(MultiInsertOrUpdate("Users", {"ID"}, {{1}, {1}}));
 
   // Read to verify correct values.
   EXPECT_THAT(ReadAll("Users", {"ID"}), IsOkAndHoldsRows({{1}}));
 }
 
 TEST_P(MultiRowWritesTest, UpdateSameKeySucceeds) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "Mark", 25}));
-  ZETASQL_EXPECT_OK(MultiUpdate("Users", {"ID", "Age"}, {{1, 26}, {1, 27}}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "Mark", 25}));
+  GOOGLESQL_EXPECT_OK(MultiUpdate("Users", {"ID", "Age"}, {{1, 26}, {1, 27}}));
 
   // Read to verify correct values.
   EXPECT_THAT(ReadAll("Users", {"ID", "Name", "Age"}),
@@ -80,8 +80,8 @@ TEST_P(MultiRowWritesTest, UpdateSameKeySucceeds) {
 }
 
 TEST_P(MultiRowWritesTest, ReplaceSameKeySucceeds) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "Mark", 25}));
-  ZETASQL_EXPECT_OK(MultiReplace("Users", {"ID", "Name", "Age"},
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "Mark", 25}));
+  GOOGLESQL_EXPECT_OK(MultiReplace("Users", {"ID", "Name", "Age"},
                          {{1, "Mark", 26}, {1, "Mark", 27}}));
 
   // Read to verify correct values.
@@ -90,8 +90,8 @@ TEST_P(MultiRowWritesTest, ReplaceSameKeySucceeds) {
 }
 
 TEST_P(MultiRowWritesTest, DeleteSameKeySucceeds) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "Mark", 25}));
-  ZETASQL_EXPECT_OK(Delete("Users", {Key(1), Key(1)}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "Mark", 25}));
+  GOOGLESQL_EXPECT_OK(Delete("Users", {Key(1), Key(1)}));
 
   // Read to verify row does not exist.
   EXPECT_THAT(ReadAll("Users", {"ID", "Name", "Age"}), IsOkAndHoldsRows({}));
@@ -102,17 +102,17 @@ TEST_P(MultiRowWritesTest, MultipleModsWithErrorsFails) {
                   MakeInsert("Users", {"ID", "Name"}, 1, "Mark"),
                   MakeInsert("NonExistentTable", {"Column"}, 1),
               }),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_P(MultiRowWritesTest, DeleteNotAppliedWithFailingMods) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "Mark", 25}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "Mark", 25}));
 
   EXPECT_THAT(Commit({
                   MakeDelete("Users", KeySet::All()),
                   MakeInsert("NonExistentTable", {"Column"}, 1),
               }),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 
   EXPECT_THAT(ReadAll("Users", {"ID", "Name", "Age"}),
               IsOkAndHoldsRow({1, "Mark", 25}));

@@ -23,7 +23,7 @@
 #include <vector>
 
 #include "google/protobuf/descriptor.pb.h"
-#include "zetasql/public/types/proto_type.h"
+#include "googlesql/public/types/proto_type.h"
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
@@ -34,8 +34,8 @@
 #include "common/errors.h"
 #include "google/protobuf/descriptor.h"
 #include "google/protobuf/descriptor_database.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -55,12 +55,12 @@ absl::Status ProtoBundle::Builder::ParseProtoDescriptorBytes(
   // in a temporary protodb before adding the listed types to the correct
   // protodb.
   google::protobuf::FileDescriptorSet provided_descriptor_set;
-  ZETASQL_RET_CHECK(provided_descriptor_set.ParseFromString(proto_descriptor_bytes))
+  GOOGLESQL_RET_CHECK(provided_descriptor_set.ParseFromString(proto_descriptor_bytes))
           .SetErrorCode(absl::StatusCode::kInvalidArgument)
       << "Could not parse contents of proto_descriptor_file";
 
   for (const auto& file : provided_descriptor_set.file()) {
-    ZETASQL_RET_CHECK(unfiltered_protodb_->Add(file)) << absl::Substitute(
+    GOOGLESQL_RET_CHECK(unfiltered_protodb_->Add(file)) << absl::Substitute(
         "Could not add FileDescriptor of `$0` into the protodb: the file "
         "descriptor already exists in the protodb.",
         file.name());
@@ -71,11 +71,11 @@ absl::Status ProtoBundle::Builder::ParseProtoDescriptorBytes(
 
 absl::Status ProtoBundle::Builder::LoadTypesFromPreviousProtoBundle(
     const ProtoBundle* prev_proto_bundle) {
-  ZETASQL_RET_CHECK(!prev_proto_bundle->empty())
+  GOOGLESQL_RET_CHECK(!prev_proto_bundle->empty())
           .SetErrorCode(absl::StatusCode::kInvalidArgument)
       << "Previous ProtoBundle is empty";
 
-  ZETASQL_RETURN_IF_ERROR(InsertTypes(std::vector(prev_proto_bundle->types_.begin(),
+  GOOGLESQL_RETURN_IF_ERROR(InsertTypes(std::vector(prev_proto_bundle->types_.begin(),
                                           prev_proto_bundle->types_.end())))
           .SetPrepend()
       << "Failed to load type list from previous proto bundle into new proto "
@@ -87,9 +87,9 @@ absl::Status ProtoBundle::Builder::LoadTypesFromPreviousProtoBundle(
 absl::Status ProtoBundle::Builder::InsertTypes(
     absl::Span<const std::string> types) {
   for (const auto& t : types) {
-    ZETASQL_RETURN_IF_ERROR(CheckIfTypeExistsInUnfilteredDescriptors(t));
+    GOOGLESQL_RETURN_IF_ERROR(CheckIfTypeExistsInUnfilteredDescriptors(t));
     auto ret = instance_->types_.insert(t);
-    ZETASQL_RET_CHECK(ret.second).SetErrorCode(absl::StatusCode::kAlreadyExists)
+    GOOGLESQL_RET_CHECK(ret.second).SetErrorCode(absl::StatusCode::kAlreadyExists)
         << absl::Substitute("Type already exists: `$0` the proto bundle", t);
   }
   return absl::OkStatus();
@@ -102,7 +102,7 @@ absl::Status ProtoBundle::Builder::UpdateTypes(
       return absl::NotFoundError(absl::Substitute(
           "Tried to update `$0` which does not already exist.", t));
     }
-    ZETASQL_RETURN_IF_ERROR(CheckIfTypeExistsInUnfilteredDescriptors(t));
+    GOOGLESQL_RETURN_IF_ERROR(CheckIfTypeExistsInUnfilteredDescriptors(t));
   }
   return absl::OkStatus();
 }
@@ -111,7 +111,7 @@ absl::Status ProtoBundle::Builder::DeleteTypes(
     absl::Span<const std::string> types) {
   for (const auto& t : types) {
     // TODO: Implement behavior to validate removals.
-    ZETASQL_RET_CHECK_EQ(instance_->types_.erase(t), 1)
+    GOOGLESQL_RET_CHECK_EQ(instance_->types_.erase(t), 1)
             .SetErrorCode(absl::StatusCode::kNotFound)
         << absl::Substitute(
                "Tried to remove `$0` which does not already exist in the proto "
@@ -128,7 +128,7 @@ ProtoBundle::Builder::Build() {
     google::protobuf::FileDescriptorProto file_descriptor_proto;
     // This is a sanity check as the types were already verified to exist in
     // the proto bundle.
-    ZETASQL_RET_CHECK(unfiltered_protodb_->FindFileContainingSymbol(
+    GOOGLESQL_RET_CHECK(unfiltered_protodb_->FindFileContainingSymbol(
                   proto_type, &file_descriptor_proto))
             .SetErrorCode(absl::StatusCode::kNotFound)
         << absl::Substitute("Could not find FileDescriptor for `$0`",
@@ -137,7 +137,7 @@ ProtoBundle::Builder::Build() {
     if (!encountered_files.contains(file_descriptor_proto.name())) {
       // Add() should only fail for double insertions which is already taken
       // care of. We return an error if it fails for anything else.
-      ZETASQL_RET_CHECK(instance_->protodb_->Add(file_descriptor_proto))
+      GOOGLESQL_RET_CHECK(instance_->protodb_->Add(file_descriptor_proto))
           << absl::Substitute(
                  "Could not insert FileDescriptor (`$0`) of `$1` in the "
                  "database",
@@ -150,8 +150,8 @@ ProtoBundle::Builder::Build() {
   instance_->descriptor_pool_ =
       std::make_unique<google::protobuf::DescriptorPool>(instance_->protodb_.get());
   instance_->descriptor_pool_->AllowUnknownDependencies();
-  ZETASQL_RETURN_IF_ERROR(instance_->CheckUnsupportedFeatures());
-  ZETASQL_RETURN_IF_ERROR(instance_->ValidateRestrictedPackages());
+  GOOGLESQL_RETURN_IF_ERROR(instance_->CheckUnsupportedFeatures());
+  GOOGLESQL_RETURN_IF_ERROR(instance_->ValidateRestrictedPackages());
 
   return std::move(instance_);
 }
@@ -184,24 +184,24 @@ absl::Status ProtoBundle::ValidateMessage(
   if (descriptor->full_name() == "proto2.bridge.MessageSet") {
     return error::MessageTypeNotSupported(descriptor->full_name());
   }
-  if (descriptor->options().HasExtension(zetasql::use_field_defaults)) {
+  if (descriptor->options().HasExtension(googlesql::use_field_defaults)) {
     return error::ExtensionNotSupported(
-        (zetasql::use_field_defaults).number(), descriptor->full_name());
+        (googlesql::use_field_defaults).number(), descriptor->full_name());
   }
   for (int i = 0; i < descriptor->field_count(); i++) {
     const google::protobuf::FieldDescriptor* field = descriptor->field(i);
-    if (zetasql::ProtoType::HasFormatAnnotation(field)) {
-      int field_number = field->options().HasExtension(zetasql::format)
-                             ? (zetasql::format.number())
-                             : (zetasql::type.number());
+    if (googlesql::ProtoType::HasFormatAnnotation(field)) {
+      int field_number = field->options().HasExtension(googlesql::format)
+                             ? (googlesql::format.number())
+                             : (googlesql::type.number());
       return error::ExtensionNotSupported(field_number, field->full_name());
     }
-    if (field->options().HasExtension(zetasql::use_defaults)) {
-      return error::ExtensionNotSupported((zetasql::use_defaults).number(),
+    if (field->options().HasExtension(googlesql::use_defaults)) {
+      return error::ExtensionNotSupported((googlesql::use_defaults).number(),
                                           field->full_name());
     }
     if (field->type() == google::protobuf::FieldDescriptor::TYPE_MESSAGE) {
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           ValidateMessage(field->message_type(), visited_descriptors));
     }
   }
@@ -216,7 +216,7 @@ absl::Status ProtoBundle::CheckUnsupportedFeatures() const {
     // This would happen if the descriptor is type is enum.
     if (!descriptor) continue;
     absl::flat_hash_set<const google::protobuf::Descriptor*> visited_descriptors;
-    ZETASQL_RETURN_IF_ERROR(ValidateMessage(descriptor, visited_descriptors));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateMessage(descriptor, visited_descriptors));
   }
   return absl::OkStatus();
 }
@@ -254,7 +254,7 @@ absl::StatusOr<std::string> ProtoBundle::GetProtoDescriptorBytes() const {
   absl::flat_hash_set<std::string> added_files;
   for (const auto& type : types_) {
     google::protobuf::FileDescriptorProto file_descriptor_proto;
-    ZETASQL_RET_CHECK(protodb_->FindFileContainingSymbol(type, &file_descriptor_proto))
+    GOOGLESQL_RET_CHECK(protodb_->FindFileContainingSymbol(type, &file_descriptor_proto))
             .SetErrorCode(absl::StatusCode::kNotFound)
         << absl::Substitute("Could not find FileDescriptor for `$0`", type);
     if (added_files.contains(file_descriptor_proto.name())) {

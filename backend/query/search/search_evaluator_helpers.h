@@ -24,7 +24,7 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -51,7 +51,7 @@ class SearchHelper {
   //          flag indicate if the source is NULL value. Otherwise error status
   //          code.
   static absl::StatusOr<TokenMap> BuildTokenMap(
-      const zetasql::Value& token_list, absl::string_view func_name,
+      const googlesql::Value& token_list, absl::string_view func_name,
       bool& source_is_null);
 };
 

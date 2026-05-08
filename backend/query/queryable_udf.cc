@@ -20,14 +20,14 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/evaluator.h"
-#include "zetasql/public/function.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/evaluator.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_split.h"
 #include "absl/types/span.h"
@@ -37,8 +37,8 @@
 #include "backend/query/hint_rewriter.h"
 #include "backend/query/index_hint_validator.h"
 #include "backend/schema/catalog/udf.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -47,65 +47,65 @@ namespace backend {
 
 QueryableUdf::QueryableUdf(const backend::Udf* backend_udf,
                            const std::string default_time_zone,
-                           zetasql::Catalog* catalog,
-                           zetasql::TypeFactory* type_factory)
-    : zetasql::Function(
+                           googlesql::Catalog* catalog,
+                           googlesql::TypeFactory* type_factory)
+    : googlesql::Function(
           absl::StrSplit(backend_udf->Name(), '.'),
-          /*group=*/kSqlUdfGroup, zetasql::Function::SCALAR,
-          std::vector<zetasql::FunctionSignature>{*backend_udf->signature()},
+          /*group=*/kSqlUdfGroup, googlesql::Function::SCALAR,
+          std::vector<googlesql::FunctionSignature>{*backend_udf->signature()},
           CreateFunctionOptions(backend_udf, default_time_zone, catalog,
                                 type_factory)),
       wrapped_udf_(backend_udf) {}
 
-zetasql::FunctionOptions QueryableUdf::CreateFunctionOptions(
+googlesql::FunctionOptions QueryableUdf::CreateFunctionOptions(
     const backend::Udf* udf, const std::string default_time_zone,
-    zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory) {
-  auto evaluator = [=](absl::Span<const zetasql::Value> args)
-      -> absl::StatusOr<zetasql::Value> {
-    std::unique_ptr<const zetasql::AnalyzerOutput> output;
-    zetasql::AnalyzerOptions options =
+    googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory) {
+  auto evaluator = [=](absl::Span<const googlesql::Value> args)
+      -> absl::StatusOr<googlesql::Value> {
+    std::unique_ptr<const googlesql::AnalyzerOutput> output;
+    googlesql::AnalyzerOptions options =
         MakeGoogleSqlAnalyzerOptions(default_time_zone);
-    zetasql::ParameterValueMap columns;
+    googlesql::ParameterValueMap columns;
 
     for (int i = 0; i < udf->signature()->arguments().size(); i++) {
       const auto& arg = udf->signature()->arguments()[i];
       columns[arg.argument_name()] = args[i];
       // Add expression columns to analyzer options.
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           options.AddExpressionColumn(arg.argument_name(), arg.type()));
     }
 
-    ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeExpression(udf->body(), options, catalog,
+    GOOGLESQL_RETURN_IF_ERROR(googlesql::AnalyzeExpression(udf->body(), options, catalog,
                                                  type_factory, &output));
-    ZETASQL_RET_CHECK_NE(output->resolved_expr(), nullptr);
+    GOOGLESQL_RET_CHECK_NE(output->resolved_expr(), nullptr);
 
     HintRewriter rewriter;
-    ZETASQL_RETURN_IF_ERROR(output->resolved_expr()->Accept(&rewriter));
-    ZETASQL_ASSIGN_OR_RETURN(auto resolved_expr,
-                     rewriter.ConsumeRootNode<zetasql::ResolvedExpr>());
+    GOOGLESQL_RETURN_IF_ERROR(output->resolved_expr()->Accept(&rewriter));
+    GOOGLESQL_ASSIGN_OR_RETURN(auto resolved_expr,
+                     rewriter.ConsumeRootNode<googlesql::ResolvedExpr>());
 
     IndexHintValidator index_hint_validator{
         /*schema=*/nullptr,
         /*disable_query_null_filtered_index_check=*/false,
         /*allow_search_indexes_in_transaction=*/false,
         /*in_partition_query=*/false};
-    ZETASQL_RETURN_IF_ERROR(resolved_expr->Accept(&index_hint_validator));
+    GOOGLESQL_RETURN_IF_ERROR(resolved_expr->Accept(&index_hint_validator));
 
     // Check the query size limits
     // https://cloud.google.com/spanner/quotas#query_limits
     QuerySizeLimitsChecker checker;
-    ZETASQL_RETURN_IF_ERROR(checker.CheckQueryAgainstLimits(resolved_expr.get()));
+    GOOGLESQL_RETURN_IF_ERROR(checker.CheckQueryAgainstLimits(resolved_expr.get()));
 
-    zetasql::EvaluatorOptions evaluator_options;
-    zetasql::PreparedExpression expr(resolved_expr.get(), evaluator_options);
-    ZETASQL_RETURN_IF_ERROR(expr.Prepare(options, nullptr));
+    googlesql::EvaluatorOptions evaluator_options;
+    googlesql::PreparedExpression expr(resolved_expr.get(), evaluator_options);
+    GOOGLESQL_RETURN_IF_ERROR(expr.Prepare(options, nullptr));
 
-    ZETASQL_ASSIGN_OR_RETURN(zetasql::Value val, expr.Execute(columns));
+    GOOGLESQL_ASSIGN_OR_RETURN(googlesql::Value val, expr.Execute(columns));
     return val;
   };
 
-  zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(zetasql::FunctionEvaluator(evaluator));
+  googlesql::FunctionOptions function_options;
+  function_options.set_evaluator(googlesql::FunctionEvaluator(evaluator));
   return function_options;
 }
 

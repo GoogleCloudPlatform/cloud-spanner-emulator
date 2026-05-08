@@ -43,7 +43,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"  // IWYU pragma: keep
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 // Constant Declarations
 static const int64_t kNumMillisPerSecond = 1000LL;
@@ -162,7 +162,7 @@ absl::StatusOr<PGInterval> ParseInterval(absl::string_view input_string) {
 }
 
 absl::StatusOr<int64_t> IntervalToSecs(absl::string_view input_string) {
-  ZETASQL_ASSIGN_OR_RETURN(PGInterval interval, ParseInterval(input_string));
+  GOOGLESQL_ASSIGN_OR_RETURN(PGInterval interval, ParseInterval(input_string));
   int64_t total;
   total = (((interval.months * 30) + interval.days) * 86400) +
           interval.micros / USECS_PER_SEC;

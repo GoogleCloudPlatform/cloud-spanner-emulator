@@ -18,15 +18,15 @@
 
 #include <vector>
 
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_ast_visitor.h"
-#include "zetasql/resolved_ast/resolved_node.h"
-#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_visitor.h"
+#include "googlesql/resolved_ast/resolved_node.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -35,18 +35,18 @@ namespace backend {
 
 namespace {
 
-class HasTableScanVisitor : public zetasql::ResolvedASTVisitor {
+class HasTableScanVisitor : public googlesql::ResolvedASTVisitor {
  public:
   HasTableScanVisitor() = default;
 
-  absl::StatusOr<bool> HasTableScan(const zetasql::ResolvedNode* node) {
+  absl::StatusOr<bool> HasTableScan(const googlesql::ResolvedNode* node) {
     has_table_scan_ = false;
-    ZETASQL_RETURN_IF_ERROR(node->Accept(this));
+    GOOGLESQL_RETURN_IF_ERROR(node->Accept(this));
     return has_table_scan_;
   }
 
   absl::Status VisitResolvedTableScan(
-      const zetasql::ResolvedTableScan* node) override {
+      const googlesql::ResolvedTableScan* node) override {
     has_table_scan_ = true;
     return absl::OkStatus();
   }
@@ -56,7 +56,7 @@ class HasTableScanVisitor : public zetasql::ResolvedASTVisitor {
 };
 
 // Returns true if the expression tree has TableScan.
-absl::StatusOr<bool> HasTableScan(const zetasql::ResolvedNode* node) {
+absl::StatusOr<bool> HasTableScan(const googlesql::ResolvedNode* node) {
   HasTableScanVisitor visitor;
   return visitor.HasTableScan(node);
 }
@@ -64,12 +64,12 @@ absl::StatusOr<bool> HasTableScan(const zetasql::ResolvedNode* node) {
 }  // namespace
 
 absl::Status PartitionabilityValidator::ValidatePartitionability(
-    const zetasql::ResolvedNode* node) {
-  ABSL_DCHECK(node->node_kind() == zetasql::RESOLVED_QUERY_STMT);
+    const googlesql::ResolvedNode* node) {
+  ABSL_DCHECK(node->node_kind() == googlesql::RESOLVED_QUERY_STMT);
   if (EmulatorFeatureFlags::instance()
           .flags()
           .enable_batch_query_with_no_table_scan) {
-    ZETASQL_ASSIGN_OR_RETURN(bool has_table_scan, HasTableScan(node));
+    GOOGLESQL_ASSIGN_OR_RETURN(bool has_table_scan, HasTableScan(node));
     if (!has_table_scan) {
       return absl::OkStatus();
     }
@@ -95,38 +95,38 @@ absl::Status PartitionabilityValidator::ValidatePartitionability(
 //       +-TableScan(column_list=[Obj.obj_k#2], table=Obj)
 //
 absl::Status PartitionabilityValidator::ValidateSimpleScan(
-    const zetasql::ResolvedNode* node) {
+    const googlesql::ResolvedNode* node) {
   absl::Status error_status =
       error::NonPartitionableQuery("Query is not a simple table scan.");
-  const zetasql::ResolvedNode* current_node = node;
+  const googlesql::ResolvedNode* current_node = node;
   while (true) {
     switch (current_node->node_kind()) {
-      case zetasql::RESOLVED_QUERY_STMT:
+      case googlesql::RESOLVED_QUERY_STMT:
         current_node =
-            current_node->GetAs<zetasql::ResolvedQueryStmt>()->query();
+            current_node->GetAs<googlesql::ResolvedQueryStmt>()->query();
         if (current_node != nullptr &&
-            current_node->node_kind() == zetasql::RESOLVED_PROJECT_SCAN) {
+            current_node->node_kind() == googlesql::RESOLVED_PROJECT_SCAN) {
           break;
         }
         return error_status;
-      case zetasql::RESOLVED_PROJECT_SCAN:
+      case googlesql::RESOLVED_PROJECT_SCAN:
         current_node =
-            current_node->GetAs<zetasql::ResolvedProjectScan>()->input_scan();
+            current_node->GetAs<googlesql::ResolvedProjectScan>()->input_scan();
         if (current_node != nullptr &&
-            (current_node->node_kind() == zetasql::RESOLVED_TABLE_SCAN ||
-             current_node->node_kind() == zetasql::RESOLVED_FILTER_SCAN)) {
+            (current_node->node_kind() == googlesql::RESOLVED_TABLE_SCAN ||
+             current_node->node_kind() == googlesql::RESOLVED_FILTER_SCAN)) {
           break;
         }
         return error_status;
-      case zetasql::RESOLVED_FILTER_SCAN:
+      case googlesql::RESOLVED_FILTER_SCAN:
         current_node =
-            current_node->GetAs<zetasql::ResolvedFilterScan>()->input_scan();
+            current_node->GetAs<googlesql::ResolvedFilterScan>()->input_scan();
         if (current_node != nullptr &&
-            current_node->node_kind() == zetasql::RESOLVED_TABLE_SCAN) {
+            current_node->node_kind() == googlesql::RESOLVED_TABLE_SCAN) {
           break;
         }
         return error_status;
-      case zetasql::RESOLVED_TABLE_SCAN:
+      case googlesql::RESOLVED_TABLE_SCAN:
         return absl::OkStatus();
       default:
         return error_status;
@@ -135,14 +135,14 @@ absl::Status PartitionabilityValidator::ValidateSimpleScan(
 }
 
 bool PartitionabilityValidator::HasSubquery(
-    const zetasql::ResolvedNode* node) {
+    const googlesql::ResolvedNode* node) {
   ABSL_DCHECK(node != nullptr);
-  if (node->node_kind() == zetasql::RESOLVED_SUBQUERY_EXPR) {
+  if (node->node_kind() == googlesql::RESOLVED_SUBQUERY_EXPR) {
     return true;
   }
-  std::vector<const zetasql::ResolvedNode*> child_nodes;
+  std::vector<const googlesql::ResolvedNode*> child_nodes;
   node->GetChildNodes(&child_nodes);  // only non-null children returned.
-  for (const zetasql::ResolvedNode* child : child_nodes) {
+  for (const googlesql::ResolvedNode* child : child_nodes) {
     if (HasSubquery(child)) {
       return true;
     }

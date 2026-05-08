@@ -19,9 +19,9 @@
 #include <string>
 
 #include "google/spanner/v1/type.pb.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/types/type.h"
 #include "common/feature_flags.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
 
@@ -33,36 +33,36 @@ namespace backend {
 using ::google::spanner::v1::TypeAnnotationCode;
 using ::postgres_translator::spangres::datatypes::SpannerExtendedType;
 
-bool IsSupportedColumnType(const zetasql::Type* type) {
+bool IsSupportedColumnType(const googlesql::Type* type) {
   // According to https://cloud.google.com/spanner/docs/data-types
-  // Note: ZetaSQL currently doesn't support constructing array-of-array
+  // Note: GoogleSQL currently doesn't support constructing array-of-array
   // types.
   if (type->IsArray()) {
-    const zetasql::Type* element_type = type->AsArray()->element_type();
+    const googlesql::Type* element_type = type->AsArray()->element_type();
     if (element_type->IsArray()) {
       return false;
     }
     return IsSupportedColumnType(element_type);
   }
   switch (type->kind()) {
-    case zetasql::TypeKind::TYPE_INT64:
-    case zetasql::TypeKind::TYPE_BOOL:
-    case zetasql::TypeKind::TYPE_FLOAT:
-    case zetasql::TypeKind::TYPE_DOUBLE:
-    case zetasql::TypeKind::TYPE_STRING:
-    case zetasql::TypeKind::TYPE_BYTES:
-    case zetasql::TypeKind::TYPE_TIMESTAMP:
-    case zetasql::TypeKind::TYPE_DATE:
-    case zetasql::TypeKind::TYPE_NUMERIC:
-    case zetasql::TypeKind::TYPE_JSON:
-    case zetasql::TypeKind::TYPE_TOKENLIST:
-    case zetasql::TypeKind::TYPE_UUID:
+    case googlesql::TypeKind::TYPE_INT64:
+    case googlesql::TypeKind::TYPE_BOOL:
+    case googlesql::TypeKind::TYPE_FLOAT:
+    case googlesql::TypeKind::TYPE_DOUBLE:
+    case googlesql::TypeKind::TYPE_STRING:
+    case googlesql::TypeKind::TYPE_BYTES:
+    case googlesql::TypeKind::TYPE_TIMESTAMP:
+    case googlesql::TypeKind::TYPE_DATE:
+    case googlesql::TypeKind::TYPE_NUMERIC:
+    case googlesql::TypeKind::TYPE_JSON:
+    case googlesql::TypeKind::TYPE_TOKENLIST:
+    case googlesql::TypeKind::TYPE_UUID:
       return true;
-    case zetasql::TypeKind::TYPE_PROTO:
-    case zetasql::TypeKind::TYPE_ENUM: {
+    case googlesql::TypeKind::TYPE_PROTO:
+    case googlesql::TypeKind::TYPE_ENUM: {
       return EmulatorFeatureFlags::instance().flags().enable_protos;
     }
-    case zetasql::TypeKind::TYPE_EXTENDED: {
+    case googlesql::TypeKind::TYPE_EXTENDED: {
       auto type_code = static_cast<const SpannerExtendedType*>(type)->code();
       switch (type_code) {
         case TypeAnnotationCode::PG_JSONB:
@@ -73,14 +73,14 @@ bool IsSupportedColumnType(const zetasql::Type* type) {
       }
     }
     // INTERVAL is a query only type.
-    case zetasql::TypeKind::TYPE_INTERVAL:
+    case googlesql::TypeKind::TYPE_INTERVAL:
       return false;
     default:
       return false;
   }
 }
 
-bool IsSupportedKeyColumnType(const zetasql::Type* type,
+bool IsSupportedKeyColumnType(const googlesql::Type* type,
                               bool is_vector_index) {
   // According to
   // https://docs.cloud.google.com/spanner/docs/reference/standard-sql/data-types#valid_key_column_types
@@ -107,12 +107,12 @@ bool IsSupportedKeyColumnType(const zetasql::Type* type,
   return IsSupportedColumnType(type);
 }
 
-std::string ToString(const zetasql::Type* type) {
-  return type->ShortTypeName(zetasql::PRODUCT_EXTERNAL,
+std::string ToString(const googlesql::Type* type) {
+  return type->ShortTypeName(googlesql::PRODUCT_EXTERNAL,
                              /*use_external_float32=*/true);
 }
 
-const zetasql::Type* BaseType(const zetasql::Type* type) {
+const googlesql::Type* BaseType(const googlesql::Type* type) {
   if (!IsSupportedColumnType(type)) {
     return nullptr;
   }

@@ -19,7 +19,7 @@
 
 #include <string>
 
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
@@ -48,7 +48,7 @@ extern const char kChangeStreamExcludeUpdateOptionName[];
 extern const char kChangeStreamExcludeDeleteOptionName[];
 extern const char kChangeStreamExcludeTtlDeletesOptionName[];
 extern const char kChangeStreamAllowTxnExclusionOptionName[];
-extern const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+extern const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
     kChangeStreamBooleanOptions;
 
 extern const char kModelColumnRequiredOptionName[];

@@ -35,10 +35,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/statusor.h"
 #include "absl/types/optional.h"
 #include "third_party/spanner_pg/interface/memory_reservation_manager.h"
@@ -52,7 +52,7 @@ namespace postgres_translator {
 
 namespace {
 
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 class FakeMemoryReservationManager
     : public interfaces::MemoryReservationManager {
@@ -93,7 +93,7 @@ TEST(MemoryReservationTest, SetsThreadLocal) {
     // The current implementation of MemoryReservationHolder should set the
     // thread-local variable `thread_memory_reservation` to point to a memory
     // reservation manager
-    ZETASQL_ASSERT_OK(res_holder);
+    GOOGLESQL_ASSERT_OK(res_holder);
     EXPECT_NE(thread_memory_reservation, nullptr);
   }
 
@@ -109,8 +109,8 @@ TEST_F(TrackedMemoryReservationTest, SimpleReservation) {
   auto res_manager = std::make_unique<FakeMemoryReservationManager>(
       kAllocatorOverhead + kBlockSize * 2);
   auto res_holder = MemoryReservationHolder::Create(res_manager.get());
-  ZETASQL_ASSERT_OK(res_holder);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto memory_context,
+  GOOGLESQL_ASSERT_OK(res_holder);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto memory_context,
                        MemoryContextManager::Init("TestMemoryContext"));
   EXPECT_EQ(res_manager->GetReservedBytes(), kAllocatorOverhead);
 
@@ -132,7 +132,7 @@ TEST_F(TrackedMemoryReservationTest, SimpleReservation) {
   EXPECT_EQ(res_manager->GetReservedBytes(),
             kAllocatorOverhead + kBlockSize * 2);
   // Test cleanup to insure hermiticity.
-  ZETASQL_ASSERT_OK(memory_context.Clear());
+  GOOGLESQL_ASSERT_OK(memory_context.Clear());
 }
 
 // Test that palloc fails as expected when it asks for too much memory. Test
@@ -143,9 +143,9 @@ TEST_F(TrackedMemoryReservationTest, RejectedReservation) {
   auto res_manager =
       std::make_unique<FakeMemoryReservationManager>(kAllocatorOverhead);
   auto res_holder = MemoryReservationHolder::Create(res_manager.get());
-  ZETASQL_ASSERT_OK(res_holder);
+  GOOGLESQL_ASSERT_OK(res_holder);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto memory_context,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto memory_context,
                        MemoryContextManager::Init("TestMemoryContext"));
   EXPECT_EQ(res_manager->GetReservedBytes(), kAllocatorOverhead);
   // This allocation should trigger a new block request and fail. The
@@ -173,7 +173,7 @@ TEST_F(TrackedMemoryReservationTest, RejectedReservation) {
   EXPECT_EQ(res_manager->GetReservedBytes(), 0);
 
   // Test cleanup to insure hermiticity.
-  ZETASQL_ASSERT_OK(memory_context.Clear());
+  GOOGLESQL_ASSERT_OK(memory_context.Clear());
 }
 
 // Addendum to the above test for realloc because it needs a valid pointer.
@@ -185,13 +185,13 @@ TEST_F(TrackedMemoryReservationTest, RejectedReallocReservation) {
   auto res_manager =
       std::make_unique<FakeMemoryReservationManager>(kAllocatorOverhead);
   auto res_holder = MemoryReservationHolder::Create(res_manager.get());
-  ZETASQL_ASSERT_OK(res_holder);
+  GOOGLESQL_ASSERT_OK(res_holder);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto memory_context,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto memory_context,
                        MemoryContextManager::Init("TestMemoryContext"));
   EXPECT_EQ(res_manager->GetReservedBytes(), kAllocatorOverhead);
   // This allocation should not trigger a new block request.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(void* pointer, CheckedPgPalloc(1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(void* pointer, CheckedPgPalloc(1));
   EXPECT_EQ(res_manager->GetReservedBytes(), kAllocatorOverhead);
   // This allocation should trigger a new block request and fail. No new
   // grant is created and the old one is revoked.
@@ -199,7 +199,7 @@ TEST_F(TrackedMemoryReservationTest, RejectedReallocReservation) {
   EXPECT_EQ(res_manager->GetReservedBytes(), 0);
 
   // Test cleanup to insure hermiticity.
-  ZETASQL_ASSERT_OK(memory_context.Clear());
+  GOOGLESQL_ASSERT_OK(memory_context.Clear());
 }
 
 // Test that the PostgreSQL parser correctly uses spanner memory reservations.
@@ -207,8 +207,8 @@ TEST_F(TrackedMemoryReservationTest, Parser) {
   // Create a reservation tracker with plenty of memory for parsing.
   auto res_manager = std::make_unique<FakeMemoryReservationManager>(100 * 1024);
   auto res_holder = MemoryReservationHolder::Create(res_manager.get());
-  ZETASQL_ASSERT_OK(res_holder);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto memory_context,
+  GOOGLESQL_ASSERT_OK(res_holder);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto memory_context,
                        MemoryContextManager::Init("TestMemoryContext"));
 
   int64_t memory_accum = 0;  // Used to separate memory used for each parse.
@@ -226,9 +226,9 @@ TEST_F(TrackedMemoryReservationTest, Parser) {
         pretty_format_node_dump(nodeToString(parse_tree));
     int64_t new_mem =
         res_manager->GetReservedBytes() - kAllocatorOverhead - memory_accum;
-    ZETASQL_VLOG(1) << "Test case string:\n" << test_case;
-    ZETASQL_VLOG(1) << "Parse tree:\n" << parse_tree_str;
-    ZETASQL_VLOG(1) << "Additional memory used on this parse: " << new_mem;
+    GOOGLESQL_VLOG(1) << "Test case string:\n" << test_case;
+    GOOGLESQL_VLOG(1) << "Parse tree:\n" << parse_tree_str;
+    GOOGLESQL_VLOG(1) << "Additional memory used on this parse: " << new_mem;
     memory_accum += new_mem;
   }
   // This test gets into the 2nd double-sizing chunk, thus uses 8+16kB of
@@ -237,7 +237,7 @@ TEST_F(TrackedMemoryReservationTest, Parser) {
             ((8 + 16) * 1024) + kAllocatorOverhead);
 
   // Test cleanup to insure hermiticity.
-  ZETASQL_ASSERT_OK(memory_context.Clear());
+  GOOGLESQL_ASSERT_OK(memory_context.Clear());
 }
 
 // Failing to initialize the MemoryContextManager should not terminate
@@ -248,7 +248,7 @@ TEST_F(TrackedMemoryReservationTest, MemoryContextInitFailure) {
   auto res_manager = std::make_unique<StubMemoryReservationManager>(
       /*available_memory=*/1);
   auto res_holder = MemoryReservationHolder::Create(res_manager.get());
-  ZETASQL_ASSERT_OK(res_holder);
+  GOOGLESQL_ASSERT_OK(res_holder);
   EXPECT_EQ(CurrentMemoryContext, nullptr);
   EXPECT_THAT(MemoryContextManager::Init("TestMemoryContext"),
               StatusIs(absl::StatusCode::kResourceExhausted));

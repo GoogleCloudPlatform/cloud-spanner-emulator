@@ -18,16 +18,16 @@
 
 #include <string>
 
-#include "zetasql/base/logging.h"
-#include "zetasql/public/function.h"
-#include "zetasql/public/functions/datetime.pb.h"
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/value.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_ast_enums.pb.h"
-#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "googlesql/base/logging.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/functions/datetime.pb.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/value.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_enums.pb.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -35,13 +35,13 @@
 #include "backend/query/feature_filter/error_mode_util.h"
 #include "backend/query/feature_filter/sql_features_view.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google::spanner::emulator::backend {
 namespace {
 
-absl::Status CheckSafeIsProperlySupported(const zetasql::Function* func) {
+absl::Status CheckSafeIsProperlySupported(const googlesql::Function* func) {
   if (!SupportsSafeErrorMode(func)) {
     return error::UnsupportedFeatureSafe(
         absl::StrCat("SAFE.", func->FullName(/*include_group=*/false)),
@@ -107,19 +107,19 @@ bool IsDisabledFunction(const SqlFeaturesView& query_features,
 
   return false;
 }
-absl::Status IsNotIsoDatePart(const zetasql::ResolvedExpr* arg,
+absl::Status IsNotIsoDatePart(const googlesql::ResolvedExpr* arg,
                               const std::string& name) {
-  ZETASQL_RET_CHECK_EQ(arg->node_kind(), zetasql::RESOLVED_LITERAL);
-  auto constant = arg->GetAs<zetasql::ResolvedLiteral>();
-  const zetasql::Value& lit = constant->value();
+  GOOGLESQL_RET_CHECK_EQ(arg->node_kind(), googlesql::RESOLVED_LITERAL);
+  auto constant = arg->GetAs<googlesql::ResolvedLiteral>();
+  const googlesql::Value& lit = constant->value();
   if (lit.is_null()) {
     return absl::OkStatus();
   }
-  ZETASQL_RET_CHECK(lit.type()->IsEnum());
+  GOOGLESQL_RET_CHECK(lit.type()->IsEnum());
   switch (lit.enum_value()) {
-    case zetasql::functions::ISOWEEK:
+    case googlesql::functions::ISOWEEK:
       return error::UnsupportedFunction(absl::StrCat(name, "_ISOWEEK"));
-    case zetasql::functions::ISOYEAR:
+    case googlesql::functions::ISOYEAR:
       return error::UnsupportedFunction(absl::StrCat(name, "_ISOYEAR"));
     default:
       return absl::OkStatus();
@@ -130,14 +130,14 @@ absl::Status IsNotIsoDatePart(const zetasql::ResolvedExpr* arg,
 
 absl::Status FilterResolvedAggregateFunction(
     const SqlFeaturesView& query_features,
-    const zetasql::ResolvedAggregateFunctionCall& aggregate_function) {
+    const googlesql::ResolvedAggregateFunctionCall& aggregate_function) {
   const std::string name = aggregate_function.function()->Name();
 
   if (IsDisabledAggregateFunction(query_features, name)) {
     return error::UnsupportedFeatureSafe("aggregate function", name);
   }
   if (aggregate_function.null_handling_modifier() !=
-          zetasql::ResolvedNonScalarFunctionCallBaseEnums::
+          googlesql::ResolvedNonScalarFunctionCallBaseEnums::
               DEFAULT_NULL_HANDLING &&
       name != "array_agg") {
     return error::UnsupportedIgnoreNullsInAggregateFunctions();
@@ -151,9 +151,9 @@ absl::Status FilterResolvedAggregateFunction(
 }
 
 absl::Status FilterResolvedFunction(
-    const zetasql::LanguageOptions& language_options,
+    const googlesql::LanguageOptions& language_options,
     const SqlFeaturesView& query_features,
-    const zetasql::ResolvedFunctionCall& function_call) {
+    const googlesql::ResolvedFunctionCall& function_call) {
   const std::string name = function_call.function()->FullName(false);
 
   if (IsDisabledFunction(query_features, name)) {
@@ -193,27 +193,27 @@ absl::Status FilterResolvedFunction(
       !function_call.argument_list(0)->type()->IsJsonType()) {
     return error::ToJsonStringNonJsonTypeNotSupported(
         function_call.argument_list(0)->type()->TypeName(
-            zetasql::PRODUCT_EXTERNAL, /*use_external_float32=*/true));
+            googlesql::PRODUCT_EXTERNAL, /*use_external_float32=*/true));
   }
 
   return absl::OkStatus();
 }
 
 absl::Status FilterSafeModeFunction(
-    const zetasql::ResolvedFunctionCallBase& function_call) {
+    const googlesql::ResolvedFunctionCallBase& function_call) {
   bool safe_mode = false;
   if (function_call.error_mode() ==
-      zetasql::ResolvedFunctionCallBaseEnums::SAFE_ERROR_MODE) {
+      googlesql::ResolvedFunctionCallBaseEnums::SAFE_ERROR_MODE) {
     safe_mode = true;
   } else {
     ABSL_DCHECK_EQ(function_call.error_mode(),
-              zetasql::ResolvedFunctionCallBaseEnums::DEFAULT_ERROR_MODE);
+              googlesql::ResolvedFunctionCallBaseEnums::DEFAULT_ERROR_MODE);
   }
-  ZETASQL_RET_CHECK(!safe_mode || function_call.function()->SupportsSafeErrorMode())
+  GOOGLESQL_RET_CHECK(!safe_mode || function_call.function()->SupportsSafeErrorMode())
       << "Invalid ResolvedAST.";
 
   if (safe_mode) {
-    ZETASQL_RETURN_IF_ERROR(CheckSafeIsProperlySupported(function_call.function()));
+    GOOGLESQL_RETURN_IF_ERROR(CheckSafeIsProperlySupported(function_call.function()));
   }
   return absl::OkStatus();
 }

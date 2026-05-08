@@ -81,7 +81,7 @@ cc_library(
         "//frontend/converters:time",
         "@com_google_absl//absl/strings",
         "@com_google_googleapis//google/spanner/admin/instance/v1:instance_cc_grpc",
-        "@com_google_zetasql//zetasql/base:clock",
+        "@com_google_googlesql//googlesql/base:clock",
     ],
 )
 
@@ -97,10 +97,10 @@ cc_test(
         "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/time",
+        "@com_google_googlesql//googlesql/base:clock",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
         "@com_google_protobuf//:cc_wkt_protos",
-        "@com_google_zetasql//zetasql/base:clock",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -128,8 +128,8 @@ cc_test(
         "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googleapis//google/spanner/admin/instance/v1:instance_cc_grpc",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -162,9 +162,9 @@ cc_library(
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:variant",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googlesql//googlesql/base:ret_check",
+        "@com_google_googlesql//googlesql/base:time_proto_util",
+        "@com_google_googlesql//googlesql/public:value",
         "@com_google_protobuf//:cc_wkt_protos",
-        "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/base:time_proto_util",
-        "@com_google_zetasql//zetasql/public:value",
     ],
 )

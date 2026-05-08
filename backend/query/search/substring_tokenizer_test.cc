@@ -21,11 +21,11 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "backend/query/search/tokenizer.h"
@@ -38,7 +38,7 @@ namespace query {
 namespace search {
 
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 struct SubstringTokenizerTestCase {
   std::vector<std::string> original_strs;
@@ -57,49 +57,49 @@ using SubstringTokenizerTest =
 TEST_P(SubstringTokenizerTest, TestTokenize) {
   const SubstringTokenizerTestCase& test_case = GetParam();
 
-  zetasql::Value value;
+  googlesql::Value value;
   if (test_case.is_array_input) {
-    value = zetasql::values::StringArray(test_case.original_strs);
+    value = googlesql::values::StringArray(test_case.original_strs);
   } else {
-    value = zetasql::Value::String(test_case.original_strs[0]);
+    value = googlesql::Value::String(test_case.original_strs[0]);
   }
 
-  zetasql::Value ngram_max =
+  googlesql::Value ngram_max =
       test_case.ngram_size_max.has_value()
-          ? zetasql::Value::Int64(test_case.ngram_size_max.value())
-          : zetasql::Value::NullInt64();
-  zetasql::Value ngram_min =
+          ? googlesql::Value::Int64(test_case.ngram_size_max.value())
+          : googlesql::Value::NullInt64();
+  googlesql::Value ngram_min =
       test_case.ngram_size_min.has_value()
-          ? zetasql::Value::Int64(test_case.ngram_size_min.value())
-          : zetasql::Value::NullInt64();
+          ? googlesql::Value::Int64(test_case.ngram_size_min.value())
+          : googlesql::Value::NullInt64();
 
-  zetasql::Value support_relative_search =
+  googlesql::Value support_relative_search =
       test_case.support_relative_search.has_value()
-          ? zetasql::Value::Bool(test_case.support_relative_search.value())
-          : zetasql::Value::NullBool();
+          ? googlesql::Value::Bool(test_case.support_relative_search.value())
+          : googlesql::Value::NullBool();
 
-  zetasql::Value content_type = zetasql::Value::NullString();
+  googlesql::Value content_type = googlesql::Value::NullString();
 
-  zetasql::Value search_types;
+  googlesql::Value search_types;
   if (test_case.relative_search_types.empty()) {
-    search_types = zetasql::Value::Null(zetasql::types::StringArrayType());
+    search_types = googlesql::Value::Null(googlesql::types::StringArrayType());
   } else {
     search_types =
-        zetasql::values::StringArray(test_case.relative_search_types);
+        googlesql::values::StringArray(test_case.relative_search_types);
   }
 
-  std::vector<zetasql::Value> args{value,        ngram_max,
+  std::vector<googlesql::Value> args{value,        ngram_max,
                                      ngram_min,    support_relative_search,
                                      content_type, search_types};
 
-  absl::StatusOr<zetasql::Value> result = SubstringTokenizer::Tokenize(args);
-  ZETASQL_EXPECT_OK(result.status());
+  absl::StatusOr<googlesql::Value> result = SubstringTokenizer::Tokenize(args);
+  GOOGLESQL_EXPECT_OK(result.status());
 
-  zetasql::Value token_list = result.value();
+  googlesql::Value token_list = result.value();
   EXPECT_TRUE(token_list.type()->IsTokenList());
 
   auto get_tokens = StringsFromTokenList(token_list);
-  ZETASQL_EXPECT_OK(get_tokens.status());
+  GOOGLESQL_EXPECT_OK(get_tokens.status());
 
   // Always expect the tokenlist has at least one token
   // which stores tokenizer information.
@@ -242,11 +242,11 @@ using SubstringTokenizerNgramTest =
 TEST_P(SubstringTokenizerNgramTest, TestNgramValues) {
   const SubstringTokenizerNgramTestCase& test_case = GetParam();
 
-  std::vector<zetasql::Value> args;
-  args.push_back(zetasql::Value::String("test_ngram_values"));
-  args.push_back(zetasql::Value::Int64(test_case.ngram_size_max));
-  args.push_back(zetasql::Value::Int64(test_case.ngram_size_min));
-  args.push_back(zetasql::Value::Bool(false));
+  std::vector<googlesql::Value> args;
+  args.push_back(googlesql::Value::String("test_ngram_values"));
+  args.push_back(googlesql::Value::Int64(test_case.ngram_size_max));
+  args.push_back(googlesql::Value::Int64(test_case.ngram_size_min));
+  args.push_back(googlesql::Value::Bool(false));
 
   EXPECT_THAT(SubstringTokenizer::Tokenize(args),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -263,36 +263,36 @@ INSTANTIATE_TEST_SUITE_P(
     }));
 
 TEST(SubstringTokenizerTest, NullInputValue) {
-  absl::StatusOr<zetasql::Value> result =
-      SubstringTokenizer::Tokenize({zetasql::Value::NullString()});
-  ZETASQL_EXPECT_OK(result.status());
+  absl::StatusOr<googlesql::Value> result =
+      SubstringTokenizer::Tokenize({googlesql::Value::NullString()});
+  GOOGLESQL_EXPECT_OK(result.status());
 
-  zetasql::Value token_list = result.value();
+  googlesql::Value token_list = result.value();
   EXPECT_TRUE(token_list.type()->IsTokenList());
 
   // Always expect the tokenlist has at least one token
   // which stores tokenizer information.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
   ASSERT_EQ(tokens.size(), 1);
   EXPECT_EQ("substring-4-1-1-0", tokens[0]);
 }
 
 TEST(SubstringTokenizerTest, ConflictSupportRelativeSearchArgs) {
-  absl::StatusOr<zetasql::Value> result = SubstringTokenizer::Tokenize(
-      {zetasql::Value::String("test"), zetasql::Value::NullInt64(),
-       zetasql::Value::NullInt64(), zetasql::Value::Bool(true),
-       zetasql::Value::NullString(),
-       zetasql::values::StringArray({"all"})});
+  absl::StatusOr<googlesql::Value> result = SubstringTokenizer::Tokenize(
+      {googlesql::Value::String("test"), googlesql::Value::NullInt64(),
+       googlesql::Value::NullInt64(), googlesql::Value::Bool(true),
+       googlesql::Value::NullString(),
+       googlesql::values::StringArray({"all"})});
   EXPECT_THAT(result,
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("only one of 'support_relative_search' and "
                                  "'relative_search_types' can be specified.")));
 
   result = SubstringTokenizer::Tokenize(
-      {zetasql::Value::String("test"), zetasql::Value::NullInt64(),
-       zetasql::Value::NullInt64(), zetasql::Value::Bool(false),
-       zetasql::Value::NullString(),
-       zetasql::values::StringArray({"all"})});
+      {googlesql::Value::String("test"), googlesql::Value::NullInt64(),
+       googlesql::Value::NullInt64(), googlesql::Value::Bool(false),
+       googlesql::Value::NullString(),
+       googlesql::values::StringArray({"all"})});
   EXPECT_THAT(result,
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("only one of 'support_relative_search' and "
@@ -300,11 +300,11 @@ TEST(SubstringTokenizerTest, ConflictSupportRelativeSearchArgs) {
 }
 
 TEST(SubstringTokenizerTest, InvalidRelativeSearchTypes) {
-  absl::StatusOr<zetasql::Value> result = SubstringTokenizer::Tokenize(
-      {zetasql::Value::String("test"), zetasql::Value::NullInt64(),
-       zetasql::Value::NullInt64(), zetasql::Value::NullBool(),
-       zetasql::Value::NullString(),
-       zetasql::values::StringArray({"not_supported"})});
+  absl::StatusOr<googlesql::Value> result = SubstringTokenizer::Tokenize(
+      {googlesql::Value::String("test"), googlesql::Value::NullInt64(),
+       googlesql::Value::NullInt64(), googlesql::Value::NullBool(),
+       googlesql::Value::NullString(),
+       googlesql::values::StringArray({"not_supported"})});
   EXPECT_THAT(result, StatusIs(absl::StatusCode::kInvalidArgument,
                                HasSubstr("Invalid relative_search_type")));
 }

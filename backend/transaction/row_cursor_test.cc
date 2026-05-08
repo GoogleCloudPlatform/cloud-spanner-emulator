@@ -23,7 +23,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "backend/storage/in_memory_iterator.h"
 #include "tests/common/schema_constructor.h"
@@ -34,14 +34,14 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::Value;
-using zetasql::values::Int64;
-using zetasql::values::String;
+using googlesql::Value;
+using googlesql::values::Int64;
+using googlesql::values::String;
 
 class StorageIteratorRowCursorTest : public testing::Test {
  public:
   StorageIteratorRowCursorTest()
-      : type_factory_(std::make_unique<zetasql::TypeFactory>()),
+      : type_factory_(std::make_unique<googlesql::TypeFactory>()),
         schema_(test::CreateSchemaWithOneTable(type_factory_.get())) {
     std::vector<std::string> columns = {"int64_col", "string_col"};
     auto table = schema_->FindTable("test_table");
@@ -53,7 +53,7 @@ class StorageIteratorRowCursorTest : public testing::Test {
 
  protected:
   // The type factory must outlive the type objects that it has made.
-  std::unique_ptr<zetasql::TypeFactory> type_factory_;
+  std::unique_ptr<googlesql::TypeFactory> type_factory_;
   std::unique_ptr<const Schema> schema_;
   std::vector<std::unique_ptr<StorageIterator>> iterators_;
   std::vector<const Column*> columns_;
@@ -69,7 +69,7 @@ TEST_F(StorageIteratorRowCursorTest, CreateWithNoIterators) {
   EXPECT_TRUE(rowc.ColumnType(1)->IsString());
 
   EXPECT_FALSE(rowc.Next());
-  ZETASQL_EXPECT_OK(rowc.Status());
+  GOOGLESQL_EXPECT_OK(rowc.Status());
 }
 
 TEST_F(StorageIteratorRowCursorTest, CreateWithEmptyIterator) {
@@ -84,7 +84,7 @@ TEST_F(StorageIteratorRowCursorTest, CreateWithEmptyIterator) {
   EXPECT_TRUE(rowc.ColumnType(1)->IsString());
 
   EXPECT_FALSE(rowc.Next());
-  ZETASQL_EXPECT_OK(rowc.Status());
+  GOOGLESQL_EXPECT_OK(rowc.Status());
 }
 
 TEST_F(StorageIteratorRowCursorTest, CreateWithUnaryLengthIterator) {
@@ -106,12 +106,12 @@ TEST_F(StorageIteratorRowCursorTest, CreateWithUnaryLengthIterator) {
     EXPECT_EQ(String("test_string1"), rowc.ColumnValue(1));
   }
   EXPECT_FALSE(rowc.Next());
-  ZETASQL_EXPECT_OK(rowc.Status());
+  GOOGLESQL_EXPECT_OK(rowc.Status());
 }
 
 TEST_F(StorageIteratorRowCursorTest, ConvertsInvalidValuesToNulls) {
   std::vector<std::pair<Key, std::vector<Value>>> row_values = {
-      {Key({Int64(2)}), {Int64(20), zetasql::Value()}}};
+      {Key({Int64(2)}), {Int64(20), googlesql::Value()}}};
   iterators_.push_back(
       std::make_unique<FixedRowStorageIterator>(std::move(row_values)));
 
@@ -125,10 +125,10 @@ TEST_F(StorageIteratorRowCursorTest, ConvertsInvalidValuesToNulls) {
 
   while (rowc.Next()) {
     EXPECT_EQ(Int64(20), rowc.ColumnValue(0));
-    EXPECT_EQ(zetasql::values::NullString(), rowc.ColumnValue(1));
+    EXPECT_EQ(googlesql::values::NullString(), rowc.ColumnValue(1));
   }
   EXPECT_FALSE(rowc.Next());
-  ZETASQL_EXPECT_OK(rowc.Status());
+  GOOGLESQL_EXPECT_OK(rowc.Status());
 }
 
 TEST_F(StorageIteratorRowCursorTest, CreateWithEmptyAndNonEmptyIterators) {
@@ -151,7 +151,7 @@ TEST_F(StorageIteratorRowCursorTest, CreateWithEmptyAndNonEmptyIterators) {
     EXPECT_EQ(String("test_string1"), rowc.ColumnValue(1));
   }
   EXPECT_FALSE(rowc.Next());
-  ZETASQL_EXPECT_OK(rowc.Status());
+  GOOGLESQL_EXPECT_OK(rowc.Status());
 }
 
 TEST_F(StorageIteratorRowCursorTest, CreateWithMultiRowIterators) {
@@ -179,7 +179,7 @@ TEST_F(StorageIteratorRowCursorTest, CreateWithMultiRowIterators) {
   }
   EXPECT_EQ(3, row_count);
   EXPECT_FALSE(rowc.Next());
-  ZETASQL_EXPECT_OK(rowc.Status());
+  GOOGLESQL_EXPECT_OK(rowc.Status());
 }
 
 TEST_F(StorageIteratorRowCursorTest, CreateRowCursorMultipleMultiRowIterators) {
@@ -215,7 +215,7 @@ TEST_F(StorageIteratorRowCursorTest, CreateRowCursorMultipleMultiRowIterators) {
   }
   EXPECT_EQ(5, row_count);
   EXPECT_FALSE(rowc.Next());
-  ZETASQL_EXPECT_OK(rowc.Status());
+  GOOGLESQL_EXPECT_OK(rowc.Status());
 }
 
 }  // namespace

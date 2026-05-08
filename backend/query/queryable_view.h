@@ -22,9 +22,9 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/evaluator_table_iterator.h"
-#include "zetasql/public/simple_catalog.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/evaluator_table_iterator.h"
+#include "googlesql/public/simple_catalog.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "backend/access/read.h"
@@ -46,8 +46,8 @@ class QueryEvaluator {
       const std::string& query) = 0;
 };
 
-// A wrapper over View class which implements the zetasql::Table interface.
-class QueryableView : public zetasql::Table {
+// A wrapper over View class which implements the googlesql::Table interface.
+class QueryableView : public googlesql::Table {
  public:
   QueryableView(const backend::View* view,
                 QueryEvaluator* query_evaluator = nullptr);
@@ -61,11 +61,11 @@ class QueryableView : public zetasql::Table {
 
   int NumColumns() const override { return columns_.size(); }
 
-  const zetasql::Column* GetColumn(int i) const override {
+  const googlesql::Column* GetColumn(int i) const override {
     return columns_[i].get();
   }
 
-  const zetasql::Column* FindColumnByName(
+  const googlesql::Column* FindColumnByName(
       const std::string& name) const override;
 
   std::optional<std::vector<int>> PrimaryKey() const override {
@@ -75,7 +75,7 @@ class QueryableView : public zetasql::Table {
   const backend::View* wrapped_view() const { return wrapped_view_; }
 
   // Override CreateEvaluatorTableIterator.
-  absl::StatusOr<std::unique_ptr<zetasql::EvaluatorTableIterator>>
+  absl::StatusOr<std::unique_ptr<googlesql::EvaluatorTableIterator>>
   CreateEvaluatorTableIterator(
       absl::Span<const int> column_idxs) const override;
 
@@ -84,7 +84,7 @@ class QueryableView : public zetasql::Table {
   const backend::View* wrapped_view_;
 
   // The columns in the view.
-  std::vector<std::unique_ptr<const zetasql::SimpleColumn>> columns_;
+  std::vector<std::unique_ptr<const googlesql::SimpleColumn>> columns_;
 
   // Holds an object which is used to evaluate the view definition.
   QueryEvaluator* query_evaluator_;

@@ -19,8 +19,8 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/functions/string.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/functions/string.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
@@ -28,7 +28,7 @@
 #include "absl/types/span.h"
 #include "backend/query/search/tokenizer.h"
 #include "common/errors.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -58,8 +58,8 @@ absl::Status NgramsTokenizer::ValidateNgramSize(int ngram_size_min,
   return absl::OkStatus();
 }
 
-absl::StatusOr<zetasql::Value> NgramsTokenizer::Tokenize(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> NgramsTokenizer::Tokenize(
+    absl::Span<const googlesql::Value> args) {
   // argument indexes
   constexpr int kValue = 0;
   constexpr int kNgramMax = 1;
@@ -69,10 +69,10 @@ absl::StatusOr<zetasql::Value> NgramsTokenizer::Tokenize(
       GetIntParameterValue(args, kNgramMax, kDefaultNgramSizeMax);
   int ngram_size_min =
       GetIntParameterValue(args, kNgramMin, kDefaultNgramSizeMin);
-  ZETASQL_RETURN_IF_ERROR(ValidateNgramSize(ngram_size_min, ngram_size_max));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateNgramSize(ngram_size_min, ngram_size_max));
 
   std::vector<std::string> token_list;
-  const zetasql::Value& text = args[kValue];
+  const googlesql::Value& text = args[kValue];
   // Always add tokenize function signature as the first token. Also add value
   // to indicate if the source is null.
   // remove_diacritics argument is not currently respected so it is not embedded
@@ -84,23 +84,23 @@ absl::StatusOr<zetasql::Value> NgramsTokenizer::Tokenize(
 
   if (!text.is_null()) {
     auto tokenize_single_value =
-        [&](const zetasql::Value& value) -> absl::Status {
+        [&](const googlesql::Value& value) -> absl::Status {
       std::string lower_str;
       absl::Status status;
-      zetasql::functions::LowerUtf8(value.string_value(), &lower_str,
+      googlesql::functions::LowerUtf8(value.string_value(), &lower_str,
                                       &status);
-      ZETASQL_RETURN_IF_ERROR(status);
+      GOOGLESQL_RETURN_IF_ERROR(status);
       return TokenizeNgrams(lower_str, ngram_size_min, ngram_size_max,
                             token_list);
     };
 
     if (text.type()->IsArray()) {
       for (auto& value : text.elements()) {
-        ZETASQL_RETURN_IF_ERROR(tokenize_single_value(value));
+        GOOGLESQL_RETURN_IF_ERROR(tokenize_single_value(value));
         token_list.push_back(kGapString);
       }
     } else {
-      ZETASQL_RETURN_IF_ERROR(tokenize_single_value(text));
+      GOOGLESQL_RETURN_IF_ERROR(tokenize_single_value(text));
     }
   }
 

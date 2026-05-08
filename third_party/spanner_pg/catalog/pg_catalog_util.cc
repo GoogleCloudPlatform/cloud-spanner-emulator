@@ -33,7 +33,7 @@
 
 #include <string>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"

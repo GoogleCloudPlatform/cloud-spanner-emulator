@@ -21,8 +21,8 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/node_hash_map.h"
@@ -53,7 +53,7 @@ class ActionRegistry {
  public:
   explicit ActionRegistry(const Schema* schema,
                           const FunctionCatalog* function_catalog,
-                          zetasql::TypeFactory* type_factory);
+                          googlesql::TypeFactory* type_factory);
 
   // Executes the list of validators that apply to the given operation.
   absl::Status ExecuteValidators(const ActionContext* ctx, const WriteOp& op);
@@ -64,7 +64,7 @@ class ActionRegistry {
   // Executes the evaluated key effector that applies to the given mutation op.
   absl::Status ExecuteEvaluatedKeyEffectors(
       const MutationOp& op,
-      std::vector<std::vector<zetasql::Value>>* evaluated_values,
+      std::vector<std::vector<googlesql::Value>>* evaluated_values,
       std::vector<const Column*>* columns_with_evaluated_values);
 
   // Executes the list of modifiers that apply to the given operation.
@@ -112,7 +112,7 @@ class ActionManager {
   // Builds the registry of actions for given schema and function_catalog.
   void AddActionsForSchema(const Schema* schema,
                            const FunctionCatalog* function_catalog,
-                           zetasql::TypeFactory* type_factory);
+                           googlesql::TypeFactory* type_factory);
 
   // Returns the action registry for given schema.
   absl::StatusOr<ActionRegistry*> GetActionsForSchema(

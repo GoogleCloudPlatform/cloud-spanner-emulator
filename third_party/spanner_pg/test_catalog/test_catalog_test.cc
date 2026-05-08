@@ -31,10 +31,10 @@
 
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
 
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/catalog.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/test_catalog/emulator_catalog.h"
@@ -44,85 +44,85 @@ namespace postgres_translator::spangres::test {
 namespace {
 
 TEST(TestCatalogTest, BasicContents) {
-  zetasql::EnumerableCatalog* test_catalog =
+  googlesql::EnumerableCatalog* test_catalog =
       GetSpangresTestSpannerUserCatalog();
   ASSERT_NE(test_catalog, nullptr);
 
   // Check that we have some tables.
-  absl::flat_hash_set<const zetasql::Table*> output{};
-  ZETASQL_EXPECT_OK(test_catalog->GetTables(&output));
+  absl::flat_hash_set<const googlesql::Table*> output{};
+  GOOGLESQL_EXPECT_OK(test_catalog->GetTables(&output));
   EXPECT_THAT(output,
-              Contains(testing::Property(&zetasql::Table::Name, "keyvalue")));
-  EXPECT_THAT(output, Contains(testing::Property(&zetasql::Table::Name,
+              Contains(testing::Property(&googlesql::Table::Name, "keyvalue")));
+  EXPECT_THAT(output, Contains(testing::Property(&googlesql::Table::Name,
                                                  "AllSpangresTypes")));
 }
 
 // Test that the catalog tables have columns as we expect.
 TEST(TestCatalogTest, TableColumns) {
-  zetasql::EnumerableCatalog* test_catalog =
+  googlesql::EnumerableCatalog* test_catalog =
       GetSpangresTestSpannerUserCatalog();
   ASSERT_NE(test_catalog, nullptr);
 
-  const zetasql::Table* kv_table;
-  ZETASQL_ASSERT_OK(test_catalog->FindTable({"keyvalue"}, &kv_table));
+  const googlesql::Table* kv_table;
+  GOOGLESQL_ASSERT_OK(test_catalog->FindTable({"keyvalue"}, &kv_table));
   ASSERT_NE(kv_table, nullptr);
   int kv_num_columns = 2;
   EXPECT_EQ(kv_table->NumColumns(), kv_num_columns);
-  const zetasql::Column* key_column = kv_table->FindColumnByName("key");
+  const googlesql::Column* key_column = kv_table->FindColumnByName("key");
   ASSERT_NE(key_column, nullptr);
   EXPECT_TRUE(key_column->GetType()->IsInt64());
   EXPECT_EQ(kv_table->GetColumn(0), key_column);
-  const zetasql::Column* value_column = kv_table->FindColumnByName("value");
+  const googlesql::Column* value_column = kv_table->FindColumnByName("value");
   ASSERT_NE(value_column, nullptr);
   EXPECT_TRUE(value_column->GetType()->IsString());
   EXPECT_EQ(kv_table->GetColumn(1), value_column);
 
-  const zetasql::Table* spangres_table;
-  ZETASQL_ASSERT_OK(test_catalog->FindTable({"AllSpangresTypes"}, &spangres_table));
+  const googlesql::Table* spangres_table;
+  GOOGLESQL_ASSERT_OK(test_catalog->FindTable({"AllSpangresTypes"}, &spangres_table));
   ASSERT_NE(spangres_table, nullptr);
   int all_types_num_columns = 12;
   EXPECT_EQ(spangres_table->NumColumns(), all_types_num_columns);
-  const zetasql::Column* int64_column =
+  const googlesql::Column* int64_column =
       spangres_table->FindColumnByName("int64_value");
   ASSERT_NE(int64_column, nullptr);
   EXPECT_TRUE(int64_column->GetType()->IsInt64());
-  const zetasql::Column* bool_column =
+  const googlesql::Column* bool_column =
       spangres_table->FindColumnByName("bool_value");
   ASSERT_NE(bool_column, nullptr);
   EXPECT_TRUE(bool_column->GetType()->IsBool());
-  const zetasql::Column* double_column =
+  const googlesql::Column* double_column =
       spangres_table->FindColumnByName("double_value");
   ASSERT_NE(double_column, nullptr);
   EXPECT_TRUE(double_column->GetType()->IsDouble());
-  const zetasql::Column* string_column =
+  const googlesql::Column* string_column =
       spangres_table->FindColumnByName("string_value");
   ASSERT_NE(string_column, nullptr);
   EXPECT_TRUE(string_column->GetType()->IsString());
-  const zetasql::Column* bytes_column =
+  const googlesql::Column* bytes_column =
       spangres_table->FindColumnByName("bytes_value");
   ASSERT_NE(bytes_column, nullptr);
   EXPECT_TRUE(bytes_column->GetType()->IsBytes());
-  const zetasql::Column* timestamp_column =
+  const googlesql::Column* timestamp_column =
       spangres_table->FindColumnByName("timestamp_value");
   ASSERT_NE(timestamp_column, nullptr);
   EXPECT_TRUE(timestamp_column->GetType()->IsTimestamp());
-  const zetasql::Column* date_column =
+  const googlesql::Column* date_column =
       spangres_table->FindColumnByName("date_value");
   ASSERT_NE(date_column, nullptr);
   EXPECT_TRUE(date_column->GetType()->IsDate());
-  const zetasql::Column* numeric_column =
+  const googlesql::Column* numeric_column =
       spangres_table->FindColumnByName("numeric_value");
   ASSERT_NE(numeric_column, nullptr);
   EXPECT_TRUE(numeric_column->GetType()->IsExtendedType());
-  const zetasql::Column* jsonb_column =
+  const googlesql::Column* jsonb_column =
       spangres_table->FindColumnByName("jsonb_value");
   ASSERT_NE(jsonb_column, nullptr);
   EXPECT_TRUE(numeric_column->GetType()->IsExtendedType());
-  const zetasql::Column* float_column =
+  const googlesql::Column* float_column =
       spangres_table->FindColumnByName("float_value");
   ASSERT_NE(float_column, nullptr);
   EXPECT_TRUE(float_column->GetType()->IsFloat());
-  const zetasql::Column* uuid_column =
+  const googlesql::Column* uuid_column =
       spangres_table->FindColumnByName("uuid_value");
   ASSERT_NE(uuid_column, nullptr);
   EXPECT_TRUE(uuid_column->GetType()->IsUuid());
@@ -131,47 +131,47 @@ TEST(TestCatalogTest, TableColumns) {
 // Basic test of ArrayTypes table--verify it exists and has a couple of the
 // expected columns.
 TEST(TestCatalogTest, Arrays) {
-  zetasql::EnumerableCatalog* test_catalog =
+  googlesql::EnumerableCatalog* test_catalog =
       GetSpangresTestSpannerUserCatalog();
   ASSERT_NE(test_catalog, nullptr);
 
-  const zetasql::Table* array_table;
-  ZETASQL_ASSERT_OK(test_catalog->FindTable({"ArrayTypes"}, &array_table));
-  const zetasql::Column* int_array_column =
+  const googlesql::Table* array_table;
+  GOOGLESQL_ASSERT_OK(test_catalog->FindTable({"ArrayTypes"}, &array_table));
+  const googlesql::Column* int_array_column =
       array_table->FindColumnByName("int_array");
-  const zetasql::Type* int_array_type = int_array_column->GetType();
+  const googlesql::Type* int_array_type = int_array_column->GetType();
   EXPECT_TRUE(int_array_type->IsArray());
   EXPECT_TRUE(int_array_type->AsArray()->element_type()->IsInt64());
-  const zetasql::Column* string_array_column =
+  const googlesql::Column* string_array_column =
       array_table->FindColumnByName("string_array");
-  const zetasql::Type* string_array_type = string_array_column->GetType();
+  const googlesql::Type* string_array_type = string_array_column->GetType();
   EXPECT_TRUE(string_array_type->IsArray());
   EXPECT_TRUE(string_array_type->AsArray()->element_type()->IsString());
 }
 
 // Test that the catalog has UDFs as we expect.
   TEST(TestCatalogTest, Udfs) {
-  zetasql::EnumerableCatalog* test_catalog =
+  googlesql::EnumerableCatalog* test_catalog =
       GetSpangresTestSpannerUserCatalog();
   ASSERT_NE(test_catalog, nullptr);
 
-  absl::flat_hash_set<const zetasql::Function*> output{};
-  ZETASQL_EXPECT_OK(test_catalog->GetFunctions(&output));
+  absl::flat_hash_set<const googlesql::Function*> output{};
+  GOOGLESQL_EXPECT_OK(test_catalog->GetFunctions(&output));
   // Confirm that `simple_udf` is in the catalog.
-  EXPECT_THAT(output, Contains(testing::Property(&zetasql::Function::Name,
+  EXPECT_THAT(output, Contains(testing::Property(&googlesql::Function::Name,
                                                  "foo_udf")));
 
-  const zetasql::Function* udf;
-  ZETASQL_EXPECT_OK(test_catalog->FindFunction({"foo_udf"}, &udf));
+  const googlesql::Function* udf;
+  GOOGLESQL_EXPECT_OK(test_catalog->FindFunction({"foo_udf"}, &udf));
   EXPECT_NE(udf, nullptr);
 }
 
 // Lookup a table that doesn't exist, ensuring we get null and don't crash.
 TEST(TestCatalogTest, FailedLookup) {
-  zetasql::EnumerableCatalog* test_catalog =
+  googlesql::EnumerableCatalog* test_catalog =
       GetSpangresTestSpannerUserCatalog();
   ASSERT_NE(test_catalog, nullptr);
-  const zetasql::Table* no_table;
+  const googlesql::Table* no_table;
   ASSERT_EQ(test_catalog->FindTable({"no_such_table"}, &no_table).code(),
             absl::StatusCode::kNotFound);
   EXPECT_EQ(no_table, nullptr);

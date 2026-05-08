@@ -36,14 +36,14 @@
 namespace postgres_translator::spangres {
 namespace datatypes {
 
-const zetasql::Function* GetGenericConversionFunction() {
-  static const zetasql::Function* kGenericConv = new zetasql::Function(
-      "generic_conv", "spanner", zetasql::Function::SCALAR,
+const googlesql::Function* GetGenericConversionFunction() {
+  static const googlesql::Function* kGenericConv = new googlesql::Function(
+      "generic_conv", "spanner", googlesql::Function::SCALAR,
       /*function_signatures=*/{},
-      zetasql::FunctionOptions().set_evaluator(
-          [](const absl::Span<const zetasql::Value> args) {
-            ZETASQL_RET_CHECK_GT(args.size(), 0);
-            ZETASQL_RET_CHECK_FAIL() << "ZetaSQL generic conversion function should "
+      googlesql::FunctionOptions().set_evaluator(
+          [](const absl::Span<const googlesql::Value> args) {
+            GOOGLESQL_RET_CHECK_GT(args.size(), 0);
+            GOOGLESQL_RET_CHECK_FAIL() << "GoogleSQL generic conversion function should "
                                 "never be used. "
                                 "Input arg: "
                              << args.front();

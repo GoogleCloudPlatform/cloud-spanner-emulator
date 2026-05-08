@@ -22,10 +22,10 @@
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/random/random.h"
 #include "absl/time/time.h"
@@ -45,7 +45,7 @@ namespace {
 
 using ::google::spanner::v1::PartialResultSet;
 using ::google::spanner::v1::ResultSet;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 TEST(ChunkingTest, CopiesMetadataFromResultSet) {
   const size_t kChunkSize = 100;
@@ -72,7 +72,7 @@ TEST(ChunkingTest, CopiesMetadataFromResultSet) {
         }
       }
     )");
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
                          ChunkResultSet(result, kChunkSize));
 
     std::string expected_results = R"(
@@ -126,7 +126,7 @@ TEST(ChunkingTest, ChunkString) {
   ResultSet result = PARSE_TEXT_PROTO(R"(
     rows { values { string_value: "abcdefghijklmnopqrstuvwxyz" } }
   )");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
                        ChunkResultSet(result, kChunkSize));
 
   std::vector<std::string> expected_results(2);
@@ -165,7 +165,7 @@ TEST(ChunkingTest, ChunkNestedLists) {
       }
     }
   )");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
                        ChunkResultSet(result, kChunkSize));
 
   std::vector<std::string> expected_results(3);
@@ -236,7 +236,7 @@ TEST(ChunkingTest, ChunkStringLists) {
       }
     }
   )");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
                        ChunkResultSet(result, kChunkSize));
 
   std::vector<std::string> expected_results(2);
@@ -280,7 +280,7 @@ TEST(ChunkingTest, ChunkStringListsAtStringBoundary) {
       }
     }
   )");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
                        ChunkResultSet(result, kChunkSize));
 
   std::vector<std::string> expected_results(2);
@@ -329,7 +329,7 @@ TEST(ChunkingTest, ChunkStringListsAtListBoundary) {
       }
     }
   )");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
                        ChunkResultSet(result, kChunkSize));
 
   std::vector<std::string> expected_results(2);
@@ -374,7 +374,7 @@ TEST(ChunkingTest, ChunkStringListsAtNestedListBoundary) {
       }
     }
   )");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
                        ChunkResultSet(result, kChunkSize));
 
   std::vector<std::string> expected_results(2);
@@ -425,7 +425,7 @@ TEST(ChunkingTest, ChunkEmptyLists) {
       }
     }
   )");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
                        ChunkResultSet(result, kChunkSize));
 
   std::vector<std::string> expected_results(2);
@@ -504,7 +504,7 @@ TEST(ChunkingTest, ChunkNumberLists) {
       }
     }
   )");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
                        ChunkResultSet(result, kChunkSize));
 
   std::vector<std::string> expected_results(2);
@@ -551,7 +551,7 @@ TEST(ChunkingTest, ChunkUTFCharacters) {
       metadata {}
       rows { values { string_value: "\x00\x00\x00\x00\xC3\x88" } }
     )");
-    ZETASQL_ASSERT_OK_AND_ASSIGN(results, ChunkResultSet(result, kChunkSize));
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, ChunkResultSet(result, kChunkSize));
 
     expected_results[0] = R"(
       metadata {}
@@ -573,7 +573,7 @@ TEST(ChunkingTest, ChunkUTFCharacters) {
       metadata {}
       rows { values { string_value: "\x00\x00\x00\xE0\xB0\x81" } }
     )");
-    ZETASQL_ASSERT_OK_AND_ASSIGN(results, ChunkResultSet(result, kChunkSize));
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, ChunkResultSet(result, kChunkSize));
 
     expected_results[0] = R"(
       metadata {}
@@ -595,7 +595,7 @@ TEST(ChunkingTest, ChunkUTFCharacters) {
       metadata {}
       rows { values { string_value: "\x00\x00\xF7\x81\x83\x87" } }
     )");
-    ZETASQL_ASSERT_OK_AND_ASSIGN(results, ChunkResultSet(result, kChunkSize));
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, ChunkResultSet(result, kChunkSize));
 
     expected_results[0] = R"(
       metadata {}
@@ -619,7 +619,7 @@ TEST(ChunkingTest, ChunkUTFCharacters) {
       metadata {}
       rows { values { string_value: "\x61\x62\x63\x64\x65\x66\x67" } }
     )");
-    ZETASQL_ASSERT_OK_AND_ASSIGN(results, ChunkResultSet(result, kChunkSize));
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, ChunkResultSet(result, kChunkSize));
 
     expected_results[0] = R"(
       metadata {}
@@ -642,7 +642,7 @@ TEST(ChunkingTest, ChunkEmptyString) {
     metadata {}
     rows { values { string_value: "" } }
   )");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
                        ChunkResultSet(result, kChunkSize));
 
   std::vector<std::string> expected_results(1);
@@ -664,7 +664,7 @@ TEST(ChunkingTest, CheckSizeLimit) {
   for (int i = 0; i < 600000; ++i) {
     row->add_values()->set_bool_value(true);
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
                        ChunkResultSet(result, kChunkSize));
 
   // Check that the total size is within a factor of 2 of the streaming chunk
@@ -695,16 +695,16 @@ TEST(ChunkingTest, RandomChunking) {
                                                kNumColumnsMin, kNumColumnsMax);
 
     // Generate random result set.
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         ResultSet result,
         backend::test::GenerateRandomResultSet(&gen, kNumColumns));
 
     // Chunk result.
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<PartialResultSet> results,
                          ChunkResultSet(result, kChunkSize));
 
     // Merge resulting chunks and check that it is equal to the original result.
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         ResultSet merged_result,
         backend::test::MergePartialResultSets(results, kNumColumns));
     EXPECT_THAT(merged_result, test::EqualsProto(result));

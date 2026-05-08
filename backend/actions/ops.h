@@ -21,7 +21,7 @@
 #include <variant>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "backend/common/rows.h"
 #include "backend/common/variant.h"
 #include "backend/datamodel/key.h"
@@ -44,7 +44,7 @@ struct InsertOp {
 
   // The columns & values for this row.
   std::vector<const Column*> columns;
-  std::vector<zetasql::Value> values;
+  std::vector<googlesql::Value> values;
 
   // Whether the mutation was built from a DML statement or not.
   bool origin_is_dml = false;
@@ -60,7 +60,7 @@ struct UpdateOp {
 
   // The columns & values for this row.
   std::vector<const Column*> columns;
-  std::vector<zetasql::Value> values;
+  std::vector<googlesql::Value> values;
 
   // Whether the mutation was built from a DML statement or not.
   bool origin_is_dml = false;

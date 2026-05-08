@@ -34,12 +34,12 @@
 #include <memory>
 #include <utility>
 
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/catalog.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 
@@ -60,11 +60,11 @@ absl::StatusOr<std::unique_ptr<CatalogAdapterHolder>>
 CatalogAdapterHolder::Create(
     std::unique_ptr<EngineUserCatalog> engine_user_catalog,
     EngineSystemCatalog* engine_system_catalog,
-    const zetasql::AnalyzerOptions& analyzer_options,
+    const googlesql::AnalyzerOptions& analyzer_options,
     absl::flat_hash_map<int, int> token_locations) {
   if (engine_user_catalog == nullptr) {
     return absl::InternalError(
-        "The catalog adapter holder needs to be created with a valid ZetaSQL "
+        "The catalog adapter holder needs to be created with a valid GoogleSQL "
         "catalog instance");
   }
 
@@ -81,7 +81,7 @@ CatalogAdapterHolder::Create(
     return absl::InternalError(
         "The thread-local catalog adapter is already initialized");
   }
-  ZETASQL_ASSIGN_OR_RETURN(auto adapter,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto adapter,
                    CatalogAdapter::Create(
                        std::move(engine_user_catalog), engine_system_catalog,
                        analyzer_options, std::move(token_locations)));

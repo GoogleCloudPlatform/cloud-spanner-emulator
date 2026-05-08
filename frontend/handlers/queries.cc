@@ -26,7 +26,7 @@
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
-#include "zetasql/public/analyzer_options.h"
+#include "googlesql/public/analyzer_options.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
@@ -52,7 +52,7 @@
 #include "frontend/server/request_context.h"
 #include "farmhash.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -157,11 +157,11 @@ void AddEmptyQueryPlan(v1::ResultSetStats* stats) {
 }
 
 absl::Status AddUndeclaredParametersFromQueryResult(
-    zetasql::QueryParametersMap* cursor, v1::ResultSetMetadata* metadata_pb) {
+    googlesql::QueryParametersMap* cursor, v1::ResultSetMetadata* metadata_pb) {
   for (auto const& param : *cursor) {
     auto* field_pb = metadata_pb->mutable_undeclared_parameters()->add_fields();
     field_pb->set_name(param.first);
-    ZETASQL_RETURN_IF_ERROR(TypeToProto(param.second, field_pb->mutable_type()))
+    GOOGLESQL_RETURN_IF_ERROR(TypeToProto(param.second, field_pb->mutable_type()))
         << " when converting param " << param.first << " of type "
         << param.second << " in row cursor";
   }
@@ -171,7 +171,7 @@ absl::Status AddUndeclaredParametersFromQueryResult(
 absl::StatusOr<backend::QueryResult> ExecuteQuery(
     const spanner_api::ExecuteBatchDmlRequest_Statement& statement,
     std::shared_ptr<Transaction> txn) {
-  ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
+  GOOGLESQL_ASSIGN_OR_RETURN(const backend::Query query,
                    QueryFromProto(statement.sql(), statement.params(),
                                   statement.param_types(),
                                   txn->query_engine()->type_factory(),
@@ -221,16 +221,16 @@ absl::Status ExecuteSql(RequestContext* ctx,
                         spanner_api::ResultSet* response) {
   // Take shared ownerships of session and transaction so that they will keep
   // valid throughout this function.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    GetSession(ctx, request->session()));
 
   // Get underlying transaction.
   bool is_dml_query = backend::IsDMLQuery(request->sql());
-  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(request->transaction(),
+  GOOGLESQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(request->transaction(),
                                                       is_dml_query));
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateDirectedReadsOption(request->directed_read_options(), txn));
 
   // Wrap all operations on this transaction so they are atomic.
@@ -257,7 +257,7 @@ absl::Status ExecuteSql(RequestContext* ctx,
           // DML needs to explicitly check the transaction status since
           // the DML sequence number replay should take priority over returning
           // a previously encountered error status.
-          ZETASQL_RETURN_IF_ERROR(txn->Status());
+          GOOGLESQL_RETURN_IF_ERROR(txn->Status());
         }
 
         // Cannot query after commit, rollback, or non-recoverable error.
@@ -274,13 +274,13 @@ absl::Status ExecuteSql(RequestContext* ctx,
           if (is_dml_query) {
             return error::ReadOnlyTransactionDoesNotSupportDml("ReadOnly");
           }
-          ZETASQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, txn->GetReadTimestamp());
-          ZETASQL_RETURN_IF_ERROR(ValidateReadTimestampNotTooFarInFuture(
+          GOOGLESQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, txn->GetReadTimestamp());
+          GOOGLESQL_RETURN_IF_ERROR(ValidateReadTimestampNotTooFarInFuture(
               read_timestamp, ctx->env()->clock()->Now()));
         }
 
         // Convert and execute provided SQL statement.
-        ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
+        GOOGLESQL_ASSIGN_OR_RETURN(const backend::Query query,
                          QueryFromProto(request->sql(), request->params(),
                                         request->param_types(),
                                         txn->query_engine()->type_factory(),
@@ -305,7 +305,7 @@ absl::Status ExecuteSql(RequestContext* ctx,
 
         // Populate transaction metadata.
         if (ShouldReturnTransaction(request->transaction())) {
-          ZETASQL_ASSIGN_OR_RETURN(*response->mutable_metadata()->mutable_transaction(),
+          GOOGLESQL_ASSIGN_OR_RETURN(*response->mutable_metadata()->mutable_transaction(),
                            txn->ToProto());
         }
 
@@ -315,7 +315,7 @@ absl::Status ExecuteSql(RequestContext* ctx,
         }
 
         // Return query parameter types.
-        ZETASQL_RETURN_IF_ERROR(AddUndeclaredParametersFromQueryResult(
+        GOOGLESQL_RETURN_IF_ERROR(AddUndeclaredParametersFromQueryResult(
             &result.parameter_types, response->mutable_metadata()));
 
         if (is_dml_query) {
@@ -332,19 +332,19 @@ absl::Status ExecuteSql(RequestContext* ctx,
             response->mutable_metadata()->mutable_row_type();
           } else {
             // It contains DML THEN RETURN row results.
-            ZETASQL_RETURN_IF_ERROR(RowCursorToResultSetProto(result.rows.get(),
+            GOOGLESQL_RETURN_IF_ERROR(RowCursorToResultSetProto(result.rows.get(),
                                                       /*limit=*/0, response));
           }
         } else {
-          ZETASQL_RETURN_IF_ERROR(RowCursorToResultSetProto(result.rows.get(),
+          GOOGLESQL_RETURN_IF_ERROR(RowCursorToResultSetProto(result.rows.get(),
                                                     /*limit=*/0, response));
         }
 
         if (!request->partition_token().empty()) {
-          ZETASQL_ASSIGN_OR_RETURN(
+          GOOGLESQL_ASSIGN_OR_RETURN(
               auto partition_token,
               PartitionTokenFromString(request->partition_token()));
-          ZETASQL_RETURN_IF_ERROR(ValidatePartitionToken(partition_token, request));
+          GOOGLESQL_RETURN_IF_ERROR(ValidatePartitionToken(partition_token, request));
           if (partition_token.empty_query_partition()) {
             response->clear_rows();
           }
@@ -382,7 +382,7 @@ absl::Status ExecuteStreamingSql(
     ServerStream<spanner_api::PartialResultSet>* stream) {
   // Take shared ownerships of session and transaction so that they will keep
   // valid throughout this function.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    GetSession(ctx, request->session()));
 
   backend::ChangeStreamQueryValidator::ChangeStreamMetadata
@@ -391,11 +391,11 @@ absl::Status ExecuteStreamingSql(
   // Get underlying transaction.
   bool is_dml_query = backend::IsDMLQuery(request->sql());
 
-  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(request->transaction(),
+  GOOGLESQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(request->transaction(),
                                                       is_dml_query));
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateDirectedReadsOption(request->directed_read_options(), txn));
 
   // Wrap all operations on this transaction so they are atomic.
@@ -430,7 +430,7 @@ absl::Status ExecuteStreamingSql(
           // DML needs to explicitly check the transaction status since
           // the DML sequence number replay should take priority over returning
           // a previously encountered error status.
-          ZETASQL_RETURN_IF_ERROR(txn->Status());
+          GOOGLESQL_RETURN_IF_ERROR(txn->Status());
         }
 
         // Cannot query after commit, rollback, or non-recoverable error.
@@ -447,18 +447,18 @@ absl::Status ExecuteStreamingSql(
           if (is_dml_query) {
             return error::ReadOnlyTransactionDoesNotSupportDml("ReadOnly");
           }
-          ZETASQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, txn->GetReadTimestamp());
-          ZETASQL_RETURN_IF_ERROR(ValidateReadTimestampNotTooFarInFuture(
+          GOOGLESQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, txn->GetReadTimestamp());
+          GOOGLESQL_RETURN_IF_ERROR(ValidateReadTimestampNotTooFarInFuture(
               read_timestamp, ctx->env()->clock()->Now()));
         }
         // Convert and execute provided SQL statement.
-        ZETASQL_ASSIGN_OR_RETURN(const backend::Query query,
+        GOOGLESQL_ASSIGN_OR_RETURN(const backend::Query query,
                          QueryFromProto(request->sql(), request->params(),
                                         request->param_types(),
                                         txn->query_engine()->type_factory(),
                                         txn->schema()->proto_bundle()));
         bool in_read_write_txn = txn->IsReadWrite() || txn->IsPartitionedDml();
-        ZETASQL_ASSIGN_OR_RETURN(change_stream_metadata,
+        GOOGLESQL_ASSIGN_OR_RETURN(change_stream_metadata,
                          backend::QueryEngine::TryGetChangeStreamMetadata(
                              query, txn->schema(), in_read_write_txn));
         // if current query is a change stream query, return and exit current
@@ -492,7 +492,7 @@ absl::Status ExecuteStreamingSql(
             responses.back().mutable_metadata()->mutable_row_type();
           } else {
             // It contains DML THEN RETURN row results.
-            ZETASQL_ASSIGN_OR_RETURN(responses, RowCursorToPartialResultSetProtos(
+            GOOGLESQL_ASSIGN_OR_RETURN(responses, RowCursorToPartialResultSetProtos(
                                             result.rows.get(), /*limit=*/0));
           }
           if (txn->IsPartitionedDml()) {
@@ -503,7 +503,7 @@ absl::Status ExecuteStreamingSql(
                 result.modified_row_count);
           }
         } else {
-          ZETASQL_ASSIGN_OR_RETURN(responses, RowCursorToPartialResultSetProtos(
+          GOOGLESQL_ASSIGN_OR_RETURN(responses, RowCursorToPartialResultSetProtos(
                                           result.rows.get(), /*limit=*/0));
         }
         if (session->multiplexed() && txn->IsReadWrite()) {
@@ -513,10 +513,10 @@ absl::Status ExecuteStreamingSql(
         }
 
         if (!request->partition_token().empty()) {
-          ZETASQL_ASSIGN_OR_RETURN(
+          GOOGLESQL_ASSIGN_OR_RETURN(
               auto partition_token,
               PartitionTokenFromString(request->partition_token()));
-          ZETASQL_RETURN_IF_ERROR(ValidatePartitionToken(partition_token, request));
+          GOOGLESQL_RETURN_IF_ERROR(ValidatePartitionToken(partition_token, request));
           if (partition_token.empty_query_partition()) {
             // Clear all partial responses except the first one. Return only
             // metadata in the first partial response.
@@ -528,12 +528,12 @@ absl::Status ExecuteStreamingSql(
 
         // Populate transaction metadata.
         if (ShouldReturnTransaction(request->transaction())) {
-          ZETASQL_ASSIGN_OR_RETURN(
+          GOOGLESQL_ASSIGN_OR_RETURN(
               *responses.front().mutable_metadata()->mutable_transaction(),
               txn->ToProto());
         }
         // Return query parameter types.
-        ZETASQL_RETURN_IF_ERROR(AddUndeclaredParametersFromQueryResult(
+        GOOGLESQL_RETURN_IF_ERROR(AddUndeclaredParametersFromQueryResult(
             &result.parameter_types, responses.front().mutable_metadata()));
 
         // Add basic stats for PROFILE mode. We do this to interoperate with
@@ -577,13 +577,13 @@ absl::Status ExecuteBatchDml(RequestContext* ctx,
 
   // Take shared ownerships of session and transaction so that they will keep
   // valid throughout this function.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    GetSession(ctx, request->session()));
 
   // Get underlying transaction.
-  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(request->transaction(),
+  GOOGLESQL_RETURN_IF_ERROR(ValidateTransactionSelectorForQuery(request->transaction(),
                                                       /*is_dml=*/true));
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
 
   if (txn->IsPartitionedDml()) {
@@ -619,7 +619,7 @@ absl::Status ExecuteBatchDml(RequestContext* ctx,
     // DML needs to explicitly check the transaction status since
     // the DML sequence number replay should take priority over returning
     // a previously encountered error status.
-    ZETASQL_RETURN_IF_ERROR(txn->Status());
+    GOOGLESQL_RETURN_IF_ERROR(txn->Status());
 
     // Cannot query after commit, rollback, or non-recoverable error.
     if (txn->IsInvalid()) {
@@ -667,7 +667,7 @@ absl::Status ExecuteBatchDml(RequestContext* ctx,
       if (index == 0) {
         result_set->mutable_metadata()->mutable_row_type();
         if (ShouldReturnTransaction(request->transaction())) {
-          ZETASQL_ASSIGN_OR_RETURN(
+          GOOGLESQL_ASSIGN_OR_RETURN(
               *result_set->mutable_metadata()->mutable_transaction(),
               txn->ToProto());
         }

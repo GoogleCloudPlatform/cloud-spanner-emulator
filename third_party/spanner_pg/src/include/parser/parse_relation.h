@@ -52,7 +52,7 @@ extern Relation parserOpenTable(ParseState *pstate, const RangeVar *relation,
 								int lockmode);
 // SPANGRES BEGIN
 // Performs a lookup in googlesql's Catalog and translates a looked-up
-// zetasql::Table into an RTE.
+// googlesql::Table into an RTE.
 ParseNamespaceItem* addRangeTableEntry(struct ParseState* pstate,
                                        RangeVar* relation, Alias* alias,
                                        bool inh, bool inFromCl);

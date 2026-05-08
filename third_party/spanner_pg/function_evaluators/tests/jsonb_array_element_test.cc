@@ -29,10 +29,10 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
@@ -43,19 +43,19 @@ namespace postgres_translator::function_evaluators {
 namespace {
 
 using spangres::datatypes::CreatePgJsonbValue;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
-static zetasql::Value CreatePgJsonbNullValue() {
-  static const zetasql::Type* gsql_pg_jsonb =
+static googlesql::Value CreatePgJsonbNullValue() {
+  static const googlesql::Type* gsql_pg_jsonb =
       spangres::datatypes::GetPgJsonbType();
-  return zetasql::values::Null(gsql_pg_jsonb);
+  return googlesql::values::Null(gsql_pg_jsonb);
 }
 
 class JsonbArrayElementTest : public PgEvaluatorTest {};
 
 TEST_F(JsonbArrayElementTest, ReturnsJsonbValue) {
-  static const zetasql::Value null_jsonb = zetasql::values::Null(
+  static const googlesql::Value null_jsonb = googlesql::values::Null(
       spangres::types::PgJsonbArrayMapping()->mapped_type());
   EXPECT_THAT(JsonbArrayElement(R"([null, "string val"])", 0),
               IsOkAndHolds(*CreatePgJsonbValue("null")));

@@ -31,10 +31,10 @@
 
 #include "third_party/spanner_pg/catalog/spangres_function_verifier.h"
 
-#include "zetasql/public/function.pb.h"
+#include "googlesql/public/function.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "google/protobuf/text_format.h"
 
@@ -42,8 +42,8 @@ namespace postgres_translator {
 namespace {
 
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::IsOk;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOk;
+using ::googlesql_base::testing::StatusIs;
 
 TEST(SpangresFunctionVerifierTest, ReturnsErrorWhenFunctionHasNoSignatures) {
 

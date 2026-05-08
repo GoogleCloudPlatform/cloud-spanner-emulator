@@ -20,7 +20,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -34,7 +34,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class OperationsTest
     : public DatabaseTest,
@@ -66,11 +66,11 @@ class OperationsTest
       *request.mutable_operation_id() = operation_id;
     }
     operations_api::Operation operation;
-    ZETASQL_RETURN_IF_ERROR(raw_database_client()->UpdateDatabaseDdl(&context, request,
+    GOOGLESQL_RETURN_IF_ERROR(raw_database_client()->UpdateDatabaseDdl(&context, request,
                                                              &operation));
-    ZETASQL_RETURN_IF_ERROR(WaitForOperation(operation.name(), &operation));
+    GOOGLESQL_RETURN_IF_ERROR(WaitForOperation(operation.name(), &operation));
     UpdateDatabaseDdlMetadata metadata;
-    ZETASQL_RET_CHECK(operation.metadata().UnpackTo(&metadata));
+    GOOGLESQL_RET_CHECK(operation.metadata().UnpackTo(&metadata));
     google::rpc::Status status = operation.error();
     auto status_code = static_cast<absl::StatusCode>(status.code());
     if (status_code != absl::StatusCode::kOk) {
@@ -89,7 +89,7 @@ class OperationsTest
     absl::Duration deadline = absl::Seconds(50);
     absl::Time start = absl::Now();
     while (true) {
-      ZETASQL_RETURN_IF_ERROR(GetOperation(operation_uri, op));
+      GOOGLESQL_RETURN_IF_ERROR(GetOperation(operation_uri, op));
       if (op->done()) return absl::OkStatus();
       if (absl::Now() - start > deadline) {
         return absl::Status(absl::StatusCode::kDeadlineExceeded,
@@ -120,7 +120,7 @@ class OperationsTest
     request.set_page_size(-1);
     operations_api::ListOperationsResponse reply;
     grpc::ClientContext context;
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         raw_operations_client()->ListOperations(&context, request, &reply));
     for (const auto& op : reply.operations()) {
       operations.emplace_back(op);
@@ -140,10 +140,10 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(OperationsTest, LongRunningOperationIds) {
   operations_api::Operation op;
   if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    ZETASQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 INT64"},
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 INT64"},
                              /*operation_id=*/"a_abc123", &op));
   } else {
-    ZETASQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 bigint"},
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 bigint"},
                              /*operation_id=*/"a_abc123", &op));
   }
   EXPECT_THAT(op.name(), testing::EndsWith("a_abc123"));
@@ -195,18 +195,18 @@ TEST_P(OperationsTest, LongRunningOperationIds) {
 
 TEST_P(OperationsTest, ListOperations) {
   if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    ZETASQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 INT64"},
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 INT64"},
                              /*operation_id=*/"o1"));
-    ZETASQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
                              /*operation_id=*/"o2"));
   } else {
-    ZETASQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 bigint"},
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 bigint"},
                              /*operation_id=*/"o1"));
-    ZETASQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 bigint"},
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 bigint"},
                              /*operation_id=*/"o2"));
   }
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto operations, ListDatabaseOperations());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto operations, ListDatabaseOperations());
   std::vector<std::string> op_names;
   for (const auto& operation : operations) {
     EXPECT_TRUE(operation.done());
@@ -218,15 +218,15 @@ TEST_P(OperationsTest, ListOperations) {
 
 TEST_P(OperationsTest, GetOperation) {
   if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    ZETASQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 INT64"},
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 INT64"},
                              /*operation_id=*/"a_abc123"));
   } else {
-    ZETASQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 bigint"},
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 bigint"},
                              /*operation_id=*/"a_abc123"));
   }
 
   operations_api::Operation op;
-  ZETASQL_EXPECT_OK(GetOperation(
+  GOOGLESQL_EXPECT_OK(GetOperation(
       absl::StrCat(database()->FullName(), "/operations/a_abc123"), &op));
   EXPECT_THAT(op.name(), testing::EndsWith("a_abc123"));
 }

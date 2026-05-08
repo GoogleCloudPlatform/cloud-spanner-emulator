@@ -31,22 +31,22 @@
 
 #include <cstdint>
 
-#include "zetasql/public/types/timestamp_util.h"
+#include "googlesql/public/types/timestamp_util.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
 #include "third_party/spanner_pg/interface/datetime_evaluators.h"
 
 namespace postgres_translator::function_evaluators {
 namespace {
 
-using ::zetasql::types::kDateMax;
-using ::zetasql::types::kDateMin;
+using ::googlesql::types::kDateMax;
+using ::googlesql::types::kDateMin;
 using ::testing::Eq;
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 inline constexpr int32_t kDaysUntilMaxDate = kDateMax;
 

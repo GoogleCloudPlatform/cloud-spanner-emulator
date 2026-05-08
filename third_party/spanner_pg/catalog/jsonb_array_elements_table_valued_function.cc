@@ -49,10 +49,10 @@ using ::postgres_translator::spangres::datatypes::common::jsonb::PgJsonbValue;
 using ::postgres_translator::spangres::datatypes::common::jsonb::TreeNode;
 
 // The emulator implementation of jsonb_array_elements.
-class JsonbArrayElementsEvaluator : public zetasql::EvaluatorTableIterator {
+class JsonbArrayElementsEvaluator : public googlesql::EvaluatorTableIterator {
  public:
-  JsonbArrayElementsEvaluator(zetasql::Value input,
-                              const zetasql::TVFSchemaColumn& output_column)
+  JsonbArrayElementsEvaluator(googlesql::Value input,
+                              const googlesql::TVFSchemaColumn& output_column)
       : input_(std::move(input)), output_column_(output_column) {}
 
   int NumColumns() const override { return 1; }
@@ -62,19 +62,19 @@ class JsonbArrayElementsEvaluator : public zetasql::EvaluatorTableIterator {
     return output_column_.name;
   }
 
-  const zetasql::Type* GetColumnType(int i) const override {
+  const googlesql::Type* GetColumnType(int i) const override {
     ABSL_DCHECK_EQ(i, 0);
     return output_column_.type;
   }
 
-  const zetasql::Value& GetValue(int i) const override {
+  const googlesql::Value& GetValue(int i) const override {
     ABSL_DCHECK_EQ(i, 0);
     return output_;
   }
 
   absl::Status Status() const override { return absl::OkStatus(); }
 
-  absl::Status Cancel() override { ZETASQL_RET_CHECK_FAIL() << "Unimplemented"; }
+  absl::Status Cancel() override { GOOGLESQL_RET_CHECK_FAIL() << "Unimplemented"; }
 
   absl::Status Init() {
     output_index_ = 0;
@@ -82,16 +82,16 @@ class JsonbArrayElementsEvaluator : public zetasql::EvaluatorTableIterator {
       return absl::OkStatus();
     }
     // Set up the PG memory context arena in case we call into native PG code.
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
         CreatePGArena(nullptr));
 
     // Parse the input.
-    ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(input_));
+    GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(input_));
     std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-    ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue jsonb_value,
+    GOOGLESQL_ASSIGN_OR_RETURN(PgJsonbValue jsonb_value,
                      PgJsonbValue::Parse(std::string(jsonb), &tree_nodes));
-    ZETASQL_ASSIGN_OR_RETURN(jsonb_array_, jsonb_value.GetSerializedArrayElements());
+    GOOGLESQL_ASSIGN_OR_RETURN(jsonb_array_, jsonb_value.GetSerializedArrayElements());
 
     return absl::OkStatus();
   }
@@ -106,28 +106,28 @@ class JsonbArrayElementsEvaluator : public zetasql::EvaluatorTableIterator {
   }
 
  private:
-  const zetasql::Value input_;
-  const zetasql::TVFSchemaColumn& output_column_;
+  const googlesql::Value input_;
+  const googlesql::TVFSchemaColumn& output_column_;
   std::vector<absl::Cord> jsonb_array_;
   int output_index_;
-  zetasql::Value output_;
+  googlesql::Value output_;
 };
 }  // namespace
 
-absl::StatusOr<std::unique_ptr<zetasql::EvaluatorTableIterator>>
+absl::StatusOr<std::unique_ptr<googlesql::EvaluatorTableIterator>>
 JsonbArrayElementsTableValuedFunction::CreateEvaluator(
     std::vector<TvfEvaluatorArg> input_arguments,
-    const std::vector<zetasql::TVFSchemaColumn>& output_columns,
-    const zetasql::FunctionSignature* function_call_signature) const {
-  ZETASQL_RET_CHECK_EQ(input_arguments.size(), 1);
-  ZETASQL_RET_CHECK_EQ(output_columns.size(), 1);
+    const std::vector<googlesql::TVFSchemaColumn>& output_columns,
+    const googlesql::FunctionSignature* function_call_signature) const {
+  GOOGLESQL_RET_CHECK_EQ(input_arguments.size(), 1);
+  GOOGLESQL_RET_CHECK_EQ(output_columns.size(), 1);
 
-  ZETASQL_RET_CHECK(input_arguments[0].value);
-  zetasql::Value input = *input_arguments[0].value;
+  GOOGLESQL_RET_CHECK(input_arguments[0].value);
+  googlesql::Value input = *input_arguments[0].value;
 
   auto evaluator = std::make_unique<JsonbArrayElementsEvaluator>(
       std::move(input), std::move(output_columns[0]));
-  ZETASQL_RETURN_IF_ERROR(evaluator->Init());
+  GOOGLESQL_RETURN_IF_ERROR(evaluator->Init());
   return std::move(evaluator);
 }
 

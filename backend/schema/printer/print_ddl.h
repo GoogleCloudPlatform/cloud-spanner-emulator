@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/types/type.h"
 #include "absl/status/statusor.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/check_constraint.h"
@@ -53,6 +53,9 @@ std::string PrintKeyColumn(const KeyColumn* column);
 
 // Prints the DDL statements for an index.
 std::string PrintIndex(const Index* index);
+
+// Returns the reconstructed WHERE clause for partial indexes.
+std::string PrintIndexFilter(const Index* index);
 
 // Prints the DDL statements for a table.
 std::string PrintTable(const Table* table);
@@ -85,7 +88,7 @@ std::string OnDeleteActionToString(Table::OnDeleteAction action);
 std::string RowDeletionPolicyToString(const ddl::RowDeletionPolicy& policy);
 
 // Converts a Cloud Spanner column type to its string representation.
-std::string ColumnTypeToString(const zetasql::Type* type,
+std::string ColumnTypeToString(const googlesql::Type* type,
                                std::optional<int64_t> max_length);
 
 // Converts proto_bundle types to its string representation.

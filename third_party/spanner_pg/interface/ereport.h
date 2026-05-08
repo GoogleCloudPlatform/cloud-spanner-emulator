@@ -41,7 +41,7 @@
 #include <optional>
 #include <string>
 
-#include "zetasql/base/die_if_null.h"
+#include "googlesql/base/die_if_null.h"
 #include "absl/status/status.h"
 
 namespace postgres_translator {
@@ -56,7 +56,7 @@ class PostgresEreportException : public std::exception {
   PostgresEreportException(
       const ErrorData* error_data,
       std::optional<absl::Status> error_status = std::nullopt) noexcept
-      : error_data_(*ZETASQL_DIE_IF_NULL(error_data)),
+      : error_data_(*GOOGLESQL_DIE_IF_NULL(error_data)),
         error_status_(std::move(error_status)) {
     CopyErrorDataToHeap();
     GenerateWhatMessage();

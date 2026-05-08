@@ -31,14 +31,14 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/interface/regexp_evaluators.h"
 
 namespace postgres_translator::function_evaluators {
 namespace {
 
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 TEST(StubEvaluatorTest, RegexpSplitToArray) {
   EXPECT_THAT(RegexpSplitToArray("a", "b"),

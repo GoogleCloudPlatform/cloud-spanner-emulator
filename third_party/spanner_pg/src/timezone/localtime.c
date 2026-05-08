@@ -105,7 +105,7 @@ static __thread struct pg_tm tm;
 
 /* GMT timezone state data is kept here */
 // Make this thread-local so each thread has its own copy.
-static __thread struct state *gmtptr = NULL;
+__thread struct state *gmtptr = NULL;
 /* SPANGRES END */
 
 /* Initialize *S to a value based on UTOFF, ISDST, and DESIGIDX.  */

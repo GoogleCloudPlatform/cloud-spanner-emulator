@@ -21,10 +21,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/simple_catalog.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/base/no_destructor.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
@@ -36,47 +36,47 @@ namespace emulator {
 namespace backend {
 
 // Maps the type specified in the information catalog metadata for a Spanner
-// ZetaSQL database to a ZetaSQL type.
-static const zetasql_base::NoDestructor<
-    absl::flat_hash_map<std::string, const zetasql::Type*>>
+// GoogleSQL database to a GoogleSQL type.
+static const googlesql_base::NoDestructor<
+    absl::flat_hash_map<std::string, const googlesql::Type*>>
     kSpannerTypeToGSQLType{{
-        {"BOOL", zetasql::types::BoolType()},
-        {"DATE", zetasql::types::DateType()},
-        {"INT64", zetasql::types::Int64Type()},
-        {"FLOAT64", zetasql::types::FloatType()},
-        {"STRING(32)", zetasql::types::StringType()},
-        {"STRING(100)", zetasql::types::StringType()},
-        {"STRING(MAX)", zetasql::types::StringType()},
-        {"TIMESTAMP", zetasql::types::TimestampType()},
-        {"JSON", zetasql::types::JsonType()},
+        {"BOOL", googlesql::types::BoolType()},
+        {"DATE", googlesql::types::DateType()},
+        {"INT64", googlesql::types::Int64Type()},
+        {"FLOAT64", googlesql::types::FloatType()},
+        {"STRING(32)", googlesql::types::StringType()},
+        {"STRING(100)", googlesql::types::StringType()},
+        {"STRING(MAX)", googlesql::types::StringType()},
+        {"TIMESTAMP", googlesql::types::TimestampType()},
+        {"JSON", googlesql::types::JsonType()},
     }};
 
 // Maps the type specified in the information catalog metadata for a Spanner
-// PostgreSQL database to a ZetaSQL type.
-static const zetasql_base::NoDestructor<
-    absl::flat_hash_map<std::string, const zetasql::Type*>>
+// PostgreSQL database to a GoogleSQL type.
+static const googlesql_base::NoDestructor<
+    absl::flat_hash_map<std::string, const googlesql::Type*>>
     kSpannerPGTypeToGSQLType{{
-        {"bigint", zetasql::types::Int64Type()},
-        {"bigint[]", zetasql::types::Int64ArrayType()},
-        {"boolean", zetasql::types::BoolType()},
-        {"character varying", zetasql::types::StringType()},
-        {"character varying[]", zetasql::types::StringArrayType()},
-        {"double precision", zetasql::types::DoubleType()},
+        {"bigint", googlesql::types::Int64Type()},
+        {"bigint[]", googlesql::types::Int64ArrayType()},
+        {"boolean", googlesql::types::BoolType()},
+        {"character varying", googlesql::types::StringType()},
+        {"character varying[]", googlesql::types::StringArrayType()},
+        {"double precision", googlesql::types::DoubleType()},
         {"oid", postgres_translator::spangres::datatypes::GetPgOidType()},
         {"oid[]",
          postgres_translator::spangres::datatypes::GetPgOidArrayType()},
-        {"timestamp with time zone", zetasql::types::TimestampType()},
+        {"timestamp with time zone", googlesql::types::TimestampType()},
     }};
 
 // Given a list of ColumnsMetaEntry items, returns SimpleTables that can be
 // added to a SimpleCatalog mapped by the table name. The tables are created by
-// mapping the spanner type in the ColumnsMetaEntry to the ZetaSQL type given
+// mapping the spanner type in the ColumnsMetaEntry to the GoogleSQL type given
 // by the provided mapping. Only tables for the given supported list of tables
 // is returned. The metadata entries must be ordered by table name.
-absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
+absl::flat_hash_map<std::string, std::unique_ptr<googlesql::SimpleTable>>
 AddTablesFromMetadata(
     const std::vector<ColumnsMetaEntry>& metadata_entries,
-    const absl::flat_hash_map<std::string, const zetasql::Type*>&
+    const absl::flat_hash_map<std::string, const googlesql::Type*>&
         spanner_to_gsql_type,
     const absl::flat_hash_set<std::string>& supported_tables);
 

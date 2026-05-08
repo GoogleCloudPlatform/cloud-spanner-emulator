@@ -35,7 +35,7 @@
 # shim packages because it needs to directly include PostgreSQL src files
 # instead of the standard postgres_includes package used elsewhere.
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")  # @unused
 
 package(
     default_visibility = ["//visibility:private"],
@@ -62,8 +62,8 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
+        "@com_google_googlesql//googlesql/base:logging",
         "@com_google_protobuf//:protobuf",
-        "@com_google_zetasql//zetasql/base:logging",
     ],
 )
 
@@ -92,7 +92,7 @@ cc_library(
         "//third_party/spanner_pg/postgres_includes",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_zetasql//zetasql/base:no_destructor",
+        "@com_google_googlesql//googlesql/base:no_destructor",
     ],
 )
 
@@ -109,9 +109,9 @@ cc_test(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:span",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -145,6 +145,7 @@ genrule(
     name = "generate_bootstrap_catalog_srcs",
     srcs = [
         ":spanner_pg_datfiles",
+        "//third_party/spanner_pg/codegen:pg_aggregate.dat",
         "//third_party/spanner_pg/codegen:pg_proc.dat",
         "//third_party/spanner_pg/src/include:all_headers",
         "//third_party/spanner_pg/src/include:catalog_headers",
@@ -171,6 +172,7 @@ genrule(
         ENGINE_CATALOG_PATH=third_party/spanner_pg/bootstrap_catalog/spanner_pg_data
 
         # Copies generated files into the engine catalog path
+        cp $(location //third_party/spanner_pg/codegen:pg_aggregate.dat) $$ENGINE_CATALOG_PATH
         cp $(location //third_party/spanner_pg/codegen:pg_proc.dat) $$ENGINE_CATALOG_PATH
 
         $(location gen_catalog_info.pl) \

@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
@@ -35,9 +35,9 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::values::Bool;
-using zetasql::values::Int64;
-using zetasql::values::String;
+using googlesql::values::Bool;
+using googlesql::values::Int64;
+using googlesql::values::String;
 
 class InMemoryStorageTest : public testing::Test {
  protected:
@@ -54,17 +54,17 @@ TEST_F(InMemoryStorageTest, LookupByTable) {
   absl::Time t0 = absl::Now();
 
   // Write into 2 tables.
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId1, Key({Int64(10)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId1, Key({Int64(10)}), {kColumnID},
                            {String("value-10")}));
 
   // Read from the 2 tables.
-  std::vector<zetasql::Value> values;
-  ZETASQL_EXPECT_OK(
+  std::vector<googlesql::Value> values;
+  GOOGLESQL_EXPECT_OK(
       storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {kColumnID}, &values));
   EXPECT_THAT(values, testing::ElementsAre(String("value-1")));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       storage_.Lookup(t0, kTableId1, Key({Int64(10)}), {kColumnID}, &values));
   EXPECT_THAT(values, testing::ElementsAre(String("value-10")));
 }
@@ -73,20 +73,20 @@ TEST_F(InMemoryStorageTest, ReadByTable) {
   absl::Time t0 = absl::Now();
 
   // Write into 2 tables.
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId1, Key({Int64(4)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId1, Key({Int64(4)}), {kColumnID},
                            {String("value-10")}));
 
   // Read from the 2 table.
-  ZETASQL_EXPECT_OK(storage_.Read(t0, kTableId0, kKeyRange0To5, {kColumnID}, &itr_));
+  GOOGLESQL_EXPECT_OK(storage_.Read(t0, kTableId0, kKeyRange0To5, {kColumnID}, &itr_));
   EXPECT_TRUE(itr_->Next());
   EXPECT_EQ(itr_->NumColumns(), 1);
   EXPECT_EQ(itr_->ColumnValue(0), String("value-1"));
   EXPECT_EQ(itr_->Key(), Key({Int64(1)}));
   EXPECT_FALSE(itr_->Next());
 
-  ZETASQL_EXPECT_OK(storage_.Read(t0, kTableId1, kKeyRange0To5, {kColumnID}, &itr_));
+  GOOGLESQL_EXPECT_OK(storage_.Read(t0, kTableId1, kKeyRange0To5, {kColumnID}, &itr_));
   EXPECT_TRUE(itr_->Next());
   EXPECT_EQ(itr_->NumColumns(), 1);
   EXPECT_EQ(itr_->ColumnValue(0), String("value-10"));
@@ -99,12 +99,12 @@ TEST_F(InMemoryStorageTest, ReadRangeFromSingleTable) {
 
   // Write into table.
   for (int i = 0; i < 5; ++i) {
-    ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(i)}), {kColumnID},
+    GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(i)}), {kColumnID},
                              {String(absl::StrCat("value-", i))}));
   }
 
   // Read from the table.
-  ZETASQL_EXPECT_OK(storage_.Read(t0, kTableId0, kKeyRange0To5, {kColumnID}, &itr_));
+  GOOGLESQL_EXPECT_OK(storage_.Read(t0, kTableId0, kKeyRange0To5, {kColumnID}, &itr_));
   for (int i = 0; i < 5; ++i) {
     EXPECT_TRUE(itr_->Next());
     EXPECT_EQ(itr_->NumColumns(), 1);
@@ -117,18 +117,18 @@ TEST_F(InMemoryStorageTest, ReadRangeFromSingleTable) {
 TEST_F(InMemoryStorageTest, LookupByTimestamp) {
   absl::Time write_ts = absl::Now();
 
-  ZETASQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
 
   // Lookup key at exact timestamp it was written.
-  std::vector<zetasql::Value> values;
-  ZETASQL_EXPECT_OK(storage_.Lookup(write_ts, kTableId0, Key({Int64(1)}), {kColumnID},
+  std::vector<googlesql::Value> values;
+  GOOGLESQL_EXPECT_OK(storage_.Lookup(write_ts, kTableId0, Key({Int64(1)}), {kColumnID},
                             &values));
   EXPECT_THAT(values, testing::ElementsAre(String("value-1")));
 
   // Lookup key at a future timestamp.
   absl::Time lookup_in_future_ts = write_ts + absl::Nanoseconds(24);
-  ZETASQL_EXPECT_OK(storage_.Lookup(lookup_in_future_ts, kTableId0, Key({Int64(1)}),
+  GOOGLESQL_EXPECT_OK(storage_.Lookup(lookup_in_future_ts, kTableId0, Key({Int64(1)}),
                             {kColumnID}, &values));
   EXPECT_THAT(values, testing::ElementsAre(String("value-1")));
 
@@ -136,7 +136,7 @@ TEST_F(InMemoryStorageTest, LookupByTimestamp) {
   absl::Time lookup_before_write_ts = write_ts - absl::Nanoseconds(1);
   EXPECT_THAT(storage_.Lookup(lookup_before_write_ts, kTableId0,
                               Key({Int64(1)}), {kColumnID}, &values),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
   EXPECT_TRUE(values.empty());
 }
 
@@ -144,11 +144,11 @@ TEST_F(InMemoryStorageTest, ReadByTimestamp) {
   absl::Time write_ts = absl::Now();
 
   // Write into table.
-  ZETASQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
 
   // Read key at the exact timestamp it was written.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       storage_.Read(write_ts, kTableId0, kKeyRange0To5, {kColumnID}, &itr_));
   EXPECT_TRUE(itr_->Next());
   EXPECT_EQ(itr_->ColumnValue(0), String("value-1"));
@@ -156,7 +156,7 @@ TEST_F(InMemoryStorageTest, ReadByTimestamp) {
 
   // Read key at a future timestamp.
   absl::Time read_in_future_ts = write_ts + absl::Nanoseconds(24);
-  ZETASQL_EXPECT_OK(storage_.Read(read_in_future_ts, kTableId0, kKeyRange0To5,
+  GOOGLESQL_EXPECT_OK(storage_.Read(read_in_future_ts, kTableId0, kKeyRange0To5,
                           {kColumnID}, &itr_));
   EXPECT_TRUE(itr_->Next());
   EXPECT_EQ(itr_->ColumnValue(0), String("value-1"));
@@ -164,7 +164,7 @@ TEST_F(InMemoryStorageTest, ReadByTimestamp) {
 
   // Read key at timestamp before the first time it was written.
   absl::Time read_before_write_ts = write_ts - absl::Nanoseconds(1);
-  ZETASQL_EXPECT_OK(storage_.Read(read_before_write_ts, kTableId0, kKeyRange0To5,
+  GOOGLESQL_EXPECT_OK(storage_.Read(read_before_write_ts, kTableId0, kKeyRange0To5,
                           {kColumnID}, &itr_));
   EXPECT_FALSE(itr_->Next());
 }
@@ -173,30 +173,30 @@ TEST_F(InMemoryStorageTest, LookupInvalidTableReturnsNotFoundError) {
   absl::Time t0 = absl::Now();
 
   // Lookup a table_id in empty storage.
-  std::vector<zetasql::Value> values;
+  std::vector<googlesql::Value> values;
   EXPECT_THAT(
       storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {kColumnID}, &values),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 
   // Lookup invalid table_id in storage.
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
   EXPECT_THAT(storage_.Lookup(t0, "invalid-table_id_", Key({Int64(1)}),
                               {kColumnID}, &values),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(InMemoryStorageTest, ReadInvalidTableReturnsEmptyResult) {
   absl::Time t0 = absl::Now();
 
   // Read a table_id in empty storage.
-  ZETASQL_EXPECT_OK(storage_.Read(t0, kTableId0, kKeyRange0To5, {kColumnID}, &itr_));
+  GOOGLESQL_EXPECT_OK(storage_.Read(t0, kTableId0, kKeyRange0To5, {kColumnID}, &itr_));
   EXPECT_FALSE(itr_->Next());
 
   // Read invalid table_id in storage.
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
-  ZETASQL_EXPECT_OK(storage_.Read(t0, "invalid-table_id_", kKeyRange0To5, {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Read(t0, "invalid-table_id_", kKeyRange0To5, {kColumnID},
                           &itr_));
   EXPECT_FALSE(itr_->Next());
 }
@@ -204,21 +204,21 @@ TEST_F(InMemoryStorageTest, ReadInvalidTableReturnsEmptyResult) {
 TEST_F(InMemoryStorageTest, LookupMissingKeyReturnsNotFound) {
   absl::Time t0 = absl::Now();
 
-  std::vector<zetasql::Value> values;
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  std::vector<googlesql::Value> values;
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
   EXPECT_THAT(
       storage_.Lookup(t0, kTableId0, Key({Int64(100)}), {kColumnID}, &values),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(InMemoryStorageTest, ReadMissingKeyReturnsEmptyItr) {
   absl::Time t0 = absl::Now();
   KeyRange key_range = KeyRange::ClosedOpen(Key({Int64(10)}), Key({Int64(50)}));
 
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
-  ZETASQL_EXPECT_OK(storage_.Read(t0, kTableId0, key_range, {kColumnID}, &itr_));
+  GOOGLESQL_EXPECT_OK(storage_.Read(t0, kTableId0, key_range, {kColumnID}, &itr_));
   EXPECT_FALSE(itr_->Next());
 }
 
@@ -226,12 +226,12 @@ TEST_F(InMemoryStorageTest, ReadEmptyKeyRangeReturnsEmptyItr) {
   absl::Time t0 = absl::Now();
   KeyRange key_range = KeyRange::Empty();
 
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
-  ZETASQL_EXPECT_OK(storage_.Read(t0, kTableId0, key_range, {kColumnID}, &itr_));
+  GOOGLESQL_EXPECT_OK(storage_.Read(t0, kTableId0, key_range, {kColumnID}, &itr_));
   EXPECT_FALSE(itr_->Next());
 
-  ZETASQL_EXPECT_OK(storage_.Read(
+  GOOGLESQL_EXPECT_OK(storage_.Read(
       t0, kTableId0,
       KeyRange(EndpointType::kClosed, Key(), EndpointType::kOpen, Key()), {},
       &itr_));
@@ -241,11 +241,11 @@ TEST_F(InMemoryStorageTest, ReadEmptyKeyRangeReturnsEmptyItr) {
 TEST_F(InMemoryStorageTest, LookupByMissingColumnReturnsInvalidValues) {
   absl::Time t0 = absl::Now();
 
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
 
-  std::vector<zetasql::Value> values;
-  ZETASQL_EXPECT_OK(storage_.Lookup(t0 + absl::Nanoseconds(5), kTableId0,
+  std::vector<googlesql::Value> values;
+  GOOGLESQL_EXPECT_OK(storage_.Lookup(t0 + absl::Nanoseconds(5), kTableId0,
                             Key({Int64(1)}), {"invalid_kColumnID"}, &values));
   EXPECT_FALSE(values.empty());
   EXPECT_FALSE(values[0].is_valid());
@@ -254,10 +254,10 @@ TEST_F(InMemoryStorageTest, LookupByMissingColumnReturnsInvalidValues) {
 TEST_F(InMemoryStorageTest, ReadByMissingColumnReturnsInvalidValues) {
   absl::Time t0 = absl::Now();
 
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
 
-  ZETASQL_EXPECT_OK(storage_.Read(t0, kTableId0, kKeyRange0To5, {"invalid_kColumnID"},
+  GOOGLESQL_EXPECT_OK(storage_.Read(t0, kTableId0, kKeyRange0To5, {"invalid_kColumnID"},
                           &itr_));
   EXPECT_TRUE(itr_->Next());
   EXPECT_FALSE(itr_->ColumnValue(0).is_valid());
@@ -267,10 +267,10 @@ TEST_F(InMemoryStorageTest, ReadByMissingColumnReturnsInvalidValues) {
 TEST_F(InMemoryStorageTest, LookupWithoutColumns) {
   absl::Time t0 = absl::Now();
 
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
-  std::vector<zetasql::Value> values;
-  ZETASQL_EXPECT_OK(storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {}, &values));
+  std::vector<googlesql::Value> values;
+  GOOGLESQL_EXPECT_OK(storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {}, &values));
   EXPECT_TRUE(values.empty());
 }
 
@@ -281,12 +281,12 @@ TEST_F(InMemoryStorageTest, ReadWithoutColumns) {
 
   for (int i = 0; i < 5; i++) {
     Key key({String("key"), Int64(i)});
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         storage_.Write(write_ts, kTableId0, key, {kColumnID}, {Bool(true)}));
   }
 
   std::unique_ptr<StorageIterator> itr;
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       storage_.Read(lookup_ts, kTableId0, KeyRange::Point(key), {}, &itr_));
   EXPECT_TRUE(itr_->Next());
   EXPECT_EQ(itr_->NumColumns(), 0);
@@ -297,30 +297,30 @@ TEST_F(InMemoryStorageTest, ReadWithoutColumns) {
 TEST_F(InMemoryStorageTest, LookupWithNullValuesReturnsInternalError) {
   absl::Time t0 = absl::Now();
 
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
   EXPECT_THAT(storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                               /*values =*/nullptr),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(InMemoryStorageTest, WriteWithEmptyKeyAndColumns) {
   absl::Time t0 = absl::Now();
 
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key(), {}, {}));
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key(), {}, {}));
 }
 
 TEST_F(InMemoryStorageTest, WriteWithEmptyColumns) {
   absl::Time t0 = absl::Now();
 
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {}, {}));
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {}, {}));
 }
 
 TEST_F(InMemoryStorageTest, DeleteFromNonExistentTable) {
   absl::Time t0 = absl::Now();
   Key key({Int64(1)});
 
-  ZETASQL_EXPECT_OK(storage_.Delete(t0, kTableId0, KeyRange::Point(key)));
+  GOOGLESQL_EXPECT_OK(storage_.Delete(t0, kTableId0, KeyRange::Point(key)));
 }
 
 TEST_F(InMemoryStorageTest, DuplicateDeleteReturnsOk) {
@@ -328,10 +328,10 @@ TEST_F(InMemoryStorageTest, DuplicateDeleteReturnsOk) {
   absl::Time write_ts = absl::Now();
   absl::Time delete_ts = write_ts + absl::Seconds(1);
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       storage_.Write(write_ts, kTableId0, key, {kColumnID}, {Bool(true)}));
-  ZETASQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange::Point(key)));
-  ZETASQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange::Point(key)));
+  GOOGLESQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange::Point(key)));
+  GOOGLESQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange::Point(key)));
 }
 
 TEST_F(InMemoryStorageTest, DeleteEmptyRangeWillDeleteNothing) {
@@ -339,11 +339,11 @@ TEST_F(InMemoryStorageTest, DeleteEmptyRangeWillDeleteNothing) {
   absl::Time delete_ts = absl::Now();
   absl::Time lookup_ts = delete_ts + absl::Seconds(1);
 
-  ZETASQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, Key({Int64(1)}), {kColumnID},
                            {Bool(true)}));
-  ZETASQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange()));
-  std::vector<zetasql::Value> values;
-  ZETASQL_EXPECT_OK(storage_.Lookup(lookup_ts, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange()));
+  std::vector<googlesql::Value> values;
+  GOOGLESQL_EXPECT_OK(storage_.Lookup(lookup_ts, kTableId0, Key({Int64(1)}), {kColumnID},
                             &values));
   EXPECT_THAT(values, testing::ElementsAre(Bool(true)));
 }
@@ -355,19 +355,19 @@ TEST_F(InMemoryStorageTest, DeleteLargeRangeFromSparseTable) {
 
   // Write sparse keys.
   for (int j = 0; j < 5; j++) {
-    ZETASQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, Key({Int64(5 * j)}),
+    GOOGLESQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, Key({Int64(5 * j)}),
                              {kColumnID}, {Bool(true)}));
   }
 
   // Delete key range [0, 50).
   KeyRange key_range(KeyRange::ClosedOpen(Key({Int64(0)}), Key({Int64(50)})));
-  ZETASQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, key_range));
+  GOOGLESQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, key_range));
 
   for (int j = 0; j < 5; j++) {
-    std::vector<zetasql::Value> values;
+    std::vector<googlesql::Value> values;
     EXPECT_THAT(storage_.Lookup(lookup_ts, kTableId0, Key({Int64(5 * j)}),
                                 {kColumnID}, &values),
-                zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+                googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
   }
 }
 
@@ -378,18 +378,18 @@ TEST_F(InMemoryStorageTest, DeleteRangeNotInTableWillDeleteNothing) {
 
   // Write key range [0, 5).
   for (int i = 0; i < 5; i++) {
-    ZETASQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, Key({Int64(i)}), {kColumnID},
+    GOOGLESQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, Key({Int64(i)}), {kColumnID},
                              {Bool(true)}));
   }
 
   // Delete key range [10, 100).
   KeyRange key_range(KeyRange::ClosedOpen(Key({Int64(10)}), Key({Int64(100)})));
-  ZETASQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, key_range));
+  GOOGLESQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, key_range));
 
   // Lookup for all existing keys [0, 5) should succeed.
   for (int i = 0; i < 5; i++) {
-    std::vector<zetasql::Value> values;
-    ZETASQL_EXPECT_OK(storage_.Lookup(lookup_ts, kTableId0, Key({Int64(i)}),
+    std::vector<googlesql::Value> values;
+    GOOGLESQL_EXPECT_OK(storage_.Lookup(lookup_ts, kTableId0, Key({Int64(i)}),
                               {kColumnID}, &values));
     EXPECT_THAT(values, testing::ElementsAre(Bool(true)));
     values.clear();
@@ -403,25 +403,25 @@ TEST_F(InMemoryStorageTest, DeletePartialKeyRangeFromTable) {
 
   // Write keys in the range [10, 15].
   for (int i = 10; i <= 15; i++) {
-    ZETASQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, Key({Int64(i)}), {kColumnID},
+    GOOGLESQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, Key({Int64(i)}), {kColumnID},
                              {Bool(true)}));
   }
 
   // Delete keys in the range [6, 12).
   KeyRange key_range(KeyRange::ClosedOpen(Key({Int64(6)}), Key({Int64(12)})));
-  ZETASQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, key_range));
+  GOOGLESQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, key_range));
 
   // Lookup after delete should return invalid values for keys range [10, 12).
-  std::vector<zetasql::Value> values;
+  std::vector<googlesql::Value> values;
   for (int i = 10; i < 12; i++) {
     EXPECT_THAT(storage_.Lookup(lookup_ts, kTableId0, Key({Int64(i)}),
                                 {kColumnID}, &values),
-                zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+                googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
   }
   // Lookup for range [12, 15] should return valid values.
   for (int i = 12; i <= 15; i++) {
-    std::vector<zetasql::Value> values;
-    ZETASQL_EXPECT_OK(storage_.Lookup(lookup_ts, kTableId0, Key({Int64(i)}),
+    std::vector<googlesql::Value> values;
+    GOOGLESQL_EXPECT_OK(storage_.Lookup(lookup_ts, kTableId0, Key({Int64(i)}),
                               {kColumnID}, &values));
     EXPECT_THAT(values, testing::ElementsAre(Bool(true)));
     values.clear();
@@ -433,17 +433,17 @@ TEST_F(InMemoryStorageTest,
   absl::Time t0 = absl::Now();
   Key key({Int64(1)});
 
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, key, {}, {}));
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, key, {}, {}));
   EXPECT_THAT(storage_.Delete(t0, kTableId0,
                               KeyRange::OpenClosed(Key({Int64(0)}), key)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
   EXPECT_THAT(
       storage_.Delete(t0, kTableId0,
                       KeyRange::OpenOpen(Key({Int64(0)}), Key({Int64(2)}))),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
   EXPECT_THAT(storage_.Delete(t0, kTableId0,
                               KeyRange::ClosedClosed(Key({Int64(0)}), key)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(InMemoryStorageTest, DeleteUsingEmptyKeyRangeDeletesNothing) {
@@ -453,26 +453,26 @@ TEST_F(InMemoryStorageTest, DeleteUsingEmptyKeyRangeDeletesNothing) {
 
   for (int i = 0; i < 5; i++) {
     Key key({Int64(i)});
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         storage_.Write(write_ts, kTableId0, key, {kColumnID}, {Bool(true)}));
   }
   // Explicit Empty KeyRange.
-  ZETASQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange::Empty()));
+  GOOGLESQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange::Empty()));
 
   // StartKey <= EndKey is considered an empty range.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       storage_.Delete(delete_ts, kTableId0,
                       KeyRange::ClosedOpen(Key({Int64(5)}), Key({Int64(0)}))));
   // Lookup keys in the range.
   for (int i = 0; i < 5; i++) {
-    std::vector<zetasql::Value> values;
-    ZETASQL_EXPECT_OK(storage_.Lookup(lookup_ts, kTableId0, Key({Int64(i)}),
+    std::vector<googlesql::Value> values;
+    GOOGLESQL_EXPECT_OK(storage_.Lookup(lookup_ts, kTableId0, Key({Int64(i)}),
                               {kColumnID}, &values));
     EXPECT_THAT(values, testing::ElementsAre(Bool(true)));
     values.clear();
   }
   // Read
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       storage_.Read(lookup_ts, kTableId0, KeyRange::All(), {kColumnID}, &itr_));
   for (int i = 0; i < 5; i++) {
     EXPECT_TRUE(itr_->Next());
@@ -489,19 +489,19 @@ TEST_F(InMemoryStorageTest, DeleteUsingAllKeyRangeDeletesEverything) {
 
   for (int i = 0; i < 5; i++) {
     Key key({Int64(i)});
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         storage_.Write(write_ts, kTableId0, key, {kColumnID}, {Bool(true)}));
   }
-  ZETASQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange::All()));
+  GOOGLESQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange::All()));
   // Lookup
   for (int i = 0; i < 5; i++) {
-    std::vector<zetasql::Value> values;
+    std::vector<googlesql::Value> values;
     EXPECT_THAT(storage_.Lookup(lookup_ts, kTableId0, Key({Int64(i)}),
                                 {kColumnID}, &values),
-                zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+                googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
   }
   // Read
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       storage_.Read(lookup_ts, kTableId0, KeyRange::All(), {kColumnID}, &itr_));
   EXPECT_FALSE(itr_->Next());
 }
@@ -513,21 +513,21 @@ TEST_F(InMemoryStorageTest, DeleteUsingPrefixKeyRange) {
 
   for (int i = 0; i < 5; i++) {
     Key key({String("key"), Int64(i)});
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         storage_.Write(write_ts, kTableId0, key, {kColumnID}, {Bool(true)}));
   }
-  ZETASQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0,
+  GOOGLESQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0,
                             KeyRange::Prefix(Key({String("key")}))));
   // Lookup
   for (int i = 0; i < 5; i++) {
-    std::vector<zetasql::Value> values;
+    std::vector<googlesql::Value> values;
     EXPECT_THAT(
         storage_.Lookup(lookup_ts, kTableId0, Key({String("key"), Int64(i)}),
                         {kColumnID}, &values),
-        zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+        googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
   }
   // Read
-  ZETASQL_EXPECT_OK(storage_.Read(lookup_ts, kTableId0,
+  GOOGLESQL_EXPECT_OK(storage_.Read(lookup_ts, kTableId0,
                           KeyRange::ClosedOpen(Key({String("key"), Int64(0)}),
                                                Key({String("key"), Int64(5)})),
                           {kColumnID}, &itr_));
@@ -543,19 +543,19 @@ TEST_F(InMemoryStorageTest, LookupShouldReturnMostRecentColumnValues) {
   Key key({Int64(1)});
 
   // Write key with column value = true.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       storage_.Write(write_ts, kTableId0, key, {kColumnID}, {Bool(true)}));
   // Delete key.
-  ZETASQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange::Point(key)));
+  GOOGLESQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange::Point(key)));
   // Write key without column value.
-  ZETASQL_EXPECT_OK(storage_.Write(write_after_delete_ts, kTableId0, key, {}, {}));
+  GOOGLESQL_EXPECT_OK(storage_.Write(write_after_delete_ts, kTableId0, key, {}, {}));
   // Lookup should return empty column value.
-  std::vector<zetasql::Value> values;
-  ZETASQL_EXPECT_OK(storage_.Lookup(lookup_after_second_write_ts, kTableId0, key,
+  std::vector<googlesql::Value> values;
+  GOOGLESQL_EXPECT_OK(storage_.Lookup(lookup_after_second_write_ts, kTableId0, key,
                             {kColumnID}, &values));
-  EXPECT_THAT(values, testing::ElementsAre(zetasql::Value()));
+  EXPECT_THAT(values, testing::ElementsAre(googlesql::Value()));
   // Read should return empty column values.
-  ZETASQL_EXPECT_OK(storage_.Read(lookup_after_second_write_ts, kTableId0,
+  GOOGLESQL_EXPECT_OK(storage_.Read(lookup_after_second_write_ts, kTableId0,
                           kKeyRange0To5, {kColumnID}, &itr_));
   EXPECT_TRUE(itr_->Next());
   EXPECT_EQ(itr_->NumColumns(), 1);
@@ -569,20 +569,20 @@ TEST_F(InMemoryStorageTest, LookupAtOrAfterDeleteTimestampReturnsInvalidValue) {
   absl::Time delete_ts = write_ts + absl::Seconds(1);
   absl::Time after_delete_ts = delete_ts + absl::Seconds(1);
 
-  ZETASQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, key, {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, key, {kColumnID},
                            {String("value-10")}));
-  ZETASQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange::Point(key)));
+  GOOGLESQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange::Point(key)));
 
   // Lookup at delete timestamp.
-  std::vector<zetasql::Value> values;
+  std::vector<googlesql::Value> values;
   EXPECT_THAT(storage_.Lookup(delete_ts, kTableId0, key, {kColumnID}, &values),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 
   // Lookup after delete timestamp.
   values.clear();
   EXPECT_THAT(
       storage_.Lookup(after_delete_ts, kTableId0, key, {kColumnID}, &values),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(InMemoryStorageTest, LookupBeforeDeleteTimestampReturnsValidValue) {
@@ -591,11 +591,11 @@ TEST_F(InMemoryStorageTest, LookupBeforeDeleteTimestampReturnsValidValue) {
   absl::Time delete_ts = before_delete_ts + absl::Seconds(1);
   Key key({Int64(1)});
 
-  ZETASQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, key, {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, key, {kColumnID},
                            {String("value-10")}));
-  ZETASQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange::Point(key)));
-  std::vector<zetasql::Value> values;
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(storage_.Delete(delete_ts, kTableId0, KeyRange::Point(key)));
+  std::vector<googlesql::Value> values;
+  GOOGLESQL_EXPECT_OK(
       storage_.Lookup(before_delete_ts, kTableId0, key, {kColumnID}, &values));
   EXPECT_THAT(values, testing::ElementsAre(String("value-10")));
 }
@@ -606,13 +606,13 @@ TEST_F(InMemoryStorageTest, SnapshotRead) {
   absl::Time second_write_ts = snapshot_read_ts + absl::Seconds(1);
   Key key({Int64(1)});
 
-  ZETASQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, key, {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(write_ts, kTableId0, key, {kColumnID},
                            {String("value-10")}));
-  ZETASQL_EXPECT_OK(storage_.Write(second_write_ts, kTableId0, key, {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(second_write_ts, kTableId0, key, {kColumnID},
                            {String("value-20")}));
 
   // Snapshot Read.
-  ZETASQL_EXPECT_OK(storage_.Read(snapshot_read_ts, kTableId0, kKeyRange0To5,
+  GOOGLESQL_EXPECT_OK(storage_.Read(snapshot_read_ts, kTableId0, kKeyRange0To5,
                           {kColumnID}, &itr_));
   EXPECT_TRUE(itr_->Next());
   EXPECT_EQ(itr_->ColumnValue(0), String("value-10"));
@@ -624,12 +624,12 @@ TEST_F(InMemoryStorageTest, ReadUsingKeyRangeAll) {
 
   for (int i = 0; i < 5; i++) {
     Key key({Int64(i)});
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         storage_.Write(write_ts, kTableId0, key, {kColumnID}, {Bool(true)}));
   }
 
   // Read using KeyRange::All()
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       storage_.Read(read_ts, kTableId0, KeyRange::All(), {kColumnID}, &itr_));
   for (int i = 0; i < 5; i++) {
     EXPECT_TRUE(itr_->Next());
@@ -645,11 +645,11 @@ TEST_F(InMemoryStorageTest, ReadUsingPointKeyRange) {
 
   for (int i = 0; i < 5; i++) {
     Key key({Int64(i)});
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         storage_.Write(write_ts, kTableId0, key, {kColumnID}, {Bool(true)}));
   }
 
-  ZETASQL_EXPECT_OK(storage_.Read(read_ts, kTableId0, KeyRange::Point(Key({Int64(0)})),
+  GOOGLESQL_EXPECT_OK(storage_.Read(read_ts, kTableId0, KeyRange::Point(Key({Int64(0)})),
                           {kColumnID}, &itr_));
 
   EXPECT_TRUE(itr_->Next());
@@ -664,12 +664,12 @@ TEST_F(InMemoryStorageTest, ReadUsingPrefixKeyRange) {
 
   for (int i = 0; i < 5; i++) {
     Key key({String("key"), Int64(i)});
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         storage_.Write(write_ts, kTableId0, key, {kColumnID}, {Bool(true)}));
   }
 
   // Read
-  ZETASQL_EXPECT_OK(storage_.Read(read_ts, kTableId0,
+  GOOGLESQL_EXPECT_OK(storage_.Read(read_ts, kTableId0,
                           KeyRange::Prefix(Key({String("key")})), {kColumnID},
                           &itr_));
   for (int i = 0; i < 5; i++) {
@@ -685,30 +685,30 @@ TEST_F(InMemoryStorageTest,
   absl::Time t0 = absl::Now();
   Key key({Int64(1)});
 
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, key, {}, {}));
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, key, {}, {}));
 
   EXPECT_THAT(
       storage_.Read(t0, kTableId0, KeyRange::OpenClosed(Key({Int64(0)}), key),
                     {}, &itr_),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
   EXPECT_THAT(
       storage_.Read(t0, kTableId0,
                     KeyRange::OpenOpen(Key({Int64(0)}), Key({Int64(2)})), {},
                     &itr_),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
   EXPECT_THAT(
       storage_.Read(t0, kTableId0, KeyRange::ClosedClosed(Key({Int64(0)}), key),
                     {}, &itr_),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(InMemoryStorageTest, DroppedTablesAreRemovedAfterRetentionPeriod) {
   absl::Time t0 = absl::Now();
 
   // Write into 2 tables.
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId1, Key({Int64(10)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId1, Key({Int64(10)}), {kColumnID},
                            {String("value-10")}));
 
   // Drop the first table.
@@ -718,11 +718,11 @@ TEST_F(InMemoryStorageTest, DroppedTablesAreRemovedAfterRetentionPeriod) {
   storage_.CleanUpDeletedTables(t0 + absl::Hours(1) + absl::Seconds(1));
 
   // Lookup should return not found for first table.
-  std::vector<zetasql::Value> values;
+  std::vector<googlesql::Value> values;
   EXPECT_THAT(
       storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {kColumnID}, &values),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
-  ZETASQL_EXPECT_OK(
+      googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+  GOOGLESQL_EXPECT_OK(
       storage_.Lookup(t0, kTableId1, Key({Int64(10)}), {kColumnID}, &values));
 }
 
@@ -731,7 +731,7 @@ TEST_F(InMemoryStorageTest, DroppedColumnsAreRemovedAfterRetentionPeriod) {
 
   // Write multiple rows to column.
   for (int i = 0; i < 10; i++) {
-    ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(i)}), {kColumnID},
+    GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(i)}), {kColumnID},
                              {String("value-1")}));
   }
 
@@ -741,10 +741,10 @@ TEST_F(InMemoryStorageTest, DroppedColumnsAreRemovedAfterRetentionPeriod) {
 
   // Lookup of column should return empty values in all rows.
   for (int i = 0; i < 10; i++) {
-    std::vector<zetasql::Value> values;
-    ZETASQL_EXPECT_OK(
+    std::vector<googlesql::Value> values;
+    GOOGLESQL_EXPECT_OK(
         storage_.Lookup(t0, kTableId0, Key({Int64(i)}), {kColumnID}, &values));
-    EXPECT_THAT(values, testing::ElementsAre(zetasql::Value()));
+    EXPECT_THAT(values, testing::ElementsAre(googlesql::Value()));
   }
 }
 
@@ -756,31 +756,31 @@ TEST_F(InMemoryStorageTest, ExpiredCellsThatCoverRetentionPeriodAreKept) {
   absl::Time t4 = t2 + absl::Hours(1) + absl::Seconds(1);
 
   // Write into column.
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-0")}));
-  ZETASQL_EXPECT_OK(storage_.Write(t2, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t2, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-2")}));
 
   // Write to remove expired values.
-  ZETASQL_EXPECT_OK(storage_.Write(t3, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t3, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-3")}));
 
   // Lookup of t1 should return the first value which shouldn't be cleaned up
   // because it covers the retention period.
-  std::vector<zetasql::Value> values;
-  ZETASQL_EXPECT_OK(
+  std::vector<googlesql::Value> values;
+  GOOGLESQL_EXPECT_OK(
       storage_.Lookup(t1, kTableId0, Key({Int64(1)}), {kColumnID}, &values));
   EXPECT_THAT(values, testing::ElementsAre(String("value-0")));
 
-  ZETASQL_EXPECT_OK(storage_.Write(t4, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t4, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-4")}));
 
   // Lookup of t1 should return an empty value because the first value was
   // cleaned up as it doesn't cover the retention period.
   values.clear();
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       storage_.Lookup(t1, kTableId0, Key({Int64(1)}), {kColumnID}, &values));
-  EXPECT_THAT(values, testing::ElementsAre(zetasql::Value()));
+  EXPECT_THAT(values, testing::ElementsAre(googlesql::Value()));
 }
 
 TEST_F(InMemoryStorageTest, RemoveExpiredVersionsFromCellOnWrite) {
@@ -789,20 +789,20 @@ TEST_F(InMemoryStorageTest, RemoveExpiredVersionsFromCellOnWrite) {
   absl::Time t2 = t1 + absl::Hours(1);
 
   // Write into column.
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-0")}));
-  ZETASQL_EXPECT_OK(storage_.Write(t1, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t1, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
 
   // Write should remove the t0 value as that will be expired.
-  ZETASQL_EXPECT_OK(storage_.Write(t2, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t2, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-2")}));
 
   // Lookup of t0 should return an empty value because the value was cleaned up.
-  std::vector<zetasql::Value> values;
-  ZETASQL_EXPECT_OK(
+  std::vector<googlesql::Value> values;
+  GOOGLESQL_EXPECT_OK(
       storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {kColumnID}, &values));
-  EXPECT_THAT(values, testing::ElementsAre(zetasql::Value()));
+  EXPECT_THAT(values, testing::ElementsAre(googlesql::Value()));
 }
 
 TEST_F(InMemoryStorageTest, RemoveExpiredVersionsFromCellOnDelete) {
@@ -811,19 +811,19 @@ TEST_F(InMemoryStorageTest, RemoveExpiredVersionsFromCellOnDelete) {
   absl::Time t2 = t1 + absl::Hours(1);
 
   // Write into column.
-  ZETASQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-0")}));
-  ZETASQL_EXPECT_OK(storage_.Write(t1, kTableId0, Key({Int64(1)}), {kColumnID},
+  GOOGLESQL_EXPECT_OK(storage_.Write(t1, kTableId0, Key({Int64(1)}), {kColumnID},
                            {String("value-1")}));
 
   // Delete should remove the t0 value as that will be expired.
-  ZETASQL_EXPECT_OK(storage_.Delete(t2, kTableId0, KeyRange::Point(Key({Int64(1)}))));
+  GOOGLESQL_EXPECT_OK(storage_.Delete(t2, kTableId0, KeyRange::Point(Key({Int64(1)}))));
 
   // Lookup of t0 should return an empty value because the value was cleaned up.
-  std::vector<zetasql::Value> values;
-  ZETASQL_EXPECT_OK(
+  std::vector<googlesql::Value> values;
+  GOOGLESQL_EXPECT_OK(
       storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {kColumnID}, &values));
-  EXPECT_THAT(values, testing::ElementsAre(zetasql::Value()));
+  EXPECT_THAT(values, testing::ElementsAre(googlesql::Value()));
 }
 
 }  // namespace

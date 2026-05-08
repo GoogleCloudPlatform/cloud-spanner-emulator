@@ -37,7 +37,7 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -250,7 +250,7 @@ Key ComputeKey(const ValueList& row,
     key.AddColumn(
         key_indices[i].has_value()
             ? row[key_indices[i].value()]
-            : zetasql::Value::Null(primary_key[i]->column()->GetType()),
+            : googlesql::Value::Null(primary_key[i]->column()->GetType()),
         primary_key[i]->is_descending(), primary_key[i]->is_nulls_last());
   }
   return key;
@@ -343,12 +343,12 @@ absl::StatusOr<const Table*> FindChangeStreamPartitionTable(
 
 absl::Status ValidateNonDeleteMutationOp(const MutationOp& mutation_op,
                                          const Schema* schema) {
-  ZETASQL_RET_CHECK(mutation_op.type != MutationOpType::kDelete);
+  GOOGLESQL_RET_CHECK(mutation_op.type != MutationOpType::kDelete);
 
   const Table* table = schema->FindTable(mutation_op.table);
 
   if (IsChangeStreamPartitionTable(mutation_op.table)) {
-    ZETASQL_ASSIGN_OR_RETURN(table,
+    GOOGLESQL_ASSIGN_OR_RETURN(table,
                      FindChangeStreamPartitionTable(schema, mutation_op.table));
   }
 
@@ -356,21 +356,21 @@ absl::Status ValidateNonDeleteMutationOp(const MutationOp& mutation_op,
     return error::TableNotFound(mutation_op.table);
   }
 
-  ZETASQL_RETURN_IF_ERROR(ValidateColumnsAreNotDuplicate(mutation_op.columns));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateColumnsAreNotDuplicate(mutation_op.columns));
 
-  ZETASQL_ASSIGN_OR_RETURN(std::vector<const Column*> columns,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::vector<const Column*> columns,
                    GetColumnsByName(table, mutation_op.columns));
 
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateDefaultAndGeneratedKeys(table, columns, mutation_op.type));
   if (mutation_op.type != MutationOpType::kUpdate) {
     // Insert, InsertOrUpdate and Replace mutation ops require that all
     // not-null columns be present in the mutation. Note: this check is
     // specifically done before InsertOrUpdate & Replace mutation ops are
     // flattened.
-    ZETASQL_RETURN_IF_ERROR(ValidateNotNullColumnsPresent(table, columns));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateNotNullColumnsPresent(table, columns));
   }
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateGeneratedColumnsNotPresent(table, columns, mutation_op.type));
 
   return absl::OkStatus();
@@ -378,7 +378,7 @@ absl::Status ValidateNonDeleteMutationOp(const MutationOp& mutation_op,
 
 absl::StatusOr<ResolvedMutationOp> ResolveDeleteMutationOp(
     const MutationOp& mutation_op, const Schema* schema, absl::Time now) {
-  ZETASQL_RET_CHECK(mutation_op.type == MutationOpType::kDelete);
+  GOOGLESQL_RET_CHECK(mutation_op.type == MutationOpType::kDelete);
   const Table* table = schema->FindTable(mutation_op.table);
   if (table == nullptr) {
     return error::TableNotFound(mutation_op.table);
@@ -391,7 +391,7 @@ absl::StatusOr<ResolvedMutationOp> ResolveDeleteMutationOp(
   // Invalid commit timestamp key ranges for delete ops need to be caught
   // before CanonicalizeKeySetForTable filters out invalid key ranges with
   // future timestamp(s).
-  ZETASQL_RETURN_IF_ERROR(ValidateCommitTimestampKeySetForDeleteOp(
+  GOOGLESQL_RETURN_IF_ERROR(ValidateCommitTimestampKeySetForDeleteOp(
       table, mutation_op.key_set, now));
   std::vector<KeyRange> key_ranges;
   CanonicalizeKeySetForTable(mutation_op.key_set, table, &key_ranges);
@@ -400,7 +400,7 @@ absl::StatusOr<ResolvedMutationOp> ResolveDeleteMutationOp(
     // Transaction store may contain commit timestamp sentinel value until
     // flush, if requested so in a previous mutation. Hence, convert key
     // values to timestamp sentinel value to delete such buffered rows.
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         resolved_mutation_op.key_ranges.emplace_back(),
         MaybeSetCommitTimestampSentinel(table->primary_key(), key_range));
   }

@@ -33,7 +33,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/interface/regexp_evaluators.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
@@ -48,7 +48,7 @@ namespace {
 using ::postgres_translator::function_evaluators::CleanupRegexCache;
 using ::postgres_translator::test::ValidMemoryContext;
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 class ErrorShimTest : public ValidMemoryContext {
   void TearDown() override {
@@ -93,7 +93,7 @@ TEST_F(ErrorShimTest, ErrorCodes) {
   EXPECT_EQ(PgErrorToCode(ERRCODE_INSUFFICIENT_RESOURCES),
             absl::StatusCode::kResourceExhausted);
   EXPECT_EQ(PgErrorToCode(ERRCODE_STATEMENT_TOO_COMPLEX),
-            absl::StatusCode::kResourceExhausted);
+            absl::StatusCode::kOutOfRange);
   EXPECT_EQ(PgErrorToCode(ERRCODE_OUT_OF_MEMORY),
             absl::StatusCode::kResourceExhausted);
   EXPECT_EQ(PgErrorToCode(ERRCODE_SYNTAX_ERROR),
@@ -140,14 +140,14 @@ TEST_F(ErrorShimTest, AnalyzerError) {
   const char* success_query = "select 1;";
   const char* fail_query = "select sqrt(\"foo\");";
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(List * lst, CheckedPgRawParser(success_query));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(List * lst, CheckedPgRawParser(success_query));
   for (RawStmt* stmt : StructList<RawStmt*>(lst)) {
     auto success_status =
         CheckedPgParseAnalyze(stmt, success_query, nullptr, 0, nullptr);
     EXPECT_TRUE(success_status.ok());
   }
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(lst, CheckedPgRawParser(fail_query));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(lst, CheckedPgRawParser(fail_query));
 
   for (RawStmt* stmt : StructList<RawStmt*>(lst)) {
     auto failure_status =
@@ -178,7 +178,7 @@ TEST_F(ErrorShimTest, InvalidStringToByteaErrors) {
 
 TEST_F(ErrorShimTest, CheckedPgStringToNameSucceeds) {
   std::string test_string = "test string";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum datum,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum datum,
                        CheckedPgStringToDatum(test_string.c_str(), NAMEOID));
 
   char* new_test_string = DatumGetCString(DirectFunctionCall1(nameout, datum));
@@ -187,7 +187,7 @@ TEST_F(ErrorShimTest, CheckedPgStringToNameSucceeds) {
 
 TEST_F(ErrorShimTest, CheckedPgStringToByteaSucceeds) {
   std::string bytes_string = "\\x01";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum datum,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum datum,
                        CheckedPgStringToDatum(bytes_string.c_str(), BYTEAOID));
 
   char* new_byte_string = DatumGetCString(DirectFunctionCall1(byteaout, datum));
@@ -196,10 +196,10 @@ TEST_F(ErrorShimTest, CheckedPgStringToByteaSucceeds) {
 
 TEST_F(ErrorShimTest, TextDatumToCString) {
   std::string test_string = "test string";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum datum,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum datum,
                        CheckedPgStringToDatum(test_string.c_str(), TEXTOID));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(char* new_test_string,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(char* new_test_string,
                        CheckedPgTextDatumGetCString(datum));
 
   EXPECT_STREQ(new_test_string, test_string.c_str());
@@ -207,12 +207,12 @@ TEST_F(ErrorShimTest, TextDatumToCString) {
 
 TEST_F(ErrorShimTest, CheckedOidFunctionCall1) {
   // Non-null result
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_string,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum input_string,
                        CheckedPgStringToDatum("a", TEXTOID));
-  ZETASQL_EXPECT_OK(CheckedOidFunctionCall1(F_QUOTE_IDENT, input_string));
+  GOOGLESQL_EXPECT_OK(CheckedOidFunctionCall1(F_QUOTE_IDENT, input_string));
 
   // CheckedOidFunctionCall* does not support NULL results
-  ZETASQL_ASSERT_OK_AND_ASSIGN(ArrayType * input_array,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(ArrayType * input_array,
                        CheckedPgConstructEmptyArray(TEXTOID));
   Datum input_array_datum = PointerGetDatum(input_array);
   EXPECT_THAT(CheckedOidFunctionCall1(F_ARRAY_DIMS, input_array_datum),
@@ -221,16 +221,16 @@ TEST_F(ErrorShimTest, CheckedOidFunctionCall1) {
 
 TEST_F(ErrorShimTest, CheckedOidFunctionCall2) {
   // Non-null result
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_string,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum input_string,
                        CheckedPgStringToDatum("a", TEXTOID));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_pattern,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum input_pattern,
                        CheckedPgStringToDatum("(a)", TEXTOID));
-  ZETASQL_EXPECT_OK(CheckedOidFunctionCall2(F_REGEXP_MATCH_TEXT_TEXT, input_string,
+  GOOGLESQL_EXPECT_OK(CheckedOidFunctionCall2(F_REGEXP_MATCH_TEXT_TEXT, input_string,
                                     input_pattern));
 
   // CheckedOidFunctionCall* does not support NULL results
-  ZETASQL_ASSERT_OK_AND_ASSIGN(input_string, CheckedPgStringToDatum("a", TEXTOID));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(input_pattern, CheckedPgStringToDatum("(b)", TEXTOID));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(input_string, CheckedPgStringToDatum("a", TEXTOID));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(input_pattern, CheckedPgStringToDatum("(b)", TEXTOID));
   EXPECT_THAT(CheckedOidFunctionCall2(F_REGEXP_MATCH_TEXT_TEXT, input_string,
                                       input_pattern),
               StatusIs(absl::StatusCode::kUnknown, HasSubstr("returned NULL")));
@@ -238,17 +238,17 @@ TEST_F(ErrorShimTest, CheckedOidFunctionCall2) {
 
 TEST_F(ErrorShimTest, CheckedOidFunctionCall3) {
   // Non-null result
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_string,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum input_string,
                        CheckedPgStringToDatum("a", TEXTOID));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_pattern,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum input_pattern,
                        CheckedPgStringToDatum("(a)", TEXTOID));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_flags, CheckedPgStringToDatum("i", TEXTOID));
-  ZETASQL_EXPECT_OK(CheckedOidFunctionCall3(F_REGEXP_MATCH_TEXT_TEXT, input_string,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum input_flags, CheckedPgStringToDatum("i", TEXTOID));
+  GOOGLESQL_EXPECT_OK(CheckedOidFunctionCall3(F_REGEXP_MATCH_TEXT_TEXT, input_string,
                                     input_pattern, input_flags));
 
   // CheckedOidFunctionCall* does not support NULL results
-  ZETASQL_ASSERT_OK_AND_ASSIGN(input_string, CheckedPgStringToDatum("a", TEXTOID));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(input_pattern, CheckedPgStringToDatum("(b)", TEXTOID));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(input_string, CheckedPgStringToDatum("a", TEXTOID));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(input_pattern, CheckedPgStringToDatum("(b)", TEXTOID));
   EXPECT_THAT(CheckedOidFunctionCall3(F_REGEXP_MATCH_TEXT_TEXT, input_string,
                                       input_pattern, input_flags),
               StatusIs(absl::StatusCode::kUnknown, HasSubstr("returned NULL")));
@@ -256,14 +256,14 @@ TEST_F(ErrorShimTest, CheckedOidFunctionCall3) {
 
 TEST_F(ErrorShimTest, CheckedNullableOidFunctionCall1) {
   // Non-null result
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_string,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum input_string,
                        CheckedPgStringToDatum("a", TEXTOID));
-  ZETASQL_EXPECT_OK(CheckedNullableOidFunctionCall1(F_QUOTE_IDENT, input_string));
+  GOOGLESQL_EXPECT_OK(CheckedNullableOidFunctionCall1(F_QUOTE_IDENT, input_string));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(ArrayType * input_array,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(ArrayType * input_array,
                        CheckedPgConstructEmptyArray(TEXTOID));
   Datum input_array_datum = PointerGetDatum(input_array);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Datum result_datum,
       CheckedNullableOidFunctionCall1(F_ARRAY_DIMS, input_array_datum));
   EXPECT_EQ(result_datum, NULL_DATUM);
@@ -271,16 +271,16 @@ TEST_F(ErrorShimTest, CheckedNullableOidFunctionCall1) {
 
 TEST_F(ErrorShimTest, CheckedNullableOidFunctionCall2) {
   // Non-null result
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_string,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum input_string,
                        CheckedPgStringToDatum("a", TEXTOID));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_pattern,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum input_pattern,
                        CheckedPgStringToDatum("(a)", TEXTOID));
-  ZETASQL_EXPECT_OK(CheckedNullableOidFunctionCall2(F_REGEXP_MATCH_TEXT_TEXT,
+  GOOGLESQL_EXPECT_OK(CheckedNullableOidFunctionCall2(F_REGEXP_MATCH_TEXT_TEXT,
                                             input_string, input_pattern));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(input_string, CheckedPgStringToDatum("a", TEXTOID));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(input_pattern, CheckedPgStringToDatum("(b)", TEXTOID));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum result_datum, CheckedNullableOidFunctionCall2(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(input_string, CheckedPgStringToDatum("a", TEXTOID));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(input_pattern, CheckedPgStringToDatum("(b)", TEXTOID));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum result_datum, CheckedNullableOidFunctionCall2(
                                                F_REGEXP_MATCH_TEXT_TEXT,
                                                input_string, input_pattern));
   EXPECT_EQ(result_datum, NULL_DATUM);
@@ -288,17 +288,17 @@ TEST_F(ErrorShimTest, CheckedNullableOidFunctionCall2) {
 
 TEST_F(ErrorShimTest, CheckedNullableOidFunctionCall3) {
   // Non-null result
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_string,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum input_string,
                        CheckedPgStringToDatum("a", TEXTOID));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_pattern,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum input_pattern,
                        CheckedPgStringToDatum("(a)", TEXTOID));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Datum input_flags, CheckedPgStringToDatum("i", TEXTOID));
-  ZETASQL_EXPECT_OK(CheckedNullableOidFunctionCall3(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum input_flags, CheckedPgStringToDatum("i", TEXTOID));
+  GOOGLESQL_EXPECT_OK(CheckedNullableOidFunctionCall3(
       F_REGEXP_MATCH_TEXT_TEXT, input_string, input_pattern, input_flags));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(input_string, CheckedPgStringToDatum("a", TEXTOID));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(input_pattern, CheckedPgStringToDatum("(b)", TEXTOID));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(input_string, CheckedPgStringToDatum("a", TEXTOID));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(input_pattern, CheckedPgStringToDatum("(b)", TEXTOID));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Datum result_datum,
       CheckedNullableOidFunctionCall3(F_REGEXP_MATCH_TEXT_TEXT, input_string,
                                       input_pattern, input_flags));
@@ -307,13 +307,13 @@ TEST_F(ErrorShimTest, CheckedNullableOidFunctionCall3) {
 
 TEST_F(ErrorShimTest, CheckedPgListDeleteNthCell) {
   List* test_list = list_make3_int(1, 2, 3);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(test_list, CheckedPgListDeleteNthCell(test_list, 1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test_list, CheckedPgListDeleteNthCell(test_list, 1));
   EXPECT_FALSE(list_member_int(test_list, 2));
   EXPECT_TRUE(list_member_int(test_list, 1));
   EXPECT_TRUE(list_member_int(test_list, 3));
   EXPECT_EQ(test_list->length, 2);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(test_list, CheckedPgListDeleteNthCell(test_list, 0));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test_list, CheckedPgListDeleteNthCell(test_list, 0));
   EXPECT_FALSE(list_member_int(test_list, 1));
   EXPECT_TRUE(list_member_int(test_list, 3));
   EXPECT_EQ(test_list->length, 1);
@@ -323,7 +323,7 @@ TEST_F(ErrorShimTest, CheckedPgLinitialNode) {
   String* arg1 = makeString(pstrdup("column1"));
   String* arg2 = makeString(pstrdup("column2"));
   List* test_list = list_make2(arg1, arg2);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(String * initial_arg,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(String * initial_arg,
                        CheckedPgLinitialNode<String>(test_list));
   EXPECT_EQ(initial_arg, arg1);
 }
@@ -331,7 +331,7 @@ TEST_F(ErrorShimTest, CheckedPgLinitialNode) {
 TEST_F(ErrorShimTest, CheckedPgListHead) {
   List* test_list = list_make3_int(1, 2, 3);
   ListCell* lc;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(lc, CheckedPgListHead(test_list));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(lc, CheckedPgListHead(test_list));
   ASSERT_NE(lc, nullptr);
 
   int test_int = lfirst_int(lc);
@@ -340,12 +340,12 @@ TEST_F(ErrorShimTest, CheckedPgListHead) {
 
 TEST_F(ErrorShimTest, CheckedPgDefGetInt64) {
   char value_str[] = "9223372036854775807";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       DefElem * defElem,
       CheckedPgMakeDefElem(
           nullptr, internal::PostgresCastToNode(makeFloat(value_str)), 1));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int64_t value, CheckedPgDefGetInt64(defElem));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int64_t value, CheckedPgDefGetInt64(defElem));
   EXPECT_EQ(value, 9223372036854775807);
 }
 

@@ -20,10 +20,10 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
@@ -37,7 +37,7 @@ namespace query {
 namespace search {
 
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 // The test suite focuses on verifying the code path that cannot easily
 // triggered by end to end tests, or code paths with outputs not easily
@@ -61,7 +61,7 @@ TokenMap BuildTokenMap(std::string doc) {
 TEST(SearchQueryCacheTest, GetParsedQuery) {
   auto result =
       SearchQueryCache::GetInstance()->GetParsedQuery("google spanner");
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
   EXPECT_NE(result.value(), nullptr);
 }
 
@@ -143,7 +143,7 @@ TEST(PharaseMatcherTest, CompositeUnNearMatch) {
 }
 
 TEST(SearchHelperTest, TestBuildTokenMap) {
-  const zetasql::Value tokenlist = TokenListFromStrings({"substring"});
+  const googlesql::Value tokenlist = TokenListFromStrings({"substring"});
 
   bool is_source_null;
   EXPECT_THAT(

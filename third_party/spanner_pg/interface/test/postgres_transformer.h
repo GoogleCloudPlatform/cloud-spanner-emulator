@@ -38,10 +38,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/analyzer_output.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/analyzer_output.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
@@ -52,11 +52,11 @@ namespace postgres_translator {
 
 // Parse, analyze, and transform a given query using PostgreSQL. Also runs the
 // serializer and deserializer on the PostgreSQL Parse and Query trees.
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
 ParseAndAnalyzeSQLString(
-    const std::string& sql, zetasql::EnumerableCatalog* catalog,
+    const std::string& sql, googlesql::EnumerableCatalog* catalog,
     std::unique_ptr<EngineBuiltinFunctionCatalog> function_catalog,
-    const zetasql::AnalyzerOptions& analyzer_options,
+    const googlesql::AnalyzerOptions& analyzer_options,
     std::vector<std::string>* analyze_query_trees,
     const uint64_t query_id = 0
 );

@@ -20,7 +20,7 @@
 
 #include "common/constants.h"
 #include "common/errors.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -28,7 +28,7 @@ namespace emulator {
 namespace backend {
 
 absl::Status DMLQueryValidator::VisitResolvedFunctionCall(
-    const zetasql::ResolvedFunctionCall* node) {
+    const googlesql::ResolvedFunctionCall* node) {
   const std::string name = node->function()->FullName(false);
   // Check if the function is a DML-specific function.
   if (name == kPendingCommitTimestampFunctionName) {
@@ -39,7 +39,7 @@ absl::Status DMLQueryValidator::VisitResolvedFunctionCall(
 }
 
 absl::Status DMLQueryValidator::VisitResolvedReturningClause(
-    const zetasql::ResolvedReturningClause* node) {
+    const googlesql::ResolvedReturningClause* node) {
   for (const auto& column : node->output_column_list()) {
     if (column->column().type()->IsStruct())
       return error::UnsupportedReturnStructAsColumn();

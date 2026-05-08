@@ -31,10 +31,10 @@
 
 #include "third_party/spanner_pg/test_catalog/spanner_test_catalog.h"
 
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/catalog.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/test_catalog/emulator_catalog.h"
 
@@ -44,16 +44,16 @@ namespace {
 TEST(SpannerTestCatalogTest, SchemaTables) {
   // Check that the full names of the tables in the SqlCatalog include the
   // tables schemas.
-  zetasql::EnumerableCatalog* sql_catalog =
+  googlesql::EnumerableCatalog* sql_catalog =
       GetSpangresTestSpannerUserCatalog();
-  const zetasql::Table* sql_table;
-  ZETASQL_ASSERT_OK(
+  const googlesql::Table* sql_table;
+  GOOGLESQL_ASSERT_OK(
       sql_catalog->FindTable({"INFORMATION_SCHEMA", "TABLES"}, &sql_table));
   std::string full_name = "INFORMATION_SCHEMA.TABLES";
   EXPECT_EQ(sql_table->FullName(), full_name);
   EXPECT_EQ(sql_table->Name(), "TABLES");
 
-  ZETASQL_ASSERT_OK(sql_catalog->FindTable(
+  GOOGLESQL_ASSERT_OK(sql_catalog->FindTable(
       {"SPANNER_SYS", "SUPPORTED_OPTIMIZER_VERSIONS"}, &sql_table));
   full_name = "SPANNER_SYS.SUPPORTED_OPTIMIZER_VERSIONS";
   EXPECT_EQ(sql_table->FullName(), full_name);

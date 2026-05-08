@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "backend/actions/action.h"
@@ -54,27 +54,27 @@ class ColumnValueValidator : public Validator {
                         const DeleteOp& op) const override;
   absl::Status ValidateInsertUpdateOp(
       const Table* table, const std::vector<const Column*>& columns,
-      const std::vector<zetasql::Value>& values, Clock* clock) const;
+      const std::vector<googlesql::Value>& values, Clock* clock) const;
   absl::Status ValidateColumnStringValue(const Table* table,
                                          const Column* column,
-                                         const zetasql::Value& value) const;
+                                         const googlesql::Value& value) const;
 
   absl::Status ValidateColumnValueType(const Table* table,
                                        const Column* const column,
-                                       const zetasql::Value& value) const;
+                                       const googlesql::Value& value) const;
 
   absl::Status ValidateKeyNotNull(const Table* table, const Key& key) const;
 
   absl::Status ValidateColumnBytesValue(const Table* table,
                                         const Column* column,
-                                        const zetasql::Value& value) const;
+                                        const googlesql::Value& value) const;
 
   absl::Status ValidateColumnArrayValue(const Table* table,
                                         const Column* column,
-                                        const zetasql::Value& value) const;
+                                        const googlesql::Value& value) const;
 
   absl::Status ValidateColumnTimestampValue(const Column* const column,
-                                            const zetasql::Value& value,
+                                            const googlesql::Value& value,
                                             Clock* clock) const;
 
   absl::Status ValidateKeySize(const Table* table, const Key& key) const;

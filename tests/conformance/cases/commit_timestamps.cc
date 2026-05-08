@@ -19,7 +19,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/time/clock.h"
@@ -34,7 +34,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 // String used to tell cloud spanner to insert the commit timestamp into a
 // TIMESTAMP column with allow_commit_timestamp option set to true upon
@@ -44,7 +44,7 @@ constexpr char kCommitTimestampSentinel[] = "spanner.commit_timestamp()";
 class CommitTimestamps : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchema({
+    GOOGLESQL_RETURN_IF_ERROR(SetSchema({
         R"(
           CREATE TABLE Users(
             ID           INT64,
@@ -107,7 +107,7 @@ class CommitTimestamps : public DatabaseTest {
 TEST_F(CommitTimestamps, CanWriteCommitTimestampToCommitTimestampColumn) {
   // Test that value assigned to commit timestamp written in column matches the
   // commit timestamp returned.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(CommitResult result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(CommitResult result,
                        Insert("Users", {"ID", "Name", "Age", "CommitTS"},
                               {6, "Levin", 24, kCommitTimestampSentinel}));
   EXPECT_THAT(ReadAll("Users", {"ID", "Name", "Age", "CommitTS"}),
@@ -119,7 +119,7 @@ TEST_F(CommitTimestamps, CannotWriteCommitTimestampToNonCommitTimestampColumn) {
   // column or to a timestamp column with allow_commit_timestamp set to false.
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"},
                      {6, "Levin", kCommitTimestampSentinel}),
-              StatusIs(absl::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age", "NonCommitTS"},
                      {6, "Levin", 24, kCommitTimestampSentinel}),
@@ -131,7 +131,7 @@ TEST_F(CommitTimestamps, CanWriteMaxTimestampToTimestampColumn) {
   // column.
   Timestamp max_allowed_timestamp = MakeMaxTimestamp();
 
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age", "NonCommitTS"},
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age", "NonCommitTS"},
                    {6, "Levin", 24, max_allowed_timestamp}));
 
   EXPECT_THAT(ReadAll("Users", {"ID", "Name", "Age", "NonCommitTS"}),
@@ -163,7 +163,7 @@ TEST_F(CommitTimestamps, CannotWriteFutureTimestampToCommitTimestampColumn) {
 TEST_F(CommitTimestamps, CanWriteCommitTimestampToCommitTimestampKeyColumn) {
   // Test that value assigned to commit timestamp written in key column matches
   // the commit timestamp returned.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       Insert("CommitTimestampKeyTable", {"ID", "CommitTS", "Name"},
              {6, kCommitTimestampSentinel, "Mark"}));
@@ -175,10 +175,10 @@ TEST_F(CommitTimestamps, CanWriteCommitTimestampToCommitTimestampKeyColumn) {
 TEST_F(CommitTimestamps, CanRepeatedlyInsertCommitTimestampKeyColumn) {
   // Test that identical back-to-back inserts with PCT placeholder succeed and
   // are assigned distinct values.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(CommitResult result0,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(CommitResult result0,
                        Insert("CommitTimestampKeyTable", {"ID", "CommitTS"},
                               {0, kCommitTimestampSentinel}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(CommitResult result1,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(CommitResult result1,
                        Insert("CommitTimestampKeyTable", {"ID", "CommitTS"},
                               {0, kCommitTimestampSentinel}));
 
@@ -189,7 +189,7 @@ TEST_F(CommitTimestamps, CanRepeatedlyInsertCommitTimestampKeyColumn) {
 
 TEST_F(CommitTimestamps, CanUpdateCommitTimestampForCommitTimestampColumn) {
   // Test that we can write commit timestamp with Update and InsertOrUpdate.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       Commit({
           MakeInsert("Users", {"ID", "Name", "Age", "CommitTS"}, 6, "Levin", 24,
@@ -210,7 +210,7 @@ TEST_F(CommitTimestamps, CanUpdateCommitTimestampForCommitTimestampColumn) {
 TEST_F(CommitTimestamps, CanUpdateCommitTimestampForCommitTimestampKeyColumn) {
   // Test that we can write commit timestamp with Update and InsertOrUpdate to
   // a key column.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       Commit({
           MakeInsert("CommitTimestampKeyTable", {"ID", "CommitTS", "Name"}, 6,
@@ -231,7 +231,7 @@ TEST_F(CommitTimestamps, CanUpdateCommitTimestampForCommitTimestampKeyColumn) {
 
 TEST_F(CommitTimestamps, CanReplaceCommitTimestampForCommitTimestampColumn) {
   // Test that we can write commit timestamp with Replace.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       Commit({
           MakeInsert("Users", {"ID", "Name", "Age", "CommitTS"}, 6, "Levin", 24,
@@ -248,7 +248,7 @@ TEST_F(CommitTimestamps, CanReplaceCommitTimestampForCommitTimestampColumn) {
 
 TEST_F(CommitTimestamps, CanReplaceCommitTimestampForCommitTimestampKeyColumn) {
   // Test that we can write commit timestamp with Replace to a key column.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       Commit({
           MakeInsert("CommitTimestampKeyTable", {"ID", "CommitTS", "Name"}, 6,
@@ -268,7 +268,7 @@ TEST_F(CommitTimestamps, CanDeleteCommitTimestampColumn) {
   // mutation. Read with the same key as deleted should return empty response.
   KeySet key_set;
   key_set.AddKey(Key(6));
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("Users", {"ID", "Name", "Age", "CommitTS"}, 6, "Levin", 24,
                  kCommitTimestampSentinel),
       MakeDelete("Users", key_set),
@@ -283,7 +283,7 @@ TEST_F(CommitTimestamps, CanDeleteCommitTimestampKeyColumn) {
   // Read with the commit timestamp key should return empty response.
   KeySet key_set;
   key_set.AddKey(Key(1, kCommitTimestampSentinel));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       Commit({
           MakeInsert("CommitTimestampKeyTable", {"ID", "CommitTS", "Name"}, 1,
@@ -301,7 +301,7 @@ TEST_F(CommitTimestamps, CanDeleteRangeWithCommitTimestampSentinel) {
   // Treated as infinite future when used for end open key bound.
   KeySet key_set;
   key_set.AddKey(Key(1, kCommitTimestampSentinel));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       Commit({
           MakeInsert("CommitTimestampKeyTable", {"ID", "CommitTS", "Name"}, 1,
@@ -311,7 +311,7 @@ TEST_F(CommitTimestamps, CanDeleteRangeWithCommitTimestampSentinel) {
                    Key(1, result.commit_timestamp)),
               IsOkAndHoldsRows({{1, result.commit_timestamp, "Levin"}}));
 
-  ZETASQL_ASSERT_OK(Delete("CommitTimestampKeyTable",
+  GOOGLESQL_ASSERT_OK(Delete("CommitTimestampKeyTable",
                    ClosedOpen(Key(1, result.commit_timestamp),
                               Key(1, kCommitTimestampSentinel))));
   EXPECT_THAT(Read("CommitTimestampKeyTable", {"ID", "CommitTS", "Name"},
@@ -324,7 +324,7 @@ TEST_F(CommitTimestamps, CanDeleteFullRangeInSameTransaction) {
   // return not found on reads.
   KeySet key_set;
   key_set.AddKey(Key(1, kCommitTimestampSentinel));
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("CommitTimestampKeyTable", {"ID", "CommitTS", "Name"}, 1,
                  kCommitTimestampSentinel, "Levin"),
       MakeInsert("CommitTimestampKeyTable", {"ID", "CommitTS", "Name"}, 1,
@@ -340,7 +340,7 @@ TEST_F(CommitTimestamps, CannotDeleteEmptyRangeWithCommitTimestampSentinel) {
   // Insert a new record at commit timestamp.
   KeySet key_set;
   key_set.AddKey(Key(1, kCommitTimestampSentinel));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       Commit({
           MakeInsert("CommitTimestampKeyTable", {"ID", "CommitTS", "Name"}, 1,
@@ -351,14 +351,14 @@ TEST_F(CommitTimestamps, CannotDeleteEmptyRangeWithCommitTimestampSentinel) {
               IsOkAndHoldsRows({{1, result.commit_timestamp, "Levin"}}));
 
   // Performing delete with empty key range with commit timestamp is a no-op.
-  ZETASQL_ASSERT_OK(Delete("CommitTimestampKeyTable",
+  GOOGLESQL_ASSERT_OK(Delete("CommitTimestampKeyTable",
                    ClosedOpen(Key(1, kCommitTimestampSentinel),
                               Key(1, kCommitTimestampSentinel))));
   EXPECT_THAT(ReadAll("CommitTimestampKeyTable", {"ID", "CommitTS", "Name"}),
               IsOkAndHoldsRows({{1, result.commit_timestamp, "Levin"}}));
 
   // Delete empty range [ct, t0) has no effect (on an insert at t0).
-  ZETASQL_ASSERT_OK(Delete("CommitTimestampKeyTable",
+  GOOGLESQL_ASSERT_OK(Delete("CommitTimestampKeyTable",
                    ClosedOpen(Key(1, kCommitTimestampSentinel),
                               Key(1, result.commit_timestamp))));
   EXPECT_THAT(ReadAll("CommitTimestampKeyTable", {"ID", "CommitTS", "Name"}),
@@ -386,7 +386,7 @@ TEST_F(CommitTimestamps, ValidatesDeleteRangeWithCommitTimestamp) {
   Timestamp future_timestamp2 = MakeFutureTimestamp(std::chrono::seconds(2000));
 
   // Range delete at (past, past+k) is allowed.
-  ZETASQL_EXPECT_OK(Delete("CommitTimestampKeyTable",
+  GOOGLESQL_EXPECT_OK(Delete("CommitTimestampKeyTable",
                    OpenOpen(Key(1, past_timestamp), Key(1, past_timestamp2))));
 
   // Range delete at (future, future+k) is disallowed.
@@ -402,12 +402,12 @@ TEST_F(CommitTimestamps, ValidatesDeleteRangeWithCommitTimestamp) {
       StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // No-op delete at (future, future) allowed.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Delete("CommitTimestampKeyTable",
              OpenOpen(Key(1, future_timestamp), Key(1, future_timestamp))));
 
   // No-op delete at [future, future) allowed.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Delete("CommitTimestampKeyTable",
              ClosedOpen(Key(1, future_timestamp), Key(1, future_timestamp))));
 
@@ -419,11 +419,11 @@ TEST_F(CommitTimestamps, ValidatesDeleteRangeWithCommitTimestamp) {
       StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // No-op delete at (future, past) is allowed.
-  ZETASQL_EXPECT_OK(Delete("CommitTimestampKeyTable",
+  GOOGLESQL_EXPECT_OK(Delete("CommitTimestampKeyTable",
                    OpenOpen(Key(1, future_timestamp), Key(1, past_timestamp))));
 
   // Range delete on prefix works.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       Commit({
           MakeInsert("CommitTimestampKeyTable", {"ID", "CommitTS", "Name"}, 1,
@@ -444,7 +444,7 @@ TEST_F(CommitTimestamps, ValidatesDeleteRangeWithDescendingCommitTimestamp) {
   Timestamp future_timestamp2 = MakeFutureTimestamp(std::chrono::seconds(2000));
 
   // Range delete at (past+k, past) is allowed.
-  ZETASQL_EXPECT_OK(Delete("CommitTimestampDescKeyTable",
+  GOOGLESQL_EXPECT_OK(Delete("CommitTimestampDescKeyTable",
                    OpenOpen(Key(1, past_timestamp2), Key(1, past_timestamp))));
 
   // Range delete at (future+k, future) is disallowed.
@@ -460,12 +460,12 @@ TEST_F(CommitTimestamps, ValidatesDeleteRangeWithDescendingCommitTimestamp) {
       StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // No-op delete at (future, future) allowed.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Delete("CommitTimestampDescKeyTable",
              OpenOpen(Key(1, future_timestamp), Key(1, future_timestamp))));
 
   // No-op delete at [future, future) allowed.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Delete("CommitTimestampDescKeyTable",
              ClosedOpen(Key(1, future_timestamp), Key(1, future_timestamp))));
 
@@ -477,11 +477,11 @@ TEST_F(CommitTimestamps, ValidatesDeleteRangeWithDescendingCommitTimestamp) {
       StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // No-op delete at (past, future) is allowed.
-  ZETASQL_EXPECT_OK(Delete("CommitTimestampDescKeyTable",
+  GOOGLESQL_EXPECT_OK(Delete("CommitTimestampDescKeyTable",
                    OpenOpen(Key(1, past_timestamp), Key(1, future_timestamp))));
 
   // Range delete on prefix works.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       Commit({
           MakeInsert("CommitTimestampDescKeyTable", {"ID", "CommitTS", "Name"},
@@ -497,7 +497,7 @@ TEST_F(CommitTimestamps, ValidatesDeleteRangeWithDescendingCommitTimestamp) {
 }
 
 TEST_F(CommitTimestamps, CanInsertPendingCommitTimestampInBuffer) {
-  ZETASQL_ASSERT_OK(ExecuteDml(
+  GOOGLESQL_ASSERT_OK(ExecuteDml(
       SqlStatement("INSERT INTO CommitTimestampKeyTable (ID, CommitTS, Name) "
                    "VALUES (@id, PENDING_COMMIT_TIMESTAMP(), @name)",
                    {{"id", Value(6)}, {"name", Value("Mark")}})));
@@ -509,7 +509,7 @@ TEST_F(CommitTimestamps, CanInsertPendingCommitTimestampInBuffer) {
 }
 
 TEST_F(CommitTimestamps, CanInsertAndCommitPendingCommitTimestampInDml) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       CommitDml({SqlStatement(
           "INSERT INTO CommitTimestampKeyTable (ID, CommitTS, Name) "
@@ -521,7 +521,7 @@ TEST_F(CommitTimestamps, CanInsertAndCommitPendingCommitTimestampInDml) {
 
 TEST_F(CommitTimestamps, CanInsertPendingCommitTimestampWithSubsetOfColumns) {
   // Note that column `Name` is not part of inserted columns.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       CommitDml({SqlStatement("INSERT INTO Users(ID, Age, CommitTS) "
                               "VALUES (1, 27, PENDING_COMMIT_TIMESTAMP())")}));
@@ -536,17 +536,17 @@ TEST_F(CommitTimestamps, CannotInsertPendingCommitTimestampFromSelect) {
                                "SELECT 1, 27, PENDING_COMMIT_TIMESTAMP()")}});
   std::string error_msg = "PENDING_COMMIT_TIMESTAMP()";
   EXPECT_THAT(result,
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
                                         testing::HasSubstr(error_msg)));
 }
 
 TEST_F(CommitTimestamps, CanUpdateAndCommitPendingCommitTimestampInDml) {
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "CommitTS"},
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "CommitTS"},
                    {1, "Levin", MakeMinTimestamp()}));
   EXPECT_THAT(Query("SELECT ID, Name, CommitTS FROM Users"),
               IsOkAndHoldsRows({{1, "Levin", MakeMinTimestamp()}}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       CommitDml({SqlStatement("UPDATE Users SET CommitTS = "
                               "PENDING_COMMIT_TIMESTAMP() WHERE ID = 1")}));
@@ -555,7 +555,7 @@ TEST_F(CommitTimestamps, CanUpdateAndCommitPendingCommitTimestampInDml) {
 }
 
 TEST_F(CommitTimestamps, CanInsertMultipleRowsInDml) {
-  ZETASQL_EXPECT_OK(CommitDml({
+  GOOGLESQL_EXPECT_OK(CommitDml({
       SqlStatement("INSERT INTO CommitTimestampTable (ID, CommitTS) "
                    "VALUES (0, PENDING_COMMIT_TIMESTAMP())"),
       SqlStatement("INSERT INTO CommitTimestampTable (ID, CommitTS) "
@@ -564,7 +564,7 @@ TEST_F(CommitTimestamps, CanInsertMultipleRowsInDml) {
 }
 
 TEST_F(CommitTimestamps, CanInsertMultipleRowsWithIndexedTimestamp) {
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 0,
                  kCommitTimestampSentinel, "A"),
       MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 1,
@@ -573,7 +573,7 @@ TEST_F(CommitTimestamps, CanInsertMultipleRowsWithIndexedTimestamp) {
 }
 
 TEST_F(CommitTimestamps, CanInsertMultipleRowsWithIndexedTimestampInDml) {
-  ZETASQL_EXPECT_OK(CommitDml({
+  GOOGLESQL_EXPECT_OK(CommitDml({
       SqlStatement("INSERT INTO CommitTimestampIndexTable (ID, CommitTS, Name) "
                    "VALUES (0, PENDING_COMMIT_TIMESTAMP(), 'A')"),
       SqlStatement("INSERT INTO CommitTimestampIndexTable (ID, CommitTS, Name) "
@@ -582,7 +582,7 @@ TEST_F(CommitTimestamps, CanInsertMultipleRowsWithIndexedTimestampInDml) {
 }
 
 TEST_F(CommitTimestamps, CannotUpdateMultipleRowsWithIndexedTimestampInDml) {
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 0,
                  kCommitTimestampSentinel, "A"),
       MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 1,
@@ -600,13 +600,13 @@ TEST_F(CommitTimestamps, CannotUpdateMultipleRowsWithIndexedTimestampInDml) {
 }
 
 TEST_F(CommitTimestamps, InsertOnConflictDoNothingCommitTsPKColumn) {
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("CommitTimestampKeyTable", {"ID", "CommitTS"}, 1,
                  kCommitTimestampSentinel),
       MakeInsert("CommitTimestampKeyTable", {"ID", "CommitTS"}, 2,
                  kCommitTimestampSentinel),
   }));
-  ZETASQL_ASSERT_OK(CommitDml(
+  GOOGLESQL_ASSERT_OK(CommitDml(
       {SqlStatement("INSERT INTO CommitTimestampKeyTable (ID, CommitTS) "
                     "VALUES (1, PENDING_COMMIT_TIMESTAMP()), "
                     "(2, PENDING_COMMIT_TIMESTAMP()) "
@@ -619,14 +619,14 @@ TEST_F(CommitTimestamps, InsertOnConflictDoNothingCommitTsPKColumn) {
 }
 
 TEST_F(CommitTimestamps, InsertOnConflictDoNothingCommitTsUniqueIndexColumn) {
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 1,
                  kCommitTimestampSentinel, "A"),
       MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 2,
                  kCommitTimestampSentinel, "B"),
   }));
   // Two new rows are inserted.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       CommitDml({SqlStatement("INSERT INTO CommitTimestampIndexTable "
                               "(ID, Name, CommitTS) "
@@ -646,7 +646,7 @@ TEST_F(CommitTimestamps, InsertOnConflictDoNothingCommitTsUniqueIndexColumn) {
 }
 
 TEST_F(CommitTimestamps, InsertOnConflictDoUpdateCommitTsPKColumn) {
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("CommitTimestampTable", {"ID"}, 1),
       MakeInsert("CommitTimestampTable", {"ID"}, 2),
   }));
@@ -661,7 +661,7 @@ TEST_F(CommitTimestamps, InsertOnConflictDoUpdateCommitTsPKColumn) {
         IsOkAndHoldsRows({{2}}));
   }
   // CommitTS is updated to commit timestamp value by SET clause.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       CommitDml({SqlStatement("INSERT INTO CommitTimestampTable (ID, CommitTS) "
                               "VALUES (1, PENDING_COMMIT_TIMESTAMP()), "
@@ -676,7 +676,7 @@ TEST_F(CommitTimestamps, InsertOnConflictDoUpdateCommitTsPKColumn) {
 }
 
 TEST_F(CommitTimestamps, InsertOnConflictDoUpdateCommitTsUniqueIndexColumn) {
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("CommitTimestampIndexTable", {"ID"}, 1),
   }));
 
@@ -689,7 +689,7 @@ TEST_F(CommitTimestamps, InsertOnConflictDoUpdateCommitTsUniqueIndexColumn) {
         IsOkAndHoldsRows({{1}}));
   }
   // CommitTS is updated to commit timestamp value by SET clause.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       CommitDml({SqlStatement(
           "INSERT INTO CommitTimestampIndexTable (ID) "
@@ -707,12 +707,12 @@ TEST_F(CommitTimestamps, InsertOnConflictDoUpdateCommitTsUniqueIndexColumn) {
 
 TEST_F(CommitTimestamps,
        InsertOnConflictCannotReadCommitTsColumnInSetClauseExpressions) {
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("CommitTimestampTable", {"ID"}, 1),
   }));
 
   ASSERT_THAT(
-      ExecuteDml({SqlStatement(
+      CommitDml({SqlStatement(
           "INSERT INTO CommitTimestampTable (ID, CommitTS) "
           "VALUES (1, PENDING_COMMIT_TIMESTAMP()) "
           "ON CONFLICT(ID) "
@@ -720,24 +720,25 @@ TEST_F(CommitTimestamps,
           "CommitTS = TIMESTAMP_ADD(excluded.CommitTS, INTERVAL 1 DAY)")}),
       StatusIs(absl::StatusCode::kInvalidArgument));
 
-  ASSERT_THAT(ExecuteDml({SqlStatement(
-                  "INSERT INTO CommitTimestampTable (ID, CommitTS) "
-                  "VALUES (1, PENDING_COMMIT_TIMESTAMP()) "
-                  "ON CONFLICT(ID) "
-                  "DO UPDATE SET CommitTS = PENDING_COMMIT_TIMESTAMP() "
-                  "WHERE excluded.CommitTS IS NOT NULL")}),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+  auto result = CommitDml(
+      {SqlStatement("INSERT INTO CommitTimestampTable (ID, CommitTS) "
+                    "VALUES (1, PENDING_COMMIT_TIMESTAMP()) "
+                    "ON CONFLICT(ID) "
+                    "DO UPDATE SET CommitTS = PENDING_COMMIT_TIMESTAMP() "
+                    "WHERE excluded.CommitTS IS NOT NULL")});
+  ASSERT_THAT(result, StatusIs(absl::StatusCode::kInvalidArgument))
+      << result.status();
 }
 
 TEST_F(CommitTimestamps, CanUpdateMultipleRowsWithIndexedTimestampInSingleDml) {
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 0,
                  kCommitTimestampSentinel, "A"),
       MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 1,
                  kCommitTimestampSentinel, "B"),
   }));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       DmlResult result,
       ExecuteDml("UPDATE CommitTimestampIndexTable SET CommitTS = "
                  "PENDING_COMMIT_TIMESTAMP() WHERE ID = 0 OR ID = 1"));
@@ -745,14 +746,14 @@ TEST_F(CommitTimestamps, CanUpdateMultipleRowsWithIndexedTimestampInSingleDml) {
 }
 
 TEST_F(CommitTimestamps, CanUpdateMultipleRowsInDml) {
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("CommitTimestampTable", {"ID", "CommitTS"}, 0,
                  kCommitTimestampSentinel),
       MakeInsert("CommitTimestampTable", {"ID", "CommitTS"}, 1,
                  kCommitTimestampSentinel),
   }));
 
-  ZETASQL_EXPECT_OK(CommitDml({
+  GOOGLESQL_EXPECT_OK(CommitDml({
       SqlStatement("UPDATE CommitTimestampTable SET CommitTS = "
                    "PENDING_COMMIT_TIMESTAMP() WHERE ID = 0"),
       SqlStatement("UPDATE CommitTimestampTable SET CommitTS = "
@@ -761,14 +762,14 @@ TEST_F(CommitTimestamps, CanUpdateMultipleRowsInDml) {
 }
 
 TEST_F(CommitTimestamps, CanUpdateMultipleRowsWithIndexedTimestamp) {
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 0,
                  kCommitTimestampSentinel, "A"),
       MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 1,
                  kCommitTimestampSentinel, "B"),
   }));
 
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeUpdate("CommitTimestampIndexTable", {"ID", "CommitTS"}, 0,
                  kCommitTimestampSentinel),
       MakeUpdate("CommitTimestampIndexTable", {"ID", "CommitTS"}, 1,
@@ -779,11 +780,11 @@ TEST_F(CommitTimestamps, CanUpdateMultipleRowsWithIndexedTimestamp) {
 // This test covers a known inconsistency between Spanner and the Emulator
 TEST_F(CommitTimestamps, IndexReadsIncorrectlyAllowedInQueries) {
   auto txn = Transaction(Transaction::ReadWriteOptions());
-  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+  GOOGLESQL_ASSERT_OK(ExecuteDmlTransaction(
       txn,
       SqlStatement("INSERT INTO CommitTimestampIndexTable (ID, CommitTS, Name) "
                    "VALUES (0, PENDING_COMMIT_TIMESTAMP(), 'name 1')")));
-  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+  GOOGLESQL_ASSERT_OK(ExecuteDmlTransaction(
       txn,
       SqlStatement("INSERT INTO CommitTimestampIndexTable (ID, CommitTS, Name) "
                    "VALUES (1, PENDING_COMMIT_TIMESTAMP(), 'name 2')")));
@@ -802,12 +803,12 @@ TEST_F(CommitTimestamps, IndexReadsIncorrectlyAllowedInQueries) {
 }
 
 TEST_F(CommitTimestamps, QueryValidatorHandlesSystemTables) {
-  ZETASQL_EXPECT_OK(Query("select table_name from information_schema.tables"));
+  GOOGLESQL_EXPECT_OK(Query("select table_name from information_schema.tables"));
 }
 
 TEST_F(CommitTimestamps, CanNotReadThroughView) {
   auto txn = Transaction(Transaction::ReadWriteOptions());
-  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+  GOOGLESQL_ASSERT_OK(ExecuteDmlTransaction(
       txn, SqlStatement("INSERT INTO CommitTimestampTable (ID, CommitTS, Name) "
                         "VALUES (0, PENDING_COMMIT_TIMESTAMP(), 'name 1')")));
   EXPECT_THAT(QueryTransaction(std::move(txn),
@@ -816,7 +817,7 @@ TEST_F(CommitTimestamps, CanNotReadThroughView) {
 }
 
 TEST_F(CommitTimestamps, InconsistentCommitTimestampInParent) {
-  ZETASQL_EXPECT_OK(SetSchema({
+  GOOGLESQL_EXPECT_OK(SetSchema({
       R"(
         CREATE TABLE T1(
           ts     TIMESTAMP,
@@ -844,7 +845,7 @@ TEST_F(CommitTimestamps, InconsistentCommitTimestampInParent) {
 }
 
 TEST_F(CommitTimestamps, InconsistentCommitTimestampInChildren) {
-  ZETASQL_EXPECT_OK(SetSchema({
+  GOOGLESQL_EXPECT_OK(SetSchema({
       R"(
         CREATE TABLE T1(
           ts     TIMESTAMP OPTIONS (allow_commit_timestamp = true),
@@ -871,7 +872,7 @@ TEST_F(CommitTimestamps, InconsistentCommitTimestampInChildren) {
 }
 
 TEST_F(CommitTimestamps, InconsistentCommitTimestampAllowedInSchema) {
-  ZETASQL_EXPECT_OK(SetSchema({
+  GOOGLESQL_EXPECT_OK(SetSchema({
       R"(
         CREATE TABLE T1(
           ts     TIMESTAMP,
@@ -887,7 +888,7 @@ TEST_F(CommitTimestamps, InconsistentCommitTimestampAllowedInSchema) {
   // Expect that schema change to parent table to set allow_commit_timestamp to
   // true is allowed, even if it's inconsistent with child table. Attempt to
   // insert a pending commit
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       SetSchema({"ALTER TABLE T1 ALTER COLUMN ts SET OPTIONS "
                  "(allow_commit_timestamp = true)"}));
   EXPECT_THAT(Insert("T2", {"ts", "col2"}, {kCommitTimestampSentinel, "val2"}),
@@ -895,14 +896,14 @@ TEST_F(CommitTimestamps, InconsistentCommitTimestampAllowedInSchema) {
 
   // Set allow_commit_timestamp to true in child table to make it consistent
   // with the same column in parent table.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       SetSchema({"ALTER TABLE T2 ALTER COLUMN ts SET OPTIONS "
                  "(allow_commit_timestamp = true)"}));
 
   // Insert in the child table now succeed as expected and the value inserted in
   // the parent and child is same and is equal to the commit timestamp value.
   {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         CommitResult result,
         Commit({
             MakeInsert("T1", {"ts"}, kCommitTimestampSentinel),
@@ -917,7 +918,7 @@ TEST_F(CommitTimestamps, InconsistentCommitTimestampAllowedInSchema) {
   // Insert a row in parent table first. Followed by an attempt to insert in the
   // child row in a separate commit request.
   {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(CommitResult result,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(CommitResult result,
                          Commit({
                              MakeInsert("T1", {"ts"}, kCommitTimestampSentinel),
                          }));
@@ -932,7 +933,7 @@ TEST_F(CommitTimestamps, InconsistentCommitTimestampAllowedInSchema) {
                                : absl::StatusCode::kNotFound));
 
     // Insert the same timestamp that was inserted into parent row will succeed.
-    ZETASQL_EXPECT_OK(Commit({
+    GOOGLESQL_EXPECT_OK(Commit({
         MakeInsert("T2", {"ts", "col2"}, result.commit_timestamp, "val2"),
     }));
   }
@@ -940,7 +941,7 @@ TEST_F(CommitTimestamps, InconsistentCommitTimestampAllowedInSchema) {
 
 TEST_F(CommitTimestamps, CanInsertExplicitTimestampWithInconsistentSchema) {
   // Interleave hierarchy with inconsistent allow_commit_timestamp in child.
-  ZETASQL_EXPECT_OK(SetSchema({
+  GOOGLESQL_EXPECT_OK(SetSchema({
       R"(
         CREATE TABLE T1(
           ts     TIMESTAMP OPTIONS (allow_commit_timestamp = true),
@@ -957,7 +958,7 @@ TEST_F(CommitTimestamps, CanInsertExplicitTimestampWithInconsistentSchema) {
   // hierarchy.
   {
     Timestamp explicit_timestamp = MakePastTimestamp(std::chrono::seconds(10));
-    ZETASQL_ASSERT_OK(Commit({
+    GOOGLESQL_ASSERT_OK(Commit({
         MakeInsert("T1", {"ts"}, explicit_timestamp),
         MakeInsert("T2", {"ts", "col2"}, explicit_timestamp, "val2"),
     }));
@@ -968,7 +969,7 @@ TEST_F(CommitTimestamps, CanInsertExplicitTimestampWithInconsistentSchema) {
   }
 
   // Interleave hierarchy with inconsistent allow_commit_timestamp in parent.
-  ZETASQL_EXPECT_OK(SetSchema({
+  GOOGLESQL_EXPECT_OK(SetSchema({
       R"(
         CREATE TABLE T3(
           ts     TIMESTAMP,
@@ -985,7 +986,7 @@ TEST_F(CommitTimestamps, CanInsertExplicitTimestampWithInconsistentSchema) {
   // hierarchy.
   {
     Timestamp explicit_timestamp = MakePastTimestamp(std::chrono::seconds(10));
-    ZETASQL_ASSERT_OK(Commit({
+    GOOGLESQL_ASSERT_OK(Commit({
         MakeInsert("T3", {"ts"}, explicit_timestamp),
         MakeInsert("T4", {"ts", "col2"}, explicit_timestamp, "val2"),
     }));
@@ -1004,7 +1005,7 @@ TEST_F(CommitTimestamps, BatchDmlWithMultipleRowsWithCommitTimestamp) {
                          "VALUES (1, 'Pete', PENDING_COMMIT_TIMESTAMP())"),
             SqlStatement("INSERT INTO Users(ID, Name, CommitTS) "
                          "VALUES (2, 'Zeke', PENDING_COMMIT_TIMESTAMP())")});
-  ZETASQL_EXPECT_OK(ToUtilStatus(result.value().status));
+  GOOGLESQL_EXPECT_OK(ToUtilStatus(result.value().status));
 }
 
 TEST_F(CommitTimestamps, BatchDmlWithUpdateWithCommitTimestamp) {
@@ -1016,14 +1017,14 @@ TEST_F(CommitTimestamps, BatchDmlWithUpdateWithCommitTimestamp) {
             SqlStatement("UPDATE Users SET Name = 'Zeke' WHERE ID = 1"),
             SqlStatement("UPDATE Users SET CommitTS = "
                          "PENDING_COMMIT_TIMESTAMP() WHERE ID = 1")});
-  ZETASQL_EXPECT_OK(ToUtilStatus(result.value().status));
+  GOOGLESQL_EXPECT_OK(ToUtilStatus(result.value().status));
 }
 
 // Test to verify that commit timestamps are propagated to index columns.
 class CommitTimestampIndexingTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchema({
+    GOOGLESQL_RETURN_IF_ERROR(SetSchema({
         R"(
           CREATE TABLE Base (
             ID            INT64,
@@ -1043,7 +1044,7 @@ class CommitTimestampIndexingTest : public DatabaseTest {
 
 TEST_F(CommitTimestampIndexingTest, CommitTimestampIsPropagatedToIndex) {
   // Writing to the base table should write to the index.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       CommitResult result,
       Insert("Base",
              {"ID", "KeyCommitTS1", "KeyCommitTS2", "Name", "ValueCommitTS"},

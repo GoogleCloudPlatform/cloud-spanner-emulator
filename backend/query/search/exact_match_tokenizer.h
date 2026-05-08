@@ -19,7 +19,7 @@
 
 #include <string>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/strings/string_view.h"
 
 namespace google {
@@ -31,8 +31,8 @@ namespace search {
 
 class ExactMatchTokenizer {
  public:
-  static absl::StatusOr<zetasql::Value> Tokenize(
-      absl::Span<const zetasql::Value> args);
+  static absl::StatusOr<googlesql::Value> Tokenize(
+      absl::Span<const googlesql::Value> args);
 };
 
 }  // namespace search

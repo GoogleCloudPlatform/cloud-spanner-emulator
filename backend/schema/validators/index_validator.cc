@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/types/type.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
@@ -37,8 +37,8 @@
 #include "backend/schema/updater/schema_validation_context.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -69,7 +69,7 @@ absl::Status GetDropManagedIndexError(
     return error::DropForeignKeyManagedIndex(
         index_name, absl::StrJoin(foreign_key_names, ", "));
   }
-  ZETASQL_RET_CHECK_FAIL() << "Unknown type of managed index: index name=`"
+  GOOGLESQL_RET_CHECK_FAIL() << "Unknown type of managed index: index name=`"
                    << index_name << "` managing nodes=["
                    << absl::StrJoin(other_names, ", ") << "]";
 }
@@ -78,16 +78,16 @@ absl::Status GetDropManagedIndexError(
 
 absl::Status IndexValidator::Validate(const Index* index,
                                       SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK(!index->name_.empty());
-  ZETASQL_RET_CHECK_NE(index->indexed_table_, nullptr);
-  ZETASQL_RET_CHECK_NE(index->index_data_table_, nullptr);
+  GOOGLESQL_RET_CHECK(!index->name_.empty());
+  GOOGLESQL_RET_CHECK_NE(index->indexed_table_, nullptr);
+  GOOGLESQL_RET_CHECK_NE(index->index_data_table_, nullptr);
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(index->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(index->postgresql_oid().has_value());
   } else {
-    ZETASQL_RET_CHECK(!index->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!index->postgresql_oid().has_value());
   }
 
-  ZETASQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName("Index", index->name_));
+  GOOGLESQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName("Index", index->name_));
   if (!index->is_managed() &&
       !SDLObjectName::InSameSchema(index->name_,
                                    index->indexed_table_->Name())) {
@@ -122,7 +122,7 @@ absl::Status IndexValidator::Validate(const Index* index,
                                                ToString(column_type));
     }
     if (index->is_null_filtered_) {
-      ZETASQL_RET_CHECK(!key_column->column()->is_nullable());
+      GOOGLESQL_RET_CHECK(!key_column->column()->is_nullable());
     }
     keys_set.insert(column_name);
   }
@@ -186,14 +186,14 @@ absl::Status IndexValidator::Validate(const Index* index,
       return error::VectorIndexPartitionByUnsupported(index->name_);
     }
 
-    ZETASQL_RET_CHECK(index->key_columns_.size() == 1);
+    GOOGLESQL_RET_CHECK(index->key_columns_.size() == 1);
     const KeyColumn* key_column = index->key_columns_[0];
     if (!key_column->column()->GetType()->IsArray()) {
       return error::VectorIndexNonArrayKey(key_column->column()->Name(),
                                            index->name_);
     }
 
-    const zetasql::Type* element_type =
+    const googlesql::Type* element_type =
         key_column->column()->GetType()->AsArray()->element_type();
     if (!element_type->IsFloat() && !element_type->IsDouble()) {
       return error::VectorIndexArrayKeyMustBeFloatOrDouble(
@@ -234,29 +234,29 @@ absl::Status IndexValidator::ValidateUpdate(const Index* index,
     if (!index->managing_nodes_.empty()) {
       return GetDropManagedIndexError(index->name_, index->managing_nodes_);
     }
-    ZETASQL_RET_CHECK(index->index_data_table_->is_deleted());
+    GOOGLESQL_RET_CHECK(index->index_data_table_->is_deleted());
     context->global_names()->RemoveName(index->Name());
     return absl::OkStatus();
   }
 
-  ZETASQL_RET_CHECK(!index->index_data_table()->is_deleted());
+  GOOGLESQL_RET_CHECK(!index->index_data_table()->is_deleted());
   for (const SchemaNode* managing_node : index->managing_nodes_) {
-    ZETASQL_RET_CHECK(!managing_node->is_deleted());
+    GOOGLESQL_RET_CHECK(!managing_node->is_deleted());
   }
 
-  ZETASQL_RET_CHECK_EQ(index->name_, old_index->name_);
-  ZETASQL_RET_CHECK_EQ(index->is_null_filtered_, old_index->is_null_filtered_);
-  ZETASQL_RET_CHECK_EQ(index->is_unique_, old_index->is_unique_);
-  ZETASQL_RET_CHECK_EQ(index->key_columns_.size(), old_index->key_columns_.size());
+  GOOGLESQL_RET_CHECK_EQ(index->name_, old_index->name_);
+  GOOGLESQL_RET_CHECK_EQ(index->is_null_filtered_, old_index->is_null_filtered_);
+  GOOGLESQL_RET_CHECK_EQ(index->is_unique_, old_index->is_unique_);
+  GOOGLESQL_RET_CHECK_EQ(index->key_columns_.size(), old_index->key_columns_.size());
 
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(index->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(old_index->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK_EQ(index->postgresql_oid().value(),
+    GOOGLESQL_RET_CHECK(index->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(old_index->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK_EQ(index->postgresql_oid().value(),
                  old_index->postgresql_oid().value());
   } else {
-    ZETASQL_RET_CHECK(!index->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(!old_index->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!index->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!old_index->postgresql_oid().has_value());
   }
 
   for (int i = 0; i < index->key_columns_.size(); ++i) {
@@ -265,7 +265,7 @@ absl::Status IndexValidator::ValidateUpdate(const Index* index,
     if (index->is_null_filtered_) {
       // For null-filtered indexes, we need not check for nullability changes
       // of the source column
-      ZETASQL_RET_CHECK(!new_key->column()->is_nullable());
+      GOOGLESQL_RET_CHECK(!new_key->column()->is_nullable());
     } else {
       // Cannot change nullability of key columns for non-null filtered
       // indexes.

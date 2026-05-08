@@ -32,43 +32,43 @@
 #ifndef INTERFACE_EMULATOR_PARSER_H_
 #define INTERFACE_EMULATOR_PARSER_H_
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type_factory.h"
 #include "backend/query/function_catalog.h"
 #include "third_party/spanner_pg/interface/spangres_translator_interface.h"
 
 namespace postgres_translator {
 namespace spangres {
 
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
 ParseAndAnalyzePostgreSQL(
-    const std::string& sql, zetasql::EnumerableCatalog* catalog,
-    const zetasql::AnalyzerOptions& analyzer_options,
-    zetasql::TypeFactory* type_factory,
+    const std::string& sql, googlesql::EnumerableCatalog* catalog,
+    const googlesql::AnalyzerOptions& analyzer_options,
+    googlesql::TypeFactory* type_factory,
     std::unique_ptr<google::spanner::emulator::backend::FunctionCatalog>
         emulator_function_catalog);
 
 absl::StatusOr<interfaces::ExpressionTranslateResult>
 TranslateTableLevelExpression(
     absl::string_view expression, absl::string_view table_name,
-    zetasql::EnumerableCatalog& catalog,
-    const zetasql::AnalyzerOptions& analyzer_options,
-    zetasql::TypeFactory* type_factory,
+    googlesql::EnumerableCatalog& catalog,
+    const googlesql::AnalyzerOptions& analyzer_options,
+    googlesql::TypeFactory* type_factory,
     std::unique_ptr<google::spanner::emulator::backend::FunctionCatalog>
         emulator_function_catalog);
 
 absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateQueryInView(
-    absl::string_view query, zetasql::EnumerableCatalog& catalog,
-    const zetasql::AnalyzerOptions& analyzer_options,
-    zetasql::TypeFactory* type_factory,
+    absl::string_view query, googlesql::EnumerableCatalog& catalog,
+    const googlesql::AnalyzerOptions& analyzer_options,
+    googlesql::TypeFactory* type_factory,
     std::unique_ptr<google::spanner::emulator::backend::FunctionCatalog>
         emulator_function_catalog);
 
 absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateFunctionBody(
-    absl::string_view query, zetasql::EnumerableCatalog& catalog,
-    const zetasql::AnalyzerOptions& analyzer_options,
-    zetasql::TypeFactory* type_factory,
+    absl::string_view query, googlesql::EnumerableCatalog& catalog,
+    const googlesql::AnalyzerOptions& analyzer_options,
+    googlesql::TypeFactory* type_factory,
     std::unique_ptr<google::spanner::emulator::backend::FunctionCatalog>
         emulator_function_catalog);
 

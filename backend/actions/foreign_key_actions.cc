@@ -22,7 +22,7 @@
 #include <optional>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -36,7 +36,7 @@
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/iterator.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -124,9 +124,9 @@ std::vector<std::optional<int>> GetPrimaryKeyColumnPositions(
 // Arrange the values in the order of the primary key columns, and return the
 // key. If any of the primary key columns are missing from the given column
 // order then return the prefix of the primary key.
-Key ComputePk(const std::vector<zetasql::Value>& values,
+Key ComputePk(const std::vector<googlesql::Value>& values,
               const std::vector<std::optional<int>>& col_order) {
-  std::vector<zetasql::Value> key_value;
+  std::vector<googlesql::Value> key_value;
   key_value.reserve(col_order.size());
   for (int i = 0; i < col_order.size(); ++i) {
     if (!col_order[i].has_value()) {
@@ -161,7 +161,7 @@ absl::Status ForeignKeyActionEffector::ProcessDeleteForUnorderedReferencingKey(
   // If the foreign key is a prefix but the order of the columns is
   // different, then we need to read all the rows in the referencing table
   // that match the prefix of the key.
-    ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<StorageIterator> itr,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<StorageIterator> itr,
                      ctx->store()->Read(foreign_key_->referencing_table(),
                                         KeyRange::Prefix(referencing_key), {}));
     while (itr->Next()) {
@@ -181,7 +181,7 @@ absl::Status ForeignKeyActionEffector::ProcessDeleteForNonPKReferencingKey(
   Key index_key = ComputePk(referenced_key.column_values(), column_order);
   // Retrieve the referencing table key from the row in the referencing
   // index data table that matches the referenced key.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<StorageIterator> itr,
       ctx->store()->Read(foreign_key_->referencing_data_table(),
                          KeyRange::Prefix(index_key),
@@ -208,7 +208,7 @@ absl::Status ForeignKeyActionEffector::ProcessDeleteByKey(
     case FKPrefixShape::kInOrder: {
       // Since the referenced key and primary key have the same shape, we can
       // use the primary key.
-      ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<StorageIterator> itr,
+      GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<StorageIterator> itr,
                        ctx->store()->Read(foreign_key_->referencing_table(),
                                           KeyRange::Point(referenced_key), {}));
       while (itr->Next()) {
@@ -219,7 +219,7 @@ absl::Status ForeignKeyActionEffector::ProcessDeleteByKey(
     case FKPrefixShape::kInOrderPrefix: {
       // The referencing table could have multiple rows that reference the same
       // foreign key value.
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           std::unique_ptr<StorageIterator> itr,
           ctx->store()->Read(foreign_key_->referencing_table(),
                              KeyRange::Prefix(referenced_key), {}));
@@ -229,11 +229,11 @@ absl::Status ForeignKeyActionEffector::ProcessDeleteByKey(
       break;
     }
     case FKPrefixShape::kOutOfOrder:
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           ProcessDeleteForUnorderedReferencingKey(ctx, referenced_key));
       break;
     case FKPrefixShape::kNone:
-      ZETASQL_RETURN_IF_ERROR(ProcessDeleteForNonPKReferencingKey(ctx, referenced_key));
+      GOOGLESQL_RETURN_IF_ERROR(ProcessDeleteForNonPKReferencingKey(ctx, referenced_key));
       break;
   }
   return absl::OkStatus();
@@ -245,7 +245,7 @@ absl::Status ForeignKeyActionEffector::EffectForUnorderedReferencedKey(
       foreign_key_->referenced_columns(),
       foreign_key_->referenced_table()->primary_key());
   Key referenced_key = ComputePk(op.key.column_values(), column_order);
-  ZETASQL_RETURN_IF_ERROR(ProcessDeleteByKey(ctx, referenced_key));
+  GOOGLESQL_RETURN_IF_ERROR(ProcessDeleteByKey(ctx, referenced_key));
   return absl::OkStatus();
 }
 
@@ -253,7 +253,7 @@ absl::Status ForeignKeyActionEffector::EffectForNonPKReferencedKey(
     const ActionContext* ctx, const DeleteOp& op) const {
   // Read the values of all non-key columns in the referenced table that is
   // referenced by a foreign key.
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<StorageIterator> itr,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<StorageIterator> itr,
                    ctx->store()->Read(foreign_key_->referenced_table(),
                                       KeyRange::Prefix(op.key),
                                       foreign_key_->referenced_columns()));
@@ -262,7 +262,7 @@ absl::Status ForeignKeyActionEffector::EffectForNonPKReferencedKey(
     for (int i = 0; i < itr->NumColumns(); ++i) {
       referenced_key.AddColumn(itr->ColumnValue(i));
     }
-    ZETASQL_RETURN_IF_ERROR(ProcessDeleteByKey(ctx, referenced_key));
+    GOOGLESQL_RETURN_IF_ERROR(ProcessDeleteByKey(ctx, referenced_key));
   }
   return absl::OkStatus();
 }
@@ -271,19 +271,19 @@ absl::Status ForeignKeyActionEffector::Effect(const ActionContext* ctx,
                                               const DeleteOp& op) const {
   switch (referenced_key_prefix_shape_) {
     case FKPrefixShape::kInOrder:
-      ZETASQL_RETURN_IF_ERROR(ProcessDeleteByKey(ctx, op.key));
+      GOOGLESQL_RETURN_IF_ERROR(ProcessDeleteByKey(ctx, op.key));
       break;
     case FKPrefixShape::kInOrderPrefix:
       // Need to supply key prefix, because the prefix alone could match
       // multiple rows in the referencing table.
-      ZETASQL_RETURN_IF_ERROR(ProcessDeleteByKey(
+      GOOGLESQL_RETURN_IF_ERROR(ProcessDeleteByKey(
           ctx, op.key.Prefix(foreign_key_->referenced_columns().size())));
       break;
     case FKPrefixShape::kOutOfOrder:
-      ZETASQL_RETURN_IF_ERROR(EffectForUnorderedReferencedKey(ctx, op));
+      GOOGLESQL_RETURN_IF_ERROR(EffectForUnorderedReferencedKey(ctx, op));
       break;
     case FKPrefixShape::kNone:
-      ZETASQL_RETURN_IF_ERROR(EffectForNonPKReferencedKey(ctx, op));
+      GOOGLESQL_RETURN_IF_ERROR(EffectForNonPKReferencedKey(ctx, op));
       break;
   }
   return absl::OkStatus();

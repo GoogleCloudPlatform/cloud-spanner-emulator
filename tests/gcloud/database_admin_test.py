@@ -50,7 +50,7 @@ class GCloudDatabaseAdminTest(emulator.TestCase):
 
   def testCreateDatabaseWithProtoDescriptor(self):
     r = runfiles.Create()
-    proto_descriptors_file = r.Rlocation('com_google_cloud_spanner_emulator/tests/common/test_proto_descriptors.pb')
+    proto_descriptors_file = r.Rlocation('_main/tests/common/test_proto_descriptors.pb')
     # Create an instance.
     self.RunGCloud('spanner', 'instances', 'create', 'test-instance',
                    '--config=emulator-config', '--description=Test Instance',

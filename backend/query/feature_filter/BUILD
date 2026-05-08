@@ -39,17 +39,17 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/public:function",
-        "@com_google_zetasql//zetasql/public:language_options",
-        "@com_google_zetasql//zetasql/public:options_cc_proto",
-        "@com_google_zetasql//zetasql/public:type",
-        "@com_google_zetasql//zetasql/public:value",
-        "@com_google_zetasql//zetasql/public/functions:datetime_cc_proto",
-        "@com_google_zetasql//zetasql/resolved_ast",
-        "@com_google_zetasql//zetasql/resolved_ast:resolved_ast_enums_cc_proto",
-        "@com_google_zetasql//zetasql/resolved_ast:resolved_node_kind_cc_proto",
+        "@com_google_googlesql//googlesql/base",
+        "@com_google_googlesql//googlesql/base:ret_check",
+        "@com_google_googlesql//googlesql/public:function",
+        "@com_google_googlesql//googlesql/public:language_options",
+        "@com_google_googlesql//googlesql/public:options_cc_proto",
+        "@com_google_googlesql//googlesql/public:type",
+        "@com_google_googlesql//googlesql/public:value",
+        "@com_google_googlesql//googlesql/public/functions:datetime_cc_proto",
+        "@com_google_googlesql//googlesql/resolved_ast",
+        "@com_google_googlesql//googlesql/resolved_ast:resolved_ast_enums_cc_proto",
+        "@com_google_googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
     ],
 )
 
@@ -60,7 +60,7 @@ cc_library(
     deps = [
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/public:function",
+        "@com_google_googlesql//googlesql/public:function",
     ],
 )
 
@@ -71,7 +71,7 @@ cc_library(
     deps = [
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/public:function",
+        "@com_google_googlesql//googlesql/public:function",
     ],
 )
 
@@ -87,11 +87,11 @@ cc_test(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:builtin_function",
+        "@com_google_googlesql//googlesql/public:builtin_function_options",
+        "@com_google_googlesql//googlesql/public:function",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public:builtin_function",
-        "@com_google_zetasql//zetasql/public:builtin_function_options",
-        "@com_google_zetasql//zetasql/public:function",
     ],
 )
 
@@ -102,9 +102,9 @@ cc_library(
     deps = [
         "//common:errors",
         "@com_google_absl//absl/status",
-        "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/public:type",
-        "@com_google_zetasql//zetasql/resolved_ast",
-        "@com_google_zetasql//zetasql/resolved_ast:resolved_node_kind_cc_proto",
+        "@com_google_googlesql//googlesql/base:ret_check",
+        "@com_google_googlesql//googlesql/public:type",
+        "@com_google_googlesql//googlesql/resolved_ast",
+        "@com_google_googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
     ],
 )

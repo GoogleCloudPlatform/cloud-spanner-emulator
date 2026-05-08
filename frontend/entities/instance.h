@@ -22,7 +22,7 @@
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.pb.h"
 #include "absl/strings/string_view.h"
 #include "frontend/common/labels.h"
-#include "zetasql/base/clock.h"
+#include "googlesql/base/clock.h"
 
 namespace google {
 namespace spanner {
@@ -37,7 +37,7 @@ class Instance {
  public:
   Instance(const std::string& name, const std::string config,
            const std::string& display_name, int32_t processing_units,
-           Labels labels, zetasql_base::Clock* clock)
+           Labels labels, googlesql_base::Clock* clock)
       : name_(name),
         config_(config),
         display_name_(display_name),

@@ -20,7 +20,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/memory/memory.h"
 #include "absl/time/time.h"
@@ -38,8 +38,8 @@ TEST(VersionedCatalogTest, FindSchemaAtTimeStamp) {
   absl::Time t1 = absl::Now();
   absl::Time t2 = t1 + absl::Seconds(1);
   absl::Time t3 = t2 + absl::Seconds(1);
-  ZETASQL_EXPECT_OK(catalog.AddSchema(t1, std::make_unique<const Schema>()));
-  ZETASQL_EXPECT_OK(catalog.AddSchema(t3, std::make_unique<const Schema>()));
+  GOOGLESQL_EXPECT_OK(catalog.AddSchema(t1, std::make_unique<const Schema>()));
+  GOOGLESQL_EXPECT_OK(catalog.AddSchema(t3, std::make_unique<const Schema>()));
 
   // Find schemas created at t1 and t3.
   const Schema* schema_t1 = catalog.GetSchema(t1);
@@ -57,7 +57,7 @@ TEST(VersionedCatalogTest, FindSchemaAtTimeStamp) {
 TEST(VersionedCatalog, FirstAndLastSchema) {
   VersionedCatalog catalog;
   absl::Time t1 = absl::Now();
-  ZETASQL_EXPECT_OK(catalog.AddSchema(t1, std::make_unique<const Schema>()));
+  GOOGLESQL_EXPECT_OK(catalog.AddSchema(t1, std::make_unique<const Schema>()));
 
   // Find the default initial schema using absl::InfinitePast(). Expect it to be
   // different from the schema created at t1.
@@ -82,7 +82,7 @@ TEST(VersionedCatalogTest, FindFirstSchemaBeforeCreation) {
 
   absl::Time t1 = absl::Now();
   absl::Time t2 = t1 + absl::Seconds(1);
-  ZETASQL_EXPECT_OK(catalog.AddSchema(t2, std::make_unique<const Schema>()));
+  GOOGLESQL_EXPECT_OK(catalog.AddSchema(t2, std::make_unique<const Schema>()));
 
   // Confirm that the schema created at t2 is not visible at t1.
   EXPECT_NE(catalog.GetSchema(t1), catalog.GetSchema(t2));
@@ -93,13 +93,13 @@ TEST(VersionedCatalogTest, AddSchemaWithSameOrEarlierCreationTime) {
   absl::Time t1 = absl::Now();
   absl::Time t2 = t1 + absl::Seconds(1);
 
-  ZETASQL_EXPECT_OK(catalog.AddSchema(t2, std::make_unique<const Schema>()));
+  GOOGLESQL_EXPECT_OK(catalog.AddSchema(t2, std::make_unique<const Schema>()));
   EXPECT_THAT(catalog.AddSchema(t2, std::make_unique<const Schema>()),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInternal,
                   testing::MatchesRegex(".*Failed to insert schema.*")));
   EXPECT_THAT(catalog.AddSchema(t1, std::make_unique<const Schema>()),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInternal,
                   testing::MatchesRegex(".*Failed to insert schema.*")));
 }
@@ -113,9 +113,9 @@ TEST(VersionedCatalogTest, ExpiredSchemasThatCoverRetentionPeriodAreKept) {
   absl::Time t3 = t0 + absl::Hours(1) + absl::Seconds(1);
   absl::Time t4 = t2 + absl::Hours(1) + absl::Seconds(1);
 
-  ZETASQL_EXPECT_OK(catalog.AddSchema(t0, std::make_unique<const Schema>()));
-  ZETASQL_EXPECT_OK(catalog.AddSchema(t1, std::make_unique<const Schema>()));
-  ZETASQL_EXPECT_OK(catalog.AddSchema(t2, std::make_unique<const Schema>()));
+  GOOGLESQL_EXPECT_OK(catalog.AddSchema(t0, std::make_unique<const Schema>()));
+  GOOGLESQL_EXPECT_OK(catalog.AddSchema(t1, std::make_unique<const Schema>()));
+  GOOGLESQL_EXPECT_OK(catalog.AddSchema(t2, std::make_unique<const Schema>()));
 
   catalog.RemoveExpiredSchemas(t3);
   // Verify that the schema created at t0 is not removed as it still covers the

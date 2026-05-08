@@ -34,10 +34,10 @@
 #include <memory>
 #include <string>
 
-#include "zetasql/public/interval_value.h"
+#include "googlesql/public/interval_value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -50,8 +50,8 @@ namespace {
 
 constexpr char kDefaultTimezone[] = "America/Los_Angeles";
 
-zetasql::IntervalValue GsqlInterval(absl::string_view interval) {
-  return *zetasql::IntervalValue::ParseFromString(interval,
+googlesql::IntervalValue GsqlInterval(absl::string_view interval) {
+  return *googlesql::IntervalValue::ParseFromString(interval,
                                                     /*allow_nanos=*/true);
 }
 
@@ -60,7 +60,7 @@ class IntervalTestBase : public PgEvaluatorTestWithParam<T> {
  protected:
   void SetUp() override {
     PgEvaluatorTestWithParam<T>::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {
@@ -87,17 +87,17 @@ class MakeIntervalTest : public IntervalTestBase<MakeIntervalTestCase> {};
 TEST_P(MakeIntervalTest, MakeInterval) {
   const MakeIntervalTestCase& testcase = GetParam();
 
-  absl::StatusOr<zetasql::IntervalValue> actual_interval = PgMakeInterval(
+  absl::StatusOr<googlesql::IntervalValue> actual_interval = PgMakeInterval(
       testcase.years, testcase.months, testcase.weeks, testcase.days,
       testcase.hours, testcase.minutes, testcase.seconds);
   if (testcase.expected_status != absl::StatusCode::kOk) {
     EXPECT_THAT(actual_interval,
-                zetasql_base::testing::StatusIs(testcase.expected_status));
+                googlesql_base::testing::StatusIs(testcase.expected_status));
     return;
   }
 
-  ZETASQL_ASSERT_OK(actual_interval);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::IntervalValue expected_interval,
+  GOOGLESQL_ASSERT_OK(actual_interval);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::IntervalValue expected_interval,
                        PgIntervalIn(testcase.expected_interval));
   EXPECT_EQ(*actual_interval, expected_interval);
 }
@@ -150,9 +150,9 @@ INSTANTIATE_TEST_SUITE_P(
                              absl::StatusCode::kInvalidArgument}));
 
 struct IntervalMultiplyTestCase {
-  zetasql::IntervalValue input_interval;
+  googlesql::IntervalValue input_interval;
   double scale;
-  zetasql::IntervalValue expected_interval;
+  googlesql::IntervalValue expected_interval;
   absl::StatusCode expected_status = absl::StatusCode::kOk;
 };
 
@@ -162,31 +162,31 @@ class IntervalMultiplyTest : public IntervalTestBase<IntervalMultiplyTestCase> {
 TEST_P(IntervalMultiplyTest, IntervalMultiply) {
   const IntervalMultiplyTestCase& testcase = GetParam();
 
-  absl::StatusOr<zetasql::IntervalValue> actual_interval =
+  absl::StatusOr<googlesql::IntervalValue> actual_interval =
       PgIntervalMultiply(testcase.input_interval, testcase.scale);
   if (testcase.expected_status != absl::StatusCode::kOk) {
     EXPECT_THAT(actual_interval,
-                zetasql_base::testing::StatusIs(testcase.expected_status));
+                googlesql_base::testing::StatusIs(testcase.expected_status));
     return;
   }
 
-  ZETASQL_ASSERT_OK(actual_interval);
+  GOOGLESQL_ASSERT_OK(actual_interval);
   EXPECT_EQ(*actual_interval, testcase.expected_interval);
 }
 
 INSTANTIATE_TEST_SUITE_P(
     IntervalMultiplyTestSuite, IntervalMultiplyTest,
     testing::Values(
-        IntervalMultiplyTestCase{zetasql::IntervalValue::MaxValue(), 1.0,
-                                 zetasql::IntervalValue::MaxValue()},
-        IntervalMultiplyTestCase{zetasql::IntervalValue::MaxValue(), -1.0,
-                                 zetasql::IntervalValue::MinValue()},
-        IntervalMultiplyTestCase{zetasql::IntervalValue::MinValue(), 1.0,
-                                 zetasql::IntervalValue::MinValue()},
-        IntervalMultiplyTestCase{zetasql::IntervalValue::MinValue(), -1.0,
-                                 zetasql::IntervalValue::MaxValue()},
-        IntervalMultiplyTestCase{zetasql::IntervalValue::MinValue(), 0.0,
-                                 zetasql::IntervalValue()},
+        IntervalMultiplyTestCase{googlesql::IntervalValue::MaxValue(), 1.0,
+                                 googlesql::IntervalValue::MaxValue()},
+        IntervalMultiplyTestCase{googlesql::IntervalValue::MaxValue(), -1.0,
+                                 googlesql::IntervalValue::MinValue()},
+        IntervalMultiplyTestCase{googlesql::IntervalValue::MinValue(), 1.0,
+                                 googlesql::IntervalValue::MinValue()},
+        IntervalMultiplyTestCase{googlesql::IntervalValue::MinValue(), -1.0,
+                                 googlesql::IntervalValue::MaxValue()},
+        IntervalMultiplyTestCase{googlesql::IntervalValue::MinValue(), 0.0,
+                                 googlesql::IntervalValue()},
         IntervalMultiplyTestCase{GsqlInterval("2-2 2 2:2:2.23456789"), 2.5,
                                  GsqlInterval("5-5 5 5:5:5.58642")},
         IntervalMultiplyTestCase{GsqlInterval("2-2 2 2:2:2.23456789"), -2.5,
@@ -197,25 +197,25 @@ INSTANTIATE_TEST_SUITE_P(
                                  GsqlInterval("6-9 29 28:29:59.141476")},
         IntervalMultiplyTestCase{GsqlInterval("-1-1 8 -1:1:1.123456"), 1000.0,
                                  GsqlInterval("-1083-4 8000 -1016:58:43.456")},
-        IntervalMultiplyTestCase{zetasql::IntervalValue::MaxValue(), 2.0,
-                                 zetasql::IntervalValue(),
+        IntervalMultiplyTestCase{googlesql::IntervalValue::MaxValue(), 2.0,
+                                 googlesql::IntervalValue(),
                                  absl::StatusCode::kInvalidArgument},
-        IntervalMultiplyTestCase{zetasql::IntervalValue::MaxValue(), -2.0,
-                                 zetasql::IntervalValue(),
+        IntervalMultiplyTestCase{googlesql::IntervalValue::MaxValue(), -2.0,
+                                 googlesql::IntervalValue(),
                                  absl::StatusCode::kInvalidArgument},
         IntervalMultiplyTestCase{GsqlInterval("2-2 2 2:2:2.23456"),
                                  std::numeric_limits<double>::infinity(),
-                                 zetasql::IntervalValue(),
+                                 googlesql::IntervalValue(),
                                  absl::StatusCode::kInvalidArgument},
         IntervalMultiplyTestCase{GsqlInterval("2-2 2 2:2:2.23456"),
                                  std::numeric_limits<double>::quiet_NaN(),
-                                 zetasql::IntervalValue(),
+                                 googlesql::IntervalValue(),
                                  absl::StatusCode::kInvalidArgument}));
 
 struct IntervalDivideTestCase {
-  zetasql::IntervalValue input_interval;
+  googlesql::IntervalValue input_interval;
   double scale;
-  zetasql::IntervalValue expected_interval;
+  googlesql::IntervalValue expected_interval;
   absl::StatusCode expected_status = absl::StatusCode::kOk;
 };
 
@@ -223,28 +223,28 @@ class IntervalDivideTest : public IntervalTestBase<IntervalDivideTestCase> {};
 
 TEST_P(IntervalDivideTest, IntervalDivide) {
   const IntervalDivideTestCase& testcase = GetParam();
-  absl::StatusOr<zetasql::IntervalValue> actual_interval =
+  absl::StatusOr<googlesql::IntervalValue> actual_interval =
       PgIntervalDivide(testcase.input_interval, testcase.scale);
   if (testcase.expected_status != absl::StatusCode::kOk) {
     EXPECT_THAT(actual_interval,
-                zetasql_base::testing::StatusIs(testcase.expected_status));
+                googlesql_base::testing::StatusIs(testcase.expected_status));
     return;
   }
-  ZETASQL_ASSERT_OK(actual_interval);
+  GOOGLESQL_ASSERT_OK(actual_interval);
   EXPECT_EQ(*actual_interval, testcase.expected_interval);
 }
 
 INSTANTIATE_TEST_SUITE_P(
     IntervalDivideTestSuite, IntervalDivideTest,
     testing::Values(
-        IntervalDivideTestCase{zetasql::IntervalValue::MaxValue(), 1.0,
-                               zetasql::IntervalValue::MaxValue()},
-        IntervalDivideTestCase{zetasql::IntervalValue::MaxValue(), -1.0,
-                               zetasql::IntervalValue::MinValue()},
-        IntervalDivideTestCase{zetasql::IntervalValue::MinValue(), 1.0,
-                               zetasql::IntervalValue::MinValue()},
-        IntervalDivideTestCase{zetasql::IntervalValue::MinValue(), -1.0,
-                               zetasql::IntervalValue::MaxValue()},
+        IntervalDivideTestCase{googlesql::IntervalValue::MaxValue(), 1.0,
+                               googlesql::IntervalValue::MaxValue()},
+        IntervalDivideTestCase{googlesql::IntervalValue::MaxValue(), -1.0,
+                               googlesql::IntervalValue::MinValue()},
+        IntervalDivideTestCase{googlesql::IntervalValue::MinValue(), 1.0,
+                               googlesql::IntervalValue::MinValue()},
+        IntervalDivideTestCase{googlesql::IntervalValue::MinValue(), -1.0,
+                               googlesql::IntervalValue::MaxValue()},
         IntervalDivideTestCase{GsqlInterval("2-2 2 2:2:2.23456789"), 2.5,
                                GsqlInterval("0-10 12 20:00:48.893827")},
         IntervalDivideTestCase{GsqlInterval("2-2 2 2:2:2.23456789"), -2.5,
@@ -257,21 +257,21 @@ INSTANTIATE_TEST_SUITE_P(
                                GsqlInterval("-09:10:08.461123")},
         IntervalDivideTestCase{GsqlInterval("2-2 2 2:2:2.23456"),
                                std::numeric_limits<double>::infinity(),
-                               zetasql::IntervalValue()},
+                               googlesql::IntervalValue()},
         IntervalDivideTestCase{GsqlInterval("2-2 2 2:2:2.23456"),
                                -std::numeric_limits<double>::infinity(),
-                               zetasql::IntervalValue()},
-        IntervalDivideTestCase{zetasql::IntervalValue::MaxValue(), 0.0,
-                               zetasql::IntervalValue(),
+                               googlesql::IntervalValue()},
+        IntervalDivideTestCase{googlesql::IntervalValue::MaxValue(), 0.0,
+                               googlesql::IntervalValue(),
                                absl::StatusCode::kOutOfRange},
         IntervalDivideTestCase{GsqlInterval("2-2 2 2:2:2.23456"),
                                std::numeric_limits<double>::quiet_NaN(),
-                               zetasql::IntervalValue(),
+                               googlesql::IntervalValue(),
                                absl::StatusCode::kInvalidArgument}));
 
 struct IntervalFromStringTestCase {
   std::string input_interval;
-  zetasql::IntervalValue expected_interval;
+  googlesql::IntervalValue expected_interval;
   absl::StatusCode expected_status = absl::StatusCode::kOk;
 };
 
@@ -280,21 +280,21 @@ class IntervalFromStringTest
 
 TEST_P(IntervalFromStringTest, IntervalFromString) {
   const IntervalFromStringTestCase& testcase = GetParam();
-  absl::StatusOr<zetasql::IntervalValue> actual_interval =
+  absl::StatusOr<googlesql::IntervalValue> actual_interval =
       PgIntervalIn(testcase.input_interval);
   if (testcase.expected_status != absl::StatusCode::kOk) {
     EXPECT_THAT(actual_interval,
-                zetasql_base::testing::StatusIs(testcase.expected_status));
+                googlesql_base::testing::StatusIs(testcase.expected_status));
     return;
   }
-  ZETASQL_ASSERT_OK(actual_interval);
+  GOOGLESQL_ASSERT_OK(actual_interval);
   EXPECT_EQ(*actual_interval, testcase.expected_interval);
 }
 
 INSTANTIATE_TEST_SUITE_P(
     IntervalFromStringTestSuite, IntervalFromStringTest,
     testing::Values(
-        IntervalFromStringTestCase{"0-0 0 0:0:0", zetasql::IntervalValue()},
+        IntervalFromStringTestCase{"0-0 0 0:0:0", googlesql::IntervalValue()},
         IntervalFromStringTestCase{"1-1 8 1:1:1.123456789",
                                    GsqlInterval("1-1 8 1:1:1.123457")},
         IntervalFromStringTestCase{"-1-1 -8 -1:1:1.123456789",
@@ -309,13 +309,13 @@ INSTANTIATE_TEST_SUITE_P(
             GsqlInterval("-1-2 3 -4:5:6")},
         IntervalFromStringTestCase{"-1-2 +3 -4:05:06",
                                    GsqlInterval("-1-2 3 -4:5:6")},
-        IntervalFromStringTestCase{"test_string", zetasql::IntervalValue(),
+        IntervalFromStringTestCase{"test_string", googlesql::IntervalValue(),
                                    absl::StatusCode::kInvalidArgument},
-        IntervalFromStringTestCase{"120000 years", zetasql::IntervalValue(),
+        IntervalFromStringTestCase{"120000 years", googlesql::IntervalValue(),
                                    absl::StatusCode::kInvalidArgument}));
 
 struct IntervalToStringTestCase {
-  zetasql::IntervalValue input_interval;
+  googlesql::IntervalValue input_interval;
   std::string expected_interval;
 };
 
@@ -324,7 +324,7 @@ class IntervalToStringTest : public IntervalTestBase<IntervalToStringTestCase> {
 
 TEST_P(IntervalToStringTest, IntervalToString) {
   const IntervalToStringTestCase& testcase = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::string actual_interval_str,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::string actual_interval_str,
                        PgIntervalOut(testcase.input_interval));
   EXPECT_THAT(actual_interval_str, testcase.expected_interval);
 }
@@ -332,10 +332,10 @@ TEST_P(IntervalToStringTest, IntervalToString) {
 INSTANTIATE_TEST_SUITE_P(
     IntervalToStringTestSuite, IntervalToStringTest,
     testing::Values(
-        IntervalToStringTestCase{zetasql::IntervalValue(), "00:00:00"},
-        IntervalToStringTestCase{zetasql::IntervalValue::MaxValue(),
+        IntervalToStringTestCase{googlesql::IntervalValue(), "00:00:00"},
+        IntervalToStringTestCase{googlesql::IntervalValue::MaxValue(),
                                  "10000 years 3660000 days 87840000:00:00"},
-        IntervalToStringTestCase{zetasql::IntervalValue::MinValue(),
+        IntervalToStringTestCase{googlesql::IntervalValue::MinValue(),
                                  "-10000 years -3660000 days -87840000:00:00"},
         IntervalToStringTestCase{GsqlInterval("1-1 8 1:1:1.123456789"),
                                  "1 year 1 mon 8 days 01:01:01.123457"},
@@ -349,7 +349,7 @@ INSTANTIATE_TEST_SUITE_P(
                                  "00:32:32.456757"}));
 
 struct IntervalToCharTestCase {
-  zetasql::IntervalValue input_interval;
+  googlesql::IntervalValue input_interval;
   std::string format;
   std::string expected_interval;
   absl::StatusCode expected_status = absl::StatusCode::kOk;
@@ -362,22 +362,22 @@ TEST_P(IntervalToCharTest, IntervalToChar) {
   absl::StatusOr<std::unique_ptr<std::string>> result =
       PgIntervalToChar(testcase.input_interval, testcase.format);
   if (testcase.expected_status != absl::StatusCode::kOk) {
-    EXPECT_THAT(result, zetasql_base::testing::StatusIs(testcase.expected_status));
+    EXPECT_THAT(result, googlesql_base::testing::StatusIs(testcase.expected_status));
     return;
   }
-  EXPECT_THAT(result, zetasql_base::testing::IsOkAndHolds(
+  EXPECT_THAT(result, googlesql_base::testing::IsOkAndHolds(
                           Pointee(testing::StrEq(testcase.expected_interval))));
 }
 
 INSTANTIATE_TEST_SUITE_P(
     IntervalToCharTestSuite, IntervalToCharTest,
     testing::Values(
-        IntervalToCharTestCase{zetasql::IntervalValue(),
+        IntervalToCharTestCase{googlesql::IntervalValue(),
                                "YYYY-MM-DD HH:MI:SS", "0000-00-00 12:00:00"},
-        IntervalToCharTestCase{zetasql::IntervalValue::MaxValue(),
+        IntervalToCharTestCase{googlesql::IntervalValue::MaxValue(),
                                "YYYY-MM-DD HH12:MI:SS",
                                "10000-00-3660000 12:00:00"},
-        IntervalToCharTestCase{zetasql::IntervalValue::MinValue(),
+        IntervalToCharTestCase{googlesql::IntervalValue::MinValue(),
                                "YYYY-MM-DD HH24:MI:SS",
                                "-10000-00--3660000 -87840000:00:00"},
         IntervalToCharTestCase{GsqlInterval("1-1 8 1:1:1.123456789"),
@@ -409,13 +409,13 @@ class RoundIntervalPrecisionTest
 
 TEST_P(RoundIntervalPrecisionTest, RoundIntervalPrecision) {
   const IntervalRoundPrecisonTestCase& testcase = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::IntervalValue input_interval,
-                       zetasql::IntervalValue::ParseFromString(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::IntervalValue input_interval,
+                       googlesql::IntervalValue::ParseFromString(
                            testcase.input_interval, /*allow_nanos=*/true));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::IntervalValue expected_interval,
-                       zetasql::IntervalValue::ParseFromString(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::IntervalValue expected_interval,
+                       googlesql::IntervalValue::ParseFromString(
                            testcase.expected_interval, /*allow_nanos=*/true));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::IntervalValue actual_interval,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::IntervalValue actual_interval,
                        PgRoundIntervalPrecision(input_interval));
   EXPECT_EQ(actual_interval, expected_interval);
 }

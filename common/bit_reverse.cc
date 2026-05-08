@@ -18,15 +18,15 @@
 
 #include <cstdint>
 
-#include "zetasql/base/bits.h"
+#include "googlesql/base/bits.h"
 
 int64_t BitReverse(int64_t input, bool preserve_sign) {
   if (input == 0) {
     return 0;
   }
-  // Explicitly cast to uint64_t here, as zetasql_base::Bits::ReverseBits64() receives
+  // Explicitly cast to uint64_t here, as googlesql_base::Bits::ReverseBits64() receives
   // an uint64_t input, and for easier bit manipulation.
-  uint64_t value = zetasql_base::Bits::ReverseBits64(static_cast<uint64_t>(input));
+  uint64_t value = googlesql_base::Bits::ReverseBits64(static_cast<uint64_t>(input));
   if (preserve_sign) {
     // The sign bit is now the least significant bit, take it and shift
     // to the furthest left.

@@ -31,16 +31,16 @@
 
 #include "third_party/spanner_pg/shims/memory_context_manager.h"
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "absl/status/status.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/optional.h"
 #include "absl/utility/utility.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
-#include "zetasql/base/logging.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_builder.h"
+#include "googlesql/base/logging.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_builder.h"
 
 
 namespace postgres_translator {
@@ -51,8 +51,8 @@ namespace postgres_translator {
 // Creating the initial MemoryContext is a special case where an OOM can prevent
 // us from reporting the real error since much of ereport depends on allocating.
 // This happens often in systests (deliberately).
-static zetasql_base::StatusBuilder FailedMemoryContextCreation(
-    zetasql_base::StatusBuilder builder) {
+static googlesql_base::StatusBuilder FailedMemoryContextCreation(
+    googlesql_base::StatusBuilder builder) {
   if (builder.code() == absl::StatusCode::kInternal) {
     // Log the original error just in case, but usually it's not informative.
     absl::Status status =
@@ -60,7 +60,7 @@ static zetasql_base::StatusBuilder FailedMemoryContextCreation(
         << "error occurred during MemoryContextManager::Init; assuming OOM and "
            "converting to Resource Exhausted";
     // New message matches what Postgres would report for any other OOM.
-    return zetasql_base::ResourceExhaustedErrorBuilder() << "out of memory";
+    return googlesql_base::ResourceExhaustedErrorBuilder() << "out of memory";
   } else {
     // Another error is unlikely here, but we won't encode that assumption.
     return builder;
@@ -69,14 +69,14 @@ static zetasql_base::StatusBuilder FailedMemoryContextCreation(
 
 absl::StatusOr<ActiveMemoryContext> MemoryContextManager::Init(
     const char* name) {
-  ZETASQL_RET_CHECK_EQ(CurrentMemoryContext, nullptr)
+  GOOGLESQL_RET_CHECK_EQ(CurrentMemoryContext, nullptr)
       << "Memory context already present in slot.";
-  ZETASQL_RET_CHECK_EQ(TopMemoryContext, nullptr)
+  GOOGLESQL_RET_CHECK_EQ(TopMemoryContext, nullptr)
       << "Memory context already present in top slot.";
-  ZETASQL_ASSIGN_OR_RETURN(CurrentMemoryContext, CreateDefaultMemoryContext(name),
+  GOOGLESQL_ASSIGN_OR_RETURN(CurrentMemoryContext, CreateDefaultMemoryContext(name),
                    _.With(FailedMemoryContextCreation));
   TopMemoryContext = CurrentMemoryContext;
-  ZETASQL_RET_CHECK_NE(CurrentMemoryContext, nullptr)
+  GOOGLESQL_RET_CHECK_NE(CurrentMemoryContext, nullptr)
       << "Failed to create CurrentMemoryContext.";
 
   return ActiveMemoryContext();
@@ -86,32 +86,32 @@ absl::StatusOr<ActiveMemoryContext> MemoryContextManager::Init(
 static absl::Status DeleteCacheMemoryContext() {
   if (MemoryContext temp_cache = CacheMemoryContext; temp_cache != nullptr) {
     CacheMemoryContext = nullptr;
-    ZETASQL_RET_CHECK_OK(CheckedPgMemoryContextDelete(temp_cache));
+    GOOGLESQL_RET_CHECK_OK(CheckedPgMemoryContextDelete(temp_cache));
   }
   return absl::OkStatus();
 }
 
 absl::Status MemoryContextManager::Reset() {
-  ZETASQL_RET_CHECK_NE(CurrentMemoryContext, nullptr) << "No memory context in slot.";
+  GOOGLESQL_RET_CHECK_NE(CurrentMemoryContext, nullptr) << "No memory context in slot.";
 
   // Must delete because it lives inside Current.
-  ZETASQL_RET_CHECK_OK(DeleteCacheMemoryContext());
+  GOOGLESQL_RET_CHECK_OK(DeleteCacheMemoryContext());
   CurrentMemoryContext = TopMemoryContext;  // Reset to the original context.
   MemoryContextReset(CurrentMemoryContext);
   return absl::OkStatus();
 }
 
 absl::Status MemoryContextManager::Clear() {
-  ZETASQL_RET_CHECK_NE(CurrentMemoryContext, nullptr) << "No memory context in slot.";
+  GOOGLESQL_RET_CHECK_NE(CurrentMemoryContext, nullptr) << "No memory context in slot.";
 
-  ZETASQL_RET_CHECK_OK(DeleteCacheMemoryContext());
+  GOOGLESQL_RET_CHECK_OK(DeleteCacheMemoryContext());
   MemoryContext context = TopMemoryContext;
   CurrentMemoryContext = nullptr;
   TopMemoryContext = nullptr;
-  ZETASQL_RET_CHECK_OK(CheckedPgMemoryContextDelete(context));
+  GOOGLESQL_RET_CHECK_OK(CheckedPgMemoryContextDelete(context));
 
   // Clear thread-local freelists as well
-  ZETASQL_RET_CHECK_OK(CheckedPgAsetDeleteFreelists());
+  GOOGLESQL_RET_CHECK_OK(CheckedPgAsetDeleteFreelists());
 
   return absl::OkStatus();
 }
@@ -189,7 +189,7 @@ absl::Status ActiveMemoryContext::Clear() {
 }
 
 absl::Status ActiveMemoryContext::ClearLocked() {
-  ZETASQL_RETURN_IF_ERROR(CheckSameThread());
+  GOOGLESQL_RETURN_IF_ERROR(CheckSameThread());
 
   if (!active_memory_context_.has_value()) {
     return absl::OkStatus();
@@ -202,7 +202,7 @@ absl::Status ActiveMemoryContext::ClearLocked() {
 absl::Status ActiveMemoryContext::Reset() {
   absl::ReaderMutexLock lock(&mu_);
 
-  ZETASQL_RETURN_IF_ERROR(CheckSameThread());
+  GOOGLESQL_RETURN_IF_ERROR(CheckSameThread());
 
   if (!active_memory_context_.has_value()) {
     return absl::OkStatus();

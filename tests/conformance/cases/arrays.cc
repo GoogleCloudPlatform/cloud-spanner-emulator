@@ -22,7 +22,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "google/cloud/spanner/json.h"
@@ -34,7 +34,7 @@ namespace google::spanner::emulator::test {
 namespace {
 
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 class ArraysTest
     : public DatabaseTest,
@@ -65,12 +65,12 @@ TEST_P(ArraysTest, InsertBasicArraysSucceed) {
   Array<Timestamp> timestamp_arr{Timestamp(), Timestamp(), Timestamp()};
   Array<Date> date_arr{Date(/*year=*/1, /*month=*/1, /*day=*/1)};
 
-  ZETASQL_EXPECT_OK(Insert("test_table", {"id", "string_array"}, {1, string_arr}));
-  ZETASQL_EXPECT_OK(Insert("test_table", {"id", "bytes_array"}, {2, bytes_arr}));
-  ZETASQL_EXPECT_OK(Insert("test_table", {"id", "num_array"}, {3, num_arr}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(Insert("test_table", {"id", "string_array"}, {1, string_arr}));
+  GOOGLESQL_EXPECT_OK(Insert("test_table", {"id", "bytes_array"}, {2, bytes_arr}));
+  GOOGLESQL_EXPECT_OK(Insert("test_table", {"id", "num_array"}, {3, num_arr}));
+  GOOGLESQL_EXPECT_OK(
       Insert("test_table", {"id", "timestamp_array"}, {4, timestamp_arr}));
-  ZETASQL_EXPECT_OK(Insert("test_table", {"id", "date_array"}, {5, date_arr}));
+  GOOGLESQL_EXPECT_OK(Insert("test_table", {"id", "date_array"}, {5, date_arr}));
 
   EXPECT_THAT(
       ReadAll("test_table", {"id", "string_array", "bytes_array", "num_array",
@@ -95,7 +95,7 @@ TEST_P(ArraysTest, InsertJsonArraysSucceed) {
     Array<Json> json_arr{Json("{\"intkey\":123}"), Json("{\"boolkey\":true}"),
                          Json("{\"strkey\":\"strval\"}")};
 
-    ZETASQL_EXPECT_OK(Insert("test_table", {"id", "json_array"}, {1, json_arr}));
+    GOOGLESQL_EXPECT_OK(Insert("test_table", {"id", "json_array"}, {1, json_arr}));
     EXPECT_THAT(ReadAll("test_table", {"id", "json_array"}),
                 IsOkAndHoldsRows({{1, json_arr}}));
   } else {
@@ -104,7 +104,7 @@ TEST_P(ArraysTest, InsertJsonArraysSucceed) {
         cloud::spanner::JsonB("{\"boolkey\": true}"),
         cloud::spanner::JsonB("{\"strkey\": \"strval\"}")};
 
-    ZETASQL_EXPECT_OK(Insert("test_table", {"id", "json_array"}, {1, json_arr}));
+    GOOGLESQL_EXPECT_OK(Insert("test_table", {"id", "json_array"}, {1, json_arr}));
     EXPECT_THAT(ReadAll("test_table", {"id", "json_array"}),
                 IsOkAndHoldsRows({{1, json_arr}}));
   }
@@ -118,7 +118,7 @@ TEST_P(ArraysTest, InsertNumericArraysSucceed) {
         cloud::spanner::MakeNumeric("99999999999999999999999999999.999999999")
             .value()};
 
-    ZETASQL_EXPECT_OK(Insert("test_table", {"id", "numeric_array"}, {1, numeric_arr}));
+    GOOGLESQL_EXPECT_OK(Insert("test_table", {"id", "numeric_array"}, {1, numeric_arr}));
     EXPECT_THAT(ReadAll("test_table", {"id", "numeric_array"}),
                 IsOkAndHoldsRows({{1, numeric_arr}}));
   } else {
@@ -128,7 +128,7 @@ TEST_P(ArraysTest, InsertNumericArraysSucceed) {
         cloud::spanner::MakePgNumeric("99999999999999999999999999999.999999999")
             .value()};
 
-    ZETASQL_EXPECT_OK(Insert("test_table", {"id", "numeric_array"}, {1, numeric_arr}));
+    GOOGLESQL_EXPECT_OK(Insert("test_table", {"id", "numeric_array"}, {1, numeric_arr}));
     EXPECT_THAT(ReadAll("test_table", {"id", "numeric_array"}),
                 IsOkAndHoldsRows({{1, numeric_arr}}));
   }
@@ -139,11 +139,11 @@ TEST_P(ArraysTest, InsertOrUpdateArraySucceeds) {
   Array<std::string> new_string_arr{"new-value1", "new-value2", "new-value3"};
   Array<std::int64_t> num_arr{1, 2, 3};
 
-  ZETASQL_EXPECT_OK(InsertOrUpdate("test_table", {"id", "string_array"},
+  GOOGLESQL_EXPECT_OK(InsertOrUpdate("test_table", {"id", "string_array"},
                            {1, old_string_arr}));
   EXPECT_THAT(ReadAll("test_table", {"id", "string_array"}),
               IsOkAndHoldsRows({{1, old_string_arr}}));
-  ZETASQL_EXPECT_OK(InsertOrUpdate("test_table", {"id", "string_array", "num_array"},
+  GOOGLESQL_EXPECT_OK(InsertOrUpdate("test_table", {"id", "string_array", "num_array"},
                            {1, new_string_arr, num_arr}));
   EXPECT_THAT(ReadAll("test_table", {"id", "string_array", "num_array"}),
               IsOkAndHoldsRows({{1, new_string_arr, num_arr}}));
@@ -154,11 +154,11 @@ TEST_P(ArraysTest, UpdateArraySucceeds) {
   Array<std::string> new_string_arr{"new-value1", "new-value2", "new-value3"};
   Array<std::int64_t> num_arr{1, 2, 3};
 
-  ZETASQL_EXPECT_OK(Insert("test_table", {"id", "string_array", "num_array"},
+  GOOGLESQL_EXPECT_OK(Insert("test_table", {"id", "string_array", "num_array"},
                    {1, old_string_arr, num_arr}));
   EXPECT_THAT(ReadAll("test_table", {"id", "string_array", "num_array"}),
               IsOkAndHoldsRows({{1, old_string_arr, num_arr}}));
-  ZETASQL_EXPECT_OK(Update("test_table", {"id", "string_array"}, {1, new_string_arr}));
+  GOOGLESQL_EXPECT_OK(Update("test_table", {"id", "string_array"}, {1, new_string_arr}));
   EXPECT_THAT(ReadAll("test_table", {"id", "string_array", "num_array"}),
               IsOkAndHoldsRows({{1, new_string_arr, num_arr}}));
 }
@@ -168,11 +168,11 @@ TEST_P(ArraysTest, ReplaceArraySucceeds) {
   Array<std::string> new_string_arr{"new-value1", "new-value2", "new-value3"};
   Array<std::int64_t> num_arr{1, 2, 3};
 
-  ZETASQL_EXPECT_OK(Insert("test_table", {"id", "string_array", "num_array"},
+  GOOGLESQL_EXPECT_OK(Insert("test_table", {"id", "string_array", "num_array"},
                    {1, old_string_arr, num_arr}));
   EXPECT_THAT(ReadAll("test_table", {"id", "string_array", "num_array"}),
               IsOkAndHoldsRows({{1, old_string_arr, num_arr}}));
-  ZETASQL_EXPECT_OK(Replace("test_table", {"id", "string_array"}, {1, new_string_arr}));
+  GOOGLESQL_EXPECT_OK(Replace("test_table", {"id", "string_array"}, {1, new_string_arr}));
   EXPECT_THAT(
       ReadAll("test_table", {"id", "string_array", "num_array"}),
       IsOkAndHoldsRows({{1, new_string_arr, Null<Array<std::int64_t>>()}}));
@@ -189,7 +189,7 @@ TEST_P(ArraysTest, InsertArrayWithMaxDataPerColumnSucceeds) {
   // Attempt to insert an array that is exactly 10MB.
   std::string str(250000, 'a');
   Array<std::string> string_arr{str, str, str, str};
-  ZETASQL_EXPECT_OK(Insert("test_table", {"id", "max_string_array"}, {1, string_arr}));
+  GOOGLESQL_EXPECT_OK(Insert("test_table", {"id", "max_string_array"}, {1, string_arr}));
 }
 
 TEST_P(ArraysTest, InsertArrayThatExceedsMaxDataPerColumnFails) {
@@ -208,8 +208,8 @@ TEST_P(ArraysTest, InsertInvalidDateArrayFails) {
 TEST_P(ArraysTest, InsertEmptyArraysSucceed) {
   Array<std::string> string_arr{};
   Array<Bytes> bytes_arr{};
-  ZETASQL_EXPECT_OK(Insert("test_table", {"id", "string_array"}, {1, string_arr}));
-  ZETASQL_EXPECT_OK(Insert("test_table", {"id", "bytes_array"}, {2, bytes_arr}));
+  GOOGLESQL_EXPECT_OK(Insert("test_table", {"id", "string_array"}, {1, string_arr}));
+  GOOGLESQL_EXPECT_OK(Insert("test_table", {"id", "bytes_array"}, {2, bytes_arr}));
 
   // Read back all rows.
   EXPECT_THAT(ReadAll("test_table", {"id", "string_array", "bytes_array"}),
@@ -220,9 +220,9 @@ TEST_P(ArraysTest, InsertEmptyArraysSucceed) {
 TEST_P(ArraysTest, InsertArraysWithVectorLengthSucceed) {
   Array<double> double_arr{1.1, 1.2};
   Array<float> float_arr{2.1, 2.2};
-  ZETASQL_EXPECT_OK(Insert("vector_length_limits_table", {"pk", "arr_double"},
+  GOOGLESQL_EXPECT_OK(Insert("vector_length_limits_table", {"pk", "arr_double"},
                    {2, std::move(double_arr)}));
-  ZETASQL_EXPECT_OK(Insert("vector_length_limits_table", {"pk", "arr_float"},
+  GOOGLESQL_EXPECT_OK(Insert("vector_length_limits_table", {"pk", "arr_float"},
                    {3, std::move(float_arr)}));
 }
 
@@ -272,7 +272,29 @@ TEST_P(ArraysTest, ArrayTransform) {
   if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();
   }
-  ZETASQL_EXPECT_OK(Query("SELECT ARRAY_TRANSFORM([1, 2, 3], e -> e * 2) AS x"));
+  GOOGLESQL_EXPECT_OK(Query("SELECT ARRAY_TRANSFORM([1, 2, 3], e -> e * 2) AS x"));
+}
+
+TEST_P(ArraysTest, ArrayFilter) {
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  EXPECT_THAT(Query("SELECT ARRAY_FILTER([1, 2, 3], e -> e != 2)"),
+              IsOkAndHoldsRow({Array<std::int64_t>{1, 3}}));
+}
+
+TEST_P(ArraysTest, ArrayFirst) {
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  EXPECT_THAT(Query("SELECT ARRAY_FIRST([1, 2, 3])"), IsOkAndHoldsRow({1}));
+}
+
+TEST_P(ArraysTest, ArrayLast) {
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  EXPECT_THAT(Query("SELECT ARRAY_LAST([1, 2, 3])"), IsOkAndHoldsRow({3}));
 }
 
 }  // namespace

@@ -18,10 +18,10 @@
 
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/statusor.h"
 #include "backend/query/search/tokenizer.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
@@ -36,26 +36,26 @@ namespace search {
 using postgres_translator::spangres::datatypes::CreatePgJsonbValue;
 using postgres_translator::spangres::datatypes::GetPgJsonbType;
 
-void CheckResult(absl::StatusOr<zetasql::Value>& result) {
-  ZETASQL_EXPECT_OK(result.status());
-  zetasql::Value token_list = result.value();
+void CheckResult(absl::StatusOr<googlesql::Value>& result) {
+  GOOGLESQL_EXPECT_OK(result.status());
+  googlesql::Value token_list = result.value();
   EXPECT_TRUE(token_list.type()->IsTokenList());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
   ASSERT_EQ(tokens.size(), 1);
   EXPECT_EQ(tokens[0], "jsonb");
 }
 
 TEST(JsonTokenizerTest, TestTokenize) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto pg_jsonb_value, CreatePgJsonbValue("true"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto pg_jsonb_value, CreatePgJsonbValue("true"));
 
-  absl::StatusOr<zetasql::Value> result =
+  absl::StatusOr<googlesql::Value> result =
       JsonbTokenizer::Tokenize({pg_jsonb_value});
   CheckResult(result);
 }
 
 TEST(JsonTokenizerTest, TestTokenizeNull) {
-  zetasql::Value pg_jsonb_value = zetasql::Value::Null(GetPgJsonbType());
-  absl::StatusOr<zetasql::Value> result =
+  googlesql::Value pg_jsonb_value = googlesql::Value::Null(GetPgJsonbType());
+  absl::StatusOr<googlesql::Value> result =
       JsonbTokenizer::Tokenize({pg_jsonb_value});
   CheckResult(result);
 }

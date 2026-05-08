@@ -1,0 +1,57 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE CommitTsTable (
+  id STRING(MAX) NOT NULL,
+  ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+  val STRING(MAX)
+) PRIMARY KEY (id, ts);
+CREATE TABLE CommitTsChildTable (
+  id STRING(MAX) NOT NULL,
+  ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+  ts2 TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+  val2 STRING(MAX)
+) PRIMARY KEY (id, ts, ts2);
+CREATE INDEX CommitTsTableIndex ON CommitTsTable(val);
+CREATE UNIQUE INDEX CommitTsTableUniqueIndex ON CommitTsTable(val);
+CREATE TABLE NonKeyCommitTsTable (
+  id STRING(MAX) NOT NULL,
+  key STRING(MAX) NOT NULL,
+  ts TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+) PRIMARY KEY (id, key);
+CREATE INDEX NonKeyCommitTsIndexOnTs ON NonKeyCommitTsTable(ts);
+CREATE INDEX NonKeyCommitTsIndexOnKey ON NonKeyCommitTsTable(key);
+CREATE TABLE Users (
+  userid INT64 NOT NULL,
+  email STRING(MAX)
+) PRIMARY KEY (userid);
+CREATE UNIQUE INDEX UsersByEmail ON Users(email);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE CommitTsTable (
+  id text NOT NULL,
+  ts SPANNER.COMMIT_TIMESTAMP NOT NULL,
+  val text,
+  PRIMARY KEY (id, ts)
+);
+CREATE TABLE CommitTsChildTable (
+  id text NOT NULL,
+  ts SPANNER.COMMIT_TIMESTAMP NOT NULL,
+  ts2 SPANNER.COMMIT_TIMESTAMP NOT NULL,
+  val2 text,
+  PRIMARY KEY (id, ts, ts2)
+);
+CREATE INDEX CommitTsTableIndex ON CommitTsTable(val);
+CREATE UNIQUE INDEX CommitTsTableUniqueIndex ON CommitTsTable(val);
+CREATE TABLE NonKeyCommitTsTable (
+  id text NOT NULL,
+  key text NOT NULL,
+  ts SPANNER.COMMIT_TIMESTAMP,
+  PRIMARY KEY (id, key)
+);
+CREATE INDEX NonKeyCommitTsIndexOnTs ON NonKeyCommitTsTable(ts);
+CREATE INDEX NonKeyCommitTsIndexOnKey ON NonKeyCommitTsTable(key);
+CREATE TABLE Users (
+  userid int8 NOT NULL,
+  email text,
+  PRIMARY KEY (userid)
+);
+CREATE UNIQUE INDEX UsersByEmail ON Users(email);

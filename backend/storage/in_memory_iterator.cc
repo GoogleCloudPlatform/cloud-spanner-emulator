@@ -37,14 +37,14 @@ absl::Status FixedRowStorageIterator::Status() const {
 
 const Key& FixedRowStorageIterator::Key() const { return rows_[pos_].first; }
 
-const std::vector<zetasql::Value>& FixedRowStorageIterator::GetColumns()
+const std::vector<googlesql::Value>& FixedRowStorageIterator::GetColumns()
     const {
   return rows_[pos_].second;
 }
 
 int FixedRowStorageIterator::NumColumns() const { return GetColumns().size(); }
 
-const zetasql::Value& FixedRowStorageIterator::ColumnValue(int i) const {
+const googlesql::Value& FixedRowStorageIterator::ColumnValue(int i) const {
   return GetColumns()[i];
 }
 

@@ -36,14 +36,14 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/strings.h"
-#include "zetasql/public/types/array_type.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_parameters.h"
-#include "zetasql/public/types/value_equality_check_options.h"
-#include "zetasql/public/value_content.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/strings.h"
+#include "googlesql/public/types/array_type.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_parameters.h"
+#include "googlesql/public/types/value_equality_check_options.h"
+#include "googlesql/public/value_content.h"
 #include "absl/flags/flag.h"
 #include "absl/hash/hash.h"
 #include "absl/log/check.h"
@@ -51,17 +51,17 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 
 namespace postgres_translator::spangres::datatypes {
 
-using ::zetasql::LanguageOptions;
-using ::zetasql::ProductMode;
-using ::zetasql::TypeParameters;
-using ::zetasql::TypeParameterValue;
-using ::zetasql::TypeProto;
-using ::zetasql::ValueContent;
-using ::zetasql::ValueProto;
+using ::googlesql::LanguageOptions;
+using ::googlesql::ProductMode;
+using ::googlesql::TypeParameters;
+using ::googlesql::TypeParameterValue;
+using ::googlesql::TypeProto;
+using ::googlesql::ValueContent;
+using ::googlesql::ValueProto;
 using TypeAnnotationCode = ::google::spanner::v1::TypeAnnotationCode;
 
 class PgOidType : public SpannerExtendedType {
@@ -109,8 +109,8 @@ class PgOidType : public SpannerExtendedType {
   absl::Status SerializeToProtoAndDistinctFileDescriptorsImpl(
       const BuildFileDescriptorSetMapOptions& options, TypeProto* type_proto,
       FileDescriptorSetMap* file_descriptor_set_map) const override {
-    type_proto->set_type_kind(zetasql::TypeKind::TYPE_EXTENDED);
-    type_proto->set_extended_type_name(TypeName(zetasql::PRODUCT_EXTERNAL));
+    type_proto->set_type_kind(googlesql::TypeKind::TYPE_EXTENDED);
+    type_proto->set_extended_type_name(TypeName(googlesql::PRODUCT_EXTERNAL));
     return absl::OkStatus();
   }
 
@@ -143,14 +143,14 @@ class PgOidType : public SpannerExtendedType {
   void DebugStringImpl(bool details, TypeOrStringVector* stack,
                        std::string* debug_string) const override {
     absl::StrAppend(debug_string,
-                    ShortTypeName(/*unused=*/zetasql::PRODUCT_EXTERNAL));
+                    ShortTypeName(/*unused=*/googlesql::PRODUCT_EXTERNAL));
   }
 
   void ClearValueContent(const ValueContent& value) const override {}
 
   bool ValueContentEquals(
       const ValueContent& x, const ValueContent& y,
-      const zetasql::ValueEqualityCheckOptions& options) const override {
+      const googlesql::ValueEqualityCheckOptions& options) const override {
     return x.GetAs<int64_t>() == y.GetAs<int64_t>();
   }
 
@@ -176,7 +176,7 @@ class PgOidType : public SpannerExtendedType {
     if (options.mode == FormatValueContentOptions::Mode::kSQLLiteral ||
         options.mode == FormatValueContentOptions::Mode::kSQLExpression) {
       return absl::StrCat("CAST(",
-                          zetasql::ToSingleQuotedStringLiteral(oid_str),
+                          googlesql::ToSingleQuotedStringLiteral(oid_str),
                           " AS PG.OID)");
     }
     return oid_str;
@@ -203,9 +203,9 @@ const SpannerExtendedType* GetPgOidType() {
   return s_pg_oid_type;
 }
 
-const zetasql::ArrayType* GetPgOidArrayType() {
-  static const zetasql::ArrayType* s_pg_oid_arr_type = []() {
-    const zetasql::ArrayType* pg_oid_array_type = nullptr;
+const googlesql::ArrayType* GetPgOidArrayType() {
+  static const googlesql::ArrayType* s_pg_oid_arr_type = []() {
+    const googlesql::ArrayType* pg_oid_array_type = nullptr;
     ABSL_CHECK_OK(
         GetTypeFactory()->MakeArrayType(GetPgOidType(), &pg_oid_array_type));
     return pg_oid_array_type;
@@ -213,16 +213,16 @@ const zetasql::ArrayType* GetPgOidArrayType() {
   return s_pg_oid_arr_type;
 }
 
-absl::StatusOr<zetasql::Value> CreatePgOidValue(uint32_t oid) {
-  return zetasql::Value::Extended(
-      GetPgOidType(), zetasql::ValueContent::Create((int64_t)oid));
+absl::StatusOr<googlesql::Value> CreatePgOidValue(uint32_t oid) {
+  return googlesql::Value::Extended(
+      GetPgOidType(), googlesql::ValueContent::Create((int64_t)oid));
 }
 
-zetasql::Value NullPgOid() { return zetasql::Value::Null(GetPgOidType()); }
+googlesql::Value NullPgOid() { return googlesql::Value::Null(GetPgOidType()); }
 
-absl::StatusOr<int64_t> GetPgOidValue(const zetasql::Value& value) {
-  ZETASQL_RET_CHECK(!value.is_null());
-  ZETASQL_RET_CHECK(value.type() == GetPgOidType());
+absl::StatusOr<int64_t> GetPgOidValue(const googlesql::Value& value) {
+  GOOGLESQL_RET_CHECK(!value.is_null());
+  GOOGLESQL_RET_CHECK(value.type() == GetPgOidType());
   return value.extended_value().GetAs<int64_t>();
 }
 

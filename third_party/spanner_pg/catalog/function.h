@@ -37,9 +37,9 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/procedure.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/procedure.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -58,16 +58,16 @@ inline constexpr char kPostgresGroup[] = "pg";
 // when asked how to execute a PostgreSQL function call in this storage engine.
 struct FunctionAndSignature {
  public:
-  FunctionAndSignature(const zetasql::Function* function,
-                       const zetasql::FunctionSignature signature)
+  FunctionAndSignature(const googlesql::Function* function,
+                       const googlesql::FunctionSignature signature)
       : function_(function), signature_(signature) {}
 
-  const zetasql::Function* function() const { return function_; }
-  const zetasql::FunctionSignature& signature() const { return signature_; }
+  const googlesql::Function* function() const { return function_; }
+  const googlesql::FunctionSignature& signature() const { return signature_; }
 
  private:
-  const zetasql::Function* function_;
-  const zetasql::FunctionSignature signature_;
+  const googlesql::Function* function_;
+  const googlesql::FunctionSignature signature_;
 };
 
 // Group a procedure and signature together for the EngineSystemCatalog to
@@ -75,16 +75,16 @@ struct FunctionAndSignature {
 // engine.
 struct ProcedureAndSignature {
  public:
-  ProcedureAndSignature(const zetasql::Procedure* procedure,
-                        const zetasql::FunctionSignature signature)
+  ProcedureAndSignature(const googlesql::Procedure* procedure,
+                        const googlesql::FunctionSignature signature)
       : procedure_(procedure), signature_(signature) {}
 
-  const zetasql::Procedure* procedure() const { return procedure_; }
-  const zetasql::FunctionSignature& signature() const { return signature_; }
+  const googlesql::Procedure* procedure() const { return procedure_; }
+  const googlesql::FunctionSignature& signature() const { return signature_; }
 
  private:
-  const zetasql::Procedure* procedure_;
-  const zetasql::FunctionSignature signature_;
+  const googlesql::Procedure* procedure_;
+  const googlesql::FunctionSignature signature_;
 };
 
 // PostgresExtendedFunctionSignature identifies the argument types per
@@ -97,7 +97,7 @@ struct ProcedureAndSignature {
 // One will map to the PostgreSQL proc with the unsupported return type and
 // the other will map to a builtin function with the same input types but a
 // different return type which is supported.
-class PostgresExtendedFunctionSignature : public zetasql::FunctionSignature {
+class PostgresExtendedFunctionSignature : public googlesql::FunctionSignature {
  public:
   // Constructs the function signature and stores metadata about the mapped
   // builtin function and mapped PostgreSQL proc oid.
@@ -109,16 +109,16 @@ class PostgresExtendedFunctionSignature : public zetasql::FunctionSignature {
   // If postgres_proc_oid is a valid Oid, it must have the same input and output
   // types as this signature.
   PostgresExtendedFunctionSignature(
-      const zetasql::FunctionSignature& signature,
-      std::unique_ptr<zetasql::Function> mapped_function = nullptr,
+      const googlesql::FunctionSignature& signature,
+      std::unique_ptr<googlesql::Function> mapped_function = nullptr,
       Oid postgres_proc_oid = InvalidOid,
       std::vector<std::string> query_features_names = {})
-      : zetasql::FunctionSignature(signature),
+      : googlesql::FunctionSignature(signature),
         mapped_function_(std::move(mapped_function)),
         postgres_proc_oid_(postgres_proc_oid),
         query_features_names_(query_features_names) {}
 
-  const zetasql::Function* mapped_function() const {
+  const googlesql::Function* mapped_function() const {
     return mapped_function_.get();
   }
 
@@ -130,26 +130,26 @@ class PostgresExtendedFunctionSignature : public zetasql::FunctionSignature {
   }
 
  private:
-  std::unique_ptr<zetasql::Function> mapped_function_;
+  std::unique_ptr<googlesql::Function> mapped_function_;
   Oid postgres_proc_oid_;
   std::vector<std::string> query_features_names_;
 };
 
-class PostgresExtendedFunction : public zetasql::Function {
+class PostgresExtendedFunction : public googlesql::Function {
  public:
   // Initialize a PostgresExtendedFunction.
   explicit PostgresExtendedFunction(
-      const std::string& name, zetasql::Function::Mode mode,
+      const std::string& name, googlesql::Function::Mode mode,
       std::vector<std::unique_ptr<PostgresExtendedFunctionSignature>>
           function_signatures,
       std::vector<std::string> query_features_names = {})
       // TODO: Consider passing full function name path here.
-      : zetasql::Function(name, kPostgresGroup, mode),
+      : googlesql::Function(name, kPostgresGroup, mode),
         postgres_signatures_(std::move(function_signatures)),
         query_features_names_(query_features_names) {
     for (const std::unique_ptr<PostgresExtendedFunctionSignature>& signature :
          postgres_signatures_) {
-      // Call the zetasql::Function AddSignature function so all of the base
+      // Call the googlesql::Function AddSignature function so all of the base
       // class lookups work correctly.
       AddSignature(*signature);
 

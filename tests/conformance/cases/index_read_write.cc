@@ -20,7 +20,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/common/scoped_feature_flags_setter.h"
@@ -33,7 +33,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class IndexTest
     : public DatabaseTest,
@@ -58,11 +58,11 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 TEST_P(IndexTest, ReturnsRowsInDescendingOrder) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {0, "Adam", 20}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 22}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {4, "Matthew", 33}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {0, "Adam", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 22}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {4, "Matthew", 33}));
+  GOOGLESQL_EXPECT_OK(
       Insert("Users", {"ID", "Name", "Age"}, {5, Null<std::string>(), 18}));
 
   // Read back all rows.
@@ -86,11 +86,11 @@ TEST_P(IndexTest, ReturnsRowsInDescendingOrder) {
 }
 
 TEST_P(IndexTest, ReturnsRowsInAscendingOrder) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {0, "Adam", 20}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 22}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {4, "Matthew", 33}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {0, "Adam", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 22}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {4, "Matthew", 33}));
+  GOOGLESQL_EXPECT_OK(
       Insert("Users", {"ID", "Name", "Age"}, {5, Null<std::string>(), 18}));
 
   // Read back all rows.
@@ -112,12 +112,12 @@ TEST_P(IndexTest, ReturnsRowsInAscendingOrder) {
 }
 
 TEST_P(IndexTest, IndexEntriesAreUpdated) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {0, "Adam", 20}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 22}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {4, "Matthew", 33}));
-  ZETASQL_EXPECT_OK(Update("Users", {"ID", "Name", "Age"}, {2, "Samantha", 24}));
-  ZETASQL_EXPECT_OK(Update("Users", {"ID", "Name", "Age"}, {4, "Alice", 21}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {0, "Adam", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 22}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {4, "Matthew", 33}));
+  GOOGLESQL_EXPECT_OK(Update("Users", {"ID", "Name", "Age"}, {2, "Samantha", 24}));
+  GOOGLESQL_EXPECT_OK(Update("Users", {"ID", "Name", "Age"}, {4, "Alice", 21}));
 
   // Read back all rows.
   EXPECT_THAT(ReadAllWithIndex("Users", "UsersByName", {"Name", "ID"}),
@@ -130,17 +130,17 @@ TEST_P(IndexTest, IndexEntriesAreUpdated) {
 }
 
 TEST_P(IndexTest, IndexEntriesAreDeleted) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {0, "Adam", 20}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 22}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {4, "Matthew", 33}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {0, "Adam", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 22}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {4, "Matthew", 33}));
 
-  ZETASQL_EXPECT_OK(Delete("Users", {Key(0), Key(2)}));
+  GOOGLESQL_EXPECT_OK(Delete("Users", {Key(0), Key(2)}));
   // Read back all rows.
   EXPECT_THAT(ReadAllWithIndex("Users", "UsersByName", {"Name", "ID"}),
               IsOkAndHoldsRows({{"John", 1}, {"Matthew", 4}}));
 
-  ZETASQL_EXPECT_OK(Delete("Users", {Key(1), Key(4)}));
+  GOOGLESQL_EXPECT_OK(Delete("Users", {Key(1), Key(4)}));
   EXPECT_THAT(ReadAllWithIndex("Users", "UsersByName", {"Name", "ID"}),
               IsOkAndHoldsRows({}));
 }
@@ -153,12 +153,12 @@ TEST_P(IndexTest, EmptyIndexReturnsZeroRows) {
 }
 
 TEST_P(IndexTest, NullEntriesAreFiltered) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {0, "Adam", 20}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "", 22}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {0, "Adam", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "", 22}));
+  GOOGLESQL_EXPECT_OK(
       Insert("Users", {"ID", "Name", "Age"}, {2, Null<std::string>(), 41}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {3, "John", 28}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"},
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {3, "John", 28}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"},
                    {4, "Matthew", Null<std::int64_t>()}));
 
   // Read back all rows.
@@ -187,17 +187,17 @@ TEST_P(IndexTest, NullEntriesAreFiltered) {
 }
 
 TEST_P(IndexTest, AllEntriesAreUnique) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {0, "Adam", 20}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "", 22}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {0, "Adam", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "", 22}));
+  GOOGLESQL_EXPECT_OK(
       Insert("Users", {"ID", "Name", "Age"}, {2, Null<std::string>(), 41}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {3, "John", 28}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {3, "John", 28}));
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"}, {4, "Adam", 20}),
               StatusIs(absl::StatusCode::kAlreadyExists));
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"}, {5, "", 20}),
               StatusIs(absl::StatusCode::kAlreadyExists));
   if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    // ZetaSQL treats NULLs as not-distinct values, so an error is triggered
+    // GoogleSQL treats NULLs as not-distinct values, so an error is triggered
     // when inserting multiple entries with NULL values.
     EXPECT_THAT(
         Insert("Users", {"ID", "Name", "Age"}, {6, Null<std::string>(), 41}),
@@ -205,10 +205,10 @@ TEST_P(IndexTest, AllEntriesAreUnique) {
   } else {
     // PostgreSQL treats NULLs as distinct values, so it is possible to insert
     // multiple entries with NULL values even in the presence of a UNIQUE index.
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         Insert("Users", {"ID", "Name", "Age"}, {6, Null<std::string>(), 41}));
   }
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"},
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"},
                    {7, "Matthew", Null<std::int64_t>()}));
 
   // Read back all rows.
@@ -233,7 +233,7 @@ TEST_P(IndexTest, ReadOnIndexWithSingletonRow) {
   if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP() << "PostgreSQL does not support singleton rows.";
   }
-  ZETASQL_EXPECT_OK(Insert("NoPkTable", {"Col1"}, {20}));
+  GOOGLESQL_EXPECT_OK(Insert("NoPkTable", {"Col1"}, {20}));
   EXPECT_THAT(Insert("NoPkTable", {"Col1"}, {30}),
               StatusIs(absl::StatusCode::kAlreadyExists));
   EXPECT_THAT(ReadAllWithIndex("NoPkTable", "NoPkTableIdx", {"Col1"}),
@@ -253,7 +253,7 @@ TEST_P(IndexTest, TriggersUniqueIndexViolationWithImplicitNulls) {
   // Executed across separate transactions.
   {
     // Index UsersByNameAgeUnique will add NULL, NULL for Name & Age column.
-    ZETASQL_EXPECT_OK(Insert("Users", {"ID"}, {0}));
+    GOOGLESQL_EXPECT_OK(Insert("Users", {"ID"}, {0}));
 
     // This should fail because it is also adding NULL, NULL to unique Index
     // UsersByNameAgeUnique.
@@ -272,20 +272,20 @@ TEST_P(IndexTest, TriggersUniqueIndexViolationWithImplicitNulls) {
 }
 
 TEST_P(IndexTest, AllEntriesAreUniqueAndNullFiltered) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {0, "Adam", 20}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "", 22}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {0, "Adam", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "", 22}));
+  GOOGLESQL_EXPECT_OK(
       Insert("Users", {"ID", "Name", "Age"}, {2, Null<std::string>(), 41}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {3, "John", 28}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"}, {3, "John", 28}));
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"}, {4, "Adam", 20}),
               StatusIs(absl::StatusCode::kAlreadyExists));
   EXPECT_THAT(Insert("Users", {"ID", "Name", "Age"}, {5, "", 22}),
               StatusIs(absl::StatusCode::kAlreadyExists));
   // A duplicate index entry that is null filtered should not trigger a UNIQUE
   // violation.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("Users", {"ID", "Name", "Age"}, {6, Null<std::string>(), 43}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"},
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name", "Age"},
                    {7, "Matthew", Null<std::int64_t>()}));
 
   // Read back all rows.
@@ -319,13 +319,13 @@ TEST_F(NumericIndexTest, BasicRead) {
   Numeric john_money = cloud::spanner::MakeNumeric("0").value();
   Numeric zack_money = cloud::spanner::MakeNumeric("999999999.456789").value();
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("Accounts", {"ID", "Name", "Money"}, {0, "Zack", zack_money}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("Accounts", {"ID", "Name", "Money"}, {1, "John", john_money}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("Accounts", {"ID", "Name", "Money"}, {2, "Adam", adam_money}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("Accounts", {"ID", "Name", "Money"}, {3, "Bill", bill_money}));
 
   EXPECT_THAT(ReadAllWithIndex("Accounts", "AccountsByNameStoringMoney",
@@ -354,11 +354,11 @@ TEST_F(JsonIndexTest, BasicRead) {
   Json bill_config = Json("{\"floor\":2}");
   Json john_config = Json();
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("Users", {"ID", "Name", "Config"}, {1, "Bill", bill_config}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("Users", {"ID", "Name", "Config"}, {2, "John", john_config}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("Users", {"ID", "Name", "Config"}, {0, "Adam", adam_config}));
 
   EXPECT_THAT(
@@ -384,13 +384,13 @@ class RemoteIndexTest : public DatabaseTest {
 };
 
 TEST_F(RemoteIndexTest, InsertsThenDeletes) {
-  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Adam", 20}));
-  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Timothy", 40}));
+  GOOGLESQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Adam", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Timothy", 40}));
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("TestTable", {"id", "testname", "info"}, {1, "Adam", "AdamInfo"}));
   // Can insert a row in remote index without parent row.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("TestTable", {"id", "testname", "info"}, {2, "Bill", "BillInfo"}));
 
   // Read back all rows.
@@ -399,29 +399,29 @@ TEST_F(RemoteIndexTest, InsertsThenDeletes) {
       IsOkAndHoldsRows({{"Adam", "AdamInfo"}, {"Bill", "BillInfo"}}));
 
   // Delete the parent row, the index should stay the same.
-  ZETASQL_EXPECT_OK(Delete("ParentTable", {Key("Adam")}));
+  GOOGLESQL_EXPECT_OK(Delete("ParentTable", {Key("Adam")}));
   EXPECT_THAT(
       ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
       IsOkAndHoldsRows({{"Adam", "AdamInfo"}, {"Bill", "BillInfo"}}));
 
   // Delete the indexed table row, the index should contain only 1 row now.
-  ZETASQL_EXPECT_OK(Delete("TestTable", {Key(2)}));
+  GOOGLESQL_EXPECT_OK(Delete("TestTable", {Key(2)}));
   EXPECT_THAT(
       ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
       IsOkAndHoldsRows({{"Adam", "AdamInfo"}}));
 }
 
 TEST_F(RemoteIndexTest, InsertsThenUpdates) {
-  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Adam", 20}));
-  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Charlie", 30}));
+  GOOGLESQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Adam", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Charlie", 30}));
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("TestTable", {"id", "testname", "info"}, {1, "Adam", "AdamInfo"}));
   // Insert a row in remote index without parent row.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("TestTable", {"id", "testname", "info"}, {2, "Bill", "BillInfo"}));
   // Insert another row in remote index with parent row.
-  ZETASQL_EXPECT_OK(Insert("TestTable", {"id", "testname", "info"},
+  GOOGLESQL_EXPECT_OK(Insert("TestTable", {"id", "testname", "info"},
                    {3, "Charlie", "CharlieInfo"}));
 
   // Read back all rows.
@@ -432,9 +432,9 @@ TEST_F(RemoteIndexTest, InsertsThenUpdates) {
                         {"Charlie", "CharlieInfo"}}));
 
   // Update an indexed table row, the index should be updated accordingly.
-  ZETASQL_EXPECT_OK(Update("TestTable", {"id", "testname", "info"},
+  GOOGLESQL_EXPECT_OK(Update("TestTable", {"id", "testname", "info"},
                    {2, "NoLongerBill", "NotBillInfo"}));
-  ZETASQL_EXPECT_OK(Update("TestTable", {"id", "testname", "info"},
+  GOOGLESQL_EXPECT_OK(Update("TestTable", {"id", "testname", "info"},
                    {3, "NoLongerCharlie", "NotCharlieInfo"}));
   EXPECT_THAT(
       ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
@@ -457,13 +457,13 @@ class RemoteIndexWithInterleaveInTest : public DatabaseTest {
 };
 
 TEST_F(RemoteIndexWithInterleaveInTest, InsertsThenDeletes) {
-  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Adam", 20}));
-  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Timothy", 40}));
+  GOOGLESQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Adam", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Timothy", 40}));
 
-  ZETASQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
+  GOOGLESQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
                    {"Adam", "Adam", "AdamInfo"}));
   // Can insert a row in remote index without parent row.
-  ZETASQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
+  GOOGLESQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
                    {"Bill", "Bill", "BillInfo"}));
 
   // Read back all rows.
@@ -472,29 +472,29 @@ TEST_F(RemoteIndexWithInterleaveInTest, InsertsThenDeletes) {
       IsOkAndHoldsRows({{"Adam", "AdamInfo"}, {"Bill", "BillInfo"}}));
 
   // Delete the parent row, the index should stay the same.
-  ZETASQL_EXPECT_OK(Delete("ParentTable", {Key("Adam")}));
+  GOOGLESQL_EXPECT_OK(Delete("ParentTable", {Key("Adam")}));
   EXPECT_THAT(
       ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
       IsOkAndHoldsRows({{"Adam", "AdamInfo"}, {"Bill", "BillInfo"}}));
 
   // Delete the indexed table row, the index should contain only 1 row now.
-  ZETASQL_EXPECT_OK(Delete("TestTable", {Key("Bill")}));
+  GOOGLESQL_EXPECT_OK(Delete("TestTable", {Key("Bill")}));
   EXPECT_THAT(
       ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),
       IsOkAndHoldsRows({{"Adam", "AdamInfo"}}));
 }
 
 TEST_F(RemoteIndexWithInterleaveInTest, InsertsThenUpdates) {
-  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Adam", 20}));
-  ZETASQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Charlie", 30}));
+  GOOGLESQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Adam", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("ParentTable", {"name", "age"}, {"Charlie", 30}));
 
-  ZETASQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
+  GOOGLESQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
                    {"Adam", "Adam", "AdamInfo"}));
   // Insert a row in remote index without parent row.
-  ZETASQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
+  GOOGLESQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
                    {"Bill", "Bill", "BillInfo"}));
   // Insert another row in remote index with parent row.
-  ZETASQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
+  GOOGLESQL_EXPECT_OK(Insert("TestTable", {"name", "testname", "info"},
                    {"Charlie", "Charlie", "CharlieInfo"}));
 
   // Read back all rows.
@@ -505,9 +505,9 @@ TEST_F(RemoteIndexWithInterleaveInTest, InsertsThenUpdates) {
                         {"Charlie", "CharlieInfo"}}));
 
   // Update an indexed table row, the index should be updated accordingly.
-  ZETASQL_EXPECT_OK(Update("TestTable", {"name", "testname", "info"},
+  GOOGLESQL_EXPECT_OK(Update("TestTable", {"name", "testname", "info"},
                    {"Bill", "NoLongerBill", "NotBillInfo"}));
-  ZETASQL_EXPECT_OK(Update("TestTable", {"name", "testname", "info"},
+  GOOGLESQL_EXPECT_OK(Update("TestTable", {"name", "testname", "info"},
                    {"Charlie", "NoLongerCharlie", "NotCharlieInfo"}));
   EXPECT_THAT(
       ReadAllWithIndex("TestTable", "RemoteIndex", {"testname", "info"}),

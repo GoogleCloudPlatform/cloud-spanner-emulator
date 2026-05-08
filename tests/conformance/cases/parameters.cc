@@ -17,15 +17,23 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/time/civil_time.h"
+#include "absl/time/time.h"
+#include "google/cloud/spanner/json.h"
+#include "google/cloud/spanner/numeric.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
+#include "grpcpp/client_context.h"
+#include "google/protobuf/map.h"
 
 namespace google {
 namespace spanner {
@@ -36,11 +44,13 @@ namespace {
 
 using ::google::spanner::emulator::test::proto::Partially;
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::IsOk;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOk;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
-class ParamsApiTest : public test::DatabaseTest {
+class ParamsApiTest
+    : public test::DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
  protected:
   // Creates a new session for tests using raw grpc client.
   absl::StatusOr<std::string> CreateTestSession() {
@@ -48,33 +58,18 @@ class ParamsApiTest : public test::DatabaseTest {
     spanner_api::CreateSessionRequest request;
     spanner_api::Session response;
     request.set_database(database()->FullName());
-    ZETASQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
+    GOOGLESQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
     return response.name();
   }
 
   void SetUp() override {
+    dialect_ = GetParam();
     test::DatabaseTest::SetUp();
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_, CreateTestSession());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(test_session_uri_, CreateTestSession());
   }
 
   absl::Status SetUpDatabase() override {
-    return SetSchema({
-        R"(CREATE TABLE test_table(
-              Key INT64,
-              BoolValue BOOL,
-              IntValue INT64,
-              DoubleValue FLOAT64,
-              StrValue STRING(MAX),
-              ByteValue BYTES(MAX),
-              TimestampValue TIMESTAMP,
-              DateValue DATE,
-              BoolArray ARRAY<BOOL>,
-              IntArray ARRAY<INT64>,
-              DoubleArray ARRAY<FLOAT64>,
-              StrArray ARRAY<STRING(MAX)>,
-              ByteArray ARRAY<BYTES(MAX)>,
-              TimestampArray ARRAY<TIMESTAMP>,
-              DateArray ARRAY<DATE>) PRIMARY KEY(Key))"});
+    return SetSchemaFromFile("parameters.test");
   }
 
  protected:
@@ -96,7 +91,7 @@ class ParamsApiTest : public test::DatabaseTest {
     // Execute the query.
     spanner_api::ResultSet response;
     grpc::ClientContext context;
-    ZETASQL_RETURN_IF_ERROR(raw_client()->ExecuteSql(&context, request, &response));
+    GOOGLESQL_RETURN_IF_ERROR(raw_client()->ExecuteSql(&context, request, &response));
 
     // Clear the transaction if any.
     response.mutable_metadata()->clear_transaction();
@@ -107,53 +102,96 @@ class ParamsApiTest : public test::DatabaseTest {
   std::string test_session_uri_;
 };
 
-TEST_F(ParamsApiTest, Params) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectParamsApiTest, ParamsApiTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<ParamsApiTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(ParamsApiTest, Params) {
   // The majority of the test cases set the parameter to a certain value and
   // expect the returned row to contain said value. This lambda just captures
   // that pattern.
   auto expect_selected = [this](Value v) {
-    EXPECT_THAT(QueryWithParams("SELECT @param",
-                                {{"param", v}, {"unused_param", Value(6)}}),
-                IsOkAndHoldsRow({v}));
+    if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+      EXPECT_THAT(QueryWithParams("SELECT @param",
+                                  {{"param", v}, {"unused_param", Value(6)}}),
+                  IsOkAndHoldsRow({v}));
+    } else {
+      EXPECT_THAT(QueryWithParams("SELECT $1", {{"p1", v}, {"p2", Value(6)}}),
+                  IsOkAndHoldsRow({v}));
+    }
   };
 
   expect_selected(Value(6));
   expect_selected(Value("str"));
   expect_selected(Value(""));
   expect_selected(Value(Bytes("bytes")));
-  expect_selected(
-      Value(cloud::spanner::MakeNumeric("-2353250901550135.12453024").value()));
-  expect_selected(Value(Json("{\"key\":123}")));
+  if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    expect_selected(Value(
+        cloud::spanner::MakeNumeric("-2353250901550135.12453024").value()));
+    expect_selected(Value(Json("{\"key\":123}")));
+  } else {
+    expect_selected(Value(
+        cloud::spanner::MakePgNumeric("-2353250901550135.12453024").value()));
+    expect_selected(Value(cloud::spanner::JsonB("{\"key\": 123}")));
+  }
   expect_selected(
       Value(MakeTimestamp(absl::ToChronoTime(absl::FromUnixNanos(1)))));
   expect_selected(Value(MakeTimestamp(absl::ToChronoTime(
       absl::FromCivil(absl::CivilDay(1970, 1, 11), absl::FixedTimeZone(0))))));
   expect_selected(Value(std::vector<bool>{true, false}));
 
-  EXPECT_THAT(
-      QueryWithParams("SELECT @param * @param",
-                      {{"param", Value(-2.0)}, {"unused_param", Value(6)}}),
-      IsOkAndHoldsRow({4.0}));
+  if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        QueryWithParams("SELECT @param * @param",
+                        {{"param", Value(-2.0)}, {"unused_param", Value(6)}}),
+        IsOkAndHoldsRow({4.0}));
 
-  EXPECT_THAT(
-      QueryWithParams("SELECT @param * @param",
-                      {{"param", Value(-0.0)}, {"unused_param", Value(6)}}),
-      IsOkAndHoldsRow({0.0}));
+    EXPECT_THAT(
+        QueryWithParams("SELECT @param * @param",
+                        {{"param", Value(-0.0)}, {"unused_param", Value(6)}}),
+        IsOkAndHoldsRow({0.0}));
 
-  EXPECT_THAT(
-      QueryWithParams("SELECT @param * @param",
-                      {{"param", Value(2.0)}, {"unused_param", Value(6)}}),
-      IsOkAndHoldsRow({4.0}));
+    EXPECT_THAT(
+        QueryWithParams("SELECT @param * @param",
+                        {{"param", Value(2.0)}, {"unused_param", Value(6)}}),
+        IsOkAndHoldsRow({4.0}));
 
-  EXPECT_THAT(QueryWithParams("SELECT @`p\\`ram`", {{"p`ram", Value(6)}}),
-              IsOkAndHoldsRow({6}));
+    EXPECT_THAT(QueryWithParams("SELECT @`p\\`ram`", {{"p`ram", Value(6)}}),
+                IsOkAndHoldsRow({6}));
 
-  EXPECT_THAT(
-      QueryWithParams("SELECT @param", {{std::string(130, 'x'), Value(6)}}),
-      StatusIs(absl::StatusCode::kInvalidArgument));
+    EXPECT_THAT(
+        QueryWithParams("SELECT @param", {{std::string(130, 'x'), Value(6)}}),
+        StatusIs(absl::StatusCode::kInvalidArgument));
+  } else {
+    EXPECT_THAT(QueryWithParams("SELECT $1 * $1",
+                                {{"p1", Value(-2.0)}, {"p2", Value(6)}}),
+                IsOkAndHoldsRow({4.0}));
+
+    EXPECT_THAT(QueryWithParams("SELECT $1 * $1",
+                                {{"p1", Value(-0.0)}, {"p2", Value(6)}}),
+                IsOkAndHoldsRow({0.0}));
+
+    EXPECT_THAT(QueryWithParams("SELECT $1 * $1",
+                                {{"p1", Value(2.0)}, {"p2", Value(6)}}),
+                IsOkAndHoldsRow({4.0}));
+
+    // PostgreSQL does not support backtick identifiers for parameters.
+    // PostgreSQL uses $1, $2, etc.
+
+    EXPECT_THAT(
+        QueryWithParams("SELECT $1", {{std::string(130, 'x'), Value(6)}}),
+        StatusIs(absl::StatusCode::kInvalidArgument));
+  }
 }
 
-TEST_F(ParamsApiTest, StructParams) {
+TEST_P(ParamsApiTest, StructParams) {
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP() << "PostgreSQL does not support STRUCT parameters.";
+  }
   auto make_name = [](std::string first_name, std::string last_name) {
     return std::tuple(std::pair("FirstName", first_name),
                       std::pair("LastName", last_name));
@@ -184,17 +222,28 @@ TEST_F(ParamsApiTest, StructParams) {
       IsOkAndHoldsRow({"Test"}));
 }
 
-TEST_F(ParamsApiTest, NamedParameterInSqlNotSuppliedParametersInRequest) {
+TEST_P(ParamsApiTest, NamedParameterInSqlNotSuppliedParametersInRequest) {
   // The SQL query uses a named parameter, but none are supplied in the actual
   // request.
   google::protobuf::Struct params;
   google::protobuf::Map<std::string, google::spanner::v1::Type> param_types;
-  auto query = R"(SELECT @any)";
-  EXPECT_THAT(Execute(query, params, param_types),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+  if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    auto query = R"(SELECT @any)";
+    EXPECT_THAT(Execute(query, params, param_types),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  } else {
+    auto query = R"(SELECT $1)";
+    EXPECT_THAT(Execute(query, params, param_types),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
 }
 
-TEST_F(ParamsApiTest, UndeclaredParameters) {
+TEST_P(ParamsApiTest, UndeclaredParameters) {
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP()
+        << "Undeclared parameters are not supported in PostgreSQL in the "
+           "emulator, PostgreSQL requires parameter types to be known.";
+  }
   // Parameter unused in query.
   google::protobuf::Struct params = PARSE_TEXT_PROTO(R"pb(
     fields {
@@ -703,7 +752,10 @@ TEST_F(ParamsApiTest, UndeclaredParameters) {
               IsOkAndHolds(Partially(test::EqualsProto(result))));
 }
 
-TEST_F(ParamsApiTest, UndeclaredStructParams) {
+TEST_P(ParamsApiTest, UndeclaredStructParams) {
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP() << "PostgreSQL does not support STRUCT parameters.";
+  }
   google::protobuf::Struct params = PARSE_TEXT_PROTO(R"pb(
     fields {
       key: "pstruct1"
@@ -733,7 +785,12 @@ TEST_F(ParamsApiTest, UndeclaredStructParams) {
                                  "pstruct1 whose type is unknown")));
 }
 
-TEST_F(ParamsApiTest, UndeclaredParametersBadEncoding) {
+TEST_P(ParamsApiTest, UndeclaredParametersBadEncoding) {
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP()
+        << "Undeclared parameters are not supported in PostgreSQL in the "
+           "emulator, PostgreSQL requires parameter types to be known.";
+  }
   // The provided parameter is a STRING, but the query expects a DOUBLE.
   google::protobuf::Struct params = PARSE_TEXT_PROTO(R"pb(
     fields {

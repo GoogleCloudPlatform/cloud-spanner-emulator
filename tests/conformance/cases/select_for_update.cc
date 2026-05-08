@@ -19,7 +19,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/substitute.h"
@@ -34,7 +34,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class SelectForUpdateTest
     : public DatabaseTest,
@@ -53,12 +53,12 @@ class SelectForUpdateTest
 
  protected:
   void PopulateDatabase() {
-    ZETASQL_EXPECT_OK(MultiInsert("users", {"user_id", "name", "age"},
+    GOOGLESQL_EXPECT_OK(MultiInsert("users", {"user_id", "name", "age"},
                           {{1, "Douglas Adams", 49},
                            {2, "Suzanne Collins", 61},
                            {3, "J.R.R. Tolkien", 81}}));
 
-    ZETASQL_EXPECT_OK(MultiInsert("threads", {"user_id", "thread_id", "starred"},
+    GOOGLESQL_EXPECT_OK(MultiInsert("threads", {"user_id", "thread_id", "starred"},
                           {{1, 1, true},
                            {1, 2, true},
                            {1, 3, true},
@@ -67,7 +67,7 @@ class SelectForUpdateTest
                            {2, 2, true},
                            {3, 1, false}}));
 
-    ZETASQL_EXPECT_OK(MultiInsert("messages",
+    GOOGLESQL_EXPECT_OK(MultiInsert("messages",
                           {"user_id", "thread_id", "message_id", "subject"},
                           {{1, 1, 1, "a code review"},
                            {1, 1, 2, "Re: a code review"},

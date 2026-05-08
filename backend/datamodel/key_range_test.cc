@@ -20,7 +20,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 
 namespace google {
@@ -30,8 +30,8 @@ namespace backend {
 
 namespace {
 
-using zetasql::values::Int64;
-using zetasql::values::String;
+using googlesql::values::Int64;
+using googlesql::values::String;
 
 TEST(KeyRange, DefaultConstructorIsEmpty) {
   EXPECT_EQ(KeyRange(), KeyRange::Empty());

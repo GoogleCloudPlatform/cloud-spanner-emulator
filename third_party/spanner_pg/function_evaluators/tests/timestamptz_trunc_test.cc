@@ -31,11 +31,11 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
 #include "third_party/spanner_pg/interface/datetime_evaluators.h"
 #include "third_party/spanner_pg/shims/timezone_helper.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::function_evaluators {
 namespace {
@@ -62,7 +62,7 @@ class TimestamptzTruncTest
  protected:
   void SetUp() override {
     PgEvaluatorTestWithParam<TimestamptzTruncTestCase>::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {
@@ -74,17 +74,17 @@ class TimestamptzTruncTest
 
 TEST_P(TimestamptzTruncTest, TimestamptzTrunc) {
   const TimestamptzTruncTestCase& test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time source_input,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time source_input,
                        PgTimestamptzIn(test_case.source));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time expected_timestamptz,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time expected_timestamptz,
                        PgTimestamptzIn(test_case.expected_result));
 
   if (test_case.timezone.empty()) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time computed_time,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time computed_time,
                          PgTimestamptzTrunc(test_case.field, source_input));
     EXPECT_EQ(expected_timestamptz, computed_time);
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         absl::Time computed_time,
         PgTimestamptzTrunc(test_case.field, source_input, test_case.timezone));
     EXPECT_EQ(expected_timestamptz, computed_time);

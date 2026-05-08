@@ -55,8 +55,10 @@
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "third_party/spanner_pg/src/include/nodes/nodes.h"
+#include "third_party/spanner_pg/src/include/nodes/parsenodes.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 ABSL_DECLARE_FLAG(bool, spangres_enable_udf_unnamed_parameters);
 
@@ -86,14 +88,14 @@ bool IsListEmpty(const List* list) { return list_length(list) == 0; }
 // <NodeType*>. Checks that element's type is equal to NodeTypeTag.
 template <typename NodeType, const NodeTag NodeTypeTag>
 absl::StatusOr<const NodeType*> SingleItemListAsNode(const List* list) {
-  ZETASQL_RET_CHECK_NE(list, nullptr);
-  ZETASQL_RET_CHECK_EQ(list->type, T_List);
-  ZETASQL_RET_CHECK_EQ(list_length(list), 1);
+  GOOGLESQL_RET_CHECK_NE(list, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(list->type, T_List);
+  GOOGLESQL_RET_CHECK_EQ(list_length(list), 1);
 
   NodeType* node = static_cast<NodeType*>(linitial(list));
 
-  ZETASQL_RET_CHECK_NE(node, nullptr);
-  ZETASQL_RET_CHECK_EQ(node->type, NodeTypeTag);
+  GOOGLESQL_RET_CHECK_NE(node, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node->type, NodeTypeTag);
 
   return node;
 }
@@ -102,16 +104,16 @@ absl::StatusOr<const NodeType*> SingleItemListAsNode(const List* list) {
 // element's type is equal to NodeTypeTag.
 template <typename NodeType, const NodeTag NodeTypeTag>
 absl::StatusOr<const NodeType*> GetListItemAsNode(const List* list, int n) {
-  ZETASQL_RET_CHECK_NE(list, nullptr);
-  ZETASQL_RET_CHECK_EQ(list->type, T_List);
-  ZETASQL_RET_CHECK_GT(list_length(list), n);
+  GOOGLESQL_RET_CHECK_NE(list, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(list->type, T_List);
+  GOOGLESQL_RET_CHECK_GT(list_length(list), n);
 
   // PostgreSQL now (13+) stores lists as arrays of cells with O(1) access to
   // any one of them via new helper functions.
   NodeType* node = static_cast<NodeType*>(list_nth(list, n));
 
-  ZETASQL_RET_CHECK_NE(node, nullptr);
-  ZETASQL_RET_CHECK_EQ(node->type, NodeTypeTag);
+  GOOGLESQL_RET_CHECK_NE(node, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node->type, NodeTypeTag);
 
   return node;
 }
@@ -119,7 +121,7 @@ absl::StatusOr<const NodeType*> GetListItemAsNode(const List* list, int n) {
 absl::Status ValidateAlterColumnType(const AlterTableStmt& node,
                                      const AlterTableCmd* first_cmd,
                                      const TranslationOptions& options) {
-  ZETASQL_RET_CHECK_EQ(first_cmd->subtype, AT_AlterColumnType);
+  GOOGLESQL_RET_CHECK_EQ(first_cmd->subtype, AT_AlterColumnType);
   if (list_length(node.cmds) > 2) {
     return UnsupportedTranslationError(
         "<ALTER TABLE ALTER COLUMN> statement can only modify one column "
@@ -128,11 +130,11 @@ absl::Status ValidateAlterColumnType(const AlterTableStmt& node,
         "<ALTER COLUMN SET>, and <ALTER COLUMN RESTART COUNTER WITH>.");
   }
   if (list_length(node.cmds) == 2) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const AlterTableCmd* second_cmd,
         (GetListItemAsNode<AlterTableCmd, T_AlterTableCmd>(node.cmds, 1)));
 
-    ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*second_cmd, node.objtype, options));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*second_cmd, node.objtype, options));
 
     if (second_cmd->subtype != AT_SetNotNull &&
         second_cmd->subtype != AT_DropNotNull) {
@@ -141,7 +143,7 @@ absl::Status ValidateAlterColumnType(const AlterTableStmt& node,
           "COLUMN> "
           "action of <ALTER TABLE> statement.");
     }
-    ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*second_cmd, node.objtype, options));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*second_cmd, node.objtype, options));
 
     if (strcmp(first_cmd->name, second_cmd->name)) {
       return UnsupportedTranslationError(
@@ -190,49 +192,49 @@ absl::Status ValidateParseTreeNode(const ColumnDef& node,
       FieldTypeChecker<LocalityGroupOption*>(node.locality_group_name),
       FieldTypeChecker<int>(node.location));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_ColumnDef);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_ColumnDef);
 
   // `colname` defines name of the column. Mandatory in <CREATE TABLE>, not used
   // in <ALTER TABLE ALTER TYPE>
   if (!alter_column) {
-    ZETASQL_RET_CHECK_NE(node.colname, nullptr);
-    ZETASQL_RET_CHECK_NE(*node.colname, '\0');
+    GOOGLESQL_RET_CHECK_NE(node.colname, nullptr);
+    GOOGLESQL_RET_CHECK_NE(*node.colname, '\0');
   }
 
   // `typeName` defines type of the column, validated separately.
-  ZETASQL_RET_CHECK_NE(node.typeName, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.typeName, nullptr);
 
   // `compression` defines the method to compress the given column. Not
   // supported.
-  ZETASQL_RET_CHECK_EQ(node.compression, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node.compression, nullptr);
 
   // `inhcount` shows how many times the column is inherited. Not used during
   // parsing.
-  ZETASQL_RET_CHECK_EQ(node.inhcount, 0);
+  GOOGLESQL_RET_CHECK_EQ(node.inhcount, 0);
 
   // `is_local` is true if column is not inherited. Not used during parsing. Not
   // set for <ALTER TABLE ALTER TYPE>.
   if (!alter_column) {
-    ZETASQL_RET_CHECK(node.is_local);
+    GOOGLESQL_RET_CHECK(node.is_local);
   }
 
   // `is_not_null` is true if IS NOT NULL is set for the column.
 
   // `is_from_type` is used for typed tables (i.e. defined as <OF type_name>).
   // Not supported.
-  ZETASQL_RET_CHECK(!node.is_from_type);
+  GOOGLESQL_RET_CHECK(!node.is_from_type);
 
   // `storage` defines storage type for oversized attributes (e.g. BLOBs, large
   // varchar/text, etc. - see TOAST). Not used during parsing.
-  ZETASQL_RET_CHECK_EQ(node.storage, '\0');
+  GOOGLESQL_RET_CHECK_EQ(node.storage, '\0');
 
   // `raw_default` contains untransformed parse tree for the DEFAULT expression.
   // Not supported.
-  ZETASQL_RET_CHECK_EQ(node.raw_default, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node.raw_default, nullptr);
 
   // `cooked_default` contains transformed parse tree for the DEFAULT
   // expression. Not used during parsing.
-  ZETASQL_RET_CHECK_EQ(node.cooked_default, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node.cooked_default, nullptr);
 
   // `identity` is set for IDENTITY columns. Not supported.
   if (node.identity != '\0') {
@@ -241,11 +243,11 @@ absl::Status ValidateParseTreeNode(const ColumnDef& node,
 
   // `identitySequence` is used to store sequence name for identity columns or
   // serial types. Not supported.
-  ZETASQL_RET_CHECK_EQ(node.identitySequence, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node.identitySequence, nullptr);
 
   // `generated` is set to non-zero for generated columns. Not used during
   // parsing, not supported.
-  ZETASQL_RET_CHECK_EQ(node.generated, '\0');
+  GOOGLESQL_RET_CHECK_EQ(node.generated, '\0');
 
   // `collClause` is present if COLLATE clause is provided. Not supported.
   if (node.collClause != nullptr) {
@@ -255,7 +257,7 @@ absl::Status ValidateParseTreeNode(const ColumnDef& node,
 
   // `collOid` defines oid for collation. Not used during parsing, not
   // supported.
-  ZETASQL_RET_CHECK_EQ(node.collOid, 0);
+  GOOGLESQL_RET_CHECK_EQ(node.collOid, 0);
 
   // `constraints` contains list of constraints defined for the column.
   // Validated separately.
@@ -263,7 +265,7 @@ absl::Status ValidateParseTreeNode(const ColumnDef& node,
   // `fdwoptions` contains options set via <WITH OPTION> clause. PostgreSQL
   // allows it for certain kinds of <CREATE TABLE> statement (mainly
   // inheritance-related), none of which are supported by Spangres.
-  ZETASQL_RET_CHECK(IsListEmpty(node.fdwoptions));
+  GOOGLESQL_RET_CHECK(IsListEmpty(node.fdwoptions));
 
   // `location` defines parsed token location of the text in the input, no
   // validation required.
@@ -287,7 +289,7 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
       FieldTypeChecker<ColumnarPolicyOption*>(node.columnar_policy_name),
       FieldTypeChecker<char*>(node.raw_expr_string));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_AlterTableCmd);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_AlterTableCmd);
 
   // `subtype` defines the kind of ALTER TABLE statement (ALTER COLUMN, ADD
   // CONSTRAINT, etc.). Validated in AlterTableStmt validation method above.
@@ -296,22 +298,22 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
       switch (node.subtype) {
         case AT_AddColumn:
         case AT_AddConstraint: {
-          ZETASQL_RET_CHECK_EQ(node.name, nullptr);
-          ZETASQL_RET_CHECK_NE(node.def, nullptr);
+          GOOGLESQL_RET_CHECK_EQ(node.name, nullptr);
+          GOOGLESQL_RET_CHECK_NE(node.def, nullptr);
           break;
         }
         case AT_DropColumn:
         case AT_DropConstraint:
         case AT_SetNotNull:
         case AT_DropNotNull: {
-          ZETASQL_RET_CHECK_NE(node.name, nullptr);
-          ZETASQL_RET_CHECK_EQ(node.def, nullptr);
+          GOOGLESQL_RET_CHECK_NE(node.name, nullptr);
+          GOOGLESQL_RET_CHECK_EQ(node.def, nullptr);
           break;
         }
         case AT_AlterColumnType: {
-          ZETASQL_RET_CHECK_NE(node.name, nullptr);
-          ZETASQL_RET_CHECK_NE(node.def, nullptr);
-          ZETASQL_ASSIGN_OR_RETURN(const ColumnDef* column_def,
+          GOOGLESQL_RET_CHECK_NE(node.name, nullptr);
+          GOOGLESQL_RET_CHECK_NE(node.def, nullptr);
+          GOOGLESQL_ASSIGN_OR_RETURN(const ColumnDef* column_def,
                            (DowncastNode<ColumnDef, T_ColumnDef>(node.def)));
           // `raw_default` is used to store expression in USING clause, e.g.
           // ALTER TABLE t ALTER c TYPE varchar USING (c::varchar)
@@ -320,15 +322,15 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
                 "<USING> clause is not supported in <ALTER TABLE ALTER COLUMN "
                 "TYPE> statement");
           }
-          ZETASQL_RETURN_IF_ERROR(
+          GOOGLESQL_RETURN_IF_ERROR(
               ValidateParseTreeNode(*column_def, /*alter_column=*/true));
           break;
         }
         case AT_SetIdentity: {
-          ZETASQL_RET_CHECK_NE(node.name, nullptr);
-          ZETASQL_RET_CHECK_NE(node.def, nullptr);
+          GOOGLESQL_RET_CHECK_NE(node.name, nullptr);
+          GOOGLESQL_RET_CHECK_NE(node.def, nullptr);
           // We currently support altering only one option at a time.
-          ZETASQL_ASSIGN_OR_RETURN(const List* alter_options,
+          GOOGLESQL_ASSIGN_OR_RETURN(const List* alter_options,
                            (DowncastNode<List, T_List>(node.def)));
           if (list_length(alter_options) != 1) {
             return absl::InvalidArgumentError(
@@ -338,35 +340,35 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
           // The supported options are: NO MINVALUE | NO MAXVALUE | NO SKIP
           // RANGE | SKIP RANGE skip_range_min skip_range_max | NO CYCLE. We
           // reuse the validation for sequence option.
-          ZETASQL_ASSIGN_OR_RETURN(
+          GOOGLESQL_ASSIGN_OR_RETURN(
               const DefElem* elem,
               (GetListItemAsNode<DefElem, T_DefElem>(alter_options, 0)));
-          ZETASQL_RET_CHECK_NE(elem, nullptr);
-          ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(*elem, /*is_create=*/false,
+          GOOGLESQL_RET_CHECK_NE(elem, nullptr);
+          GOOGLESQL_RETURN_IF_ERROR(ValidateSequenceOption(*elem, /*is_create=*/false,
                                                  /*is_identity_column=*/true));
           break;
         }
         case AT_RestartCounter: {
-          ZETASQL_RET_CHECK_NE(node.name, nullptr);
-          ZETASQL_RET_CHECK_NE(node.def, nullptr);
+          GOOGLESQL_RET_CHECK_NE(node.name, nullptr);
+          GOOGLESQL_RET_CHECK_NE(node.def, nullptr);
           // Pg integer-looking string will get lexed as T_Float if the value is
           // too large to fit in an 'int'.
-          ZETASQL_RET_CHECK(node.def->type == T_Integer || node.def->type == T_Float);
+          GOOGLESQL_RET_CHECK(node.def->type == T_Integer || node.def->type == T_Float);
           break;
         }
         case AT_ColumnDefault:
         case AT_ColumnOnUpdate: {
-          ZETASQL_RET_CHECK_NE(node.name, nullptr);
+          GOOGLESQL_RET_CHECK_NE(node.name, nullptr);
           break;
         }
         case AT_DropTtl:
           break;
         case AT_AddTtl:
         case AT_AlterTtl: {
-          ZETASQL_RET_CHECK_NE(node.def, nullptr);
-          ZETASQL_ASSIGN_OR_RETURN(const Ttl* ttl,
+          GOOGLESQL_RET_CHECK_NE(node.def, nullptr);
+          GOOGLESQL_ASSIGN_OR_RETURN(const Ttl* ttl,
                            (DowncastNode<Ttl, T_Ttl>(node.def)));
-          ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*ttl));
+          GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*ttl));
           break;
         }
         case AT_SetOnDeleteCascade:
@@ -376,15 +378,15 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
           break;
         case AT_AddSynonym:
         case AT_DropSynonym: {
-          ZETASQL_RET_CHECK_NE(node.name, nullptr);
+          GOOGLESQL_RET_CHECK_NE(node.name, nullptr);
           break;
         }
         case AT_SetLocalityGroup: {
-          ZETASQL_RET_CHECK_NE(node.locality_group_name, nullptr);
+          GOOGLESQL_RET_CHECK_NE(node.locality_group_name, nullptr);
           break;
         }
         case AT_SetColumnarPolicy: {
-          ZETASQL_RET_CHECK_NE(node.columnar_policy_name, nullptr);
+          GOOGLESQL_RET_CHECK_NE(node.columnar_policy_name, nullptr);
           break;
         }
         default: {
@@ -405,11 +407,11 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
                 "Locality groups are not supported in <ALTER INDEX> "
                 "statement.");
           }
-          ZETASQL_RET_CHECK_NE(node.locality_group_name, nullptr);
+          GOOGLESQL_RET_CHECK_NE(node.locality_group_name, nullptr);
           break;
         }
         case AT_SetColumnarPolicy: {
-          ZETASQL_RET_CHECK_NE(node.columnar_policy_name, nullptr);
+          GOOGLESQL_RET_CHECK_NE(node.columnar_policy_name, nullptr);
           break;
         }
         default: {
@@ -431,11 +433,11 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
 
   // `num` is used when referencing column by number, which is allowed only in
   // ALTER TABLE ALTER COLUMN SET STATISTICS statement, which is not supported.
-  ZETASQL_RET_CHECK_EQ(node.num, 0);
+  GOOGLESQL_RET_CHECK_EQ(node.num, 0);
 
   // `newowner` defines new owner in ALTER TABLE OWNER TO statement, which is
   // not supported.
-  ZETASQL_RET_CHECK_EQ(node.newowner, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node.newowner, nullptr);
 
   // `def` contains the definition of new object in ALTER TABLE ADD/ALTER
   // COLUMN/CONSTRAINT (and some unsupported) command types.
@@ -472,7 +474,7 @@ absl::Status ValidateParseTreeNode(const VariableSetStmt& node,
                          FieldTypeChecker<List*>(node.args),
                          FieldTypeChecker<bool>(node.is_local));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_VariableSetStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_VariableSetStmt);
 
   // `kind` defines the type of operation on the option and is validated in
   // TranslateAlterDatabase method.
@@ -491,7 +493,7 @@ absl::Status ValidateParseTreeNode(const VariableSetStmt& node,
 
   // `is_local` represents use of SET LOCAL and is not supported by ALTER
   // DATABASE.
-  ZETASQL_RET_CHECK(!node.is_local);
+  GOOGLESQL_RET_CHECK(!node.is_local);
 
   return absl::OkStatus();
 }
@@ -501,10 +503,10 @@ absl::Status ValidateParseTreeNode(const CreatedbStmt& node) {
   AssertPGNodeConsistsOf(node, FieldTypeChecker<char*>(node.dbname),
                          FieldTypeChecker<List*>(node.options));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_CreatedbStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_CreatedbStmt);
 
   // `dbname` defines the name of the database to create.
-  ZETASQL_RET_CHECK(node.dbname) << "Database name is missing.";
+  GOOGLESQL_RET_CHECK(node.dbname) << "Database name is missing.";
 
   // `options` defines options to set on the newly created database. Not
   // supported, options are expected to be set via separate ALTER DATABASE SET
@@ -522,16 +524,16 @@ absl::Status ValidateParseTreeNode(const AlterDatabaseSetStmt& node) {
   AssertPGNodeConsistsOf(node, FieldTypeChecker<char*>(node.dbname),
                          FieldTypeChecker<VariableSetStmt*>(node.setstmt));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_AlterDatabaseSetStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_AlterDatabaseSetStmt);
 
   // `dbname` defines the name of the database to set options for. It's largely
   // ignored because we already know the database statement is being executed
   // for.
-  ZETASQL_RET_CHECK(node.dbname) << "Database name is missing.";
+  GOOGLESQL_RET_CHECK(node.dbname) << "Database name is missing.";
 
   // `setstmt` defines what value to assign to which database option.
-  ZETASQL_RET_CHECK_NE(node.setstmt, nullptr);
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.setstmt, "ALTER DATABASE"));
+  GOOGLESQL_RET_CHECK_NE(node.setstmt, nullptr);
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.setstmt, "ALTER DATABASE"));
 
   return absl::OkStatus();
 }
@@ -574,7 +576,7 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter,
                          FieldTypeChecker<bool>(node.initially_valid),
                          FieldTypeChecker<char*>(node.constraint_expr_string));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_Constraint);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_Constraint);
 
   // `contype` defines a type of constraint (UNIQUE, ABSL_CHECK, FOREIGN KEY,
   // etc.). Validate that it's supported before anything else to make sure we
@@ -636,7 +638,7 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter,
   }
 
   // `initdeferred` is impossible without deferred initialization.
-  ZETASQL_RET_CHECK(!node.initdeferred)
+  GOOGLESQL_RET_CHECK(!node.initdeferred)
       << "Non-deferrable constraint cannot have deferred initialization.";
 
   // `location` holds the offset in the original source text for error
@@ -670,11 +672,11 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter,
   }
 
   // `exclusions` is used for EXCLUDE constraints which are not supported.
-  ZETASQL_RET_CHECK_EQ(node.exclusions, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node.exclusions, nullptr);
 
   if (node.contype == CONSTR_IDENTITY) {
     List* opts = node.options;
-    ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(opts, /*is_create=*/true,
+    GOOGLESQL_RETURN_IF_ERROR(ValidateSequenceOption(opts, /*is_create=*/true,
                                            /*is_identity_column=*/true,
                                            options));
   } else {
@@ -687,7 +689,7 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter,
 
   // `indexname` is used in ALTER TABLE ADD [UNIQUE | PRIMARY KEY] USING INDEX.
   // This type of ALTER statement is not supported.
-  ZETASQL_RET_CHECK_EQ(node.indexname, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node.indexname, nullptr);
 
   // `indexspace` is used in USING INDEX TABLESPACE for PRIMARY KEY (and
   // unsupported UNIQUE and EXCLUDE) constraints.
@@ -709,7 +711,7 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter,
   // `where_clause` defines partial predicate for EXCLUDE constraints, which are
   // not supported. However, there is some indication that it will be expanded
   // to other contypes, so to be on the safe side we're returning error instead
-  // of ZETASQL_RET_CHECK.
+  // of GOOGLESQL_RET_CHECK.
   if (node.where_clause != nullptr) {
     return UnsupportedTranslationError(
         "Partial predicates are not supported for constraints.");
@@ -763,7 +765,7 @@ absl::Status ValidateParseTreeNode(const RangeVar& node,
                          FieldTypeChecker<int>(node.location),
                          FieldTypeChecker<List*>(node.tableHints));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_RangeVar);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_RangeVar);
 
   if (node.catalogname != nullptr) {
     return UnsupportedTranslationError(absl::Substitute(
@@ -772,14 +774,14 @@ absl::Status ValidateParseTreeNode(const RangeVar& node,
   }
 
   if (node.schemaname != nullptr) {
-    ZETASQL_RET_CHECK(*node.schemaname != '\0');
+    GOOGLESQL_RET_CHECK(*node.schemaname != '\0');
   }
   if (node.schemaname != nullptr && absl::StrContains(node.schemaname, ".")) {
     return UnsupportedTranslationError(absl::Substitute(
         "Dot(.) is not supported in schema name: $0.", node.schemaname));
   }
 
-  ZETASQL_RET_CHECK(node.relname && *node.relname != '\0');
+  GOOGLESQL_RET_CHECK(node.relname && *node.relname != '\0');
   if (absl::StrContains(node.relname, ".")) {
     return UnsupportedTranslationError(absl::Substitute(
         "Dot(.) is not supported in object name: $0.", node.relname));
@@ -805,7 +807,7 @@ absl::Status ValidateParseTreeNode(const RangeVar& node,
   }
 
   // `alias` defines table alias. This is not used by DDL.
-  ZETASQL_RET_CHECK_EQ(node.alias, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node.alias, nullptr);
 
   // `location` defines parsed token location of the text in the input, no
   // validation required.
@@ -831,11 +833,11 @@ absl::Status ValidateParseTreeNode(const InterleaveSpec& node,
       FieldTypeChecker<char>(node.on_delete_action),
       FieldTypeChecker<int>(node.location));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_InterleaveSpec);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_InterleaveSpec);
 
   // `parent` defines the target to store/interleave the data.
-  ZETASQL_RET_CHECK_NE(node.parent, nullptr);
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(
+  GOOGLESQL_RET_CHECK_NE(node.parent, nullptr);
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(
       *node.parent, absl::StrCat(parent_statement_type, " INTERLEAVE")));
 
   // `on_delete_action` defines the action when parent is deleted. Validated in
@@ -853,26 +855,26 @@ absl::Status ValidateParseTreeNode(const AlterTableStmt& node,
                          FieldTypeChecker<ObjectType>(node.objtype),
                          FieldTypeChecker<bool>(node.missing_ok));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_AlterTableStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_AlterTableStmt);
 
   // `relation` defines the table to alter.
-  ZETASQL_RET_CHECK_NE(node.relation, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.relation, nullptr);
 
   // `cmds` defines clauses to execute. Only one clause is supported. Usually we
   // support just one clause here, with the exception of ALTER TABLE ALTER
   // COLUMN, in which case we require two clauses: both ALTER COLUMN SET DATA
   // TYPE and ALTER COLUMN {SET|DROP} NOT NULL. Actual command is validated the
   // last to make sure we fail on more important errors first.
-  ZETASQL_RET_CHECK(!IsListEmpty(node.cmds));
+  GOOGLESQL_RET_CHECK(!IsListEmpty(node.cmds));
 
   switch (node.objtype) {
     case OBJECT_TABLE: {
       // Validating command here to allow failures for statements like ALTER
       // INDEX..., ALTER TABLE IF EXISTS... happen first.
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const AlterTableCmd* first_cmd,
           (GetListItemAsNode<AlterTableCmd, T_AlterTableCmd>(node.cmds, 0)));
-      ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*first_cmd, node.objtype, options));
+      GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*first_cmd, node.objtype, options));
 
       if (first_cmd->subtype == AT_AlterColumnType) {
         return ValidateAlterColumnType(node, first_cmd, options);
@@ -892,11 +894,11 @@ absl::Status ValidateParseTreeNode(const AlterTableStmt& node,
             "<ALTER INDEX> only supports one action at a time.");
       }
 
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const AlterTableCmd* first_cmd,
           (GetListItemAsNode<AlterTableCmd, T_AlterTableCmd>(node.cmds, 0)));
-      ZETASQL_RET_CHECK_NE(first_cmd, nullptr);
-      ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*first_cmd, node.objtype, options));
+      GOOGLESQL_RET_CHECK_NE(first_cmd, nullptr);
+      GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*first_cmd, node.objtype, options));
       break;
     }
     default: {
@@ -916,8 +918,10 @@ absl::Status ValidateParseTreeNode(const AlterTableStmt& node,
   // `missing_ok` is set if IF EXISTS/IF NOT EXISTS clause is present. We are
   // supporting IF EXISTS only for ALTER TABLE statements.
   if (node.missing_ok) {
+    if (node.objtype != OBJECT_TABLE || !options.enable_alter_table_if_exists) {
       return UnsupportedTranslationError(
           "<IF [NOT] EXISTS> is not supported in <ALTER> statement.");
+    }
   }
 
   return absl::OkStatus();
@@ -932,12 +936,12 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
                          FieldTypeChecker<bool>(node.missing_ok),
                          FieldTypeChecker<bool>(node.concurrent));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_DropStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_DropStmt);
 
   // `objects` contains the list of objects (tables or indexes) to drop. Only
   // one object is allowed here. Validated last to prioritize other kinds of
   // errors first.
-  ZETASQL_RET_CHECK(!IsListEmpty(node.objects));
+  GOOGLESQL_RET_CHECK(!IsListEmpty(node.objects));
   if (list_length(node.objects) > 1) {
     return UnsupportedTranslationError(
         "<DROP> statements support deletion of only single object per "
@@ -970,17 +974,17 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
   }
 
   if (node.removeType == OBJECT_CHANGE_STREAM) {
-    ZETASQL_RET_CHECK_EQ(1, node.objects->length);
+    GOOGLESQL_RET_CHECK_EQ(1, node.objects->length);
     // `change_stream_name` defines the name of the change stream.
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const RangeVar* changestream_to_drop_node,
         (SingleItemListAsNode<RangeVar, T_RangeVar>(node.objects)));
-    ZETASQL_RET_CHECK(changestream_to_drop_node->relname &&
+    GOOGLESQL_RET_CHECK(changestream_to_drop_node->relname &&
               *changestream_to_drop_node->relname != '\0');
   } else if (node.removeType == OBJECT_SEARCH_INDEX) {
-    ZETASQL_ASSIGN_OR_RETURN(const List* search_index_to_drop_list,
+    GOOGLESQL_ASSIGN_OR_RETURN(const List* search_index_to_drop_list,
                      (SingleItemListAsNode<List, T_List>(node.objects)));
-    ZETASQL_RET_CHECK(!IsListEmpty(search_index_to_drop_list))
+    GOOGLESQL_RET_CHECK(!IsListEmpty(search_index_to_drop_list))
         << "Empty search index object name to drop provided.";
     if (list_length(search_index_to_drop_list) > 2) {
       return UnsupportedTranslationError(
@@ -988,26 +992,26 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
           "statement.");
     }
     for (int i = 0; i < list_length(search_index_to_drop_list); ++i) {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const String* search_index_to_drop_node,
           (GetListItemAsNode<String, T_String>)(search_index_to_drop_list, i));
 
       char* search_index_to_drop = search_index_to_drop_node->sval;
       // Expected to see non-empty object name to drop.
-      ZETASQL_RET_CHECK(search_index_to_drop && *search_index_to_drop != '\0');
+      GOOGLESQL_RET_CHECK(search_index_to_drop && *search_index_to_drop != '\0');
     }
   } else if (node.removeType == OBJECT_LOCALITY_GROUP) {
-    ZETASQL_RET_CHECK_EQ(1, node.objects->length);
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_RET_CHECK_EQ(1, node.objects->length);
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const RangeVar* locality_group_to_drop_node,
         (SingleItemListAsNode<RangeVar, T_RangeVar>(node.objects)));
-    ZETASQL_RET_CHECK(locality_group_to_drop_node->relname &&
+    GOOGLESQL_RET_CHECK(locality_group_to_drop_node->relname &&
               *locality_group_to_drop_node->relname != '\0');
   // TODO: expose when queue is implemented.
   } else if (node.removeType != OBJECT_SCHEMA) {
     const List* object_to_drop_list;
     if (node.removeType == OBJECT_FUNCTION) {
-      ZETASQL_ASSIGN_OR_RETURN(const ObjectWithArgs* object_with_args,
+      GOOGLESQL_ASSIGN_OR_RETURN(const ObjectWithArgs* object_with_args,
                        (SingleItemListAsNode<ObjectWithArgs, T_ObjectWithArgs>(
                            node.objects)));
       if (list_length(object_with_args->objargs) > 0) {
@@ -1017,10 +1021,10 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
       }
       object_to_drop_list = object_with_args->objname;
     } else {
-      ZETASQL_ASSIGN_OR_RETURN(object_to_drop_list,
+      GOOGLESQL_ASSIGN_OR_RETURN(object_to_drop_list,
                        (SingleItemListAsNode<List, T_List>(node.objects)));
     }
-    ZETASQL_RET_CHECK(!IsListEmpty(object_to_drop_list))
+    GOOGLESQL_RET_CHECK(!IsListEmpty(object_to_drop_list))
         << "Empty object name to drop provided.";
     if (node.removeType == OBJECT_TABLE || node.removeType == OBJECT_INDEX ||
         node.removeType == OBJECT_FUNCTION ||
@@ -1031,13 +1035,13 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
             "statement.");
       }
       for (int i = 0; i < list_length(object_to_drop_list); ++i) {
-        ZETASQL_ASSIGN_OR_RETURN(
+        GOOGLESQL_ASSIGN_OR_RETURN(
             const String* object_to_drop_node,
             (GetListItemAsNode<String, T_String>)(object_to_drop_list, i));
 
         char* object_to_drop = object_to_drop_node->sval;
         // Expected to see non-empty object name to drop.
-        ZETASQL_RET_CHECK(object_to_drop && *object_to_drop != '\0');
+        GOOGLESQL_RET_CHECK(object_to_drop && *object_to_drop != '\0');
       }
     } else {
       if (list_length(object_to_drop_list) > 1) {
@@ -1045,21 +1049,21 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
             "Object name schema qualifiers are not supported in <DROP> "
             "statement.");
       }
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const String* object_to_drop_node,
           (SingleItemListAsNode<String, T_String>)(object_to_drop_list));
 
       char* object_to_drop = object_to_drop_node->sval;
       // Expected to see non-empty object name to drop.
-      ZETASQL_RET_CHECK(object_to_drop && *object_to_drop != '\0');
+      GOOGLESQL_RET_CHECK(object_to_drop && *object_to_drop != '\0');
     }
   } else {
-    ZETASQL_ASSIGN_OR_RETURN(const String* object_to_drop_node,
+    GOOGLESQL_ASSIGN_OR_RETURN(const String* object_to_drop_node,
                      (SingleItemListAsNode<String, T_String>)(node.objects));
 
     char* object_to_drop = object_to_drop_node->sval;
     // Expected to see non-empty object name to drop.
-    ZETASQL_RET_CHECK(object_to_drop && *object_to_drop != '\0');
+    GOOGLESQL_RET_CHECK(object_to_drop && *object_to_drop != '\0');
   }
 
   // `behavior` defines if RESTRICT or CASCADE drop mode is requested. Only
@@ -1116,38 +1120,38 @@ absl::Status ValidateParseTreeNode(const TypeName& node) {
                          FieldTypeChecker<List*>(node.arrayBounds),
                          FieldTypeChecker<int>(node.location));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_TypeName);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_TypeName);
 
   // `names` defines the type name. Might contain one (type name) or two
   // (catalog name and type name) elements.
-  ZETASQL_RET_CHECK(!IsListEmpty(node.names));
+  GOOGLESQL_RET_CHECK(!IsListEmpty(node.names));
   if (list_length(node.names) > 2) {
     return UnsupportedTranslationError(
         "Type names with more than two parts are not supported.");
   }
   for (const String* type_name_part : StructList<String*>(node.names)) {
-    ZETASQL_RET_CHECK_EQ(type_name_part->type, T_String);
-    ZETASQL_RET_CHECK_NE(type_name_part->sval, nullptr);
-    ZETASQL_RET_CHECK_NE(*type_name_part->sval, '\0');
+    GOOGLESQL_RET_CHECK_EQ(type_name_part->type, T_String);
+    GOOGLESQL_RET_CHECK_NE(type_name_part->sval, nullptr);
+    GOOGLESQL_RET_CHECK_NE(*type_name_part->sval, '\0');
   }
 
   // `typeOid` is used when type is defined internally via oid. Not used during
   // parsing.
-  ZETASQL_RET_CHECK_EQ(node.typeOid, 0);
+  GOOGLESQL_RET_CHECK_EQ(node.typeOid, 0);
 
   // `setof` is set if type is defined as SETOF. Used when defining functions,
   // not supported in Spangres.
-  ZETASQL_RET_CHECK(!node.setof);
+  GOOGLESQL_RET_CHECK(!node.setof);
 
   // `pct_type` is set if `names` contains field name instead of type (in which
   // case type should be looked up). Used only when defining functions, which is
   // not supported by Spangres.
-  ZETASQL_RET_CHECK(!node.pct_type);
+  GOOGLESQL_RET_CHECK(!node.pct_type);
 
   // `typmods` contains type modifiers. Currently supported for varchar only.
   // `typemod` is used to store type modifiers when type is defined internally
   // via oid. Not used during parsing.
-  ZETASQL_RET_CHECK_EQ(node.typemod, -1);
+  GOOGLESQL_RET_CHECK_EQ(node.typemod, -1);
 
   // `arrayBounds` contains the size for the bounded or -1 for unbounded array
   // types as well as dimensionality information. PostgreSQL ignores both of
@@ -1176,7 +1180,7 @@ absl::Status ValidateSequenceOption(const DefElem& elem, bool is_create,
   absl::string_view parent_statement_type =
       is_identity_column ? (is_create ? "CREATE TABLE" : "ALTER COLUMN ... SET")
                          : (is_create ? "CREATE SEQUENCE" : "ALTER SEQUENCE");
-  ZETASQL_RET_CHECK(!name.empty());
+  GOOGLESQL_RET_CHECK(!name.empty());
   if (name == "minvalue") {
     if (elem.arg != nullptr) {
       return UnsupportedTranslationError(absl::Substitute(
@@ -1200,16 +1204,16 @@ absl::Status ValidateSequenceOption(const DefElem& elem, bool is_create,
           parent_statement_type));
       }
     } else {
-      ZETASQL_RET_CHECK_NE(elem.arg, nullptr);
-      ZETASQL_ASSIGN_OR_RETURN(const List* range_values,
+      GOOGLESQL_RET_CHECK_NE(elem.arg, nullptr);
+      GOOGLESQL_ASSIGN_OR_RETURN(const List* range_values,
                       (DowncastNode<List, T_List>(elem.arg)));
-      ZETASQL_RET_CHECK_EQ(list_length(range_values), 2);
+      GOOGLESQL_RET_CHECK_EQ(list_length(range_values), 2);
     }
   } else if (name == "start_counter" && is_create) {
-    ZETASQL_RET_CHECK_NE(elem.arg, nullptr);
+    GOOGLESQL_RET_CHECK_NE(elem.arg, nullptr);
     // Pg integer-looking string will get lexed as T_Float if the value is
     // too large to fit in an 'int'.
-    ZETASQL_RET_CHECK(elem.arg->type == T_Integer || elem.arg->type == T_Float);
+    GOOGLESQL_RET_CHECK(elem.arg->type == T_Integer || elem.arg->type == T_Float);
   } else if (name == "restart_counter" && !is_create) {
     if (is_identity_column) {
       // Spangres supports RESTART COUNTER WITH as follows:
@@ -1221,17 +1225,17 @@ absl::Status ValidateSequenceOption(const DefElem& elem, bool is_create,
           "instead.",
           parent_statement_type));
     }
-    ZETASQL_RET_CHECK_NE(elem.arg, nullptr);
+    GOOGLESQL_RET_CHECK_NE(elem.arg, nullptr);
     // Pg integer-looking string will get lexed as T_Float if the value is
     // too large to fit in an 'int'.
-    ZETASQL_RET_CHECK(elem.arg->type == T_Integer || elem.arg->type == T_Float);
+    GOOGLESQL_RET_CHECK(elem.arg->type == T_Integer || elem.arg->type == T_Float);
   } else if (name == "owned_by" && !is_identity_column) {
     // Spangres does not support OWNED BY for identity column, so only
     // validating "owned_by" for sequence.
-    ZETASQL_ASSIGN_OR_RETURN(const List* names, (DowncastNode<List, T_List>(elem.arg)));
-    ZETASQL_RET_CHECK_GE(list_length(names), 1);
+    GOOGLESQL_ASSIGN_OR_RETURN(const List* names, (DowncastNode<List, T_List>(elem.arg)));
+    GOOGLESQL_RET_CHECK_GE(list_length(names), 1);
     if (list_length(names) == 1) {
-      ZETASQL_ASSIGN_OR_RETURN(const String* name,
+      GOOGLESQL_ASSIGN_OR_RETURN(const String* name,
                        (SingleItemListAsNode<String, T_String>(names)));
       absl::string_view name_str = name->sval;
       if (name_str == "none") {
@@ -1241,7 +1245,7 @@ absl::Status ValidateSequenceOption(const DefElem& elem, bool is_create,
     return UnsupportedTranslationError(
         "Optional clause <owned_by> only support `NONE` as the value.");
   } else if (name == "cycle") {
-    ZETASQL_ASSIGN_OR_RETURN(const Boolean* has_cycle,
+    GOOGLESQL_ASSIGN_OR_RETURN(const Boolean* has_cycle,
                      (DowncastNode<Boolean, T_Boolean>(elem.arg)));
     if (has_cycle->boolval) {
       return UnsupportedTranslationError(
@@ -1266,11 +1270,11 @@ absl::Status ValidateSequenceOption(
     DefElem* elem = ::postgres_translator::internal::PostgresCastNode(
         DefElem, options->elements[i].ptr_value);
     absl::string_view name = elem->defname;
-    ZETASQL_RET_CHECK(!name.empty());
+    GOOGLESQL_RET_CHECK(!name.empty());
     if (name == "bit_reversed_positive" && is_create) {
       seen_bit_reversed_positive = true;
     } else {
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           ValidateSequenceOption(*elem, is_create, is_identity_column));
     }
   }
@@ -1301,7 +1305,7 @@ absl::Status ValidateParseTreeNode(const CreateSeqStmt& node,
                          FieldTypeChecker<bool>(node.for_identity),
                          FieldTypeChecker<bool>(node.if_not_exists));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_CreateSeqStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_CreateSeqStmt);
 
   if (!options.enable_sequence) {
     return UnsupportedTranslationError(
@@ -1309,21 +1313,21 @@ absl::Status ValidateParseTreeNode(const CreateSeqStmt& node,
   }
 
   // `sequence` defines the name of the new sequence.
-  ZETASQL_RET_CHECK_NE(node.sequence, nullptr);
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.sequence, "CREATE SEQUENCE"));
+  GOOGLESQL_RET_CHECK_NE(node.sequence, nullptr);
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.sequence, "CREATE SEQUENCE"));
 
   // `options` defines the property of the sequence. Spangres only supports a
   // few portions of native PostgreSQL's options.
   List* opts = node.options;
-  ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(opts, /*is_create=*/true,
+  GOOGLESQL_RETURN_IF_ERROR(ValidateSequenceOption(opts, /*is_create=*/true,
                                          /*is_identity_column=*/false,
                                          options));
 
   // `ownerId` should be the default value after parsing.
-  ZETASQL_RET_CHECK_EQ(node.ownerId, InvalidOid);
+  GOOGLESQL_RET_CHECK_EQ(node.ownerId, InvalidOid);
 
   // `for_identity` true when it created for SERIAL
-  ZETASQL_RET_CHECK_EQ(node.for_identity, false);
+  GOOGLESQL_RET_CHECK_EQ(node.for_identity, false);
 
   // `if_not_exists` do nothing when the sequence exists if it is true.
 
@@ -1337,20 +1341,20 @@ absl::Status ValidateParseTreeNode(const AlterSeqStmt& node,
                          FieldTypeChecker<bool>(node.for_identity),
                          FieldTypeChecker<bool>(node.missing_ok));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_AlterSeqStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_AlterSeqStmt);
 
   // Sequences have quite a few options in the base Postgres grammar. Make sure
   // the ones we support have proper parameters, and error out if the user
   // specified options we don't (currently) allow.
   List* opts = node.options;
   if (opts != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(ValidateSequenceOption(opts, /*is_create=*/false,
+    GOOGLESQL_RETURN_IF_ERROR(ValidateSequenceOption(opts, /*is_create=*/false,
                                            /*is_identity_column=*/false,
                                            options));
   }
 
   // `for_identity` true when it created for SERIAL
-  ZETASQL_RET_CHECK_EQ(node.for_identity, false);
+  GOOGLESQL_RET_CHECK_EQ(node.for_identity, false);
 
   // `missing_ok` do nothing when the sequence exists if value is true.
 
@@ -1370,7 +1374,7 @@ absl::Status ValidateParseTreeNode(const RenameStmt& node,
                          FieldTypeChecker<bool>(node.missing_ok),
                          FieldTypeChecker<bool>(node.addSynonym));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_RenameStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_RenameStmt);
 
   // `renameType` defines the type of the object to rename.
   if (node.renameType != OBJECT_TABLE) {
@@ -1381,21 +1385,23 @@ absl::Status ValidateParseTreeNode(const RenameStmt& node,
   // `relationType` is not used for table rename.
 
   // `relation` defines the table to alter.
-  ZETASQL_RET_CHECK_NE(node.relation, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.relation, nullptr);
 
   // `object` is not used for table rename.
   // `subname` is not used for table rename.
 
   // `newname` defines the new table name to change to.
-  ZETASQL_RET_CHECK_NE(node.newname, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.newname, nullptr);
 
   // `behavior` is not used for table rename.
 
    // `missing_ok` is set if IF EXISTS/IF NOT EXISTS clause is present.
   // TODO: Add support for IF EXISTS
   if (node.missing_ok) {
+    if (!options.enable_alter_table_if_exists) {
       return UnsupportedTranslationError(
           "<IF EXISTS> clause is not supported in <RENAME TO> statement.");
+    }
   }
 
   // `addSynonym` defines whether to additionally create a synonym.
@@ -1410,7 +1416,7 @@ absl::Status ValidateParseTreeNode(const TableChainedRenameStmt& node,
   // translator.
   AssertPGNodeConsistsOf(node, FieldTypeChecker<List*>(node.ops));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_TableChainedRenameStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_TableChainedRenameStmt);
 
   if (list_length(node.ops) < 2) {
     return UnsupportedTranslationError(
@@ -1419,7 +1425,7 @@ absl::Status ValidateParseTreeNode(const TableChainedRenameStmt& node,
   for (int i = 0; i < list_length(node.ops); ++i) {
     TableRenameOp* op = ::postgres_translator::internal::PostgresCastNode(
         TableRenameOp, node.ops->elements[i].ptr_value);
-    ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*op));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*op));
   }
   return absl::OkStatus();
 }
@@ -1429,7 +1435,7 @@ absl::Status ValidateParseTreeNode(const TableRenameOp& node) {
   AssertPGNodeConsistsOf(node, FieldTypeChecker<RangeVar*>(node.fromName),
                          FieldTypeChecker<char*>(node.toName));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_TableRenameOp);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_TableRenameOp);
 
   return absl::OkStatus();
 }
@@ -1455,15 +1461,15 @@ absl::Status ValidateParseTreeNode(const CreateStmt& node,
       FieldTypeChecker<ColumnarPolicyOption*>(node.columnar_policy_name),
       FieldTypeChecker<LocalityGroupOption*>(node.locality_group_name));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_CreateStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_CreateStmt);
 
   // `relation` defines the name of the new table.
-  ZETASQL_RET_CHECK_NE(node.relation, nullptr);
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.relation, "CREATE TABLE"));
+  GOOGLESQL_RET_CHECK_NE(node.relation, nullptr);
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.relation, "CREATE TABLE"));
 
   // If there's a TTL here make sure it's correct.
   if (node.ttl != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.ttl));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.ttl));
   }
 
   // `tableElts` contains column definitions for the new table.
@@ -1485,7 +1491,7 @@ absl::Status ValidateParseTreeNode(const CreateStmt& node,
         "<FOR VALUES> clause is not supported in <CREATE TABLE> statement.");
   }
 
-  // `partspec` contains the partition specificatin for <PARTITION BY> clause.
+  // `partspec` contains the partition specification for <PARTITION BY> clause.
   // Not supported.
   if (node.partspec != nullptr) {
     return UnsupportedTranslationError(
@@ -1544,8 +1550,8 @@ absl::Status ValidateParseTreeNode(const AlterSpangresStatsStmt& node) {
                          FieldTypeChecker<VariableSetStmt*>(node.setstmt));
 
   // `setstmt` defines what value to assign to which package option.
-  ZETASQL_RET_CHECK_NE(node.setstmt, nullptr);
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.setstmt, "ALTER STATISTICS"));
+  GOOGLESQL_RET_CHECK_NE(node.setstmt, nullptr);
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.setstmt, "ALTER STATISTICS"));
 
   if (list_length(node.package_name) != 2) {
     return UnsupportedTranslationError(
@@ -1553,7 +1559,7 @@ absl::Status ValidateParseTreeNode(const AlterSpangresStatsStmt& node) {
         "spanner.<name>");
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(const String* package_namespace,
+  GOOGLESQL_ASSIGN_OR_RETURN(const String* package_namespace,
                    (GetListItemAsNode<String, T_String>(node.package_name, 0)));
   if (std::string(package_namespace->sval) != PGConstants::kNamespace) {
     return UnsupportedTranslationError(absl::StrCat(
@@ -1575,12 +1581,94 @@ absl::Status ValidateParseTreeNode(const VacuumStmt& node) {
         "Option is not supported by <ANALYZE> statement.");
   }
   if (node.rels) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const VacuumRelation* relation,
         (GetListItemAsNode<VacuumRelation, T_VacuumRelation>(node.rels, 0)));
     if (relation->relation != nullptr || relation->va_cols != nullptr) {
       return UnsupportedTranslationError(
           "Table or column is not supported by <ANALYZE> statement.");
+    }
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status ValidateParseTreeNode(const CreateFunctionStmt& node) {
+  // Make sure that if CreateFunctionStmt structure changes we update the
+  // translator.
+  AssertPGNodeConsistsOf(node, FieldTypeChecker<bool>(node.is_procedure),
+                         FieldTypeChecker<bool>(node.replace),
+                         FieldTypeChecker<List*>(node.funcname),
+                         FieldTypeChecker<List*>(node.parameters),
+                         FieldTypeChecker<TypeName*>(node.returnType),
+                         FieldTypeChecker<List*>(node.options),
+                         FieldTypeChecker<Node*>(node.sql_body),
+                         FieldTypeChecker<char*>(node.routine_body_string));
+
+  if (node.is_procedure) {
+    return UnsupportedTranslationError(
+        "<CREATE PROCEDURE> statement is not supported.");
+  }
+
+  // `funcname` defines the name of the new function.
+  if (node.funcname == nullptr) {
+    return UnsupportedTranslationError(
+        "<CREATE FUNCTION> statement must have a function name.");
+  }
+
+  // `returnType` defines the type of the function return value.
+  if (node.returnType == nullptr) {
+    return UnsupportedTranslationError(
+        "<CREATE FUNCTION> statement must have a result type.");
+  }
+  if (node.returnType->setof) {
+    return UnsupportedTranslationError(
+        "<CREATE FUNCTION> statement with set/table return type is not "
+        "supported.");
+  }
+
+  for (FunctionParameter* parameter :
+       StructList<FunctionParameter*>(node.parameters)) {
+    GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*parameter));
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status ValidateParseTreeNode(const FunctionParameter& node) {
+  // Make sure that if FunctionParameter structure changes we update the
+  // translator.
+  AssertPGNodeConsistsOf(node, FieldTypeChecker<char*>(node.name),
+                         FieldTypeChecker<TypeName*>(node.argType),
+                         FieldTypeChecker<FunctionParameterMode>(node.mode),
+                         FieldTypeChecker<Node*>(node.defexpr),
+                         FieldTypeChecker<char*>(node.def_expr_string));
+
+    if (node.name != nullptr && node.name[0] == '_') {
+      return UnsupportedTranslationError(
+          "Function parameter names cannot start with an underscore.");
+    }
+
+  if (node.argType == nullptr) {
+    return UnsupportedTranslationError(
+        "Argument types are required in function parameters.");
+  }
+
+  if (node.mode != FUNC_PARAM_IN && node.mode != FUNC_PARAM_VARIADIC &&
+      node.mode != FUNC_PARAM_DEFAULT) {
+    return UnsupportedTranslationError(
+        "Only input parameters are supported in function parameters.");
+  }
+
+  // Default expressions must be a literal (or a cast to a literal).
+  if (node.defexpr != nullptr) {
+    const Node* expr = node.defexpr;
+    if (IsA(expr, TypeCast)) {
+      expr = reinterpret_cast<const TypeCast*>(expr)->arg;
+    }
+    if (!IsA(expr, A_Const)) {
+      return UnsupportedTranslationError(
+          "Function parameters with default expressions must be literals.");
     }
   }
 
@@ -1600,8 +1688,8 @@ absl::Status ValidateParseTreeNode(const ViewStmt& node) {
       FieldTypeChecker<char*>(node.query_string));
 
   // `view` defines the name of the new view.
-  ZETASQL_RET_CHECK_NE(node.view, nullptr);
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.view, "CREATE VIEW"));
+  GOOGLESQL_RET_CHECK_NE(node.view, nullptr);
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.view, "CREATE VIEW"));
 
   // 'aliases' defines names to be used for columns of the view.
   if (node.aliases != nullptr) {
@@ -1630,13 +1718,13 @@ absl::Status ValidateParseTreeNode(const ViewStmt& node) {
   }
 
   // 'query_string' defines the raw string format of the query field.
-  ZETASQL_RET_CHECK_NE(node.query_string, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.query_string, nullptr);
 
   return absl::OkStatus();
 }
 
 absl::Status ValidateParseTreeNode(const AlterChangeStreamStmt& node) {
-  ZETASQL_RET_CHECK_EQ(node.type, T_AlterChangeStreamStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_AlterChangeStreamStmt);
 
   // Make sure that if AlterSpangresStatsStmt structure changes we update the
   // translator.
@@ -1650,7 +1738,7 @@ absl::Status ValidateParseTreeNode(const AlterChangeStreamStmt& node) {
                          FieldTypeChecker<List*>(node.opt_reset_options));
 
   // `change_stream_name` defines the change stream name.
-  ZETASQL_RET_CHECK_NE(node.change_stream_name, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.change_stream_name, nullptr);
 
   // `opt_options` defines the user-configured options applied to the change
   // streams. Optional attribute. If any,
@@ -1678,7 +1766,7 @@ absl::Status ValidateParseTreeNode(const AlterChangeStreamStmt& node) {
   int opt_reset_options_int = node.opt_reset_options ? 1 : 0;
 
   // Exactly one of the above fields should be set at all times.
-  ZETASQL_RET_CHECK_EQ(for_all_int + drop_for_all_int + opt_for_tables_int +
+  GOOGLESQL_RET_CHECK_EQ(for_all_int + drop_for_all_int + opt_for_tables_int +
                    opt_drop_for_tables_int + opt_options_int +
                    opt_reset_options_int,
                1)
@@ -1691,7 +1779,7 @@ absl::Status ValidateParseTreeNode(const AlterChangeStreamStmt& node) {
 
 absl::Status ValidateParseTreeNode(const CreateChangeStreamStmt& node,
                                    const TranslationOptions& options) {
-  ZETASQL_RET_CHECK_EQ(node.type, T_CreateChangeStreamStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_CreateChangeStreamStmt);
 
   // Make sure that if CreateChangeStreamStmt structure changes we update the
   // translator.
@@ -1702,7 +1790,7 @@ absl::Status ValidateParseTreeNode(const CreateChangeStreamStmt& node,
                          FieldTypeChecker<bool>(node.for_all));
 
   // `change_stream_name` defines the change stream name.
-  ZETASQL_RET_CHECK_NE(node.change_stream_name, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.change_stream_name, nullptr);
 
   // `opt_options` defines the user-configured options applied to the change
   // streams. Optional attribute. If any, validated later during translation.
@@ -1716,7 +1804,7 @@ absl::Status ValidateParseTreeNode(const CreateChangeStreamStmt& node,
     // all tables. Optional attribute. If any, validated later during
     // translation.
     int for_all_int = node.for_all ? 1 : 0;
-    ZETASQL_RET_CHECK_EQ(for_all_int + opt_for_tables_int, 1)
+    GOOGLESQL_RET_CHECK_EQ(for_all_int + opt_for_tables_int, 1)
         << "Invalid <FOR> clause for <CREATE CHANGE STREAM>";
   }
 
@@ -1732,7 +1820,7 @@ absl::Status ValidateParseTreeNode(const CreateChangeStreamStmt& node,
 // TODO: expose when queue is implemented.
 
 absl::Status ValidateParseTreeNode(const CreateSearchIndexStmt& node) {
-  ZETASQL_RET_CHECK_EQ(node.type, T_CreateSearchIndexStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_CreateSearchIndexStmt);
   // Make sure that if CreateSearchIndexStmt structure changes we update the
   // translator.
   AssertPGNodeConsistsOf(node, FieldTypeChecker<char*>(node.search_index_name),
@@ -1752,16 +1840,16 @@ absl::Status ValidateParseTreeNode(const CreateSearchIndexStmt& node) {
   }
 
   // `table_name` defines a table to build index on.
-  ZETASQL_RET_CHECK_NE(node.table_name, nullptr);
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RET_CHECK_NE(node.table_name, nullptr);
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateParseTreeNode(*node.table_name, "CREATE SEARCH INDEX"));
 
   // `token_columns` defines the columns to index.
-  ZETASQL_RET_CHECK(!IsListEmpty(node.token_columns));
+  GOOGLESQL_RET_CHECK(!IsListEmpty(node.token_columns));
 
   // `interleave in` validation.
   if (node.interleave != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         ValidateParseTreeNode(*node.interleave, "CREATE SEARCH INDEX"));
   }
 
@@ -1781,19 +1869,19 @@ absl::Status ValidateParseTreeNode(const CreateSearchIndexStmt& node) {
 }
 
 absl::Status ValidateParseTreeNode(const AlterSearchIndexCmd& node) {
-  ZETASQL_RET_CHECK_EQ(node.type, T_AlterSearchIndexCmd);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_AlterSearchIndexCmd);
   // Make sure that if AlterSearchIndexCmd structure changes we update the
   // translator.
   AssertPGNodeConsistsOf(
       node, FieldTypeChecker<AlterSearchIndexCmdType>(node.cmd_type),
       FieldTypeChecker<char*>(node.column_name));
 
-  ZETASQL_RET_CHECK_NE(node.column_name, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.column_name, nullptr);
   return absl::OkStatus();
 }
 
 absl::Status ValidateParseTreeNode(const CreateLocalityGroupStmt& node) {
-  ZETASQL_RET_CHECK_EQ(node.type, T_CreateLocalityGroupStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_CreateLocalityGroupStmt);
 
   // Make sure that if CreateLocalityGroupStmt structure changes we update the
   // translator.
@@ -1821,13 +1909,13 @@ absl::Status ValidateParseTreeNode(const CreateLocalityGroupStmt& node) {
                           node.ssd_to_hdd_spill_timespan->value));
     }
   }
-  ZETASQL_RET_CHECK_NE(node.locality_group_name, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.locality_group_name, nullptr);
 
   return absl::OkStatus();
 }
 
 absl::Status ValidateParseTreeNode(const AlterLocalityGroupStmt& node) {
-  ZETASQL_RET_CHECK_EQ(node.type, T_AlterLocalityGroupStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_AlterLocalityGroupStmt);
 
   // Make sure that if AlterLocalityGroupStmt structure changes we update the
   // translator.
@@ -1861,28 +1949,28 @@ absl::Status ValidateParseTreeNode(const AlterLocalityGroupStmt& node) {
                           node.ssd_to_hdd_spill_timespan->value));
     }
   }
-  ZETASQL_RET_CHECK_NE(node.locality_group_name, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.locality_group_name, nullptr);
 
   return absl::OkStatus();
 }
 
 absl::Status ValidateParseTreeNode(const AlterColumnLocalityGroupStmt& node) {
-  ZETASQL_RET_CHECK_EQ(node.type, T_AlterColumnLocalityGroupStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_AlterColumnLocalityGroupStmt);
 
   AssertPGNodeConsistsOf(
       node, FieldTypeChecker<RangeVar*>(node.relation),
       FieldTypeChecker<char*>(node.column),
       FieldTypeChecker<LocalityGroupOption*>(node.locality_group_name));
 
-  ZETASQL_RET_CHECK_NE(node.relation, nullptr);
-  ZETASQL_RET_CHECK_NE(node.column, nullptr);
-  ZETASQL_RET_CHECK_NE(node.locality_group_name, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.relation, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.column, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.locality_group_name, nullptr);
 
   return absl::OkStatus();
 }
 
 absl::Status ValidateParseTreeNode(const CreateRoleStmt& node) {
-  ZETASQL_RET_CHECK_EQ(node.type, T_CreateRoleStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_CreateRoleStmt);
 
   // Make sure that if CreateRoleStmt structure changes we update the
   // translator.
@@ -1891,7 +1979,7 @@ absl::Status ValidateParseTreeNode(const CreateRoleStmt& node) {
                          FieldTypeChecker<List*>(node.options));
 
   // Check for old variants of CREATE ROLE.
-  ZETASQL_RETURN_IF_ERROR(([&node]() -> absl::Status {
+  GOOGLESQL_RETURN_IF_ERROR(([&node]() -> absl::Status {
     switch (node.stmt_type) {
       case ROLESTMT_ROLE:
         return absl::OkStatus();
@@ -1902,7 +1990,7 @@ absl::Status ValidateParseTreeNode(const CreateRoleStmt& node) {
         return UnsupportedTranslationError(
             "<CREATE GROUP> statement is not supported.");
     }
-    ZETASQL_RET_CHECK_FAIL() << "Unknown value of RoleStmtType " << node.stmt_type;
+    GOOGLESQL_RET_CHECK_FAIL() << "Unknown value of RoleStmtType " << node.stmt_type;
   })());
 
   // Certain role names should not be created.
@@ -1925,7 +2013,7 @@ absl::Status ValidateParseTreeNode(const CreateRoleStmt& node) {
 }
 
 absl::Status ValidateParseTreeNode(const DropRoleStmt& node) {
-  ZETASQL_RET_CHECK_EQ(node.type, T_DropRoleStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_DropRoleStmt);
 
   // Make sure that if DropRoleStmt structure changes we update the translator.
   AssertPGNodeConsistsOf(node, FieldTypeChecker<List*>(node.roles),
@@ -1936,9 +2024,9 @@ absl::Status ValidateParseTreeNode(const DropRoleStmt& node) {
     return UnsupportedTranslationError(
         "<DROP ROLE> supports deletion of only a single role per statement.");
   }
-  ZETASQL_ASSIGN_OR_RETURN(const RoleSpec* role_spec,
+  GOOGLESQL_ASSIGN_OR_RETURN(const RoleSpec* role_spec,
                    (SingleItemListAsNode<RoleSpec, T_RoleSpec>)(node.roles));
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*role_spec));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*role_spec));
 
   if (node.missing_ok) {
     return UnsupportedTranslationError(
@@ -1949,7 +2037,7 @@ absl::Status ValidateParseTreeNode(const DropRoleStmt& node) {
 }
 
 absl::Status ValidateParseTreeNode(const GrantStmt& node) {
-  ZETASQL_RET_CHECK_EQ(node.type, T_GrantStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_GrantStmt);
 
   // Make sure that if GrantStmt structure changes we update the translator.
   AssertPGNodeConsistsOf(node, FieldTypeChecker<bool>(node.is_grant),
@@ -1996,7 +2084,7 @@ absl::Status ValidateParseTreeNode(const GrantStmt& node) {
   }
 
   // Privileges must be granted by naming the targets individually.
-  ZETASQL_RETURN_IF_ERROR(([&node, grant_type, object_type]() -> absl::Status {
+  GOOGLESQL_RETURN_IF_ERROR(([&node, grant_type, object_type]() -> absl::Status {
     switch (node.targtype) {
       case ACL_TARGET_OBJECT:
         return absl::OkStatus();
@@ -2006,7 +2094,7 @@ absl::Status ValidateParseTreeNode(const GrantStmt& node) {
         return UnsupportedTranslationError(
             "DEFAULT PRIVILEGES is not supported.");
     }
-    ZETASQL_RET_CHECK_FAIL() << "Unknown value of GrantTargetType " << node.targtype
+    GOOGLESQL_RET_CHECK_FAIL() << "Unknown value of GrantTargetType " << node.targtype
                      << ".";
   }()));
 
@@ -2030,9 +2118,9 @@ absl::Status ValidateParseTreeNode(const GrantStmt& node) {
 
   // Check drop behavior.
   if (node.is_grant) {
-    ZETASQL_RET_CHECK_EQ(node.behavior, DROP_RESTRICT);
+    GOOGLESQL_RET_CHECK_EQ(node.behavior, DROP_RESTRICT);
   } else {
-    ZETASQL_RETURN_IF_ERROR(([&node, grant_type]() -> absl::Status {
+    GOOGLESQL_RETURN_IF_ERROR(([&node, grant_type]() -> absl::Status {
       switch (node.behavior) {
         case DROP_RESTRICT:
           return absl::OkStatus();
@@ -2041,7 +2129,7 @@ absl::Status ValidateParseTreeNode(const GrantStmt& node) {
               "<CASCADE> clause is not supported in <$0> statement.",
               grant_type));
       }
-      ZETASQL_RET_CHECK_FAIL() << "Unknown value of DropBehavior " << node.behavior
+      GOOGLESQL_RET_CHECK_FAIL() << "Unknown value of DropBehavior " << node.behavior
                        << ".";
     }()));
   }
@@ -2057,7 +2145,7 @@ absl::Status ValidateParseTreeNode(const GrantStmt& node) {
 
 absl::Status ValidateParseTreeNode(const AccessPriv& node, bool is_grant,
                                    bool is_privilege) {
-  ZETASQL_RET_CHECK_EQ(node.type, T_AccessPriv);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_AccessPriv);
 
   // Make sure that if AccessPriv structure changes we update the translator.
   AssertPGNodeConsistsOf(node, FieldTypeChecker<char*>(node.priv_name),
@@ -2085,7 +2173,7 @@ absl::Status ValidateParseTreeNode(const AccessPriv& node, bool is_grant,
 }
 
 absl::Status ValidateParseTreeNode(const ObjectWithArgs& node, bool is_grant) {
-  ZETASQL_RET_CHECK_EQ(node.type, T_ObjectWithArgs);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_ObjectWithArgs);
 
   // Make sure that if ObjectWithArgs structure changes we update the
   // translator.
@@ -2096,8 +2184,8 @@ absl::Status ValidateParseTreeNode(const ObjectWithArgs& node, bool is_grant) {
 
   // `objname` must contain an object name, and it can optionally contain a
   // schema name and catalog name.
-  ZETASQL_RET_CHECK_NE(node.objname, nullptr);
-  ZETASQL_RET_CHECK_GT(list_length(node.objname), 0);
+  GOOGLESQL_RET_CHECK_NE(node.objname, nullptr);
+  GOOGLESQL_RET_CHECK_GT(list_length(node.objname), 0);
   if (list_length(node.objname) > 3) {
     return UnsupportedTranslationError(
         "Function contains too many dotted names.");
@@ -2105,7 +2193,7 @@ absl::Status ValidateParseTreeNode(const ObjectWithArgs& node, bool is_grant) {
 
   // `objfuncargs` contains the full specification of the parameter list (if not
   // NULL). This is not supported.
-  ZETASQL_RET_CHECK_EQ(node.objfuncargs, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node.objfuncargs, nullptr);
 
   // `args_unspecified` and `objargs` must indicate that no function arguments
   // are provided.
@@ -2114,13 +2202,13 @@ absl::Status ValidateParseTreeNode(const ObjectWithArgs& node, bool is_grant) {
     return UnsupportedTranslationError(absl::Substitute(
         "Function arguments are not supported in <$0> statement.", grant_type));
   }
-  ZETASQL_RET_CHECK_EQ(node.objargs, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node.objargs, nullptr);
 
   return absl::OkStatus();
 }
 
 absl::Status ValidateParseTreeNode(const RoleSpec& node) {
-  ZETASQL_RET_CHECK_EQ(node.type, T_RoleSpec);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_RoleSpec);
 
   // Make sure that if RoleSpec structure changes we update the translator.
   AssertPGNodeConsistsOf(node, FieldTypeChecker<RoleSpecType>(node.roletype),
@@ -2131,7 +2219,7 @@ absl::Status ValidateParseTreeNode(const RoleSpec& node) {
 }
 
 absl::Status ValidateParseTreeNode(const GrantRoleStmt& node) {
-  ZETASQL_RET_CHECK_EQ(node.type, T_GrantRoleStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_GrantRoleStmt);
 
   // Make sure that if GrantRoleStmt structure changes we update the translator.
   AssertPGNodeConsistsOf(node, FieldTypeChecker<List*>(node.granted_roles),
@@ -2162,16 +2250,16 @@ absl::Status ValidateParseTreeNode(const GrantRoleStmt& node) {
 
   // `grantor` is used by GRANTED BY, which is not supported.
   if (node.grantor != nullptr) {
-    ZETASQL_RET_CHECK(node.is_grant);
+    GOOGLESQL_RET_CHECK(node.is_grant);
     return UnsupportedTranslationError(absl::Substitute(
         "<GRANTED BY> clause is not supported in <$0> statement.", grant_type));
   }
 
   // Check drop behavior.
   if (node.is_grant) {
-    ZETASQL_RET_CHECK_EQ(node.behavior, DROP_RESTRICT);
+    GOOGLESQL_RET_CHECK_EQ(node.behavior, DROP_RESTRICT);
   } else {
-    ZETASQL_RETURN_IF_ERROR(([&node, grant_type]() -> absl::Status {
+    GOOGLESQL_RETURN_IF_ERROR(([&node, grant_type]() -> absl::Status {
       switch (node.behavior) {
         case DROP_RESTRICT:
           return absl::OkStatus();
@@ -2180,7 +2268,7 @@ absl::Status ValidateParseTreeNode(const GrantRoleStmt& node) {
               "<CASCADE> clause is not supported in <$0> statement.",
               grant_type));
       }
-      ZETASQL_RET_CHECK_FAIL() << "Unknown value of DropBehavior " << node.behavior
+      GOOGLESQL_RET_CHECK_FAIL() << "Unknown value of DropBehavior " << node.behavior
                        << ".";
     }()));
   }
@@ -2219,7 +2307,7 @@ absl::Status ValidateParseTreeNode(const IndexStmt& node,
       FieldTypeChecker<bool>(node.if_not_exists),
       FieldTypeChecker<bool>(node.reset_default_tblspc));
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_IndexStmt);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_IndexStmt);
 
   // `idxname` defines the name of the index.
   if (node.idxname == nullptr || *node.idxname == '\0') {
@@ -2228,8 +2316,8 @@ absl::Status ValidateParseTreeNode(const IndexStmt& node,
   }
 
   // `relation` defines a table to build index on.
-  ZETASQL_RET_CHECK_NE(node.relation, nullptr);
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.relation, "CREATE INDEX"));
+  GOOGLESQL_RET_CHECK_NE(node.relation, nullptr);
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.relation, "CREATE INDEX"));
 
   // `accessMethod` only allows specifying a vector index type.
   // Setting it to any other value, including the default (btree), is not
@@ -2247,7 +2335,7 @@ absl::Status ValidateParseTreeNode(const IndexStmt& node,
   }
 
   // `indexParams` defines the columns to index.
-  ZETASQL_RET_CHECK(!IsListEmpty(node.indexParams));
+  GOOGLESQL_RET_CHECK(!IsListEmpty(node.indexParams));
 
   // `indexIncludingParams` defines columns provided in INCLUDE clause. They are
   // additional columns store with index columns not used for search. They are
@@ -2263,31 +2351,31 @@ absl::Status ValidateParseTreeNode(const IndexStmt& node,
 
   // `interleavespec` defines index placement/interleave information.
   if (node.interleavespec != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         ValidateParseTreeNode(*node.interleavespec, "CREATE INDEX"));
   }
 
   // `excludeOpNames` defines exclusion operator name. This is used during
   // analyzer phase internally when analyzing exclustion constraint.
-  ZETASQL_RET_CHECK_EQ(node.excludeOpNames, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node.excludeOpNames, nullptr);
 
   // `idxcomment` defines the comment for an index. The value is from catalog,
   // not used by parser.
-  ZETASQL_RET_CHECK_EQ(node.idxcomment, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node.idxcomment, nullptr);
 
   // `indexOid` defines the OID of the index. This is used during analyzer phase
   // internally.
-  ZETASQL_RET_CHECK_EQ(node.indexOid, InvalidOid);
+  GOOGLESQL_RET_CHECK_EQ(node.indexOid, InvalidOid);
 
   // `oldNode` defines the object id on storage layer. This is used in PG
   // analyzer phase internally.
-  ZETASQL_RET_CHECK_EQ(node.oldNode, InvalidOid);
+  GOOGLESQL_RET_CHECK_EQ(node.oldNode, InvalidOid);
 
   // `oldCreateSubid` and `oldFirstRelfilenodeSubid` define the object id on
   // storage layer of an existed index. They are used in PG analyzer phase
   // internally.
-  ZETASQL_RET_CHECK_EQ(node.oldCreateSubid, InvalidSubTransactionId);
-  ZETASQL_RET_CHECK_EQ(node.oldFirstRelfilenodeSubid, InvalidSubTransactionId);
+  GOOGLESQL_RET_CHECK_EQ(node.oldCreateSubid, InvalidSubTransactionId);
+  GOOGLESQL_RET_CHECK_EQ(node.oldFirstRelfilenodeSubid, InvalidSubTransactionId);
 
   // `unique` defines if index should be UNIQUE.
 
@@ -2295,14 +2383,14 @@ absl::Status ValidateParseTreeNode(const IndexStmt& node,
   // properties of the index created internally by PG analyzer for constraints
   // e.g. PRIMARY KEY/UNIQUE. They are not used for parser phase and set to
   // `false` by default.
-  ZETASQL_RET_CHECK(!node.primary);       // is index a primary key?
-  ZETASQL_RET_CHECK(!node.isconstraint);  // is it for a pkey/unique constraint?
-  ZETASQL_RET_CHECK(!node.deferrable);    // is the constraint DEFERRABLE?
-  ZETASQL_RET_CHECK(!node.initdeferred);  // is the constraint INITIALLY DEFERRED?
+  GOOGLESQL_RET_CHECK(!node.primary);       // is index a primary key?
+  GOOGLESQL_RET_CHECK(!node.isconstraint);  // is it for a pkey/unique constraint?
+  GOOGLESQL_RET_CHECK(!node.deferrable);    // is the constraint DEFERRABLE?
+  GOOGLESQL_RET_CHECK(!node.initdeferred);  // is the constraint INITIALLY DEFERRED?
 
   // `transformed` defines the state whether an index has been processed
   // internally by PG's analyzer. It is `false` during parsing phase.
-  ZETASQL_RET_CHECK(!node.transformed);
+  GOOGLESQL_RET_CHECK(!node.transformed);
 
   // `concurrent` defines the way to build up index concurrently or not.
   // This is not supported.
@@ -2320,7 +2408,7 @@ absl::Status ValidateParseTreeNode(const IndexStmt& node,
 
   // `reset_default_tblspc` defines a boolean to reset default table space.
   // This is not supported, default value is false.
-  ZETASQL_RET_CHECK(!node.reset_default_tblspc);
+  GOOGLESQL_RET_CHECK(!node.reset_default_tblspc);
 
   return absl::OkStatus();
 }
@@ -2334,9 +2422,10 @@ absl::Status ValidateParseTreeNode(const IndexElem& node) {
                          FieldTypeChecker<List*>(node.opclass),
                          FieldTypeChecker<List*>(node.opclassopts),
                          FieldTypeChecker<SortByDir>(node.ordering),
-                         FieldTypeChecker<SortByNulls>(node.nulls_ordering));
+                         FieldTypeChecker<SortByNulls>(node.nulls_ordering)
+  );
 
-  ZETASQL_RET_CHECK_EQ(node.type, T_IndexElem);
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_IndexElem);
 
   // `name` defines the column name to index
   if (node.expr == nullptr && (node.name == nullptr || *node.name == '\0')) {
@@ -2352,9 +2441,9 @@ absl::Status ValidateParseTreeNode(const IndexElem& node) {
   }
 
   // `indexcolname` defines the name of the index when the index is created
-  // using  expression. It is an internal field used set by the analyer after
+  // using  expression. It is an internal field used set by the analyzer after
   // the parsing phase. During parsing phase, it is not used.
-  ZETASQL_RET_CHECK_EQ(node.indexcolname, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node.indexcolname, nullptr);
 
   // `collation` define name of collation: e.g. CREATE INDEX title_idx_german ON
   // films (title COLLATE "de_DE"); Default value is `NULL`, setting this is not
@@ -2395,13 +2484,13 @@ absl::Status ValidateParseTreeNode(const BoolExpr& node) {
                          FieldTypeChecker<List*>(node.args),
                          FieldTypeChecker<int>(node.location));
   // `xpr` defines expression type
-  ZETASQL_RET_CHECK_EQ(node.xpr.type, T_BoolExpr);
+  GOOGLESQL_RET_CHECK_EQ(node.xpr.type, T_BoolExpr);
 
   // `boolop` defines logical operator type to apply to the arguments. Validated
   // in `TranslateBoolExpr()`
 
   // `args` defines the arguments of the logical operator.
-  ZETASQL_RET_CHECK(!IsListEmpty(node.args));
+  GOOGLESQL_RET_CHECK(!IsListEmpty(node.args));
 
   // `location` defines parsed token location of the text in the input, no
   // validation required.
@@ -2417,10 +2506,10 @@ absl::Status ValidateParseTreeNode(const NullTest& node) {
                          FieldTypeChecker<int>(node.location));
 
   // `xpr` defines expression type
-  ZETASQL_RET_CHECK_EQ(node.xpr.type, T_NullTest);
+  GOOGLESQL_RET_CHECK_EQ(node.xpr.type, T_NullTest);
 
   // `arg` defines the expression in the null test.
-  ZETASQL_RET_CHECK_NE(node.arg, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.arg, nullptr);
 
   // `argisrow` True to perform field-by-field null checks for a row type value.
   // This value is set during analyzer phase. No validation needed.

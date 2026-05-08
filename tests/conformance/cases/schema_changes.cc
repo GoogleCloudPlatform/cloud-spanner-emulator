@@ -21,7 +21,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -42,8 +42,8 @@
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 #include "re2/re2.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -56,7 +56,7 @@ using cloud::spanner::Bytes;
 using cloud::spanner::InsertMutationBuilder;
 using ::google::spanner::admin::database::v1::DatabaseDialect;
 using ::google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 template <class T>
 using optional = google::cloud::optional<T>;
@@ -128,12 +128,12 @@ class SchemaChangeTest
   absl::StatusOr<FileBasedTestCaseOutput> RunSchemaChangeTestCase(
       const FileBasedTestCaseInput& input) {
     // Check that we were not mistakenly passed an empty test case.
-    ZETASQL_RET_CHECK(!input.text.empty()) << "Found empty schema change test case.";
+    GOOGLESQL_RET_CHECK(!input.text.empty()) << "Found empty schema change test case.";
 
     dialect_ = input.dialect;
 
     // Reset the database used for this test.
-    ZETASQL_RETURN_IF_ERROR(ResetDatabase());
+    GOOGLESQL_RETURN_IF_ERROR(ResetDatabase());
 
     // Split the input into individual DDL statements.
     std::string text = input.text;
@@ -159,7 +159,7 @@ class SchemaChangeTest
     }
 
     // For the success case, we expect the output of GetDatabaseDdl to match.
-    ZETASQL_ASSIGN_OR_RETURN(std::vector<std::string> output_statements,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::vector<std::string> output_statements,
                      GetDatabaseDdl());
     return FileBasedTestCaseOutput{
         .text = absl::StrJoin(output_statements, ";\n") + ";\n",
@@ -206,7 +206,7 @@ TEST_P(SchemaChangeTest, FileBasedTests) {
       "for input at line number ", input.line_no, ":\n", input.text);
   const auto& expected = GetParam().expected;
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto actual, RunSchemaChangeTestCase(input));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto actual, RunSchemaChangeTestCase(input));
   ASSERT_TRUE(actual.status_code.has_value());
 
   std::string expected_text = expected.text;
@@ -268,12 +268,12 @@ TEST_F(SchemaChangeTest, ValidStatements) {
      CREATE INDEX test_index ON test_table(string_col)
   )"};
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(metadata, UpdateSchema(statements));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(metadata, UpdateSchema(statements));
   EXPECT_EQ(metadata.commit_timestamps_size(), 2);
   EXPECT_EQ(metadata.statements_size(), 2);
 }
 TEST_F(SchemaChangeTest, DISABLED_PartialSuccess) {
-  ZETASQL_EXPECT_OK(SetSchema({R"(
+  GOOGLESQL_EXPECT_OK(SetSchema({R"(
               CREATE TABLE test_table(
                 int64_col INT64 NOT NULL,
                 string_col STRING(MAX)
@@ -285,7 +285,7 @@ TEST_F(SchemaChangeTest, DISABLED_PartialSuccess) {
           .AddRow({Value(2), Value("a")})
           .Build();
   auto txn = Transaction(Transaction::ReadWriteOptions());
-  ZETASQL_ASSERT_OK(CommitTransaction(txn, {mutation}));
+  GOOGLESQL_ASSERT_OK(CommitTransaction(txn, {mutation}));
 
   std::vector<std::string> statements = {R"(
      CREATE TABLE another_table (
@@ -299,71 +299,71 @@ TEST_F(SchemaChangeTest, DISABLED_PartialSuccess) {
   EXPECT_THAT(UpdateSchema(statements),
               StatusIs(absl::StatusCode::kFailedPrecondition));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto ddl_statements, GetDatabaseDdl());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto ddl_statements, GetDatabaseDdl());
   EXPECT_EQ(ddl_statements.size(), 2);
 }
 
 TEST_F(SchemaChangeTest, AddColumns) {
-  ZETASQL_EXPECT_OK(SetSchema({R"(
+  GOOGLESQL_EXPECT_OK(SetSchema({R"(
      CREATE TABLE test_table (
        int64_col INT64 NOT NULL,
      ) PRIMARY KEY(int64_col)
   )"}));
-  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col"}, {Value(1)}));
+  GOOGLESQL_ASSERT_OK(Insert("test_table", {"int64_col"}, {Value(1)}));
 
-  ZETASQL_EXPECT_OK(UpdateSchema(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(
       {"ALTER TABLE test_table ADD COLUMN string_col STRING(MAX)"}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       UpdateSchema({"ALTER TABLE test_table "
                     "ADD COLUMN gen_int64_col INT64 AS (int64_col) STORED"}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       UpdateSchema({"ALTER TABLE test_table "
                     "ADD COLUMN default_int64_col INT64 DEFAULT (1)"}));
 }
 
 TEST_F(SchemaChangeTest, AddColumnsWithoutKeyword) {
-  ZETASQL_EXPECT_OK(SetSchema({R"(
+  GOOGLESQL_EXPECT_OK(SetSchema({R"(
      CREATE TABLE test_table (
        int64_col INT64 NOT NULL,
      ) PRIMARY KEY(int64_col)
   )"}));
-  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col"}, {Value(1)}));
+  GOOGLESQL_ASSERT_OK(Insert("test_table", {"int64_col"}, {Value(1)}));
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       UpdateSchema({"ALTER TABLE test_table ADD string_col STRING(MAX)"}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       UpdateSchema({"ALTER TABLE test_table "
                     "ADD gen_int64_col INT64 AS (int64_col) STORED"}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       UpdateSchema({"ALTER TABLE test_table "
                     "ADD default_int64_col INT64 DEFAULT (1)"}));
 }
 
 TEST_F(SchemaChangeTest, AddDropColumns) {
-  ZETASQL_EXPECT_OK(SetSchema({R"(
+  GOOGLESQL_EXPECT_OK(SetSchema({R"(
      CREATE TABLE test_table (
        int64_col INT64 NOT NULL,
      ) PRIMARY KEY(int64_col)
   )"}));
-  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col"}, {Value(1)}));
+  GOOGLESQL_ASSERT_OK(Insert("test_table", {"int64_col"}, {Value(1)}));
 
   // Test with and without COLUMN keyword.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       UpdateSchema({"ALTER TABLE test_table ADD COLUMN col_A STRING(MAX)"}));
-  ZETASQL_EXPECT_OK(UpdateSchema({"ALTER TABLE test_table ADD col_B STRING(MAX)"}));
-  ZETASQL_EXPECT_OK(UpdateSchema({"ALTER TABLE test_table DROP COLUMN col_A"}));
-  ZETASQL_EXPECT_OK(UpdateSchema({"ALTER TABLE test_table DROP col_B"}));
+  GOOGLESQL_EXPECT_OK(UpdateSchema({"ALTER TABLE test_table ADD col_B STRING(MAX)"}));
+  GOOGLESQL_EXPECT_OK(UpdateSchema({"ALTER TABLE test_table DROP COLUMN col_A"}));
+  GOOGLESQL_EXPECT_OK(UpdateSchema({"ALTER TABLE test_table DROP col_B"}));
 }
 
 TEST_F(SchemaChangeTest, AlterColumnTypeChange) {
-  ZETASQL_EXPECT_OK(SetSchema({R"(
+  GOOGLESQL_EXPECT_OK(SetSchema({R"(
      CREATE TABLE test_table (
        int64_col INT64 NOT NULL,
        string_col STRING(30)
      ) PRIMARY KEY(int64_col)
   )"}));
 
-  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_col"},
+  GOOGLESQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_col"},
                    {Value(1), Value("abcdefghijklmnopqrstuvwxyz")}));
 
   // Check for invalid size reduction when converting from STRING to BYTES.
@@ -374,14 +374,14 @@ TEST_F(SchemaChangeTest, AlterColumnTypeChange) {
 }
 
 TEST_F(SchemaChangeTest, AlterColumnTypeChangeWithoutKeyword) {
-  ZETASQL_EXPECT_OK(SetSchema({R"(
+  GOOGLESQL_EXPECT_OK(SetSchema({R"(
      CREATE TABLE test_table (
        int64_col INT64 NOT NULL,
        string_col STRING(30)
      ) PRIMARY KEY(int64_col)
   )"}));
 
-  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_col"},
+  GOOGLESQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_col"},
                    {Value(1), Value("abcdefghijklmnopqrstuvwxyz")}));
 
   // Check for invalid size reduction when converting from STRING to BYTES.
@@ -392,14 +392,14 @@ TEST_F(SchemaChangeTest, AlterColumnTypeChangeWithoutKeyword) {
 }
 
 TEST_F(SchemaChangeTest, AlterColumnSizeReduction) {
-  ZETASQL_EXPECT_OK(SetSchema({R"(
+  GOOGLESQL_EXPECT_OK(SetSchema({R"(
      CREATE TABLE test_table (
        int64_col INT64 NOT NULL,
        string_col STRING(30)
      ) PRIMARY KEY(int64_col)
   )"}));
 
-  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_col"},
+  GOOGLESQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_col"},
                    {Value(1), Value("abcdefghijklmnopqrstuvwxyz")}));
 
   // Cannot reduce size below 26.
@@ -410,14 +410,14 @@ TEST_F(SchemaChangeTest, AlterColumnSizeReduction) {
 }
 
 TEST_F(SchemaChangeTest, AlterColumnInvalidTypeChange) {
-  ZETASQL_EXPECT_OK(SetSchema({R"(
+  GOOGLESQL_EXPECT_OK(SetSchema({R"(
      CREATE TABLE test_table (
        int64_col INT64 NOT NULL,
        string_col STRING(30)
      ) PRIMARY KEY(int64_col)
   )"}));
 
-  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_col"},
+  GOOGLESQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_col"},
                    {Value(1), Value("abcdefghijklmnopqrstuvwxyz")}));
 
   // Cannot change from STRING to BOOL.
@@ -428,7 +428,7 @@ TEST_F(SchemaChangeTest, AlterColumnInvalidTypeChange) {
 }
 
 TEST_F(SchemaChangeTest, AlterColumnUTFInvalid) {
-  ZETASQL_EXPECT_OK(SetSchema({R"(
+  GOOGLESQL_EXPECT_OK(SetSchema({R"(
      CREATE TABLE test_table (
        int64_col INT64 NOT NULL,
        bytes_col BYTES(30)
@@ -437,7 +437,7 @@ TEST_F(SchemaChangeTest, AlterColumnUTFInvalid) {
 
   // This is not a valid UTF8 encoding.
   const unsigned char byte_val[] = {0xFF, 0xFF, 0xFF, 0xFF};
-  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col", "bytes_col"},
+  GOOGLESQL_ASSERT_OK(Insert("test_table", {"int64_col", "bytes_col"},
                    {Value(1), Value(Bytes(byte_val))}));
 
   EXPECT_THAT(UpdateSchema({R"(
@@ -447,14 +447,14 @@ TEST_F(SchemaChangeTest, AlterColumnUTFInvalid) {
 }
 
 TEST_F(SchemaChangeTest, AlterColumnStringToBytes) {
-  ZETASQL_EXPECT_OK(SetSchema({R"(
+  GOOGLESQL_EXPECT_OK(SetSchema({R"(
      CREATE TABLE test_table (
        int64_col INT64 NOT NULL,
        string_col STRING(5)
      ) PRIMARY KEY(int64_col)
   )"}));
 
-  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_col"},
+  GOOGLESQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_col"},
                    {Value(1), Value("абвгд")}));
 
   EXPECT_THAT(UpdateSchema({R"(
@@ -462,7 +462,7 @@ TEST_F(SchemaChangeTest, AlterColumnStringToBytes) {
   )"}),
               StatusIs(absl::StatusCode::kFailedPrecondition));
 
-  ZETASQL_EXPECT_OK(UpdateSchema({R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"(
      ALTER TABLE test_table ALTER COLUMN string_col BYTES(10)
   )"}));
 
@@ -472,7 +472,7 @@ TEST_F(SchemaChangeTest, AlterColumnStringToBytes) {
 }
 
 TEST_F(SchemaChangeTest, AlterColumnWithNullValues) {
-  ZETASQL_EXPECT_OK(SetSchema({R"(
+  GOOGLESQL_EXPECT_OK(SetSchema({R"(
      CREATE TABLE test_table (
        int64_col INT64 NOT NULL,
        string_col STRING(5)
@@ -480,14 +480,14 @@ TEST_F(SchemaChangeTest, AlterColumnWithNullValues) {
   )"}));
 
   // Explicit NULL.
-  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_col"},
+  GOOGLESQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_col"},
                    {Value(1), cloud::spanner::MakeNullValue<std::string>()}));
 
   // Implicit NULL.
-  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col"}, {Value(2)}));
+  GOOGLESQL_ASSERT_OK(Insert("test_table", {"int64_col"}, {Value(2)}));
 
   // Update succeeds since all the column values are NULL.
-  ZETASQL_EXPECT_OK(UpdateSchema({R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"(
      ALTER TABLE test_table ALTER COLUMN string_col BYTES(2)
   )"}));
 
@@ -497,14 +497,14 @@ TEST_F(SchemaChangeTest, AlterColumnWithNullValues) {
 }
 
 TEST_F(SchemaChangeTest, AlterColumnBytesToString) {
-  ZETASQL_EXPECT_OK(SetSchema({R"(
+  GOOGLESQL_EXPECT_OK(SetSchema({R"(
      CREATE TABLE test_table (
        int64_col INT64 NOT NULL,
        bytes_col BYTES(30)
      ) PRIMARY KEY(int64_col)
   )"}));
 
-  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col", "bytes_col"},
+  GOOGLESQL_ASSERT_OK(Insert("test_table", {"int64_col", "bytes_col"},
                    {Value(1), Bytes(kBytesLiteral)}));
 
   // This will fail as the byte-sequence translates to a 5-(unicode)char string.
@@ -513,7 +513,7 @@ TEST_F(SchemaChangeTest, AlterColumnBytesToString) {
   )"}),
               StatusIs(absl::StatusCode::kFailedPrecondition));
 
-  ZETASQL_EXPECT_OK(UpdateSchema({R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"(
      ALTER TABLE test_table ALTER COLUMN bytes_col STRING(11)
   )"}));
 
@@ -523,7 +523,7 @@ TEST_F(SchemaChangeTest, AlterColumnBytesToString) {
 }
 
 TEST_F(SchemaChangeTest, AlterColumnArrayType) {
-  ZETASQL_EXPECT_OK(SetSchema({R"(
+  GOOGLESQL_EXPECT_OK(SetSchema({R"(
      CREATE TABLE test_table (
        int64_col INT64 NOT NULL,
        string_arr_col ARRAY<STRING(30)>
@@ -535,10 +535,10 @@ TEST_F(SchemaChangeTest, AlterColumnArrayType) {
   std::vector<optional<Bytes>> bytes_arr{Bytes(kBytesLiteral),
                                          optional<Bytes>()};
 
-  ZETASQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_arr_col"},
+  GOOGLESQL_ASSERT_OK(Insert("test_table", {"int64_col", "string_arr_col"},
                    {Value(1), Value(string_arr)}));
 
-  ZETASQL_EXPECT_OK(UpdateSchema({R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"(
      ALTER TABLE test_table ALTER COLUMN string_arr_col ARRAY<BYTES(10)>
   )"}));
 
@@ -547,10 +547,10 @@ TEST_F(SchemaChangeTest, AlterColumnArrayType) {
               IsOkAndHoldsRow({Value(bytes_arr)}));
 }
 
-TEST_F(SchemaChangeTest, Analyze) { ZETASQL_EXPECT_OK(UpdateSchema({"ANALYZE"})); }
+TEST_F(SchemaChangeTest, Analyze) { GOOGLESQL_EXPECT_OK(UpdateSchema({"ANALYZE"})); }
 
 TEST_F(SchemaChangeTest, UpdateWithNonKeyDefaultColumns) {
-  ZETASQL_EXPECT_OK(SetSchema({R"(
+  GOOGLESQL_EXPECT_OK(SetSchema({R"(
      CREATE TABLE test_table (
       id STRING(36) NOT NULL DEFAULT (GENERATE_UUID()),
       str STRING(MAX) NOT NULL,
@@ -558,8 +558,8 @@ TEST_F(SchemaChangeTest, UpdateWithNonKeyDefaultColumns) {
     ) PRIMARY KEY (id)
   )"}));
 
-  ZETASQL_ASSERT_OK(Insert("test_table", {"id", "str"}, {Value(1), Value("test")}));
-  ZETASQL_ASSERT_OK(Update("test_table", {"id", "str"}, {Value(1), Value("updated")}));
+  GOOGLESQL_ASSERT_OK(Insert("test_table", {"id", "str"}, {Value(1), Value("test")}));
+  GOOGLESQL_ASSERT_OK(Update("test_table", {"id", "str"}, {Value(1), Value("updated")}));
 }
 
 TEST_F(SchemaChangeTest, ColumnNameStartsWithUnderscore) {

@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -52,12 +52,12 @@ static constexpr char kDelimiter[] =
 // sides were created from different elements of an array.
 static constexpr char kGapString[] = "\x01";
 
-zetasql::Value TokenListFromStrings(std::vector<std::string> strings);
+googlesql::Value TokenListFromStrings(std::vector<std::string> strings);
 
 absl::StatusOr<std::vector<std::string>> StringsFromTokenList(
-    const zetasql::Value& tokenList);
+    const googlesql::Value& tokenList);
 
-zetasql::Value TokenListFromBytes(std::string& bytes);
+googlesql::Value TokenListFromBytes(std::string& bytes);
 
 // Relative search types supported by TOKENIZE_SUBSTRING and SEARCH_SUBSTRING.
 enum RelativeSearchType {
@@ -77,13 +77,13 @@ absl::StatusOr<RelativeSearchType> ParseRelativeSearchType(
 // Returns true if `token` is a tokenizer signature rather than normal token.
 bool IsTokenizerSignature(absl::string_view token);
 
-int64_t GetIntParameterValue(absl::Span<const zetasql::Value> args,
+int64_t GetIntParameterValue(absl::Span<const googlesql::Value> args,
                              int parameter_index, int default_value);
 
-double GetDoubleParameterValue(absl::Span<const zetasql::Value> args,
+double GetDoubleParameterValue(absl::Span<const googlesql::Value> args,
                                int parameter_index, double default_value);
 
-bool GetBoolParameterValue(absl::Span<const zetasql::Value> args,
+bool GetBoolParameterValue(absl::Span<const googlesql::Value> args,
                            int parameter_index, bool default_value);
 
 absl::Status TokenizeSubstring(absl::string_view str,

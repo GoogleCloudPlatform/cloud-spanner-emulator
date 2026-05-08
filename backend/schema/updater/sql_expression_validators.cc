@@ -19,17 +19,17 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/simple_catalog.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_node.h"
-#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -50,8 +50,8 @@
 #include "backend/schema/graph/schema_node.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -61,13 +61,13 @@ namespace backend {
 namespace {
 
 Udf::Determinism AnalyzedVolatilityToDeterminism(
-    zetasql::FunctionEnums::Volatility volatility) {
+    googlesql::FunctionEnums::Volatility volatility) {
   switch (volatility) {
-    case zetasql::FunctionEnums::IMMUTABLE:
+    case googlesql::FunctionEnums::IMMUTABLE:
       return Udf::Determinism::DETERMINISTIC;
-    case zetasql::FunctionEnums::STABLE:
+    case googlesql::FunctionEnums::STABLE:
       return Udf::Determinism::NOT_DETERMINISTIC_STABLE;
-    case zetasql::FunctionEnums::VOLATILE:
+    case googlesql::FunctionEnums::VOLATILE:
       return Udf::Determinism::NOT_DETERMINISTIC_VOLATILE;
     default:
       return Udf::Determinism::DETERMINISM_UNSPECIFIED;
@@ -95,10 +95,10 @@ Udf::Determinism ReduceToLeastDeterministic(Udf::Determinism determinism_1,
 }
 
 // Returns true if the ResolvedExpr is a call to PENDING_COMMIT_TIMESTAMP()
-bool isPendingCommitTimestamp(const zetasql::ResolvedExpr& expr) {
-  if (expr.node_kind() == zetasql::RESOLVED_FUNCTION_CALL) {
-    const zetasql::ResolvedFunctionCall* fn =
-        expr.GetAs<zetasql::ResolvedFunctionCall>();
+bool isPendingCommitTimestamp(const googlesql::ResolvedExpr& expr) {
+  if (expr.node_kind() == googlesql::RESOLVED_FUNCTION_CALL) {
+    const googlesql::ResolvedFunctionCall* fn =
+        expr.GetAs<googlesql::ResolvedFunctionCall>();
     if (fn->function()->Name() == "pending_commit_timestamp") {
       // Touch the argument list so that the ResolvedAST code does not claim we
       // missed it.
@@ -114,7 +114,7 @@ bool isPendingCommitTimestamp(const zetasql::ResolvedExpr& expr) {
 class ColumnExpressionValidator : public QueryValidator {
  public:
   ColumnExpressionValidator(
-      const Schema* schema, const zetasql::Table* table,
+      const Schema* schema, const googlesql::Table* table,
       absl::string_view expression_use,
       absl::flat_hash_set<std::string>* dependent_column_names,
       bool allow_volatile_expression,
@@ -128,16 +128,16 @@ class ColumnExpressionValidator : public QueryValidator {
         allow_volatile_expression_(allow_volatile_expression),
         udf_dependencies_(udf_dependencies) {}
 
-  absl::Status DefaultVisit(const zetasql::ResolvedNode* node) override {
+  absl::Status DefaultVisit(const googlesql::ResolvedNode* node) override {
     if (node->IsScan() ||
-        node->node_kind() == zetasql::RESOLVED_SUBQUERY_EXPR) {
+        node->node_kind() == googlesql::RESOLVED_SUBQUERY_EXPR) {
       return error::NonScalarExpressionInColumnExpression(expression_use_);
     }
-    if (node->node_kind() == zetasql::RESOLVED_EXPRESSION_COLUMN) {
+    if (node->node_kind() == googlesql::RESOLVED_EXPRESSION_COLUMN) {
       std::string column_name =
-          node->GetAs<zetasql::ResolvedExpressionColumn>()->name();
-      const zetasql::Column* column = table_->FindColumnByName(column_name);
-      ZETASQL_RET_CHECK_NE(column, nullptr);
+          node->GetAs<googlesql::ResolvedExpressionColumn>()->name();
+      const googlesql::Column* column = table_->FindColumnByName(column_name);
+      GOOGLESQL_RET_CHECK_NE(column, nullptr);
       dependent_column_names_->insert(column->Name());
     }
     return QueryValidator::DefaultVisit(node);
@@ -145,14 +145,14 @@ class ColumnExpressionValidator : public QueryValidator {
 
  protected:
   absl::Status VisitResolvedFunctionCall(
-      const zetasql::ResolvedFunctionCall* node) override {
+      const googlesql::ResolvedFunctionCall* node) override {
     // The validation order matters here.
     // Need to invoke the parent visitor first since some higher level
     // validation should precede the deterministic function check. For example,
     // using pending_commit_timestamp() in generated column at CREATE TABLE
     // should return error due to that function only being allowed in INSERT or
     // UPDATE.
-    ZETASQL_RETURN_IF_ERROR(QueryValidator::VisitResolvedFunctionCall(node));
+    GOOGLESQL_RETURN_IF_ERROR(QueryValidator::VisitResolvedFunctionCall(node));
     const Udf* udf = schema()->FindUdf(node->function()->FullName(false));
     if (udf != nullptr) {
       // The schema object UDF is transitive across its own dependencies.
@@ -164,7 +164,7 @@ class ColumnExpressionValidator : public QueryValidator {
       udf_dependencies_->insert(udf);
     } else {
       if (node->function()->function_options().volatility !=
-              zetasql::FunctionEnums::IMMUTABLE &&
+              googlesql::FunctionEnums::IMMUTABLE &&
           !allow_volatile_expression_) {
         return error::NonDeterministicFunctionInColumnExpression(
             node->function()->SQLName(), expression_use_);
@@ -175,7 +175,7 @@ class ColumnExpressionValidator : public QueryValidator {
   }
 
  private:
-  const zetasql::Table* table_;
+  const googlesql::Table* table_;
   absl::string_view expression_use_;
   absl::flat_hash_set<std::string>* dependent_column_names_;
   bool allow_volatile_expression_;
@@ -188,7 +188,7 @@ class ViewDefinitionValidator : public QueryValidator {
   // The dependencies returned in `dependencies` are not transitive. i.e. they
   // are only the direct dependencies of the view definition being validated.
   ViewDefinitionValidator(const Schema* schema,
-                          const zetasql::LanguageOptions& language_options,
+                          const googlesql::LanguageOptions& language_options,
                           absl::flat_hash_set<const SchemaNode*>* dependencies)
       : QueryValidator({.schema = schema}, /*extracted_options=*/nullptr,
                        /*language_options=*/language_options),
@@ -196,16 +196,16 @@ class ViewDefinitionValidator : public QueryValidator {
 
  private:
   absl::Status VisitResolvedWithScan(
-      const zetasql::ResolvedWithScan* node) override {
+      const googlesql::ResolvedWithScan* node) override {
     return error::WithViewsAreNotSupported();
   }
 
   absl::Status VisitResolvedTableScan(
-      const zetasql::ResolvedTableScan* scan) override {
+      const googlesql::ResolvedTableScan* scan) override {
     // Visit the entire tree for the scan first, validating it and collecting
     // any references to indexes. Collect the references after the view query
     // has been determined to be valid.
-    ZETASQL_RETURN_IF_ERROR(QueryValidator::VisitResolvedTableScan(scan));
+    GOOGLESQL_RETURN_IF_ERROR(QueryValidator::VisitResolvedTableScan(scan));
     // The 'catalog table' referenced in the resolved AST could be a table or a
     // view.
     auto catalog_table = scan->table();
@@ -218,7 +218,7 @@ class ViewDefinitionValidator : public QueryValidator {
     } else {
       // This should not happen. A view referencing a non-existent dependency
       // should fail analaysis.
-      ZETASQL_RET_CHECK_FAIL() << "Dependency not found: " << catalog_table->Name();
+      GOOGLESQL_RET_CHECK_FAIL() << "Dependency not found: " << catalog_table->Name();
     }
 
     // Add the column dependencies for the view.
@@ -228,7 +228,7 @@ class ViewDefinitionValidator : public QueryValidator {
     const auto& used_columns = scan->column_index_list();
     for (auto column_index : used_columns) {
       auto catalog_column = catalog_table->GetColumn(column_index);
-      ZETASQL_RET_CHECK_NE(catalog_column, nullptr)
+      GOOGLESQL_RET_CHECK_NE(catalog_column, nullptr)
           << "Referenced column "
           << scan->column_list()[column_index].DebugString() << " not found in "
           << catalog_table->Name();
@@ -240,7 +240,7 @@ class ViewDefinitionValidator : public QueryValidator {
 
     // Also add any indexes used as dependencies
     for (const auto* index : indexes_used()) {
-      ZETASQL_RET_CHECK_NE(index, nullptr);
+      GOOGLESQL_RET_CHECK_NE(index, nullptr);
       dependencies_->insert(index);
     }
 
@@ -248,8 +248,8 @@ class ViewDefinitionValidator : public QueryValidator {
   }
 
   absl::Status VisitResolvedFunctionCall(
-      const zetasql::ResolvedFunctionCall* node) override {
-    ZETASQL_RETURN_IF_ERROR(QueryValidator::VisitResolvedFunctionCall(node));
+      const googlesql::ResolvedFunctionCall* node) override {
+    GOOGLESQL_RETURN_IF_ERROR(QueryValidator::VisitResolvedFunctionCall(node));
 
     const Udf* udf =
         schema()->FindUdf(node->function()->FullName(/*include_group=*/false));
@@ -270,7 +270,7 @@ class UdfDefinitionValidator : public QueryValidator {
   // The dependencies returned in `dependencies` are not transitive. i.e. they
   // are only the direct dependencies of the view definition being validated.
   UdfDefinitionValidator(const Schema* schema,
-                         const zetasql::LanguageOptions& language_options,
+                         const googlesql::LanguageOptions& language_options,
                          absl::flat_hash_set<const SchemaNode*>* dependencies,
                          Udf::Determinism* determinism_level)
       : QueryValidator({.schema = schema}, /*extracted_options=*/nullptr,
@@ -280,16 +280,16 @@ class UdfDefinitionValidator : public QueryValidator {
 
  private:
   absl::Status VisitResolvedWithScan(
-      const zetasql::ResolvedWithScan* node) override {
+      const googlesql::ResolvedWithScan* node) override {
     return error::WithViewsAreNotSupported();
   }
 
   absl::Status VisitResolvedTableScan(
-      const zetasql::ResolvedTableScan* scan) override {
+      const googlesql::ResolvedTableScan* scan) override {
     // Visit the entire tree for the scan first, validating it and collecting
     // any references to indexes. Collect the references after the udf query
     // has been determined to be valid.
-    ZETASQL_RETURN_IF_ERROR(QueryValidator::VisitResolvedTableScan(scan));
+    GOOGLESQL_RETURN_IF_ERROR(QueryValidator::VisitResolvedTableScan(scan));
     // The 'catalog table' referenced in the resolved AST could be a table or a
     // view.
     auto catalog_table = scan->table();
@@ -302,7 +302,7 @@ class UdfDefinitionValidator : public QueryValidator {
     } else {
       // This should not happen. A udf referencing a non-existent dependency
       // should fail analaysis.
-      ZETASQL_RET_CHECK_FAIL() << "Dependency not found: " << catalog_table->Name();
+      GOOGLESQL_RET_CHECK_FAIL() << "Dependency not found: " << catalog_table->Name();
     }
 
     // Add the column dependencies for the udf.
@@ -312,7 +312,7 @@ class UdfDefinitionValidator : public QueryValidator {
     const auto& used_columns = scan->column_index_list();
     for (auto column_index : used_columns) {
       auto catalog_column = catalog_table->GetColumn(column_index);
-      ZETASQL_RET_CHECK_NE(catalog_column, nullptr)
+      GOOGLESQL_RET_CHECK_NE(catalog_column, nullptr)
           << "Referenced column "
           << scan->column_list()[column_index].DebugString() << " not found in "
           << catalog_table->Name();
@@ -324,7 +324,7 @@ class UdfDefinitionValidator : public QueryValidator {
 
     // Also add any indexes used as dependencies
     for (const auto* index : indexes_used()) {
-      ZETASQL_RET_CHECK_NE(index, nullptr);
+      GOOGLESQL_RET_CHECK_NE(index, nullptr);
       dependencies_->insert(index);
     }
 
@@ -333,10 +333,10 @@ class UdfDefinitionValidator : public QueryValidator {
 
  protected:
   absl::Status VisitResolvedFunctionCall(
-      const zetasql::ResolvedFunctionCall* node) override {
-    ZETASQL_RETURN_IF_ERROR(QueryValidator::VisitResolvedFunctionCall(node));
+      const googlesql::ResolvedFunctionCall* node) override {
+    GOOGLESQL_RETURN_IF_ERROR(QueryValidator::VisitResolvedFunctionCall(node));
 
-    // ZETASQL_VLOG IF THIS UDF IS ALWAYS THE SAME AS THE NODE ONE
+    // GOOGLESQL_VLOG IF THIS UDF IS ALWAYS THE SAME AS THE NODE ONE
     const Udf* udf = schema()->FindUdf(node->function()->FullName(false));
     if (udf != nullptr) {
       *determinism_level_ = ReduceToLeastDeterministic(
@@ -357,24 +357,24 @@ class UdfDefinitionValidator : public QueryValidator {
 };
 
 absl::Status AnalyzeColumnExpression(
-    absl::string_view expression, const zetasql::Type* target_type,
+    absl::string_view expression, const googlesql::Type* target_type,
     const Table* table, const Schema* schema,
-    zetasql::TypeFactory* type_factory,
-    const std::vector<zetasql::SimpleTable::NameAndType>& name_and_types,
+    googlesql::TypeFactory* type_factory,
+    const std::vector<googlesql::SimpleTable::NameAndType>& name_and_types,
     absl::string_view expression_use,
     absl::flat_hash_set<std::string>* dependent_column_names,
     absl::flat_hash_set<const SchemaNode*>* dependent_sequences,
     bool allow_volatile_expression,
     absl::flat_hash_set<const SchemaNode*>* udf_dependencies,
     bool* is_pending_commit_timestamp,
-    const zetasql::Type** expr_output_type) {
-  ZETASQL_RET_CHECK(expr_output_type == nullptr || target_type == nullptr);
+    const googlesql::Type** expr_output_type) {
+  GOOGLESQL_RET_CHECK(expr_output_type == nullptr || target_type == nullptr);
 
-  zetasql::SimpleTable simple_table(table->Name(), name_and_types);
+  googlesql::SimpleTable simple_table(table->Name(), name_and_types);
 
-  zetasql::AnalyzerOptions options =
+  googlesql::AnalyzerOptions options =
       MakeGoogleSqlAnalyzerOptions(schema->default_time_zone());
-  // ZetaSQL rewriting could rewrite scalar expressions into subquery.
+  // GoogleSQL rewriting could rewrite scalar expressions into subquery.
   // Disable all default enabled rewriting to check the original shape of
   // user provided expression and ensure forward compatibility.
   auto enabled_rewrites = options.enabled_rewrites();
@@ -383,10 +383,10 @@ absl::Status AnalyzeColumnExpression(
   }
 
   for (const auto& name_and_type : name_and_types) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         options.AddExpressionColumn(name_and_type.first, name_and_type.second));
   }
-  std::unique_ptr<const zetasql::AnalyzerOutput> output;
+  std::unique_ptr<const googlesql::AnalyzerOutput> output;
   FunctionCatalog function_catalog(
       type_factory,
       /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
@@ -394,7 +394,7 @@ absl::Status AnalyzeColumnExpression(
   Catalog catalog(schema, &function_catalog, type_factory,
                   MakeGoogleSqlAnalyzerOptions(schema->default_time_zone()));
 
-  ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeExpressionForAssignmentToType(
+  GOOGLESQL_RETURN_IF_ERROR(googlesql::AnalyzeExpressionForAssignmentToType(
       expression, options, &catalog, type_factory, target_type, &output));
   // If this is an allowed PENDING_COMMIT_TIMESTAMP expression, skip the typical
   // validation.
@@ -408,7 +408,7 @@ absl::Status AnalyzeColumnExpression(
   ColumnExpressionValidator validator(
       schema, &simple_table, expression_use, dependent_column_names,
       allow_volatile_expression, udf_dependencies);
-  ZETASQL_RETURN_IF_ERROR(output->resolved_expr()->Accept(&validator));
+  GOOGLESQL_RETURN_IF_ERROR(output->resolved_expr()->Accept(&validator));
 
   if (expr_output_type != nullptr) {
     *expr_output_type = output->resolved_expr()->type();
@@ -430,7 +430,7 @@ absl::Status AnalyzeColumnExpression(
 
 absl::Status AnalyzeViewDefinition(
     absl::string_view view_name, absl::string_view view_definition,
-    const Schema* schema, zetasql::TypeFactory* type_factory,
+    const Schema* schema, googlesql::TypeFactory* type_factory,
     std::vector<View::Column>* output_columns,
     absl::flat_hash_set<const SchemaNode*>* dependencies) {
   auto body = absl::Substitute("CREATE VIEW `$0` SQL SECURITY INVOKER AS $1",
@@ -443,17 +443,17 @@ absl::Status AnalyzeViewDefinition(
   FunctionCatalog function_catalog(
       type_factory, kCloudSpannerEmulatorFunctionCatalogName, schema);
   Catalog catalog(schema, &function_catalog, type_factory, analyzer_options);
-  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
-  ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeStatement(body, analyzer_options, &catalog,
+  std::unique_ptr<const googlesql::AnalyzerOutput> analyzer_output;
+  GOOGLESQL_RETURN_IF_ERROR(googlesql::AnalyzeStatement(body, analyzer_options, &catalog,
                                               type_factory, &analyzer_output));
 
   // Check the view definition for only allowed elements.
-  const zetasql::ResolvedCreateViewStmt* create_view_stmt =
+  const googlesql::ResolvedCreateViewStmt* create_view_stmt =
       analyzer_output->resolved_statement()
-          ->GetAs<zetasql::ResolvedCreateViewStmt>();
+          ->GetAs<googlesql::ResolvedCreateViewStmt>();
   ViewDefinitionValidator validator(schema, analyzer_options.language(),
                                     dependencies);
-  ZETASQL_RETURN_IF_ERROR(create_view_stmt->query()->Accept(&validator));
+  GOOGLESQL_RETURN_IF_ERROR(create_view_stmt->query()->Accept(&validator));
   for (const auto& c : create_view_stmt->output_column_list()) {
     output_columns->emplace_back(View::Column{c->name(), c->column().type()});
   }
@@ -470,9 +470,9 @@ absl::Status AnalyzeUdfDefinition(
     absl::string_view udf_definition, std::optional<absl::string_view> endpoint,
     std::optional<int> max_batching_rows, bool is_remote,
     bool is_language_remote, absl::string_view return_type,
-    const Schema* schema, zetasql::TypeFactory* type_factory,
+    const Schema* schema, googlesql::TypeFactory* type_factory,
     absl::flat_hash_set<const SchemaNode*>* dependencies,
-    std::unique_ptr<zetasql::FunctionSignature>* function_signature,
+    std::unique_ptr<googlesql::FunctionSignature>* function_signature,
     Udf::Determinism* determinism_level) {
   std::string body;
   if (is_remote || is_language_remote) {
@@ -512,26 +512,26 @@ absl::Status AnalyzeUdfDefinition(
   FunctionCatalog function_catalog(
       type_factory, kCloudSpannerEmulatorFunctionCatalogName, schema);
   Catalog catalog(schema, &function_catalog, type_factory, analyzer_options);
-  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
-  ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeStatement(body, analyzer_options, &catalog,
+  std::unique_ptr<const googlesql::AnalyzerOutput> analyzer_output;
+  GOOGLESQL_RETURN_IF_ERROR(googlesql::AnalyzeStatement(body, analyzer_options, &catalog,
                                               type_factory, &analyzer_output));
 
   // Check the udf definition for only allowed elements.
-  const zetasql::ResolvedCreateFunctionStmt* create_function_stmt =
+  const googlesql::ResolvedCreateFunctionStmt* create_function_stmt =
       analyzer_output->resolved_statement()
-          ->GetAs<zetasql::ResolvedCreateFunctionStmt>();
+          ->GetAs<googlesql::ResolvedCreateFunctionStmt>();
 
   UdfDefinitionValidator validator(schema, analyzer_options.language(),
                                    dependencies, determinism_level);
   if (create_function_stmt->function_expression() != nullptr) {
     // Only SQL UDFs have an expression body. Remote UDFs don't.
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         create_function_stmt->function_expression()->Accept(&validator));
   }
   for (const SchemaNode* sequence : validator.dependent_sequences()) {
     dependencies->insert(sequence);
   }
-  *function_signature = absl::make_unique<zetasql::FunctionSignature>(
+  *function_signature = absl::make_unique<googlesql::FunctionSignature>(
       create_function_stmt->signature());
 
   return absl::OkStatus();

@@ -24,7 +24,7 @@
 #include "google/protobuf/descriptor.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
@@ -48,7 +48,7 @@ namespace frontend {
 namespace {
 
 using google::spanner::emulator::backend::Sequence;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 namespace database_api = ::google::spanner::admin::database::v1;
 namespace operations_api = ::google::longrunning;
@@ -57,8 +57,8 @@ namespace spanner_api = ::google::spanner::v1;
 
 class DatabaseApiTest : public test::ServerTest {
  protected:
-  void SetUp() override { ZETASQL_EXPECT_OK(CreateTestInstance()); }
-  void TearDown() override { ZETASQL_EXPECT_OK(CleanupTestInstance()); }
+  void SetUp() override { GOOGLESQL_EXPECT_OK(CreateTestInstance()); }
+  void TearDown() override { GOOGLESQL_EXPECT_OK(CleanupTestInstance()); }
 
   // Generate proto descriptor bytes as string
   std::string GenerateProtoDescriptorBytesAsString() {
@@ -109,12 +109,12 @@ class DatabaseApiTest : public test::ServerTest {
     request.set_proto_descriptors(GenerateProtoDescriptorBytesAsString());
     request.set_database_dialect(dialect);
     operations_api::Operation operation;
-    ZETASQL_RETURN_IF_ERROR(test_env()->database_admin_client()->CreateDatabase(
+    GOOGLESQL_RETURN_IF_ERROR(test_env()->database_admin_client()->CreateDatabase(
         &context, request, &operation));
-    ZETASQL_RETURN_IF_ERROR(WaitForOperation(operation.name(), &operation));
+    GOOGLESQL_RETURN_IF_ERROR(WaitForOperation(operation.name(), &operation));
     database_api::CreateDatabaseMetadata metadata;
-    ZETASQL_RET_CHECK(operation.metadata().UnpackTo(&metadata));
-    ZETASQL_RET_CHECK_EQ(metadata.database(),
+    GOOGLESQL_RET_CHECK(operation.metadata().UnpackTo(&metadata));
+    GOOGLESQL_RET_CHECK_EQ(metadata.database(),
                  MakeDatabaseUri(instance_uri, database_name));
     return absl::OkStatus();
   }
@@ -133,7 +133,7 @@ class DatabaseApiTest : public test::ServerTest {
     grpc::ClientContext context;
     database_api::GetDatabaseDdlRequest request;
     request.set_database(database_uri);
-    ZETASQL_RETURN_IF_ERROR(test_env()->database_admin_client()->GetDatabaseDdl(
+    GOOGLESQL_RETURN_IF_ERROR(test_env()->database_admin_client()->GetDatabaseDdl(
         &context, request, response));
     return absl::OkStatus();
   }
@@ -150,17 +150,17 @@ class DatabaseApiTest : public test::ServerTest {
  private:
   absl::Status CleanupTestInstance() {
     database_api::ListDatabasesResponse response;
-    ZETASQL_RETURN_IF_ERROR(ListDatabases(test_instance_uri_, 0 /*page_size*/,
+    GOOGLESQL_RETURN_IF_ERROR(ListDatabases(test_instance_uri_, 0 /*page_size*/,
                                   "" /*page_token*/, &response));
     while (!response.databases().empty()) {
       for (const auto& database : response.databases()) {
-        ZETASQL_RETURN_IF_ERROR(DropDatabase(database.name()));
+        GOOGLESQL_RETURN_IF_ERROR(DropDatabase(database.name()));
       }
       response.clear_databases();
       if (!response.next_page_token().empty()) {
         std::string next_page_token = response.next_page_token();
         response.clear_next_page_token();
-        ZETASQL_RETURN_IF_ERROR(ListDatabases(test_instance_uri_, 0 /*page_size*/,
+        GOOGLESQL_RETURN_IF_ERROR(ListDatabases(test_instance_uri_, 0 /*page_size*/,
                                       next_page_token, &response));
       }
     }
@@ -195,7 +195,7 @@ TEST_F(DatabaseApiTest, CreateDatabaseWithInvalidDatabaseName) {
 
 TEST_F(DatabaseApiTest, LimitDatabasePerInstance) {
   for (int i = 0; i < limits::kMaxDatabasesPerInstance; ++i) {
-    ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_,
+    GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_,
                              absl::StrCat(test_database_name_, i)));
   }
   // Creating the next database fails.
@@ -208,7 +208,7 @@ TEST_F(DatabaseApiTest, OverrideMaxDatabasePerInstanceLimit) {
   absl::SetFlag(&FLAGS_override_max_databases_per_instance,
                 custom_max_dbs_per_instance);
   for (int i = 0; i < custom_max_dbs_per_instance; ++i) {
-    ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_,
+    GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_,
                              absl::StrCat(test_database_name_, i)));
   }
   // Creating the next database fails.
@@ -217,11 +217,11 @@ TEST_F(DatabaseApiTest, OverrideMaxDatabasePerInstanceLimit) {
 }
 
 TEST_F(DatabaseApiTest, CreateDatabaseEmptyInitialSchema) {
-  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_));
+  GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_));
 }
 
 TEST_F(DatabaseApiTest, CreateDatabaseWithInitialSchema) {
-  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_,
+  GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_,
                            {
                                R"(
                                  CREATE TABLE test_table (
@@ -239,7 +239,7 @@ TEST_F(DatabaseApiTest, CreateDatabaseWithInvalidInitialSchema) {
 }
 
 TEST_F(DatabaseApiTest, CreateDuplicateDatabaseReturnsAlreadyExists) {
-  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_));
+  GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_));
 
   // Request to create same database.
   EXPECT_THAT(CreateDatabase(test_instance_uri_, test_database_name_),
@@ -254,14 +254,14 @@ TEST_F(DatabaseApiTest, CreateDatabaseWithoutInstanceReturnsNotFound) {
 }
 
 TEST_F(DatabaseApiTest, CreateDatabaseWithGSQLDialect) {
-  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_,
+  GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_,
                            absl::StrCat(test_database_name_, "_gsql"),
                            /* extra_statements = */ {},
                            database_api::DatabaseDialect::GOOGLE_STANDARD_SQL));
 }
 
 TEST_F(DatabaseApiTest, CreateDatabaseWithPostgresDialectDisabledByDefault) {
-  ZETASQL_EXPECT_OK(CreateDatabase(
+  GOOGLESQL_EXPECT_OK(CreateDatabase(
       test_instance_uri_, absl::StrCat(test_database_name_, "_pg_1"),
       /* extra_statements = */ {}, database_api::DatabaseDialect::POSTGRESQL));
 }
@@ -269,11 +269,11 @@ TEST_F(DatabaseApiTest, CreateDatabaseWithPostgresDialectDisabledByDefault) {
 TEST_F(DatabaseApiTest, CreateDatabaseWithPostgresDialect) {
   test::ScopedEmulatorFeatureFlagsSetter enabled_flags(
       {.enable_postgresql_interface = true});
-  ZETASQL_EXPECT_OK(CreateDatabase(
+  GOOGLESQL_EXPECT_OK(CreateDatabase(
       test_instance_uri_, absl::StrCat(test_database_name_, "_pg_1"),
       /* extra_statements = */ {}, database_api::DatabaseDialect::POSTGRESQL));
 
-  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_,
+  GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_,
                            absl::StrCat(test_database_name_, "_pg_2"),
                            {
                                R"(
@@ -297,7 +297,7 @@ TEST_F(DatabaseApiTest, DoesNotListDatabasesForUnknownInstance) {
 
 TEST_F(DatabaseApiTest, ListsEmptyDatabasesForNewInstance) {
   database_api::ListDatabasesResponse response;
-  ZETASQL_EXPECT_OK(ListDatabases(test_instance_uri_, 0 /*page_size*/,
+  GOOGLESQL_EXPECT_OK(ListDatabases(test_instance_uri_, 0 /*page_size*/,
                           "" /*page_token*/, &response));
   EXPECT_EQ(response.databases_size(), 0);
 }
@@ -308,7 +308,7 @@ TEST_F(DatabaseApiTest, ListsCustomPageSizeDatabases) {
   int32_t page_size = 5;
   int32_t last_page_size = 3;
   for (int i = 0; i < page_size + last_page_size; i++) {
-    ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_,
+    GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_,
                              absl::StrCat(test_database_name_, i)));
   }
 
@@ -316,7 +316,7 @@ TEST_F(DatabaseApiTest, ListsCustomPageSizeDatabases) {
   // databases test-database0, test-database1,..., test-database4 should be
   // returned with next_page_token pointing to test-database5.
   database_api::ListDatabasesResponse response;
-  ZETASQL_EXPECT_OK(ListDatabases(test_instance_uri_, page_size, "" /*page_token*/,
+  GOOGLESQL_EXPECT_OK(ListDatabases(test_instance_uri_, page_size, "" /*page_token*/,
                           &response));
   EXPECT_EQ(response.databases_size(), page_size);
   for (int i = 0; i < page_size; i++) {
@@ -329,7 +329,7 @@ TEST_F(DatabaseApiTest, ListsCustomPageSizeDatabases) {
   // Using the next_page_token pointing to test-database5, list next at most 5
   // databases test-database5, test-database6 and test-database7.
   database_api::ListDatabasesResponse response2;
-  ZETASQL_EXPECT_OK(ListDatabases(test_instance_uri_, page_size,
+  GOOGLESQL_EXPECT_OK(ListDatabases(test_instance_uri_, page_size,
                           response.next_page_token(), &response2));
   EXPECT_EQ(response2.databases_size(), last_page_size);
   for (int i = 0; i < last_page_size; i++) {
@@ -343,7 +343,7 @@ TEST_F(DatabaseApiTest, ListsCustomPageSizeDatabases) {
 // Tests for UpdateDatabaseDdl.
 
 TEST_F(DatabaseApiTest, UpdateDatabaseDdlInvalidDatabaseUri) {
-  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_));
+  GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_));
 
   // Invalid project name should return an error.
   auto instance_uri =
@@ -366,8 +366,8 @@ TEST_F(DatabaseApiTest, UpdateDatabaseDdlInvalidDatabaseUri) {
 }
 
 TEST_F(DatabaseApiTest, UpdateDatabaseDdlPartialSuccess) {
-  ZETASQL_EXPECT_OK(CreateTestDatabase());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const std::string session,
+  GOOGLESQL_EXPECT_OK(CreateTestDatabase());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const std::string session,
                        CreateTestSession(/*multiplexed=*/false));
 
   spanner_api::CommitRequest commit_request = PARSE_TEXT_PROTO(R"pb(
@@ -390,7 +390,7 @@ TEST_F(DatabaseApiTest, UpdateDatabaseDdlPartialSuccess) {
   )pb");
   *commit_request.mutable_session() = session;
   spanner_api::CommitResponse commit_response;
-  ZETASQL_ASSERT_OK(Commit(commit_request, &commit_response));
+  GOOGLESQL_ASSERT_OK(Commit(commit_request, &commit_response));
 
   database_api::UpdateDatabaseDdlMetadata metadata;
   std::vector<std::string> statements = {R"(
@@ -421,32 +421,32 @@ TEST_F(DatabaseApiTest, GetDatabaseNonExistentDatabase) {
 }
 
 TEST_F(DatabaseApiTest, GetDatabase) {
-  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_));
+  GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_));
 
   database_api::Database database;
-  ZETASQL_EXPECT_OK(GetDatabase(test_database_uri_, &database));
+  GOOGLESQL_EXPECT_OK(GetDatabase(test_database_uri_, &database));
   EXPECT_EQ(database.name(), test_database_uri_);
   EXPECT_EQ(database.database_dialect(),
             database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 }
 
 TEST_F(DatabaseApiTest, GetDatabaseWithGSQLDialect) {
-  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_, {},
+  GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_, {},
                            database_api::DatabaseDialect::GOOGLE_STANDARD_SQL));
 
   database_api::Database database;
-  ZETASQL_EXPECT_OK(GetDatabase(test_database_uri_, &database));
+  GOOGLESQL_EXPECT_OK(GetDatabase(test_database_uri_, &database));
   EXPECT_EQ(database.name(), test_database_uri_);
   EXPECT_EQ(database.database_dialect(),
             database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 }
 
 TEST_F(DatabaseApiTest, GetDatabaseWithPostgresDialect) {
-  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_, {},
+  GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_, {},
                            database_api::DatabaseDialect::POSTGRESQL));
 
   database_api::Database database;
-  ZETASQL_EXPECT_OK(GetDatabase(test_database_uri_, &database));
+  GOOGLESQL_EXPECT_OK(GetDatabase(test_database_uri_, &database));
   EXPECT_EQ(database.name(), test_database_uri_);
   EXPECT_EQ(database.database_dialect(),
             database_api::DatabaseDialect::POSTGRESQL);
@@ -460,12 +460,12 @@ TEST_F(DatabaseApiTest, DropDatabaseInvalidInstance) {
 }
 
 TEST_F(DatabaseApiTest, DropDatabase) {
-  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_));
+  GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_));
 
   database_api::Database database;
-  ZETASQL_EXPECT_OK(GetDatabase(test_database_uri_, &database));
+  GOOGLESQL_EXPECT_OK(GetDatabase(test_database_uri_, &database));
 
-  ZETASQL_EXPECT_OK(DropDatabase(test_database_uri_));
+  GOOGLESQL_EXPECT_OK(DropDatabase(test_database_uri_));
 
   EXPECT_THAT(GetDatabase(test_database_uri_, &database),
               StatusIs(absl::StatusCode::kNotFound));
@@ -476,7 +476,7 @@ TEST_F(DatabaseApiTest, DropDatabaseIdempotent) {
   EXPECT_THAT(GetDatabase(test_database_uri_, &database),
               StatusIs(absl::StatusCode::kNotFound));
 
-  ZETASQL_EXPECT_OK(DropDatabase(test_database_uri_));
+  GOOGLESQL_EXPECT_OK(DropDatabase(test_database_uri_));
 }
 
 TEST_F(DatabaseApiTest, UpdateAndGetDatabaseDDL) {
@@ -519,10 +519,10 @@ TEST_F(DatabaseApiTest, UpdateAndGetDatabaseDDL) {
 
   for (int i = 0; i < test_schemas.size(); ++i) {
     auto schema = test_schemas[i];
-    ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_, schema));
+    GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_, schema));
 
     database_api::GetDatabaseDdlResponse response;
-    ZETASQL_EXPECT_OK(GetDatabaseDdl(test_database_uri_, &response));
+    GOOGLESQL_EXPECT_OK(GetDatabaseDdl(test_database_uri_, &response));
 
     for (int j = 0; j < schema.size(); ++j) {
       EXPECT_THAT(response.statements(j), schema[j]);
@@ -532,7 +532,7 @@ TEST_F(DatabaseApiTest, UpdateAndGetDatabaseDDL) {
                   ? GenerateProtoDescriptorBytesAsString()
                   : "");
 
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         DropDatabase(MakeDatabaseUri(test_instance_uri_, test_database_name_)));
   }
 }
@@ -562,34 +562,34 @@ TEST_F(DatabaseApiTest, CreateSameNameSequencesInTwoDatabases) {
   id INT64 DEFAULT (GET_NEXT_SEQUENCE_VALUE(SEQUENCE test_sequence)),
   col INT64,
 ) PRIMARY KEY(id))"};
-  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, "test_db_1", schema));
+  GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_, "test_db_1", schema));
   std::string database_uri_1 = MakeDatabaseUri(test_instance_uri_, "test_db_1");
 
   database_api::GetDatabaseDdlResponse response;
-  ZETASQL_EXPECT_OK(GetDatabaseDdl(database_uri_1, &response));
+  GOOGLESQL_EXPECT_OK(GetDatabaseDdl(database_uri_1, &response));
 
   for (int i = 0; i < schema.size(); ++i) {
     EXPECT_THAT(response.statements(i), schema[i]);
   }
 
-  ZETASQL_EXPECT_OK(CreateDatabase(test_instance_uri_, "test_db_2", schema));
+  GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_, "test_db_2", schema));
   std::string database_uri_2 = MakeDatabaseUri(test_instance_uri_, "test_db_2");
-  ZETASQL_EXPECT_OK(GetDatabaseDdl(database_uri_2, &response));
+  GOOGLESQL_EXPECT_OK(GetDatabaseDdl(database_uri_2, &response));
 
   for (int i = 0; i < schema.size(); ++i) {
     EXPECT_THAT(response.statements(i), schema[i]);
   }
 
   spanner_api::CommitResponse commit_response;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const std::string session_1,
       CreateTestSession(/*multiplexed=*/false, database_uri_1));
-  ZETASQL_ASSERT_OK(Commit(GenerateSequenceTableInsert(session_1), &commit_response));
+  GOOGLESQL_ASSERT_OK(Commit(GenerateSequenceTableInsert(session_1), &commit_response));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const std::string session_2,
       CreateTestSession(/*multiplexed=*/false, database_uri_2));
-  ZETASQL_ASSERT_OK(Commit(GenerateSequenceTableInsert(session_2), &commit_response));
+  GOOGLESQL_ASSERT_OK(Commit(GenerateSequenceTableInsert(session_2), &commit_response));
 
   {
     absl::MutexLock lock(&Sequence::SequenceMutex);

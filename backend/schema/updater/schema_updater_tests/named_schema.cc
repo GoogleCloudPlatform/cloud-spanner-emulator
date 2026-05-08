@@ -23,7 +23,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/substitute.h"
@@ -52,7 +52,7 @@ using database_api::DatabaseDialect::POSTGRESQL;
 TEST_P(SchemaUpdaterTest, CreateNamedSchema_Basic) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
            CREATE SCHEMA mynamedschema
         )"},
@@ -60,7 +60,7 @@ TEST_P(SchemaUpdaterTest, CreateNamedSchema_Basic) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
          CREATE SCHEMA mynamedschema
       )"}));
   }
@@ -92,7 +92,7 @@ TEST_P(SchemaUpdaterTest, CreateNamedSchema_ReservedSchemaNamesFailed) {
 TEST_P(SchemaUpdaterTest, DropNamedSchema_Success) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
            CREATE SCHEMA mynamedschema
         )"},
@@ -100,7 +100,7 @@ TEST_P(SchemaUpdaterTest, DropNamedSchema_Success) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/true));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
          CREATE SCHEMA mynamedschema
       )"}));
   }
@@ -110,7 +110,7 @@ TEST_P(SchemaUpdaterTest, DropNamedSchema_Success) {
   EXPECT_EQ(named_schema->Name(), "mynamedschema");
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
            DROP SCHEMA mynamedschema
         )"},
@@ -118,7 +118,7 @@ TEST_P(SchemaUpdaterTest, DropNamedSchema_Success) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/true));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
          DROP SCHEMA mynamedschema
       )"}));
   }
@@ -147,7 +147,7 @@ TEST_P(SchemaUpdaterTest, DropNamedSchema_Failed) {
 TEST_P(SchemaUpdaterTest, TableWithNamedSchema_CreateAndDropSuccess) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema(
             {R"(CREATE SCHEMA mynamedschema)",
@@ -156,7 +156,7 @@ TEST_P(SchemaUpdaterTest, TableWithNamedSchema_CreateAndDropSuccess) {
             /*dialect=*/POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema(
             {R"(CREATE SCHEMA mynamedschema)",
@@ -172,13 +172,13 @@ TEST_P(SchemaUpdaterTest, TableWithNamedSchema_CreateAndDropSuccess) {
             GetParam() == POSTGRESQL ? "mynamedschema.t" : "mynamedschema.T");
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema, UpdateSchema(schema.get(), {R"(DROP TABLE mynamedschema.T)"},
                              /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema, UpdateSchema(schema.get(), {R"(DROP TABLE mynamedschema.T)"}));
   }
 
@@ -196,7 +196,7 @@ TEST_P(SchemaUpdaterTest,
   // Synonyms not supported during table POSTGRESQL table creation
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema,
                        CreateSchema({R"(CREATE SCHEMA mynamedschema)",
                                      R"(
       CREATE TABLE mynamedschema.T (col1 INT64, SYNONYM(`mynamedschema.syn`))
@@ -211,7 +211,7 @@ TEST_P(SchemaUpdaterTest,
   ASSERT_NE(synonym_t, nullptr);
   EXPECT_EQ(synonym_t->Name(), "mynamedschema.T");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       schema, UpdateSchema(schema.get(), {R"(DROP TABLE mynamedschema.T)"}));
 
   named_schema = schema->FindNamedSchema("mynamedschema");
@@ -241,7 +241,7 @@ TEST_P(SchemaUpdaterTest, TableWithNamedSchema_AddAndDropSynonym) {
   std::string table_name =
       GetParam() == POSTGRESQL ? "mynamedschema.t" : "mynamedschema.T";
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema(
             {
@@ -252,7 +252,7 @@ TEST_P(SchemaUpdaterTest, TableWithNamedSchema_AddAndDropSynonym) {
             /*proto_descriptor_bytes=*/"", /*dialect=*/POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema({R"(CREATE SCHEMA mynamedschema)",
                       absl::Substitute(
@@ -264,7 +264,7 @@ TEST_P(SchemaUpdaterTest, TableWithNamedSchema_AddAndDropSynonym) {
   ASSERT_NE(named_schema->FindTable(table_name), nullptr);
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         UpdateSchema(
             schema.get(),
@@ -272,7 +272,7 @@ TEST_P(SchemaUpdaterTest, TableWithNamedSchema_AddAndDropSynonym) {
             /*proto_descriptor_bytes=*/"", /*dialect=*/POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema, UpdateSchema(schema.get(),
                              {absl::Substitute("ALTER TABLE $0 ADD SYNONYM syn",
                                                table_name)}));
@@ -283,7 +283,7 @@ TEST_P(SchemaUpdaterTest, TableWithNamedSchema_AddAndDropSynonym) {
   EXPECT_NE(synonym_t, nullptr);
   EXPECT_EQ(synonym_t->Name(), table_name);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       schema, UpdateSchema(schema.get(),
                            {absl::Substitute("ALTER TABLE $0 DROP SYNONYM syn",
                                              table_name)}));
@@ -296,7 +296,7 @@ TEST_P(SchemaUpdaterTest, TableWithNamedSchema_AddAndDropSynonym) {
 TEST_P(SchemaUpdaterTest, ViewWithNamedSchema_CreateAndDropSuccess) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema(
             {R"(CREATE SCHEMA mynamedschema)",
@@ -312,7 +312,7 @@ TEST_P(SchemaUpdaterTest, ViewWithNamedSchema_CreateAndDropSuccess) {
             /*dialect=*/POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE SCHEMA mynamedschema)",
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE SCHEMA mynamedschema)",
                                                R"(
       CREATE TABLE mynamedschema.T (
         col1 INT64,
@@ -334,13 +334,13 @@ TEST_P(SchemaUpdaterTest, ViewWithNamedSchema_CreateAndDropSuccess) {
             GetParam() == POSTGRESQL ? "mynamedschema.v" : "mynamedschema.V");
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema, UpdateSchema(schema.get(), {"DROP VIEW mynamedschema.V"},
                              /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema, UpdateSchema(schema.get(), {"DROP VIEW mynamedschema.V"}));
   }
 
@@ -354,7 +354,7 @@ TEST_P(SchemaUpdaterTest, ViewWithNamedSchema_CreateAndDropSuccess) {
 
 TEST_P(SchemaUpdaterTest, ViewWithNamedSchema_NoExistingSchemaFails) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema, CreateSchema({R"(
       CREATE TABLE T (
         col1 INT64,
         col2 STRING(MAX)
@@ -373,7 +373,7 @@ TEST_P(SchemaUpdaterTest, ViewWithNamedSchema_NoExistingSchemaFails) {
 TEST_P(SchemaUpdaterTest, SequenceWithNamedSchema_CreateAndDropSuccess) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema(
             {R"(CREATE SCHEMA mynamedschema)",
@@ -385,7 +385,7 @@ TEST_P(SchemaUpdaterTest, SequenceWithNamedSchema_CreateAndDropSuccess) {
             /*dialect=*/POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema, CreateSchema({R"(CREATE SCHEMA mynamedschema)",
                               R"(CREATE SEQUENCE mynamedschema.myseq OPTIONS (
                         sequence_kind = "bit_reversed_positive"
@@ -404,7 +404,7 @@ TEST_P(SchemaUpdaterTest, SequenceWithNamedSchema_CreateAndDropSuccess) {
   ASSERT_NE(sequence, nullptr);
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(),
                                       {R"(DROP TABLE mynamedschema.T)",
                                        R"(DROP SEQUENCE mynamedschema.myseq)"},
@@ -412,7 +412,7 @@ TEST_P(SchemaUpdaterTest, SequenceWithNamedSchema_CreateAndDropSuccess) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         UpdateSchema(schema.get(), {R"(DROP TABLE mynamedschema.T)",
                                     R"(DROP SEQUENCE mynamedschema.myseq)"}));
@@ -426,7 +426,7 @@ TEST_P(SchemaUpdaterTest, SequenceWithNamedSchema_CreateAndDropSuccess) {
 TEST_P(SchemaUpdaterTest, SequenceWithNamedSchema_CrossSchemaSuccess) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema(
             {R"(CREATE SCHEMA mynamedschema1)",
@@ -439,7 +439,7 @@ TEST_P(SchemaUpdaterTest, SequenceWithNamedSchema_CrossSchemaSuccess) {
             /*dialect=*/POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema, CreateSchema({R"(CREATE SCHEMA mynamedschema1)",
                               R"(CREATE SCHEMA mynamedschema2)",
                               R"(CREATE SEQUENCE mynamedschema1.myseq OPTIONS (
@@ -480,7 +480,7 @@ TEST_P(SchemaUpdaterTest, CreateSequenceWithNamedSchema_NoExistingSchemaFails) {
 TEST_P(SchemaUpdaterTest, IndexWithNamedSchema_CreateAndDropSuccess) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema(
             {R"(CREATE SCHEMA mynamedschema)",
@@ -490,7 +490,7 @@ TEST_P(SchemaUpdaterTest, IndexWithNamedSchema_CreateAndDropSuccess) {
             /*dialect=*/POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE SCHEMA mynamedschema)",
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE SCHEMA mynamedschema)",
                                                R"(
       CREATE TABLE mynamedschema.T (
         col1 INT64,
@@ -510,13 +510,13 @@ TEST_P(SchemaUpdaterTest, IndexWithNamedSchema_CreateAndDropSuccess) {
   EXPECT_EQ(index->Name(), "mynamedschema.idx1");
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema, UpdateSchema(schema.get(), {"DROP INDEX mynamedschema.idx1"},
                              /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema, UpdateSchema(schema.get(), {"DROP INDEX mynamedschema.idx1"}));
   }
 
@@ -536,7 +536,7 @@ TEST_P(SchemaUpdaterTest, IndexWithNamedSchema_CrossSchemaFails) {
             /*proto_descriptor_bytes=*/"",
             /*dialect=*/POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false),
-        ::zetasql_base::testing::StatusIs(
+        ::googlesql_base::testing::StatusIs(
             absl::StatusCode::kInvalidArgument,
             ::testing::HasSubstr("syntax error at or near \".\";")));
 
@@ -548,7 +548,7 @@ TEST_P(SchemaUpdaterTest, IndexWithNamedSchema_CrossSchemaFails) {
             /*proto_descriptor_bytes=*/"",
             /*dialect=*/POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false),
-        ::zetasql_base::testing::StatusIs(
+        ::googlesql_base::testing::StatusIs(
             absl::StatusCode::kInvalidArgument,
             ::testing::HasSubstr("syntax error at or near \".\";")));
   } else {
@@ -582,7 +582,7 @@ TEST_P(SchemaUpdaterTest, IndexWithNamedSchema_CrossSchemaFails) {
 TEST_P(SchemaUpdaterTest, IndexWithNamedSchema_NoExistingSchemaFails) {
   // POSTGRESQL creates indexes in the named schemas of their tables.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema, CreateSchema({R"(
   CREATE TABLE T (
     col1 INT64,
     col2 STRING(MAX)
@@ -596,7 +596,7 @@ TEST_P(SchemaUpdaterTest, IndexWithNamedSchema_NoExistingSchemaFails) {
 
 TEST_P(SchemaUpdaterTest, IndexWithNamedSchema_DuplicateIndexFails) {
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         std::unique_ptr<const Schema> schema,
         CreateSchema(
             {
@@ -612,7 +612,7 @@ TEST_P(SchemaUpdaterTest, IndexWithNamedSchema_DuplicateIndexFails) {
                 StatusIs(error::SchemaObjectAlreadyExists(
                     "Index", "mynamedschema.idx1")));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema,
                          CreateSchema({R"(CREATE SCHEMA mynamedschema)",
                                        R"(
       CREATE TABLE mynamedschema.T (
@@ -635,7 +635,7 @@ TEST_P(SchemaUpdaterTest, IndexWithNamedSchema_DuplicateIndexFails) {
 TEST_P(SchemaUpdaterTest, UDFWithNamedSchema_CreateAndDropSuccess) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema({
           R"(CREATE SCHEMA my_schema)",
@@ -655,7 +655,7 @@ TEST_P(SchemaUpdaterTest, UDFWithNamedSchema_CreateAndDropSuccess) {
           {R"(CREATE FUNCTION my_schema.udf1() RETURNS INT64 SQL SECURITY INVOKER AS (2))"}),
       StatusIs(error::SchemaObjectAlreadyExists("Function", "my_schema.udf1")));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       schema, UpdateSchema(schema.get(), {"DROP FUNCTION my_schema.udf1"}));
 
   named_schema = schema->FindNamedSchema("my_schema");
@@ -666,7 +666,7 @@ TEST_P(SchemaUpdaterTest, UDFWithNamedSchema_CreateAndDropSuccess) {
 TEST_P(SchemaUpdaterTest, UDFWithNamedSchema_SameNameInDifferentNamedSchemas) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema({
           R"(CREATE SCHEMA schema1)",
@@ -695,7 +695,7 @@ TEST_P(SchemaUpdaterTest, UDFWithNamedSchema_SameNameInDifferentNamedSchemas) {
 TEST_P(SchemaUpdaterTest, UDFWithNamedSchema_ReferencingUDFInNamedSchemas) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE SCHEMA schema1)", R"(CREATE SCHEMA schema2)",
@@ -737,7 +737,7 @@ TEST_P(SchemaUpdaterTest,
        UDFWithNamedSchema_ReferencingUDFWithoutSchemaQualification) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema({
           R"(CREATE SCHEMA my_schema)",
@@ -757,7 +757,7 @@ TEST_P(SchemaUpdaterTest,
           schema.get(),
           {R"(CREATE FUNCTION my_schema.udf2(x INT64) RETURNS INT64 SQL SECURITY
             INVOKER AS (udf1(x) * 2))"}),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
           testing::HasSubstr("Function not found: udf1")));
 }

@@ -63,11 +63,11 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
+        "@com_google_googlesql//googlesql/public:analyzer_options",
+        "@com_google_googlesql//googlesql/public:catalog",
+        "@com_google_googlesql//googlesql/public:language_options",
+        "@com_google_googlesql//googlesql/public:simple_catalog",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/public:analyzer_options",
-        "@com_google_zetasql//zetasql/public:catalog",
-        "@com_google_zetasql//zetasql/public:language_options",
-        "@com_google_zetasql//zetasql/public:simple_catalog",
     ],
 )
 
@@ -82,9 +82,9 @@ cc_test(
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:catalog",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public:catalog",
     ],
 )
 
@@ -96,7 +96,7 @@ cc_library(
     deps = [
         ":emulator_catalog",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_googlesql//googlesql/public:catalog",
     ],
 )
 
@@ -108,9 +108,9 @@ cc_test(
         ":emulator_catalog",
         ":spanner_test_catalog",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:catalog",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public:catalog",
     ],
 )
 
@@ -131,12 +131,12 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/base:no_destructor",
-        "@com_google_zetasql//zetasql/public:analyzer_options",
-        "@com_google_zetasql//zetasql/public:catalog",
-        "@com_google_zetasql//zetasql/public:function",
-        "@com_google_zetasql//zetasql/public:options_cc_proto",
-        "@com_google_zetasql//zetasql/public:type",
-        "@com_google_zetasql//zetasql/public:value",
+        "@com_google_googlesql//googlesql/base:no_destructor",
+        "@com_google_googlesql//googlesql/public:analyzer_options",
+        "@com_google_googlesql//googlesql/public:catalog",
+        "@com_google_googlesql//googlesql/public:function",
+        "@com_google_googlesql//googlesql/public:options_cc_proto",
+        "@com_google_googlesql//googlesql/public:type",
+        "@com_google_googlesql//googlesql/public:value",
     ],
 )

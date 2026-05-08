@@ -23,12 +23,12 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/json_value.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/json_value.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -49,7 +49,7 @@
 #include "common/errors.h"
 #include "common/limits.h"
 #include "nlohmann/json.hpp"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -70,19 +70,19 @@ absl::StatusOr<bool> TransactionReadOnlyStore::Exists(const Table* table,
 absl::StatusOr<bool> TransactionReadOnlyStore::PrefixExists(
     const Table* table, const Key& prefix_key) const {
   std::unique_ptr<StorageIterator> itr;
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       read_only_store_->Read(table, KeyRange::Point(prefix_key), {}, &itr));
   if (itr->Next() && itr->Status().ok()) {
     return true;
   }
-  ZETASQL_RETURN_IF_ERROR(itr->Status());
+  GOOGLESQL_RETURN_IF_ERROR(itr->Status());
   return false;
 }
 
 absl::StatusOr<ValueList> TransactionReadOnlyStore::ReadCommitted(
     const Table* table, const Key& key,
     std::vector<const Column*> columns) const {
-  ZETASQL_ASSIGN_OR_RETURN(ValueList values,
+  GOOGLESQL_ASSIGN_OR_RETURN(ValueList values,
                    read_only_store_->ReadCommitted(table, key, columns));
   return values;
 }
@@ -92,7 +92,7 @@ absl::StatusOr<std::unique_ptr<StorageIterator>> TransactionReadOnlyStore::Read(
     absl::Span<const Column* const> columns,
     bool allow_pending_commit_timestamps_in_read) const {
   std::unique_ptr<StorageIterator> itr;
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       read_only_store_->Read(table, key_range, columns, &itr,
                              allow_pending_commit_timestamps_in_read));
   return itr;
@@ -100,14 +100,14 @@ absl::StatusOr<std::unique_ptr<StorageIterator>> TransactionReadOnlyStore::Read(
 
 void TransactionEffectsBuffer::Insert(
     const Table* table, const Key& key, absl::Span<const Column* const> columns,
-    const std::vector<zetasql::Value>& values) {
+    const std::vector<googlesql::Value>& values) {
   ops_queue_->push(
       InsertOp{table, key, {columns.begin(), columns.end()}, values});
 }
 
 void TransactionEffectsBuffer::Update(
     const Table* table, const Key& key, absl::Span<const Column* const> columns,
-    const std::vector<zetasql::Value>& values) {
+    const std::vector<googlesql::Value>& values) {
   ops_queue_->push(
       UpdateOp{table, key, {columns.begin(), columns.end()}, values});
 }

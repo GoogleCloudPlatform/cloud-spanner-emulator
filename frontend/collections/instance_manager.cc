@@ -29,7 +29,7 @@
 #include "absl/synchronization/mutex.h"
 #include "common/errors.h"
 #include "frontend/common/labels.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -93,7 +93,7 @@ absl::StatusOr<std::shared_ptr<Instance>> InstanceManager::CreateInstance(
       {instance_uri,
        std::make_shared<Instance>(
            instance_uri, instance_proto.config(), instance_proto.display_name(),
-           processing_units, labels, zetasql_base::Clock::RealClock())});
+           processing_units, labels, googlesql_base::Clock::RealClock())});
   if (!inserted.second) {
     return error::InstanceAlreadyExists(instance_uri);
   }

@@ -23,8 +23,8 @@
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -33,14 +33,14 @@ namespace backend {
 
 absl::Status SequenceValidator::Validate(const Sequence* sequence,
                                          SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK(!sequence->name_.empty());
+  GOOGLESQL_RET_CHECK(!sequence->name_.empty());
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(sequence->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(sequence->postgresql_oid().has_value());
   } else {
-    ZETASQL_RET_CHECK(!sequence->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!sequence->postgresql_oid().has_value());
   }
   if (!sequence->is_internal_use()) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         GlobalSchemaNames::ValidateSchemaName("Sequence", sequence->name_));
   }
   return absl::OkStatus();
@@ -53,18 +53,18 @@ absl::Status SequenceValidator::ValidateUpdate(
     context->global_names()->RemoveName(sequence->Name());
     return absl::OkStatus();
   }
-  ZETASQL_RET_CHECK_EQ(sequence->Name(), old_sequence->Name());
-  ZETASQL_RET_CHECK_EQ(sequence->sequence_kind(), old_sequence->sequence_kind());
-  ZETASQL_RET_CHECK_EQ(sequence->id(), old_sequence->id());
+  GOOGLESQL_RET_CHECK_EQ(sequence->Name(), old_sequence->Name());
+  GOOGLESQL_RET_CHECK_EQ(sequence->sequence_kind(), old_sequence->sequence_kind());
+  GOOGLESQL_RET_CHECK_EQ(sequence->id(), old_sequence->id());
 
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(sequence->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(old_sequence->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK_EQ(sequence->postgresql_oid().value(),
+    GOOGLESQL_RET_CHECK(sequence->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(old_sequence->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK_EQ(sequence->postgresql_oid().value(),
                  old_sequence->postgresql_oid().value());
   } else {
-    ZETASQL_RET_CHECK(!sequence->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(!old_sequence->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!sequence->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!old_sequence->postgresql_oid().has_value());
   }
 
   return absl::OkStatus();

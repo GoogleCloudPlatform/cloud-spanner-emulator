@@ -24,8 +24,8 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/function.pb.h"
-#include "zetasql/public/function_signature.h"
+#include "googlesql/public/function.pb.h"
+#include "googlesql/public/function_signature.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
@@ -65,7 +65,7 @@ class Udf : public SchemaNode {
 
   const std::string& body() const { return body_; }
 
-  const zetasql::FunctionSignature* signature() const {
+  const googlesql::FunctionSignature* signature() const {
     return signature_.get();
   }
 
@@ -146,7 +146,7 @@ class Udf : public SchemaNode {
         body_(other.body_),
         body_origin_(other.body_origin_),
         signature_(other.signature_
-                       ? absl::make_unique<zetasql::FunctionSignature>(
+                       ? absl::make_unique<googlesql::FunctionSignature>(
                              *other.signature_)
                        : nullptr),
         determinism_level_(other.determinism_level_),
@@ -186,7 +186,7 @@ class Udf : public SchemaNode {
   std::optional<std::string> body_origin_;
 
   // The signature of the UDF.
-  std::unique_ptr<zetasql::FunctionSignature> signature_ = nullptr;
+  std::unique_ptr<googlesql::FunctionSignature> signature_ = nullptr;
 
   // The determinism level of the UDF.
   Determinism determinism_level_;

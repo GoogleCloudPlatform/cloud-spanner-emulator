@@ -31,14 +31,14 @@
 
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
 #include "google/spanner/v1/type.pb.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/types/type_factory.h"
 
 namespace postgres_translator::spangres {
 namespace datatypes {
 
-zetasql::TypeFactory* GetTypeFactory() {
-  static zetasql::TypeFactory* factory = new zetasql::TypeFactory(
-      zetasql::TypeFactoryOptions().IgnoreValueLifeCycle());
+googlesql::TypeFactory* GetTypeFactory() {
+  static googlesql::TypeFactory* factory = new googlesql::TypeFactory(
+      googlesql::TypeFactoryOptions().IgnoreValueLifeCycle());
   return factory;
 }
 

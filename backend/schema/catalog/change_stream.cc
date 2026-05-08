@@ -20,8 +20,8 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/type.pb.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.pb.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
@@ -35,7 +35,7 @@
 #include "common/errors.h"
 #include "common/limits.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -58,10 +58,10 @@ std::string ChangeStream::DebugString() const {
 
 absl::Status ChangeStream::DeepClone(SchemaGraphEditor* editor,
                                      const SchemaNode* orig) {
-  ZETASQL_ASSIGN_OR_RETURN(const auto* change_stream_data_table,
+  GOOGLESQL_ASSIGN_OR_RETURN(const auto* change_stream_data_table,
                    editor->Clone(change_stream_data_table_));
   change_stream_data_table_ = change_stream_data_table->As<const Table>();
-  ZETASQL_ASSIGN_OR_RETURN(const auto* change_stream_partition_table,
+  GOOGLESQL_ASSIGN_OR_RETURN(const auto* change_stream_partition_table,
                    editor->Clone(change_stream_partition_table_));
   change_stream_partition_table_ =
       change_stream_partition_table->As<const Table>();

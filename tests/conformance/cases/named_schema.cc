@@ -22,7 +22,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -39,7 +39,7 @@ namespace test {
 namespace {
 
 using ::absl::StatusCode;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 class NamedSchemaTest
     : public DatabaseTest,
@@ -65,9 +65,9 @@ class NamedSchemaTest
     } else {
       query = "SELECT spanner.get_internal_sequence_state('$0')";
     }
-    ZETASQL_ASSIGN_OR_RETURN(std::vector<ValueRow> query_result,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::vector<ValueRow> query_result,
                      Query(absl::Substitute(query, name)));
-    ZETASQL_RET_CHECK(query_result[0].values()[0].get<int64_t>().ok());
+    GOOGLESQL_RET_CHECK(query_result[0].values()[0].get<int64_t>().ok());
     return *(query_result[0].values()[0].get<int64_t>());
   }
 
@@ -83,34 +83,34 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 TEST_P(NamedSchemaTest, BasicUsingDml) {
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {3, 4}));
+  GOOGLESQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {3, 4}));
 
   EXPECT_THAT(Query("SELECT t.col1, t.col2 FROM mynamedschema.t"),
               IsOkAndHoldsUnorderedRows({{1, 2}, {3, 4}}));
 
   // Using DML to insert rows.
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("INSERT INTO mynamedschema.t(col1, col2) VALUES (5, 6)")}));
   EXPECT_THAT(Query("SELECT t.col1, t.col2 FROM mynamedschema.t"),
               IsOkAndHoldsUnorderedRows({{1, 2}, {3, 4}, {5, 6}}));
 
   // Using DML to update rows.
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("UPDATE mynamedschema.t SET col2 = 10 WHERE col1 = 5")}));
   EXPECT_THAT(Query("SELECT t.col1, t.col2 FROM mynamedschema.t"),
               IsOkAndHoldsUnorderedRows({{1, 2}, {3, 4}, {5, 10}}));
 
   // Using DML to delete rows.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       CommitDml({SqlStatement("DELETE FROM mynamedschema.t WHERE col1 = 1")}));
   EXPECT_THAT(Query("SELECT t.col1, t.col2 FROM mynamedschema.t"),
               IsOkAndHoldsUnorderedRows({{3, 4}, {5, 10}}));
 }
 
 TEST_P(NamedSchemaTest, Basic) {
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {3, 4}));
+  GOOGLESQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {3, 4}));
 
   // Verify that "as" statement works.
   EXPECT_THAT(Query("SELECT t.col1, t.col2 FROM mynamedschema.t as t"),
@@ -125,7 +125,7 @@ TEST_P(NamedSchemaTest, Basic) {
 }
 
 TEST_P(NamedSchemaTest, TableWithConstraint) {
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.con_t", {"col1", "col2"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("mynamedschema.con_t", {"col1", "col2"}, {1, 2}));
   EXPECT_THAT(Insert("mynamedschema.con_t", {"col1", "col2"}, {11, 2}),
               StatusIs(StatusCode::kOutOfRange));
 }
@@ -139,29 +139,29 @@ TEST_P(NamedSchemaTest, TableWithSynonym) {
     update_statement =
         R"(ALTER TABLE mynamedschema.t ADD SYNONYM "mynamedschema.syn")";
   }
-  ZETASQL_ASSERT_OK(UpdateSchema({update_statement}));
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(UpdateSchema({update_statement}));
+  GOOGLESQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {1, 2}));
   EXPECT_THAT(Query("SELECT * FROM mynamedschema.syn"),
               IsOkAndHoldsUnorderedRows({{1, 2}}));
 }
 
 TEST_P(NamedSchemaTest, TableWithGeneratedAndDefaultColumn) {
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.gen_t", {"col1", "col2"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("mynamedschema.gen_t", {"col1", "col2"}, {1, 2}));
   EXPECT_THAT(Query("SELECT * FROM mynamedschema.gen_t"),
               IsOkAndHoldsUnorderedRows({{1, 2, 3, 10}}));
 }
 
 TEST_P(NamedSchemaTest, TableWithSequence) {
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.seq_t", {"string_col"}, {"one"}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int64_t count_1,
+  GOOGLESQL_ASSERT_OK(Insert("mynamedschema.seq_t", {"string_col"}, {"one"}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int64_t count_1,
                        GetCurrentSequenceState("mynamedschema.myseq"));
 
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.seq_t", {"string_col"}, {"two"}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int64_t count_2,
+  GOOGLESQL_ASSERT_OK(Insert("mynamedschema.seq_t", {"string_col"}, {"two"}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int64_t count_2,
                        GetCurrentSequenceState("mynamedschema.myseq"));
 
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.seq_t", {"string_col"}, {"four"}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int64_t count_3,
+  GOOGLESQL_ASSERT_OK(Insert("mynamedschema.seq_t", {"string_col"}, {"four"}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int64_t count_3,
                        GetCurrentSequenceState("mynamedschema.myseq"));
 
   EXPECT_GE(count_3, count_2);
@@ -172,13 +172,13 @@ TEST_P(NamedSchemaTest, TableWithSequence) {
 }
 
 TEST_P(NamedSchemaTest, TableWithForeignKey) {
-  ZETASQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("fk_t", {"col1", "col2"}, {5, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("mynamedschema.t", {"col1", "col2"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("fk_t", {"col1", "col2"}, {5, 1}));
   EXPECT_THAT(Insert("fk_t", {"col1", "col2"}, {11, 5}),
               StatusIs(StatusCode::kFailedPrecondition));
 
   // Verify cross schema foreign keys work.
-  ZETASQL_ASSERT_OK(Insert("mynamedschema2.fk_t", {"col1", "col2"}, {5, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("mynamedschema2.fk_t", {"col1", "col2"}, {5, 1}));
   EXPECT_THAT(Insert("mynamedschema2.fk_t", {"col1", "col2"}, {11, 5}),
               StatusIs(StatusCode::kFailedPrecondition));
 }

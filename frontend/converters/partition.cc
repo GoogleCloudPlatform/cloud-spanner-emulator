@@ -23,7 +23,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 
 namespace google {
 namespace spanner {
@@ -33,7 +33,7 @@ namespace frontend {
 absl::StatusOr<std::string> PartitionTokenToString(
     const PartitionToken& partition_token) {
   std::string binary_string, token_string;
-  ZETASQL_RET_CHECK(partition_token.SerializeToString(&binary_string))
+  GOOGLESQL_RET_CHECK(partition_token.SerializeToString(&binary_string))
       << "Failed to serialize proto: " << absl::StrCat(partition_token);
   token_string = absl::WebSafeBase64Escape(binary_string);
   return token_string;
@@ -56,7 +56,7 @@ absl::StatusOr<PartitionToken> PartitionTokenFromString(
 absl::StatusOr<std::string> StreamingPartitionTokenToString(
     const StreamingPartitionToken& partition_token) {
   std::string binary_string, token_string;
-  ZETASQL_RET_CHECK(partition_token.SerializeToString(&binary_string))
+  GOOGLESQL_RET_CHECK(partition_token.SerializeToString(&binary_string))
       << "Failed to serialize proto: " << absl::StrCat(partition_token);
   token_string = absl::WebSafeBase64Escape(binary_string);
   return token_string;
@@ -79,7 +79,7 @@ absl::StatusOr<StreamingPartitionToken> StreamingPartitionTokenFromString(
 absl::StatusOr<std::string> StreamingPartitionTokenMetadataToString(
     const StreamingPartitionTokenMetadata& partition_token_metadata) {
   std::string binary_string, token_string;
-  ZETASQL_RET_CHECK(partition_token_metadata.SerializeToString(&binary_string))
+  GOOGLESQL_RET_CHECK(partition_token_metadata.SerializeToString(&binary_string))
       << "Failed to serialize proto: "
       << absl::StrCat(partition_token_metadata);
   token_string = absl::WebSafeBase64Escape(binary_string);

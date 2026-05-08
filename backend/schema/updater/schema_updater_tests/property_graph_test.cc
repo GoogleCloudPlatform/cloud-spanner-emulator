@@ -24,7 +24,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
@@ -197,7 +197,7 @@ TEST_P(SchemaUpdaterTest, CreatePropertyGraphBasic) {
   if (GetParam() == POSTGRESQL) {
     return;
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
         CREATE TABLE Account (
       AccountID INT64 NOT NULL,
@@ -231,7 +231,7 @@ TEST_P(SchemaUpdaterTest, CreatePropertyGraphMultiNodeAndEdge) {
   if (GetParam() == POSTGRESQL) {
     return;
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(CREATE TABLE Account (
         AccountID INT64 NOT NULL,
         AccountAlias STRING(1024),
@@ -349,7 +349,7 @@ TEST_P(SchemaUpdaterTest, CreatePropertyGraphDynamicNodeAndEdge) {
     return;
   }
   // Create a schema with a property graph and replace it.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
     CREATE TABLE GraphNode (
       id INT64 NOT NULL,
@@ -408,7 +408,7 @@ TEST_P(SchemaUpdaterTest, CreatePropertyGraphDynamicNodeOnly) {
     return;
   }
   // Create a schema with a property graph and replace it.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
     CREATE TABLE GraphNode (
       id INT64 NOT NULL,
@@ -486,7 +486,7 @@ TEST_P(SchemaUpdaterTest, CreateMultipleDynamicLabelNodeTablesFails) {
   )",
   });
   EXPECT_THAT(schema_error,
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr(
                       "Only one node table can be assigned a dynamic label")));
@@ -517,7 +517,7 @@ TEST_P(SchemaUpdaterTest,
   )",
   });
   EXPECT_THAT(schema_error,
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr(
                       "more than one node table when using dynamic labels")));
@@ -545,7 +545,7 @@ TEST_P(SchemaUpdaterTest, DynamicLabelWrongDataTypeFails) {
   )",
   });
   EXPECT_THAT(schema_error,
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("must hold expression of type STRING")));
 }
@@ -572,7 +572,7 @@ TEST_P(SchemaUpdaterTest, DynamicPropertiesWrongDataTypeFails) {
   )",
   });
   EXPECT_THAT(schema_error,
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("must hold expression of type JSON")));
 }
@@ -581,7 +581,7 @@ TEST_P(SchemaUpdaterTest, CreatePropertyGraphMultiLabels) {
   if (GetParam() == POSTGRESQL) {
     return;
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
         CREATE TABLE Account (
           id               INT64 NOT NULL,
@@ -727,7 +727,7 @@ TEST_P(SchemaUpdaterTest, CreatePropertyGraphWithIndex) {
     return;
   }
   // Element key uniqueness constraint can be satisfied by unique index.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
         CREATE TABLE Person (
           PersonID INT64 NOT NULL,
@@ -778,7 +778,7 @@ TEST_P(SchemaUpdaterTest, ReplacePropertyGraph) {
     return;
   }
   // Create a schema with a property graph and replace it.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
         CREATE TABLE Account (
       AccountID INT64 NOT NULL,
@@ -838,7 +838,7 @@ TEST_P(SchemaUpdaterTest, DropPropertyGraph) {
   if (GetParam() == POSTGRESQL) {
     return;
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
         CREATE TABLE Account (
       AccountID INT64 NOT NULL,

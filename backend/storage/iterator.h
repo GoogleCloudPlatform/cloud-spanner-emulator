@@ -17,7 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_STORAGE_ITERATOR_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_STORAGE_ITERATOR_H_
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "backend/datamodel/key.h"
 #include "absl/status/status.h"
@@ -42,14 +42,14 @@ namespace backend {
 //
 // Usage:
 //    std::unique_ptr<StorageIterator> itr;
-//    ZETASQL_RETURN_IF_ERROR(storage.Read(..., &itr)) << "Failed to read from storage."
+//    GOOGLESQL_RETURN_IF_ERROR(storage.Read(..., &itr)) << "Failed to read from storage."
 //    while (itr->Next()) {
 //      const Key& key = itr->Key();
 //      for (int i = 0; i < itr->NumColumns(); i++) {
-//        const zetasql::Value& value = itr->Value(i);
+//        const googlesql::Value& value = itr->Value(i);
 //      }
 //    }
-//    ZETASQL_RETURN_IF_ERROR(itr->Status()) << "Failed to read rows."
+//    GOOGLESQL_RETURN_IF_ERROR(itr->Status()) << "Failed to read rows."
 class StorageIterator {
  public:
   virtual ~StorageIterator() {}
@@ -74,7 +74,7 @@ class StorageIterator {
   // returned true.
   //
   // REQUIRES: 0 <= i < NumColumns()
-  virtual const zetasql::Value& ColumnValue(int i) const = 0;
+  virtual const googlesql::Value& ColumnValue(int i) const = 0;
 };
 
 }  // namespace backend

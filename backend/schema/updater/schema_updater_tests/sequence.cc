@@ -23,7 +23,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "backend/schema/catalog/column.h"
@@ -96,7 +96,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceNotSupportedWhenFlagIsOff) {
 TEST_P(SequenceSchemaUpdaterTest, CreateSequence_Basic) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
@@ -104,7 +104,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_Basic) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -130,7 +130,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_Basic) {
 TEST_P(SequenceSchemaUpdaterTest, CreateSequence_BasicWithDefaultValue) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )",
@@ -144,7 +144,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_BasicWithDefaultValue) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -172,7 +172,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_BasicWithDefaultValue) {
 TEST_P(SequenceSchemaUpdaterTest, CreateSequence_AllOptions) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
             SKIP RANGE 1 1000 START COUNTER 5000;
@@ -181,7 +181,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_AllOptions) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive",
           start_with_counter = 5000,
@@ -206,7 +206,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_NullOptions) {
   // PostgreSQL doesn't accept NULL in sequence SQL clause.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema, CreateSchema({R"(
       CREATE SEQUENCE myseq OPTIONS (
         sequence_kind = "bit_reversed_positive",
         skip_range_min = NULL,
@@ -327,7 +327,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_InvaliSkippedRange) {
 TEST_P(SequenceSchemaUpdaterTest, CreateSequence_DuplicateSequenceGivesError) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         )"},
@@ -335,7 +335,7 @@ TEST_P(SequenceSchemaUpdaterTest, CreateSequence_DuplicateSequenceGivesError) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -380,7 +380,7 @@ TEST_P(SequenceSchemaUpdaterTest,
        CreateSequence_DuplicateSequenceWithIfNotExists) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         )"},
@@ -388,7 +388,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -401,7 +401,7 @@ TEST_P(SequenceSchemaUpdaterTest,
   // here, so the statement succeeds. But the new sequence should not overwrite
   // the existing one.
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
         CREATE SEQUENCE IF NOT EXISTS myseq BIT_REVERSED_POSITIVE
           SKIP RANGE 1 1000 START COUNTER 500
@@ -410,7 +410,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         CREATE SEQUENCE IF NOT EXISTS myseq OPTIONS (
           sequence_kind = "bit_reversed_positive",
           start_with_counter = 500,
@@ -426,7 +426,7 @@ TEST_P(SequenceSchemaUpdaterTest,
 TEST_P(SequenceSchemaUpdaterTest, AlterSequence_AlterNonExistsSequence) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         )"},
@@ -434,7 +434,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_AlterNonExistsSequence) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -463,7 +463,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_AlterNonExistsSequence) {
 TEST_P(SequenceSchemaUpdaterTest, AlterSequence_WithIfExists) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         )"},
@@ -471,7 +471,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_WithIfExists) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -479,7 +479,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_WithIfExists) {
   }
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE IF EXISTS nonexist SKIP RANGE 1 1000
         )"},
@@ -487,7 +487,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_WithIfExists) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE IF EXISTS nonexist SET OPTIONS (
           skip_range_min = 1,
           skip_range_max = 1000
@@ -499,7 +499,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_WithIfExists) {
 TEST_P(SequenceSchemaUpdaterTest, AlterSequence_SetAllOptions) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
@@ -507,7 +507,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_SetAllOptions) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -515,7 +515,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_SetAllOptions) {
   }
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
           ALTER SEQUENCE myseq SKIP RANGE 1 1000 RESTART COUNTER 5000;
         )"},
@@ -523,7 +523,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_SetAllOptions) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE myseq SET OPTIONS (
           sequence_kind = "bit_reversed_positive",
           start_with_counter = 5000,
@@ -546,7 +546,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_SetAllOptions) {
 TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeStartWithCounter) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
@@ -554,7 +554,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeStartWithCounter) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -571,7 +571,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeStartWithCounter) {
   EXPECT_FALSE(sequence->skip_range_max().has_value());
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
           ALTER SEQUENCE myseq RESTART COUNTER 5000;
         )"},
@@ -579,7 +579,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeStartWithCounter) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE myseq SET OPTIONS (
           start_with_counter = 5000
         )
@@ -596,7 +596,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeStartWithCounter) {
 TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeAllOptions) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
             SKIP RANGE 1 1000 START COUNTER 2000 ;
@@ -605,7 +605,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeAllOptions) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive",
           start_with_counter = 2000,
@@ -622,7 +622,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeAllOptions) {
   EXPECT_EQ(sequence->skip_range_max().value(), 1000);
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
           ALTER SEQUENCE myseq SKIP RANGE 1000 10000 RESTART COUNTER 5000;
         )"},
@@ -630,7 +630,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeAllOptions) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE myseq SET OPTIONS (
           start_with_counter = 5000,
           skip_range_min = 1000,
@@ -650,7 +650,7 @@ TEST_P(SequenceSchemaUpdaterTest,
        AlterSequence_SetAllOptionsChangeStartWithCounter) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
             SKIP RANGE 1 1000 START COUNTER 2000 ;
@@ -659,7 +659,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive",
           start_with_counter = 2000,
@@ -676,7 +676,7 @@ TEST_P(SequenceSchemaUpdaterTest,
   EXPECT_EQ(sequence->skip_range_max().value(), 1000);
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
           ALTER SEQUENCE myseq RESTART COUNTER 3456;
         )"},
@@ -684,7 +684,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE myseq SET OPTIONS (
           start_with_counter = 3456
         )
@@ -704,7 +704,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ClearAllOptions) {
 
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
             SKIP RANGE 1 1000 START COUNTER 2000 ;
@@ -713,7 +713,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ClearAllOptions) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive",
           start_with_counter = 2000,
@@ -729,7 +729,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ClearAllOptions) {
   EXPECT_EQ(sequence->skip_range_min().value(), 1);
   EXPECT_EQ(sequence->skip_range_max().value(), 1000);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
       ALTER SEQUENCE myseq SET OPTIONS (
         skip_range_min = NULL,
         skip_range_max = NULL,
@@ -746,7 +746,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ClearAllOptions) {
 TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeOneSkipRangeValue) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
             SKIP RANGE 1 1000 START COUNTER 2000 ;
@@ -755,7 +755,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeOneSkipRangeValue) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive",
           start_with_counter = 2000,
@@ -772,7 +772,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeOneSkipRangeValue) {
   EXPECT_EQ(sequence->skip_range_max().value(), 1000);
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
           ALTER SEQUENCE myseq SKIP RANGE 1 10000;
         )"},
@@ -780,7 +780,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_ChangeOneSkipRangeValue) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE myseq SET OPTIONS (
           skip_range_max = 10000
         )
@@ -798,7 +798,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_OneSkipRangeValueSetToNull) {
   // PostgreSQL doesn't accept NULL or only 1 value in the `SKIP RANGE` clause.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema, CreateSchema({R"(
           CREATE SEQUENCE myseq OPTIONS (
             sequence_kind = "bit_reversed_positive",
             skip_range_min = 1,
@@ -828,7 +828,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_OneSkipRangeValueSetToNull) {
 TEST_P(SequenceSchemaUpdaterTest, AlterSequence_NegativeStartWithCounter) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
@@ -836,7 +836,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_NegativeStartWithCounter) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -864,7 +864,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_NegativeStartWithCounter) {
 TEST_P(SequenceSchemaUpdaterTest, AlterSequence_NegativeSkippedRange) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
@@ -872,7 +872,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_NegativeSkippedRange) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -903,7 +903,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_NegativeSkippedRange) {
 TEST_P(SequenceSchemaUpdaterTest, AlterSequence_InvaliSkippedRange) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
@@ -911,7 +911,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_InvaliSkippedRange) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -940,7 +940,7 @@ TEST_P(SequenceSchemaUpdaterTest, AlterSequence_InvaliSkippedRange) {
 TEST_P(SequenceSchemaUpdaterTest, DropSequence_Basic) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
@@ -948,7 +948,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_Basic) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -956,7 +956,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_Basic) {
   }
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq
         )"},
@@ -964,7 +964,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_Basic) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq
       )"}));
   }
@@ -975,7 +975,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_Basic) {
 TEST_P(SequenceSchemaUpdaterTest, DropSequence_DropAndCreateAgain) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
@@ -983,7 +983,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_DropAndCreateAgain) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -991,7 +991,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_DropAndCreateAgain) {
   }
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq
         )"},
@@ -999,7 +999,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_DropAndCreateAgain) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq
       )"}));
   }
@@ -1007,7 +1007,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_DropAndCreateAgain) {
   EXPECT_EQ(schema->FindSequence("myseq"), nullptr);
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
@@ -1015,7 +1015,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_DropAndCreateAgain) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -1028,7 +1028,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_DropAndCreateAgain) {
 TEST_P(SequenceSchemaUpdaterTest, DropSequence_DropNonExistSequence) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )"},
@@ -1036,7 +1036,7 @@ TEST_P(SequenceSchemaUpdaterTest, DropSequence_DropNonExistSequence) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -1065,7 +1065,7 @@ TEST_P(SequenceSchemaUpdaterTest,
        DropSequence_DropNonExistSequenceWithIfExists) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE IF NOT EXISTS myseq BIT_REVERSED_POSITIVE;
         )"},
@@ -1073,7 +1073,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -1081,7 +1081,7 @@ TEST_P(SequenceSchemaUpdaterTest,
   }
 
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE IF EXISTS notmyseq
         )"},
@@ -1089,7 +1089,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE IF EXISTS notmyseq
       )"}));
   }
@@ -1100,7 +1100,7 @@ TEST_P(SequenceSchemaUpdaterTest,
 TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndDropColumn) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )",
@@ -1115,7 +1115,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndDropColumn) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -1146,7 +1146,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndDropColumn) {
                   "SEQUENCE", "myseq", "test_table.int64_col")));
 
   // Drop the column, dependencies are dropped accordingly.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER TABLE test_table DROP COLUMN int64_col
       )"}));
 
@@ -1154,7 +1154,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndDropColumn) {
   EXPECT_EQ(int64_col, nullptr);
 
   // Now we can drop the sequence.
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq)"}));
 }
 
@@ -1162,7 +1162,7 @@ TEST_P(SequenceSchemaUpdaterTest,
        SequenceDependency_AlterSequenceDoesNotAffectColumnDependency) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )",
@@ -1177,7 +1177,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -1202,7 +1202,7 @@ TEST_P(SequenceSchemaUpdaterTest,
 
   // Alter the sequence
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE myseq RESTART COUNTER 100
       )"},
@@ -1210,7 +1210,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE myseq SET OPTIONS (
           start_with_counter = 100
         )
@@ -1226,7 +1226,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                   "SEQUENCE", "myseq", "test_table.int64_col")));
 
   // Drop the column default value, dependencies are dropped accordingly.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER TABLE test_table ALTER COLUMN int64_col DROP DEFAULT
       )"}));
 
@@ -1235,7 +1235,7 @@ TEST_P(SequenceSchemaUpdaterTest,
   EXPECT_TRUE(int64_col->sequences_used().empty());
 
   // Now we can drop the sequence.
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq)"}));
 }
 
@@ -1243,7 +1243,7 @@ TEST_P(SequenceSchemaUpdaterTest,
        SequenceDependency_CreateAndDropColumnDefaultValue) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )",
@@ -1257,7 +1257,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -1288,7 +1288,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                   "SEQUENCE", "myseq", "test_table.int64_col")));
 
   // Drop the column default value, dependencies are dropped accordingly.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER TABLE test_table ALTER COLUMN int64_col DROP DEFAULT
       )"}));
 
@@ -1297,14 +1297,14 @@ TEST_P(SequenceSchemaUpdaterTest,
   EXPECT_TRUE(int64_col->sequences_used().empty());
 
   // Now we can drop the sequence.
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq)"}));
 }
 
 TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoColumnDefaultValues) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )",
@@ -1319,7 +1319,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoColumnDefaultValues) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -1357,7 +1357,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoColumnDefaultValues) {
                   "SEQUENCE", "myseq", "test_table.int64_col")));
 
   // Drop one column default value, only one dependency is dropped.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER TABLE test_table ALTER COLUMN int64_col DROP DEFAULT
       )"}));
 
@@ -1372,7 +1372,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoColumnDefaultValues) {
                   schema->FindSequence("myseq")}));
 
   // Drop the other column default value, now there is no dependency left.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER TABLE test_table ALTER COLUMN second_col DROP DEFAULT
       )"}));
 
@@ -1385,7 +1385,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoColumnDefaultValues) {
   EXPECT_TRUE(second_col->sequences_used().empty());
 
   // Now we can drop the sequence.
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq)"}));
 }
 
@@ -1393,7 +1393,7 @@ TEST_P(SequenceSchemaUpdaterTest,
        SequenceDependency_TwoSequencesInOneColumnDefaultValue) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )",
@@ -1411,7 +1411,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -1455,7 +1455,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                   "SEQUENCE", "myseq2", "test_table.int64_col")));
 
   // Drop the column default value, corresponding dependencies are now dropped.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER TABLE test_table ALTER COLUMN int64_col DROP DEFAULT
       )"}));
 
@@ -1464,16 +1464,16 @@ TEST_P(SequenceSchemaUpdaterTest,
   EXPECT_TRUE(int64_col->sequences_used().empty());
 
   // Now we can drop the sequences.
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq)"}));
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq2)"}));
 }
 
 TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_AlterColumnToUseSequence) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )",
@@ -1487,7 +1487,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_AlterColumnToUseSequence) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -1510,7 +1510,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_AlterColumnToUseSequence) {
 
   // Alter column to set default value that uses the sequence
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
         ALTER TABLE test_table ALTER COLUMN int64_col SET DEFAULT
           nextval('myseq')
@@ -1519,7 +1519,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_AlterColumnToUseSequence) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER TABLE test_table ALTER COLUMN int64_col SET DEFAULT
             (GET_NEXT_SEQUENCE_VALUE(SEQUENCE myseq))
     )"}));
@@ -1537,7 +1537,7 @@ TEST_P(SequenceSchemaUpdaterTest,
        SequenceDependency_AlterColumnToAddMoreSequence) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )",
@@ -1554,7 +1554,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -1585,7 +1585,7 @@ TEST_P(SequenceSchemaUpdaterTest,
 
   // Alter column to add one more dependency on myseq2.
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
         ALTER TABLE test_table ALTER COLUMN int64_col SET DEFAULT
           nextval('myseq') + nextval('myseq2')
@@ -1594,7 +1594,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER TABLE test_table ALTER COLUMN int64_col SET DEFAULT
             (GET_NEXT_SEQUENCE_VALUE(SEQUENCE myseq) +
              GET_NEXT_SEQUENCE_VALUE(SEQUENCE myseq2))
@@ -1614,7 +1614,7 @@ TEST_P(SequenceSchemaUpdaterTest,
        SequenceDependency_NewColumnUsesNonExistSequence) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         )"},
@@ -1622,7 +1622,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -1639,7 +1639,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                              /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kInvalidArgument,
                     testing::HasSubstr("Sequence not found: nonexist")));
   } else {
@@ -1650,7 +1650,7 @@ TEST_P(SequenceSchemaUpdaterTest,
             value INT64
           ) PRIMARY KEY (int64_col)
       )"}),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kInvalidArgument,
                     testing::HasSubstr("Sequence not found: nonexist")));
   }
@@ -1660,7 +1660,7 @@ TEST_P(SequenceSchemaUpdaterTest,
        SequenceDependency_AlterColumnUsesNonExistSequence) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )",
@@ -1675,7 +1675,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -1700,7 +1700,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                              /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kInvalidArgument,
                     testing::HasSubstr("Sequence not found: nonexist")));
   } else {
@@ -1708,19 +1708,19 @@ TEST_P(SequenceSchemaUpdaterTest,
           ALTER TABLE test_table ALTER COLUMN second_col SET DEFAULT
               (GET_NEXT_SEQUENCE_VALUE(SEQUENCE nonexist))
       )"}),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kInvalidArgument,
                     testing::HasSubstr("Sequence not found: nonexist")));
   }
 
   // Alter column set the whole column definition should fail. This syntax is
-  // only in ZetaSQL.
+  // only in GoogleSQL.
   if (GetParam() == GOOGLE_STANDARD_SQL) {
     EXPECT_THAT(UpdateSchema(schema.get(), {R"(
           ALTER TABLE test_table ALTER COLUMN second_col INT64 DEFAULT
               (GET_NEXT_SEQUENCE_VALUE(SEQUENCE nonexist))
       )"}),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kInvalidArgument,
                     testing::HasSubstr("Sequence not found: nonexist")));
   }
@@ -1729,7 +1729,7 @@ TEST_P(SequenceSchemaUpdaterTest,
 TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndDropView) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )",
@@ -1741,7 +1741,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndDropView) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -1765,27 +1765,27 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndDropView) {
       UpdateSchema(schema.get(), {R"(
       DROP SEQUENCE myseq
     )"}),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
           testing::HasSubstr("Cannot drop SEQUENCE `myseq` on which there "
                              "are dependent views")));
 
   // Drop the view, dependencies are dropped accordingly.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         DROP VIEW myview
       )"}));
 
   EXPECT_EQ(schema->FindView("myview"), nullptr);
 
   // Now we can drop the sequence.
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq)"}));
 }
 
 TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateViewQueryTable) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )",
@@ -1804,7 +1804,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateViewQueryTable) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -1837,27 +1837,27 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateViewQueryTable) {
       UpdateSchema(schema.get(), {R"(
       DROP SEQUENCE myseq
     )"}),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
           testing::HasSubstr("Cannot drop SEQUENCE `myseq` on which there "
                              "are dependent views")));
 
   // Drop the view, dependencies are dropped accordingly.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         DROP VIEW myview
       )"}));
 
   EXPECT_EQ(schema->FindView("myview"), nullptr);
 
   // Now we can drop the sequence.
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq)"}));
 }
 
 TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndReplaceView) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         )",
@@ -1869,7 +1869,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndReplaceView) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -1896,14 +1896,14 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndReplaceView) {
       UpdateSchema(schema.get(), {R"(
       DROP SEQUENCE myseq
     )"}),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
           testing::HasSubstr("Cannot drop SEQUENCE `myseq` on which there "
                              "are dependent views")));
 
   // Replace the view to not use sequence, dependencies are dropped accordingly.
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS SELECT 1 AS one
       )"},
@@ -1911,7 +1911,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndReplaceView) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS SELECT 1 AS one
     )"}));
   }
@@ -1924,7 +1924,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_CreateAndReplaceView) {
   EXPECT_TRUE(myview->dependencies().empty());
 
   // Now we can drop the sequence.
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq)"}));
 }
 
@@ -1932,7 +1932,7 @@ TEST_P(SequenceSchemaUpdaterTest,
        SequenceDependency_AlterSequenceDoesNotAffectViewDependency) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         )",
@@ -1944,7 +1944,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -1966,7 +1966,7 @@ TEST_P(SequenceSchemaUpdaterTest,
 
   // Alter the sequence
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE myseq RESTART COUNTER 100
       )"},
@@ -1974,7 +1974,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         ALTER SEQUENCE myseq SET OPTIONS (
           start_with_counter = 100
           )
@@ -1986,14 +1986,14 @@ TEST_P(SequenceSchemaUpdaterTest,
       UpdateSchema(schema.get(), {R"(
       DROP SEQUENCE myseq
     )"}),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
           testing::HasSubstr("Cannot drop SEQUENCE `myseq` on which there "
                              "are dependent views")));
 
   // Replace the view to not use sequence, dependencies are dropped accordingly.
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS SELECT 1 AS one
       )"},
@@ -2001,7 +2001,7 @@ TEST_P(SequenceSchemaUpdaterTest,
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS SELECT 1 AS one
     )"}));
   }
@@ -2011,14 +2011,14 @@ TEST_P(SequenceSchemaUpdaterTest,
   EXPECT_TRUE(myview->dependencies().empty());
 
   // Now we can drop the sequence.
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq)"}));
 }
 
 TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoViewsUseOneSequence) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )",
@@ -2034,7 +2034,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoViewsUseOneSequence) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -2069,14 +2069,14 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoViewsUseOneSequence) {
       UpdateSchema(schema.get(), {R"(
       DROP SEQUENCE myseq
     )"}),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
           testing::HasSubstr("Cannot drop SEQUENCE `myseq` on which there "
                              "are dependent views")));
 
   // Replace one view to not use sequence, one dependency is dropped.
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS SELECT 1 AS one
       )"},
@@ -2084,7 +2084,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoViewsUseOneSequence) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS SELECT 1 AS one
     )"}));
   }
@@ -2101,21 +2101,21 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoViewsUseOneSequence) {
           (std::vector<const SchemaNode*>{schema->FindSequence("myseq")})));
 
   // Drop the other view, dependencies are dropped accordingly.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         DROP VIEW myview2
       )"}));
 
   EXPECT_EQ(schema->FindView("myview2"), nullptr);
 
   // Now we can drop the sequence.
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq)"}));
 }
 
 TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoSequencesInOneView) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )",
@@ -2131,7 +2131,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoSequencesInOneView) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -2162,7 +2162,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoSequencesInOneView) {
       UpdateSchema(schema.get(), {R"(
       DROP SEQUENCE myseq
     )"}),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
           testing::HasSubstr("Cannot drop SEQUENCE `myseq` on which there "
                              "are dependent views")));
@@ -2171,7 +2171,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoSequencesInOneView) {
       UpdateSchema(schema.get(), {R"(
       DROP SEQUENCE myseq2
     )"}),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
           testing::HasSubstr("Cannot drop SEQUENCE `myseq2` on which there "
                              "are dependent views")));
@@ -2179,7 +2179,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoSequencesInOneView) {
   // Replace the view to not use sequences, corresponding dependencies are now
   // dropped.
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS SELECT 1 AS one
       )"},
@@ -2187,7 +2187,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoSequencesInOneView) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS SELECT 1 AS one
     )"}));
   }
@@ -2197,16 +2197,16 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_TwoSequencesInOneView) {
   EXPECT_TRUE(myview->dependencies().empty());
 
   // Now we can drop the sequences.
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq)"}));
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         DROP SEQUENCE myseq2)"}));
 }
 
 TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ReplaceViewToUseSequence) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
         )",
@@ -2217,7 +2217,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ReplaceViewToUseSequence) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
@@ -2236,7 +2236,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ReplaceViewToUseSequence) {
 
   // Replace view to use the sequence
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          UpdateSchema(schema.get(), {R"(
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS
           SELECT spanner.get_internal_sequence_state('myseq') AS myseq_state
@@ -2245,7 +2245,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ReplaceViewToUseSequence) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS
           SELECT get_internal_sequence_state(SEQUENCE myseq) AS myseq_state,
     )"}));
@@ -2262,7 +2262,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ReplaceViewToUseSequence) {
 TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ViewUsesNonExistSequence) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
           CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         )"},
@@ -2270,7 +2270,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ViewUsesNonExistSequence) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE SEQUENCE myseq OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -2285,7 +2285,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ViewUsesNonExistSequence) {
                              /*proto_descriptor_bytes=*/"",
                              /*dialect=*/POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kInvalidArgument,
                     testing::HasSubstr("Sequence not found: nonexist")));
   } else {
@@ -2293,7 +2293,7 @@ TEST_P(SequenceSchemaUpdaterTest, SequenceDependency_ViewUsesNonExistSequence) {
         CREATE OR REPLACE VIEW myview SQL SECURITY INVOKER AS
           SELECT get_internal_sequence_state(SEQUENCE nonexist) AS myseq_state
       )"}),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kInvalidArgument,
                     testing::HasSubstr("Sequence not found: nonexist")));
   }
@@ -2309,7 +2309,7 @@ TEST_P(SequenceSchemaUpdaterTest, GSQLSequenceClauseNotSupportedWhenFlagIsOff) {
   EXPECT_THAT(CreateSchema({R"(
       CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
       )"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr(
                       "Using SQL clauses to configure sequence options is not "
@@ -2318,7 +2318,7 @@ TEST_P(SequenceSchemaUpdaterTest, GSQLSequenceClauseNotSupportedWhenFlagIsOff) {
   EXPECT_THAT(CreateSchema({R"(
       ALTER SEQUENCE myseq RESTART COUNTER WITH 1
       )"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("RESTART COUNTER WITH is not supported in "
                                      "ALTER SEQUENCE statements")));
@@ -2329,7 +2329,7 @@ TEST_P(SequenceSchemaUpdaterTest, GSQLSequenceClause_CreateSequence) {
   if (GetParam() == POSTGRESQL) {
     GTEST_SKIP();
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         SKIP RANGE 1000, 2000 START COUNTER WITH 100
     )"}));
@@ -2352,7 +2352,7 @@ TEST_P(SequenceSchemaUpdaterTest,
     GTEST_SKIP();
   }
   EXPECT_THAT(CreateSchema({"CREATE SEQUENCE myseq"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr(
                       "The sequence does not have a valid sequence kind. "
@@ -2366,7 +2366,7 @@ TEST_P(SequenceSchemaUpdaterTest,
   if (GetParam() == POSTGRESQL) {
     GTEST_SKIP();
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                    R"(ALTER DATABASE db SET OPTIONS (
         default_sequence_kind = 'bit_reversed_positive'))",
                                    R"(
@@ -2443,7 +2443,7 @@ TEST_P(SequenceSchemaUpdaterTest,
     GTEST_SKIP();
   }
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
             CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
           )",
                                              R"(
@@ -2469,7 +2469,7 @@ TEST_P(SequenceSchemaUpdaterTest, GSQLSequenceClause_AlterSequence) {
   if (GetParam() == POSTGRESQL) {
     GTEST_SKIP();
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE
         SKIP RANGE 1000, 2000 START COUNTER WITH 100
     )"}));
@@ -2479,7 +2479,7 @@ TEST_P(SequenceSchemaUpdaterTest, GSQLSequenceClause_AlterSequence) {
             "Sequence myseq. Sequence kind: BIT_REVERSED_POSITIVE\n  "
             "start_with_counter: 100\n  skipped range: [1000, 2000]");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
       ALTER SEQUENCE myseq SKIP RANGE 3000, 4000
     )"}));
   sequence = schema->FindSequence("myseq");
@@ -2487,7 +2487,7 @@ TEST_P(SequenceSchemaUpdaterTest, GSQLSequenceClause_AlterSequence) {
             "Sequence myseq. Sequence kind: BIT_REVERSED_POSITIVE\n  "
             "start_with_counter: 100\n  skipped range: [3000, 4000]");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
       ALTER SEQUENCE myseq RESTART COUNTER WITH 200
     )"}));
   sequence = schema->FindSequence("myseq");
@@ -2495,7 +2495,7 @@ TEST_P(SequenceSchemaUpdaterTest, GSQLSequenceClause_AlterSequence) {
             "Sequence myseq. Sequence kind: BIT_REVERSED_POSITIVE\n  "
             "start_with_counter: 200\n  skipped range: [3000, 4000]");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(), {R"(
       ALTER SEQUENCE myseq NO SKIP RANGE
     )"}));
   sequence = schema->FindSequence("myseq");

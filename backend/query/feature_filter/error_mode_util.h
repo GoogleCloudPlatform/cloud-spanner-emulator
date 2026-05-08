@@ -17,10 +17,10 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_FEATURE_FILTER_ERROR_MODE_UTIL_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_FEATURE_FILTER_ERROR_MODE_UTIL_H_
 
-#include "zetasql/public/function.h"
+#include "googlesql/public/function.h"
 
 namespace google::spanner::emulator::backend {
-bool SupportsSafeErrorMode(const zetasql::Function* function);
+bool SupportsSafeErrorMode(const googlesql::Function* function);
 
 }  // namespace google::spanner::emulator::backend
 

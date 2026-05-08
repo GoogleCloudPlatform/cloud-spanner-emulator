@@ -38,12 +38,12 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/parse_location.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/parse_location.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
@@ -57,7 +57,7 @@
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/transformer/transformer_helper.h"
 #include "third_party/spanner_pg/util/postgres.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 
@@ -73,7 +73,7 @@ static bool IsLowerCaseReference(const TableName& qualified_table_name) {
       });
 }
 
-// Build eref from alias, falling back to column names from the ZetaSQL
+// Build eref from alias, falling back to column names from the GoogleSQL
 //  Table object where aliases are not available.
 //
 // NB: Alias' column list (if supplied) is rebuilt by this process to handle
@@ -84,14 +84,14 @@ static bool IsLowerCaseReference(const TableName& qualified_table_name) {
 // Argument `lower_gsql_name` specifies that all upper-case name references from
 // `gsql_table` need to be converted to lower-case.
 static absl::StatusOr<Alias*> BuildRelationEref(
-    const zetasql::Table& gsql_table, const Alias* alias,
+    const googlesql::Table& gsql_table, const Alias* alias,
     bool lower_gsql_name) {
   const int num_columns = gsql_table.NumColumns();
   const ListCell* alias_list_cell = nullptr;
   int num_aliases = 0;
 
   Alias* eref;
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       eref,
       CheckedPgMakeAlias(alias != nullptr ? alias->aliasname
                          : lower_gsql_name
@@ -109,22 +109,22 @@ static absl::StatusOr<Alias*> BuildRelationEref(
   // check below for the invalid case of more user-supplied names than actual
   // columns.
   for (int colnum = 0; colnum < num_columns; ++colnum) {
-    const zetasql::Column* column = gsql_table.GetColumn(colnum);
+    const googlesql::Column* column = gsql_table.GetColumn(colnum);
     String* attribute_name;
 
     if (alias_list_cell != nullptr) {
       attribute_name = PostgresCastToString(lfirst(alias_list_cell));
       alias_list_cell = lnext(alias->colnames, alias_list_cell);
     } else {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           char* allocated_name,
           CheckedPgPstrdup(lower_gsql_name
                                ? absl::AsciiStrToLower(column->Name()).c_str()
                                : column->Name().c_str()));
-      ZETASQL_ASSIGN_OR_RETURN(attribute_name, CheckedPgMakeString(allocated_name));
+      GOOGLESQL_ASSIGN_OR_RETURN(attribute_name, CheckedPgMakeString(allocated_name));
     }
 
-    ZETASQL_ASSIGN_OR_RETURN(eref->colnames,
+    GOOGLESQL_ASSIGN_OR_RETURN(eref->colnames,
                      CheckedPgLappend(eref->colnames, attribute_name));
   }
 
@@ -142,22 +142,22 @@ absl::StatusOr<RangeTblEntry*> Transformer::BuildPgRangeTblEntry(
     CatalogAdapter& adapter, Oid oid,
     Alias* alias, bool inFromCl, AclMode acl_mode) {
   RangeTblEntry* rte;
-  ZETASQL_ASSIGN_OR_RETURN(rte, internal::makePartialRangeTblEntry(inFromCl, acl_mode));
+  GOOGLESQL_ASSIGN_OR_RETURN(rte, internal::makePartialRangeTblEntry(inFromCl, acl_mode));
   rte->rtekind = RTE_RELATION;
-  // Inheritence doesn't exist in ZetaSQL so use the defaults for
+  // Inheritence doesn't exist in GoogleSQL so use the defaults for
   // PostgreSQL. True is what you get when just writing "FROM <table_name>".
   // This is only false if the caller explicitly requests it: "FROM ONLY
   // <table_name>". INSERT statements are special: this is always false.
   rte->inh = acl_mode == ACL_INSERT ? false : true;
   rte->relid = oid;
   rte->relkind = RELKIND_RELATION;
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       TableName qualified_table_name, adapter.GetTableNameFromOid(oid));
 
-  const zetasql::Table* table;
-  ZETASQL_RETURN_IF_ERROR(adapter.GetEngineUserCatalog()->FindTable(
+  const googlesql::Table* table;
+  GOOGLESQL_RETURN_IF_ERROR(adapter.GetEngineUserCatalog()->FindTable(
       qualified_table_name.AsSpan(), &table));
-  ZETASQL_RET_CHECK_NE(table, nullptr);
+  GOOGLESQL_RET_CHECK_NE(table, nullptr);
 
   // Checks whether table/view is part of a system catalog that is incluced in
   // the supplied schema list. Catalogs included in the list have all object
@@ -169,11 +169,11 @@ absl::StatusOr<RangeTblEntry*> Transformer::BuildPgRangeTblEntry(
   // disallow access to these objects using upper-case quoted identifiers, like
   // in the example above.
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       const bool in_uppercase_catalog_path,
       adapter.GetEngineUserCatalog()->InUppercaseCatalogPath(table));
 
-  // ZetaSQL's catalogs are not case-sensitive, but PostgreSQL's analyzer
+  // GoogleSQL's catalogs are not case-sensitive, but PostgreSQL's analyzer
   // is. Verify we adhere to the stricter rules because PostgreSQL may do
   // case-sensitive comparisons against the RTE's fields during analysis.
   // For system tables that use upper-case for their names, we will translate
@@ -185,7 +185,7 @@ absl::StatusOr<RangeTblEntry*> Transformer::BuildPgRangeTblEntry(
           ? !IsLowerCaseReference(qualified_table_name)
           : qualified_table_name.UnqualifiedName() != table->Name();
   if (case_mismatch_error) {
-    return zetasql_base::NotFoundErrorBuilder()
+    return googlesql_base::NotFoundErrorBuilder()
            << "Table not found: `" << qualified_table_name
            << "` not found in catalog "
            << adapter.GetEngineUserCatalog()->FullName() << " (case mismatch?)";
@@ -195,31 +195,31 @@ absl::StatusOr<RangeTblEntry*> Transformer::BuildPgRangeTblEntry(
   // (actual names or user-supplied aliases as applicable).
   rte->alias = alias;
 
-  ZETASQL_ASSIGN_OR_RETURN(rte->eref,
+  GOOGLESQL_ASSIGN_OR_RETURN(rte->eref,
                    BuildRelationEref(*table, alias, in_uppercase_catalog_path));
 
   return rte;
 }
 
 absl::StatusOr<RangeTblEntry*> Transformer::BuildPgRangeTblEntry(
-    CatalogAdapter& adapter, const zetasql::Table& resolved_table,
+    CatalogAdapter& adapter, const googlesql::Table& resolved_table,
     Alias* alias, bool inFromCl, AclMode acl_mode) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       TableName qualified_table_name,
       adapter.GetEngineUserCatalog()->GetTableNameForGsqlTable(resolved_table));
-  ZETASQL_ASSIGN_OR_RETURN(auto oid,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto oid,
                    adapter.GetOrGenerateOidFromTableName(qualified_table_name));
   return BuildPgRangeTblEntry(adapter, oid, alias, inFromCl, acl_mode);
 }
 
 absl::StatusOr<Oid> Transformer::BuildPgTypeOid(
-    CatalogAdapter& catalog_adapter, const zetasql::Type* gsql_type) {
+    CatalogAdapter& catalog_adapter, const googlesql::Type* gsql_type) {
   const PostgresTypeMapping* pg_type_mapping =
       catalog_adapter.GetEngineSystemCatalog()->GetTypeFromReverseMapping(
           gsql_type);
   if (pg_type_mapping == nullptr) {
     return absl::UnimplementedError(absl::StrCat(
-        "Unsupported ZetaSQL Type: ",
+        "Unsupported GoogleSQL Type: ",
         gsql_type->TypeName(
             catalog_adapter.analyzer_options().language().product_mode())));
   }
@@ -229,11 +229,11 @@ absl::StatusOr<Oid> Transformer::BuildPgTypeOid(
 
 absl::StatusOr<Oid*> Transformer::BuildPgParameterTypeList(
     CatalogAdapter& catalog_adapter,
-    const std::map<std::string, const zetasql::Type*>& gsql_param_types,
+    const std::map<std::string, const googlesql::Type*>& gsql_param_types,
     int* max_param) {
   // Allocate the memory for the Oid*.
   auto current_size = gsql_param_types.size();
-  ZETASQL_ASSIGN_OR_RETURN(void* allocated_array,
+  GOOGLESQL_ASSIGN_OR_RETURN(void* allocated_array,
                    CheckedPgPalloc(sizeof(Oid) * current_size));
   Oid* pg_param_types = (Oid*)allocated_array;
   /* Zero out all slots */
@@ -242,7 +242,7 @@ absl::StatusOr<Oid*> Transformer::BuildPgParameterTypeList(
   // Look up each parameter type using the defined parameter prefix and the
   // parameter index, starting at 1. Given N parameters, the parameters should
   // be named p1, p2,...,pN, where N = PQ_QUERY_PARAM_MAX_LIMIT = USHRT_MAX as
-  // defined in the PG backend. Transform each ZetaSQL type to a PG type.
+  // defined in the PG backend. Transform each GoogleSQL type to a PG type.
   for (auto const& it : gsql_param_types) {
     // Check that it is a valid Spangres parameter (i.e. 'p1', 'p2', ...).
     std::string parameter_name = it.first;
@@ -260,7 +260,7 @@ absl::StatusOr<Oid*> Transformer::BuildPgParameterTypeList(
     // parameters (e.g. types have been specified for p1 and p3, but not for p2)
     if (i > current_size) {
       // Reallocate new memory for the Oid*.
-      ZETASQL_ASSIGN_OR_RETURN(allocated_array,
+      GOOGLESQL_ASSIGN_OR_RETURN(allocated_array,
                        CheckedPgRepalloc(allocated_array, sizeof(Oid) * i));
       pg_param_types = (Oid*)allocated_array;
       /* Zero out the previously-unreferenced slots */
@@ -270,8 +270,8 @@ absl::StatusOr<Oid*> Transformer::BuildPgParameterTypeList(
       current_size = i;
     }
 
-    // Transform the type from ZetaSQL to PostgreSQL.
-    ZETASQL_ASSIGN_OR_RETURN(Oid pg_type,
+    // Transform the type from GoogleSQL to PostgreSQL.
+    GOOGLESQL_ASSIGN_OR_RETURN(Oid pg_type,
                      Transformer::BuildPgTypeOid(catalog_adapter, it.second));
     pg_param_types[i - 1] = pg_type;
   }

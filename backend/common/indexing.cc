@@ -25,7 +25,7 @@
 #include "backend/schema/catalog/index.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -54,7 +54,7 @@ absl::StatusOr<Key> ComputeIndexKey(const Row& base_row, const Index* index) {
         GetColumnValueOrNull(base_row, key_column->column()->source_column()),
         key_column->is_descending(), key_column->is_nulls_last());
   }
-  ZETASQL_RETURN_IF_ERROR(ValidateKeySizeForIndex(index, key));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateKeySizeForIndex(index, key));
   return key;
 }
 

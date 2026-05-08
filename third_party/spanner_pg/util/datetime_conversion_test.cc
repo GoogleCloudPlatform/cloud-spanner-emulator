@@ -33,15 +33,15 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/time/time.h"
 
 namespace {
 
 using ::testing::Eq;
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 // Represents the offset that needs to be added to a pg date to convert it to a
 // gsql date

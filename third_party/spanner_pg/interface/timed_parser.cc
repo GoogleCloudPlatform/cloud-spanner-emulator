@@ -33,7 +33,7 @@
 
 #include "base/timer.h"
 #include "third_party/spanner_pg/interface/parser_output.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 namespace spangres {
@@ -41,7 +41,7 @@ namespace spangres {
 absl::Status TimedParser::ParseIntoBatch(
     absl::Span<const std::string> sql_expressions,
     interfaces::ParserBatchOutput* output) {
-  ZETASQL_RETURN_IF_ERROR(SetupParser(output->mutable_statistics()));
+  GOOGLESQL_RETURN_IF_ERROR(SetupParser(output->mutable_statistics()));
 
   absl::Time start_time = absl::Now();
   absl::Status status = ParseIntoBatchOffFiber(sql_expressions, output);

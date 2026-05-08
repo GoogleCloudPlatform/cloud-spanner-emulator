@@ -17,7 +17,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/time/time.h"
@@ -30,7 +30,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class SnapshotReadsTest
     : public DatabaseTest,
@@ -57,14 +57,14 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(SnapshotReadsTest, CanReadWithMinTimestampBound) {
   // Insert a few rows.
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   // Read using a min_timestamp bounded staleness.
   auto result = Read(Transaction::SingleUseOptions(
                          MakePastTimestamp(std::chrono::minutes(10))),
                      "Users", {"ID", "Name", "Age"}, KeySet::All());
-  EXPECT_THAT(result, zetasql_base::testing::IsOk());
+  EXPECT_THAT(result, googlesql_base::testing::IsOk());
   // Bounded staleness reads can return an empty set or a subset of the rows in
   // their committed order. With a bounded staleness of 10 mins, the reads can
   // return an empty set. When a non-empty set is returned, we want to ensure
@@ -82,13 +82,13 @@ TEST_P(SnapshotReadsTest, CanReadWithMinTimestampBound) {
 
 TEST_P(SnapshotReadsTest, CanReadWithMaxStalenessBound) {
   // Insert a few rows.
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   // Read using a max staleness bound.
   auto result = Read(Transaction::SingleUseOptions(std::chrono::minutes(10)),
                      "Users", {"ID", "Name", "Age"}, KeySet::All());
-  EXPECT_THAT(result, zetasql_base::testing::IsOk());
+  EXPECT_THAT(result, googlesql_base::testing::IsOk());
   // Bounded staleness reads can return an empty set or a subset of the rows in
   // their committed order. With a bounded staleness of 10 mins, the reads can
   // return an empty set. When a non-empty set is returned, we want to ensure
@@ -106,11 +106,11 @@ TEST_P(SnapshotReadsTest, CanReadWithMaxStalenessBound) {
 
 TEST_P(SnapshotReadsTest, CanReadWithExactTimestamp) {
   // Insert a row.
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
 
   // Sleep for 2s, and then insert another row.
   absl::SleepFor(absl::Seconds(2));
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   // Read using an exact timestamp option set at 1s in the past. Only row 1
   // is visible at that timestamp.
@@ -122,11 +122,11 @@ TEST_P(SnapshotReadsTest, CanReadWithExactTimestamp) {
 
 TEST_P(SnapshotReadsTest, CanReadWithExactStaleness) {
   // Insert a row.
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
 
   // Sleep for 2s, and then insert another row.
   absl::SleepFor(absl::Seconds(2));
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   // Read using an exact staleness option set to 1s in the past. Only
   // row 1 is visible at that timestamp.
@@ -138,8 +138,8 @@ TEST_P(SnapshotReadsTest, CanReadWithExactStaleness) {
 
 TEST_P(SnapshotReadsTest, CanReadWithExactTimestampInFuture) {
   // Insert a row.
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   // Read using an exact timestamp option set to 100 ms in the future. Able to
   // read all the rows, but will wait for ~100 ms to pass before returning. Use
@@ -157,8 +157,8 @@ TEST_P(SnapshotReadsTest, CanReadWithExactTimestampInFuture) {
 
 TEST_P(SnapshotReadsTest, CanReadWithMinTimestampBoundInFuture) {
   // Insert a few rows.
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", "23"}));
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", "23"}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   // Read using a min_timestamp bound set to 100 ms in future. Able to read all
   // rows, but will wait for ~100 ms to pass before returning. Use a larger time
@@ -176,8 +176,8 @@ TEST_P(SnapshotReadsTest, CanReadWithMinTimestampBoundInFuture) {
 
 TEST_P(SnapshotReadsTest, CannnotReadWithExactTimestampTooFarInFuture) {
   // Insert a row.
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   if (!in_prod_env()) {
     EXPECT_THAT(Read(Transaction::SingleUseOptions(Transaction::ReadOnlyOptions(
@@ -189,8 +189,8 @@ TEST_P(SnapshotReadsTest, CannnotReadWithExactTimestampTooFarInFuture) {
 
 TEST_P(SnapshotReadsTest, CannnotQueryWithExactTimestampTooFarInFuture) {
   // Insert a row.
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   if (!in_prod_env()) {
     EXPECT_THAT(QuerySingleUseTransaction(
@@ -203,8 +203,8 @@ TEST_P(SnapshotReadsTest, CannnotQueryWithExactTimestampTooFarInFuture) {
 
 TEST_P(SnapshotReadsTest, CannnotReadWithMinTimestampBoundTooFarInFuture) {
   // Insert a row.
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   if (!in_prod_env()) {
     EXPECT_THAT(Read(Transaction::SingleUseOptions(
@@ -216,8 +216,8 @@ TEST_P(SnapshotReadsTest, CannnotReadWithMinTimestampBoundTooFarInFuture) {
 
 TEST_P(SnapshotReadsTest, CannnotQueryWithMinTimestampBoundTooFarInFuture) {
   // Insert a row.
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
-  ZETASQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {1, "John", 23}));
+  GOOGLESQL_ASSERT_OK(Insert("Users", {"ID", "Name", "Age"}, {2, "Peter", 41}));
 
   if (!in_prod_env()) {
     EXPECT_THAT(QuerySingleUseTransaction(
@@ -239,7 +239,7 @@ TEST_F(VersionRetentionPeriodTest,
                     "minimum version retention period is 1 hour";
   }
 
-  ZETASQL_ASSERT_OK(SetSchema({R"(
+  GOOGLESQL_ASSERT_OK(SetSchema({R"(
     CREATE TABLE TestTable(
       ID   INT64 NOT NULL,
       Name STRING(MAX),
@@ -253,7 +253,7 @@ TEST_F(VersionRetentionPeriodTest,
   Timestamp before_table_deletion_empty_read = MakeNowTimestamp();
 
   // Insert a row.
-  ZETASQL_ASSERT_OK(Insert("TestTable", {"ID", "Name", "Age"}, {1, "John", 23}));
+  GOOGLESQL_ASSERT_OK(Insert("TestTable", {"ID", "Name", "Age"}, {1, "John", 23}));
 
   // Create a timestamp after confirming that the data is readable.
   EXPECT_THAT(Read(Transaction::SingleUseOptions(std::chrono::seconds(1)),
@@ -265,7 +265,7 @@ TEST_F(VersionRetentionPeriodTest,
   absl::SleepFor(absl::Seconds(1));
   Timestamp before_table_deletion_read_with_data = MakeNowTimestamp();
 
-  ZETASQL_ASSERT_OK(UpdateSchema({"DROP TABLE TestTable"}));
+  GOOGLESQL_ASSERT_OK(UpdateSchema({"DROP TABLE TestTable"}));
 
   // Reads with a timestamp before the table deletion should succeed.
   EXPECT_THAT(Read(Transaction::SingleUseOptions(Transaction::ReadOnlyOptions(
@@ -283,12 +283,12 @@ TEST_F(VersionRetentionPeriodTest,
 
   // Set the version_retention_period to 1s. This will trigger the cleanup of
   // the schema with the table definition, and the table's data.
-  ZETASQL_ASSERT_OK(UpdateSchema(
+  GOOGLESQL_ASSERT_OK(UpdateSchema(
       {"ALTER DATABASE db SET OPTIONS (version_retention_period = '1s')"}));
 
   // Set the version_retention_period back to 1 hour so that reads with
   // timestamp before the table deletion are not restricted.
-  ZETASQL_ASSERT_OK(UpdateSchema(
+  GOOGLESQL_ASSERT_OK(UpdateSchema(
       {"ALTER DATABASE db SET OPTIONS (version_retention_period = '1h')"}));
 
   // The reads should fail with NotFound error because the table was dropped

@@ -22,7 +22,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -34,7 +34,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class MalformedWritesTest
     : public DatabaseTest,
@@ -95,23 +95,23 @@ TEST_P(MalformedWritesTest, CannotSpecifySameColumnMultipleTimes) {
 
 TEST_P(MalformedWritesTest, CannotInsertValueWithMismatchingType) {
   // Insert with all types match is successful.
-  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age", "Updated"},
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age", "Updated"},
                    {"1", "Douglas Adams", 27, MakeNowTimestamp()}));
 
   // Type for int key does not match.
   EXPECT_THAT(Insert("Users", {"UserId", "Name", "Age"},
                      {MakeNowTimestamp(), "Suzanne Collins", 27}),
-              StatusIs(absl::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Type for int column does not match.
   EXPECT_THAT(Insert("Users", {"UserId", "Name", "Age"},
                      {"1", "Suzanne Collins", MakeNowTimestamp()}),
-              StatusIs(absl::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Type for timestamp column does not match.
   EXPECT_THAT(Insert("Users", {"UserId", "Name", "Updated"},
                      {"1", "Suzanne Collins", 27}),
-              StatusIs(absl::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_P(MalformedWritesTest, CannotHaveDifferentNumberOfColumnsAndValues) {
@@ -121,8 +121,8 @@ TEST_P(MalformedWritesTest, CannotHaveDifferentNumberOfColumnsAndValues) {
 }
 
 TEST_P(MalformedWritesTest, CannotSpecifyPartialKey) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name"}, {1, "Douglas Adams"}));
-  ZETASQL_EXPECT_OK(Insert("Threads", {"UserId", "ThreadId", "Starred"}, {1, 1, true}));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"UserId", "Name"}, {1, "Douglas Adams"}));
+  GOOGLESQL_EXPECT_OK(Insert("Threads", {"UserId", "ThreadId", "Starred"}, {1, 1, true}));
 
   // Can perform a successful read by specifying the full primary key.
   EXPECT_THAT(Read("Threads", {"UserId", "ThreadId", "Starred"}, Key(1, 1)),

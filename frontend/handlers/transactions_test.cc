@@ -22,7 +22,7 @@
 #include "google/spanner/v1/transaction.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
@@ -39,7 +39,7 @@
 #include "tests/common/test_env.h"
 #include "grpcpp/client_context.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -47,7 +47,7 @@ namespace emulator {
 namespace frontend {
 namespace {
 
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 namespace spanner_api = ::google::spanner::v1;
 
@@ -60,11 +60,11 @@ class TransactionApiTest : public test::ServerTest,
                            public testing::WithParamInterface<SessionType> {
  protected:
   void SetUp() override {
-    ZETASQL_ASSERT_OK(CreateTestInstance());
-    ZETASQL_ASSERT_OK(CreateTestDatabase());
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
+    GOOGLESQL_ASSERT_OK(CreateTestInstance());
+    GOOGLESQL_ASSERT_OK(CreateTestDatabase());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
                          CreateTestSession(/*multiplexed=*/false));
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_multiplexed_session_uri_,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(test_multiplexed_session_uri_,
                          CreateTestSession(/*multiplexed=*/true));
   }
 
@@ -90,7 +90,7 @@ TEST_P(TransactionApiTest, CanBeginTransaction) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction response;
-  ZETASQL_EXPECT_OK(BeginTransaction(request, &response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(request, &response));
 }
 
 TEST_P(TransactionApiTest, CanBeginMultipleTransactionsOnSameSession) {
@@ -101,7 +101,7 @@ TEST_P(TransactionApiTest, CanBeginMultipleTransactionsOnSameSession) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction response1;
-  ZETASQL_EXPECT_OK(BeginTransaction(request1, &response1));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(request1, &response1));
 
   spanner_api::BeginTransactionRequest request2 = PARSE_TEXT_PROTO(R"(
     options { read_write {} }
@@ -110,7 +110,7 @@ TEST_P(TransactionApiTest, CanBeginMultipleTransactionsOnSameSession) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction response2;
-  ZETASQL_EXPECT_OK(BeginTransaction(request2, &response2));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(request2, &response2));
 }
 
 TEST_P(TransactionApiTest, CanCommitAlreadyStartedTransaction) {
@@ -121,7 +121,7 @@ TEST_P(TransactionApiTest, CanCommitAlreadyStartedTransaction) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::CommitRequest commit_request;
   commit_request.set_transaction_id(transaction_response.id());
@@ -129,13 +129,13 @@ TEST_P(TransactionApiTest, CanCommitAlreadyStartedTransaction) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::CommitResponse commit_response;
-  ZETASQL_EXPECT_OK(Commit(commit_request, &commit_response));
+  GOOGLESQL_EXPECT_OK(Commit(commit_request, &commit_response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     // commit retry protocol will kick in since the it was an empty commit.
     ASSERT_TRUE(commit_response.has_precommit_token());
     *commit_request.mutable_precommit_token() =
         commit_response.precommit_token();
-    ZETASQL_ASSERT_OK(Commit(commit_request, &commit_response));
+    GOOGLESQL_ASSERT_OK(Commit(commit_request, &commit_response));
   }
 }
 
@@ -158,7 +158,7 @@ TEST_P(TransactionApiTest, CanCommitSingleUseReadWriteTransaction) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::CommitResponse commit_response;
-  ZETASQL_EXPECT_OK(Commit(commit_request, &commit_response));
+  GOOGLESQL_EXPECT_OK(Commit(commit_request, &commit_response));
 }
 
 TEST_P(TransactionApiTest, CannotCommitSingleUseReadOnlyTransaction) {
@@ -204,7 +204,7 @@ TEST_P(TransactionApiTest, CommitTransactionIsIdempotent) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::CommitRequest commit_request1;
   commit_request1.set_transaction_id(transaction_response.id());
@@ -215,7 +215,7 @@ TEST_P(TransactionApiTest, CommitTransactionIsIdempotent) {
   }
 
   spanner_api::CommitResponse commit_response1;
-  ZETASQL_EXPECT_OK(Commit(commit_request1, &commit_response1));
+  GOOGLESQL_EXPECT_OK(Commit(commit_request1, &commit_response1));
 
   spanner_api::CommitRequest commit_request2;
   commit_request2.set_transaction_id(transaction_response.id());
@@ -226,7 +226,7 @@ TEST_P(TransactionApiTest, CommitTransactionIsIdempotent) {
   }
 
   spanner_api::CommitResponse commit_response2;
-  ZETASQL_EXPECT_OK(Commit(commit_request2, &commit_response2));
+  GOOGLESQL_EXPECT_OK(Commit(commit_request2, &commit_response2));
 
   // Responses should match.
   EXPECT_THAT(commit_response1, test::EqualsProto(commit_response2));
@@ -240,14 +240,14 @@ TEST_P(TransactionApiTest, CanRollbackAlreadyStartedTransaction) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::RollbackRequest rollback_request;
   rollback_request.set_transaction_id(transaction_response.id());
   rollback_request.set_session(
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
-  ZETASQL_EXPECT_OK(Rollback(rollback_request));
+  GOOGLESQL_EXPECT_OK(Rollback(rollback_request));
 }
 
 TEST_P(TransactionApiTest, CannotRollbackSnapshotTransaction) {
@@ -258,7 +258,7 @@ TEST_P(TransactionApiTest, CannotRollbackSnapshotTransaction) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::RollbackRequest rollback_request;
   rollback_request.set_transaction_id(transaction_response.id());
@@ -277,7 +277,7 @@ TEST_P(TransactionApiTest, CannotRollbackAfterCommit) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::CommitRequest commit_request1;
   commit_request1.set_transaction_id(transaction_response.id());
@@ -288,7 +288,7 @@ TEST_P(TransactionApiTest, CannotRollbackAfterCommit) {
   }
 
   spanner_api::CommitResponse commit_response1;
-  ZETASQL_EXPECT_OK(Commit(commit_request1, &commit_response1));
+  GOOGLESQL_EXPECT_OK(Commit(commit_request1, &commit_response1));
 
   spanner_api::RollbackRequest rollback_request;
   rollback_request.set_transaction_id(transaction_response.id());
@@ -307,14 +307,14 @@ TEST_P(TransactionApiTest, CannotCommitAfterRollback) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::RollbackRequest rollback_request;
   rollback_request.set_transaction_id(transaction_response.id());
   rollback_request.set_session(
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
-  ZETASQL_EXPECT_OK(Rollback(rollback_request));
+  GOOGLESQL_EXPECT_OK(Rollback(rollback_request));
 
   spanner_api::CommitRequest commit_request1;
   commit_request1.set_transaction_id(transaction_response.id());
@@ -337,7 +337,7 @@ TEST_P(TransactionApiTest, CanUseTransactionAfterReadError) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   // Invalid read request.
   spanner_api::ReadRequest read_request = PARSE_TEXT_PROTO(R"(
@@ -367,7 +367,7 @@ TEST_P(TransactionApiTest, CanUseTransactionAfterReadError) {
   }
 
   spanner_api::CommitResponse commit_response;
-  ZETASQL_EXPECT_OK(Commit(commit_request, &commit_response));
+  GOOGLESQL_EXPECT_OK(Commit(commit_request, &commit_response));
 }
 
 TEST_P(TransactionApiTest,
@@ -383,7 +383,7 @@ TEST_P(TransactionApiTest,
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   // Can create a REPEATABLE_READ transaction.
   begin_request = PARSE_TEXT_PROTO(R"pb(
@@ -395,7 +395,7 @@ TEST_P(TransactionApiTest,
   begin_request.set_session(
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 }
 
 TEST_P(TransactionApiTest, CanCreateReadOnlyTransactionWithAllIsolationLevels) {
@@ -410,7 +410,7 @@ TEST_P(TransactionApiTest, CanCreateReadOnlyTransactionWithAllIsolationLevels) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   // Can create a REPEATABLE_READ transaction.
   begin_request = PARSE_TEXT_PROTO(R"pb(
@@ -422,7 +422,7 @@ TEST_P(TransactionApiTest, CanCreateReadOnlyTransactionWithAllIsolationLevels) {
   begin_request.set_session(
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 }
 
 TEST_P(TransactionApiTest, CanOnlyCreateSerializablePartitionedDmlTransaction) {
@@ -437,7 +437,7 @@ TEST_P(TransactionApiTest, CanOnlyCreateSerializablePartitionedDmlTransaction) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   // Can't create a REPEATABLE_READ transaction.
   begin_request = PARSE_TEXT_PROTO(R"pb(
@@ -467,7 +467,7 @@ TEST_P(TransactionApiTest,
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   // Can create a SERIALIZABLE transaction with optimistic locking.
   begin_request = PARSE_TEXT_PROTO(R"pb(
@@ -479,7 +479,7 @@ TEST_P(TransactionApiTest,
   begin_request.set_session(
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 }
 
 TEST_P(TransactionApiTest,
@@ -495,7 +495,7 @@ TEST_P(TransactionApiTest,
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   // Create a REPEATABLE_READ transaction with optimistic read lock mode.
   begin_request = PARSE_TEXT_PROTO(R"pb(
@@ -507,7 +507,7 @@ TEST_P(TransactionApiTest,
   begin_request.set_session(
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 }
 
 TEST_P(TransactionApiTest,
@@ -583,7 +583,7 @@ TEST_P(TransactionApiTest, CommitTransactionWithMutations) {
     *begin_request.mutable_mutation_key() = m;
   }
   spanner_api::Transaction begin_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &begin_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &begin_response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_TRUE(begin_response.has_precommit_token());
   }
@@ -599,7 +599,7 @@ TEST_P(TransactionApiTest, CommitTransactionWithMutations) {
         begin_response.precommit_token();
   }
   spanner_api::CommitResponse commit_response;
-  ZETASQL_ASSERT_OK(Commit(commit_request, &commit_response));
+  GOOGLESQL_ASSERT_OK(Commit(commit_request, &commit_response));
   ASSERT_TRUE(commit_response.has_commit_timestamp());
 }
 
@@ -613,7 +613,7 @@ TEST_P(TransactionApiTest, CommitMultiplexedSessionRetryWithoutMutations) {
   begin_request.set_session(GetSessionUri(true));
 
   spanner_api::Transaction begin_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &begin_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &begin_response));
 
   // 1. First Commit: Send mutations, NO precommit token.
   //    Expect: OkStatus + precommit_token.
@@ -635,7 +635,7 @@ TEST_P(TransactionApiTest, CommitMultiplexedSessionRetryWithoutMutations) {
   *commit_request1.add_mutations() = m;
 
   spanner_api::CommitResponse commit_response1;
-  ZETASQL_EXPECT_OK(Commit(commit_request1, &commit_response1));
+  GOOGLESQL_EXPECT_OK(Commit(commit_request1, &commit_response1));
   EXPECT_TRUE(commit_response1.has_precommit_token());
   EXPECT_FALSE(
       commit_response1.has_commit_timestamp());  // Should NOT commit yet if
@@ -652,7 +652,7 @@ TEST_P(TransactionApiTest, CommitMultiplexedSessionRetryWithoutMutations) {
   // Crucially: NO mutations added to commit_request2.
 
   spanner_api::CommitResponse commit_response2;
-  ZETASQL_EXPECT_OK(Commit(commit_request2, &commit_response2));
+  GOOGLESQL_EXPECT_OK(Commit(commit_request2, &commit_response2));
   EXPECT_TRUE(commit_response2.has_commit_timestamp());
 
   // Verify data is written.
@@ -663,7 +663,7 @@ TEST_P(TransactionApiTest, CommitMultiplexedSessionRetryWithoutMutations) {
   )pb");
   read_request.set_session(GetSessionUri(true));
   spanner_api::ResultSet read_response;
-  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  GOOGLESQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_EQ(read_response.rows_size(), 1);
   EXPECT_EQ(read_response.rows(0).values(0).string_value(), "retry_test");
 }
@@ -678,7 +678,7 @@ TEST_P(TransactionApiTest, CommitMultiplexedSessionIsolation) {
   begin_request.set_session(GetSessionUri(true));
 
   spanner_api::Transaction begin_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &begin_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &begin_response));
 
   // 1. Commit with mutations + NO precommit token.
   //    Expect: OkStatus + precommit_token.
@@ -700,7 +700,7 @@ TEST_P(TransactionApiTest, CommitMultiplexedSessionIsolation) {
   *commit_request1.add_mutations() = m;
 
   spanner_api::CommitResponse commit_response1;
-  ZETASQL_EXPECT_OK(Commit(commit_request1, &commit_response1));
+  GOOGLESQL_EXPECT_OK(Commit(commit_request1, &commit_response1));
   EXPECT_TRUE(commit_response1.has_precommit_token());
   EXPECT_FALSE(commit_response1.has_commit_timestamp());
 
@@ -713,7 +713,7 @@ TEST_P(TransactionApiTest, CommitMultiplexedSessionIsolation) {
   )pb");
   read_request.set_session(GetSessionUri(true));
   spanner_api::ResultSet read_response;
-  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  GOOGLESQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_EQ(read_response.rows_size(), 0);  // Should be empty!
 }
 
