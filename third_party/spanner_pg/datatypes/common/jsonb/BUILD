@@ -55,9 +55,9 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:cord",
         "@com_google_absl//absl/types:span",
-        "@com_google_zetasql//zetasql/base:logging",
-        "@com_google_zetasql//zetasql/base:ret_check",
-        "@nlohmann_json//:json",
+        "@com_google_googlesql//googlesql/base:logging",
+        "@com_google_googlesql//googlesql/base:ret_check",
+        "@json",
     ],
 )
 
@@ -73,8 +73,8 @@ cc_test(
         ":jsonb_value",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "//third_party/spanner_pg/util:valid_memory_context_fixture",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -84,6 +84,7 @@ cc_test(
         "jsonb_parse_test.cc",
     ],
     data = ["//third_party/spanner_pg/ddl:exported_jsondata"],
+    linkstatic = True,
     shard_count = 4,
     tags = [
         "spanner.datatypes",
@@ -101,10 +102,10 @@ cc_test(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:cord",
+        "@com_google_googlesql//googlesql/base:no_destructor",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/common:utf_util",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base:no_destructor",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/common:utf_util",
     ],
 )
 

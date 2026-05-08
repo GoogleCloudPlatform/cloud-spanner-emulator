@@ -21,11 +21,11 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/types/array_type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/types/array_type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -34,6 +34,7 @@
 #include "absl/types/span.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/printer/print_ddl.h"
 #include "backend/schema/updater/schema_updater.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "common/errors.h"
@@ -45,7 +46,7 @@ namespace emulator {
 namespace backend {
 namespace test {
 
-namespace types = zetasql::types;
+namespace types = googlesql::types;
 
 namespace {
 
@@ -59,7 +60,7 @@ using testing::UnorderedElementsAre;
 TEST_P(SchemaUpdaterTest, CreateIndex) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema(
                                      {
                                          R"sql(
         CREATE TABLE T (
@@ -79,7 +80,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex) {
                                      /*dialect=*/POSTGRESQL,
                                      /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"sql(
         CREATE TABLE T (
           k1 INT64 NOT NULL,
@@ -180,7 +181,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_NoKeys) {
 TEST_P(SchemaUpdaterTest, CreateIndex_WithLocalityGroup) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
   std::unique_ptr<const Schema> schema;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
@@ -217,7 +218,7 @@ TEST_P(SchemaUpdaterTest, CreateIndexIfNotExists) {
 
 TEST_P(SchemaUpdaterTest, CreateIndexWhereIsNotNull) {
   std::unique_ptr<const Schema> schema;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                    R"sql(
       CREATE TABLE T (
         k1 INT64,
@@ -263,6 +264,21 @@ TEST_P(SchemaUpdaterTest, CreateIndexWhereIsNotNull) {
   EXPECT_THAT(data_pk[2]->column(), ColumnIs("k1", type_factory_.get_int64()));
   EXPECT_THAT(data_pk[2]->column(), SourceColumnIs(t_k1));
   EXPECT_EQ(data_pk[2]->column()->is_nullable(), t_k1->is_nullable());
+
+  if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_EQ(PrintIndexFilter(idx), "c1 IS NOT NULL AND s1 IS NOT NULL");
+    ddl::CreateIndex ddl_index;
+    schema->DumpIndex(idx, ddl_index);
+    EXPECT_THAT(ddl_index.null_filtered_column(),
+                testing::UnorderedElementsAre("c1", "s1"));
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto ddl_statements, PrintDDLStatements(schema.get()));
+    EXPECT_THAT(ddl_statements,
+                testing::Contains(testing::HasSubstr(
+                    "WHERE c1 IS NOT NULL AND s1 IS NOT NULL")));
+  } else {
+    // TODO: Verify reconstruction for PostgreSQL dialect.
+    EXPECT_EQ(PrintIndexFilter(idx), "c1 IS NOT NULL AND s1 IS NOT NULL");
+  }
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndexIfNotExistsOnExistingIndex) {
@@ -284,7 +300,7 @@ TEST_P(SchemaUpdaterTest, CreateIndexIfNotExistsOnExistingIndex) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_DescKeys) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
@@ -311,7 +327,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_AscKeys) {
     // to PG, the ordering of the PG DDL is also ASC instead of ASC_NULLS_LAST.
     // If the ordering is not specified, the default ordering should be
     // ASC_NULLS_LAST in PG.
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"sql(
         CREATE TABLE T (
           k1 bigint primary key,
@@ -324,7 +340,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_AscKeys) {
                                       /*proto_descriptor_bytes=*/"", POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"sql(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"sql(
         CREATE TABLE T (
           k1 INT64,
           c1 INT64
@@ -354,7 +370,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_AscKeys) {
 TEST_P(SchemaUpdaterTest, CreateIndex_SharedPK) {
   // Null filtered indexes are not supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T (
         k1 INT64 NOT NULL,
@@ -382,7 +398,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_SharedPK) {
 TEST_P(SchemaUpdaterTest, CreateIndex_NullFiltered_Unique) {
   // Null filtered indexes are not supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T (
         k1 INT64,
@@ -420,7 +436,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_NullFiltered_Unique) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_InterleaveInParent) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T1 (
         k1 INT64,
@@ -450,7 +466,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_InterleaveInParent) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_InterleaveInRemoteParent) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T1 (
         k1 INT64,
@@ -510,7 +526,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_RemoteIndexHasLessKeysThanParentTable) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_InterleaveInRemoteParentMultiKeys) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T1 (
         k11 INT64,
@@ -545,7 +561,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_InterleaveInRemoteParentMultiKeys) {
 TEST_P(SchemaUpdaterTest, CreateIndex_NullFilteredInterleave) {
   // Null filtered indexes are not supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T1 (
         k1 INT64,
@@ -649,7 +665,7 @@ TEST_P(SchemaUpdaterTest,
   // In PG, all key columns are NOT NULL by default.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T1 (
         k1 INT64,
@@ -727,7 +743,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_UnsupportedArrayTypeKeyColumn) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateIndex_ArrayStoredColumn) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64,
@@ -743,17 +759,17 @@ TEST_P(SchemaUpdaterTest, CreateIndex_ArrayStoredColumn) {
   EXPECT_EQ(idx->stored_columns().size(), 1);
   auto c2 = idx->stored_columns()[0];
 
-  const zetasql::ArrayType* array_type;
-  ZETASQL_ASSERT_OK(type_factory_.MakeArrayType(types::Int64Type(), &array_type));
+  const googlesql::ArrayType* array_type;
+  GOOGLESQL_ASSERT_OK(type_factory_.MakeArrayType(types::Int64Type(), &array_type));
 
   EXPECT_THAT(c2, ColumnIs("c2", array_type));
 }
 
 TEST_P(SchemaUpdaterTest, AlterIndex_AddColumn) {
-  const zetasql::ArrayType* int_array_type;
-  ZETASQL_ASSERT_OK(type_factory_.MakeArrayType(types::Int64Type(), &int_array_type));
+  const googlesql::ArrayType* int_array_type;
+  GOOGLESQL_ASSERT_OK(type_factory_.MakeArrayType(types::Int64Type(), &int_array_type));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64,
@@ -765,7 +781,7 @@ TEST_P(SchemaUpdaterTest, AlterIndex_AddColumn) {
       CREATE INDEX Idx ON T(c1) STORING(c2)
     )sql"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto new_schema,
       UpdateSchema(schema.get(),
                    {R"sql(ALTER INDEX Idx ADD STORED COLUMN c3)sql"}));
@@ -779,7 +795,7 @@ TEST_P(SchemaUpdaterTest, AlterIndex_AddColumn) {
 
 TEST_P(SchemaUpdaterTest, AlterIndex_StoreNotNullColumn) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T (
         col1 INT64 NOT NULL,
@@ -791,14 +807,14 @@ TEST_P(SchemaUpdaterTest, AlterIndex_StoreNotNullColumn) {
       CREATE INDEX Idx ON T(col2)
     )sql"}));
 
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"sql(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"sql(
       ALTER INDEX Idx ADD STORED COLUMN col3
     )sql"}));
 }
 
 TEST_P(SchemaUpdaterTest, AlterIndex_StoreNotNullColumnWithNullFilteredIndex) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T (
         col1 INT64 NOT NULL,
@@ -810,13 +826,13 @@ TEST_P(SchemaUpdaterTest, AlterIndex_StoreNotNullColumnWithNullFilteredIndex) {
       CREATE NULL_FILTERED INDEX Idx ON T(col2)
     )sql"}));
 
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"sql(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"sql(
       ALTER INDEX Idx ADD STORED COLUMN col3
     )sql"}));
 }
 
 TEST_P(SchemaUpdaterTest, AlterIndex_AddColumnNotFound) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
@@ -833,7 +849,7 @@ TEST_P(SchemaUpdaterTest, AlterIndex_AddColumnNotFound) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterIndex_DropColumn) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64,
@@ -844,7 +860,7 @@ TEST_P(SchemaUpdaterTest, AlterIndex_DropColumn) {
       CREATE INDEX Idx ON T(c1) STORING(c2)
     )sql"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto new_schema,
       UpdateSchema(schema.get(),
                    {R"sql(ALTER INDEX Idx DROP STORED COLUMN c2)sql"}));
@@ -855,7 +871,7 @@ TEST_P(SchemaUpdaterTest, AlterIndex_DropColumn) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterIndex_DropColumnNotFound) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
@@ -873,7 +889,7 @@ TEST_P(SchemaUpdaterTest, AlterIndex_DropColumnNotFound) {
 
 TEST_P(SchemaUpdaterTest, AlterIndex_WithLocalityGroup) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T (
         col1 INT64 NOT NULL,
@@ -889,7 +905,7 @@ TEST_P(SchemaUpdaterTest, AlterIndex_WithLocalityGroup) {
       CREATE INDEX Idx ON T(col2)
     )sql"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"sql(
       ALTER INDEX Idx SET OPTIONS (locality_group = 'lg')
     )sql"}));
 
@@ -901,7 +917,7 @@ TEST_P(SchemaUpdaterTest, AlterIndex_WithLocalityGroup) {
 }
 
 TEST_P(SchemaUpdaterTest, DropTable_WithIndex) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
@@ -917,7 +933,7 @@ TEST_P(SchemaUpdaterTest, DropTable_WithIndex) {
     )sql"}),
               StatusIs(error::DropTableWithDependentIndices("T", "Idx1")));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
@@ -935,7 +951,7 @@ TEST_P(SchemaUpdaterTest, DropTable_WithIndex) {
 }
 
 TEST_P(SchemaUpdaterTest, DropIndex) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
@@ -947,7 +963,7 @@ TEST_P(SchemaUpdaterTest, DropIndex) {
 
   EXPECT_NE(schema->FindIndex("Idx"), nullptr);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"sql(
       DROP INDEX Idx
     )sql"}));
 
@@ -961,7 +977,7 @@ TEST_P(SchemaUpdaterTest, DropIndex) {
 TEST_P(SchemaUpdaterTest, DropIndexIfExists) {
   // IF NOT EXISTS isn't yet supported on the PG side of the emulator
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
@@ -973,13 +989,13 @@ TEST_P(SchemaUpdaterTest, DropIndexIfExists) {
 
   EXPECT_EQ(schema->GetSchemaGraph()->GetSchemaNodes().size(), 10);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"sql(
       DROP INDEX Idx
     )sql"}));
 
   EXPECT_EQ(new_schema->FindIndex("Idx"), nullptr);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema2, UpdateSchema(new_schema.get(), {R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema2, UpdateSchema(new_schema.get(), {R"sql(
       DROP INDEX IF EXISTS Idx
     )sql"}));
 
@@ -989,7 +1005,7 @@ TEST_P(SchemaUpdaterTest, DropIndexIfExists) {
 TEST_P(SchemaUpdaterTest, DropIndexIfExistsTwice) {
   // IF NOT EXISTS isn't yet supported on the PG side of the emulator
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
@@ -1001,13 +1017,13 @@ TEST_P(SchemaUpdaterTest, DropIndexIfExistsTwice) {
 
   EXPECT_EQ(schema->GetSchemaGraph()->GetSchemaNodes().size(), 10);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"sql(
       DROP INDEX IF EXISTS Idx
     )sql"}));
 
   EXPECT_EQ(new_schema->FindIndex("Idx"), nullptr);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema2, UpdateSchema(new_schema.get(), {R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema2, UpdateSchema(new_schema.get(), {R"sql(
       DROP INDEX IF EXISTS Idx
     )sql"}));
 
@@ -1017,7 +1033,7 @@ TEST_P(SchemaUpdaterTest, DropIndexIfExistsTwice) {
 TEST_P(SchemaUpdaterTest, DropIndexIfExistsButIndexDoesNotExist) {
   // IF NOT EXISTS isn't yet supported on the PG side of the emulator
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64
@@ -1027,7 +1043,7 @@ TEST_P(SchemaUpdaterTest, DropIndexIfExistsButIndexDoesNotExist) {
   EXPECT_EQ(schema->FindIndex("Idx"), nullptr);
 
   // Make sure dropping an index that doesn't exist is fine.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"sql(
       DROP INDEX IF EXISTS Idx
     )sql"}));
 
@@ -1037,7 +1053,7 @@ TEST_P(SchemaUpdaterTest, DropIndexIfExistsButIndexDoesNotExist) {
 TEST_P(SchemaUpdaterTest, CreateIndexOnTableWithNoPK) {
   // Table with no key columns is not supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE T ( col1 INT64 ) PRIMARY KEY ()
     )sql",
@@ -1081,7 +1097,7 @@ TEST_P(SchemaUpdaterTest, CreateIndex_NumericColumn) {
                 StatusIs(error::CannotCreateIndexOnColumn("idx", "col2",
                                                           "PG.NUMERIC")));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                           R"sql(
         CREATE TABLE T (
           col1 INT64 NOT NULL,
@@ -1154,7 +1170,7 @@ std::vector<std::string> SchemaForCaseSensitivityTests() {
 }
 
 TEST_P(SchemaUpdaterTest, TableNameIsCaseSensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
@@ -1164,7 +1180,7 @@ TEST_P(SchemaUpdaterTest, TableNameIsCaseSensitive) {
 }
 
 TEST_P(SchemaUpdaterTest, ColumnNameIsCaseSensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
@@ -1173,7 +1189,7 @@ TEST_P(SchemaUpdaterTest, ColumnNameIsCaseSensitive) {
 }
 
 TEST_P(SchemaUpdaterTest, StoringColumnNameIsCaseSensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
@@ -1182,7 +1198,7 @@ TEST_P(SchemaUpdaterTest, StoringColumnNameIsCaseSensitive) {
 }
 
 TEST_P(SchemaUpdaterTest, DropIndexIsCaseSensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"sql(
@@ -1213,7 +1229,7 @@ TEST_P(SchemaUpdaterTest, CannotCreateIndexOnTokenListColumn) {
 TEST_P(SchemaUpdaterTest, BasicCreateDropSearchIndex) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"sql(
         CREATE TABLE "T" (
           col1 bigint NOT NULL,
@@ -1230,7 +1246,7 @@ TEST_P(SchemaUpdaterTest, BasicCreateDropSearchIndex) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"sql(
         CREATE TABLE T (
           col1 INT64 NOT NULL,
@@ -1255,14 +1271,14 @@ TEST_P(SchemaUpdaterTest, BasicCreateDropSearchIndex) {
   EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col3));
 
   // Drop index
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
                                                                        R"sql(
     DROP SEARCH INDEX Idx
   )sql"}));
   EXPECT_EQ(new_schema->FindIndex("Idx"), nullptr);
 
   // Drop index if exists
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto after_drop_schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto after_drop_schema,
                        UpdateSchema(schema.get(), {
                                                       R"sql(
     DROP SEARCH INDEX IF EXISTS Idx
@@ -1273,7 +1289,7 @@ TEST_P(SchemaUpdaterTest, BasicCreateDropSearchIndex) {
 TEST_P(SchemaUpdaterTest, ComplexCreateSearchIndex) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"sql(
         CREATE TABLE "T" (
           col1 bigint NOT NULL,
@@ -1299,7 +1315,7 @@ TEST_P(SchemaUpdaterTest, ComplexCreateSearchIndex) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"sql(
         CREATE TABLE T (
           col1 INT64 NOT NULL,
@@ -1554,7 +1570,7 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexOrderByMustNotNull) {
 
 TEST_P(SchemaUpdaterTest, CreateSearchIndexNullFilteredOrderBy) {
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_EXPECT_OK(CreateSchema({R"sql(
+    GOOGLESQL_EXPECT_OK(CreateSchema({R"sql(
         CREATE TABLE "T" (
           col1 bigint NOT NULL,
           col2 varchar,
@@ -1573,7 +1589,7 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexNullFilteredOrderBy) {
                            /*dialect=*/POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_EXPECT_OK(CreateSchema({
+    GOOGLESQL_EXPECT_OK(CreateSchema({
         R"sql(
       CREATE TABLE T (
         col1 INT64 NOT NULL,
@@ -1646,7 +1662,7 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexTokenColumnOrderNotAllowed) {
         error::SearchIndexTokenlistKeyOrderUnsupported("col3", "SearchIndex");
   }
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto schema,
       CreateSchema({create_table_ddl},
                    /*proto_descriptor_bytes=*/"",
@@ -1672,7 +1688,7 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexTokenColumnOrderNotAllowed) {
 
 TEST_P(SchemaUpdaterTest, CreateVectorIndexTwoLayers) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE Docs(
         Key STRING(MAX) NOT NULL,
@@ -1723,7 +1739,7 @@ TEST_P(SchemaUpdaterTest, CreateVectorIndexTwoLayers) {
   auto idx_data3 = idx3->index_data_table();
   EXPECT_THAT(idx_data3->primary_key()[0]->column(), SourceColumnIs(col2));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
                                                                        R"sql(
       DROP VECTOR INDEX VectorIndex
     )sql",
@@ -1737,7 +1753,7 @@ TEST_P(SchemaUpdaterTest, CreateVectorIndexTwoLayers) {
   EXPECT_EQ(new_schema->FindIndex("VectorIndex2"), nullptr);
   EXPECT_EQ(new_schema->FindIndex("VectorIndex3"), nullptr);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema2,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema2,
                        (UpdateSchema(new_schema.get(), {
                                                            R"sql(
     CREATE LOCALITY GROUP lg
@@ -1753,7 +1769,7 @@ TEST_P(SchemaUpdaterTest, CreateVectorIndexTwoLayers) {
 
 TEST_P(SchemaUpdaterTest, CreateVectorIndexThreelayers) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE Base(
         K INT64,
@@ -1784,7 +1800,7 @@ TEST_P(SchemaUpdaterTest, CreateVectorIndexThreelayers) {
   auto idx_data = idx->index_data_table();
   EXPECT_THAT(idx_data->primary_key()[0]->column(), SourceColumnIs(col));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
                                                                        R"sql(
       DROP VECTOR INDEX VI
     )sql"}));
@@ -1793,7 +1809,7 @@ TEST_P(SchemaUpdaterTest, CreateVectorIndexThreelayers) {
 
 TEST_P(SchemaUpdaterTest, CreateVectorIndexNotNullAndStoring) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE Base(
         K INT64,
@@ -1827,7 +1843,7 @@ TEST_P(SchemaUpdaterTest, CreateVectorIndexNotNullAndStoring) {
 
 TEST_P(SchemaUpdaterTest, CreateVectorIndexAlterStoringColumn) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE Base(
         K INT64,
@@ -2272,7 +2288,7 @@ TEST_P(SchemaUpdaterTest, CreateVectorIndexInvalidLeafScatterFactorError) {
 
 TEST_P(SchemaUpdaterTest, DropVectorIndex) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE Docs(
         Key STRING(MAX) NOT NULL,
@@ -2301,11 +2317,11 @@ TEST_P(SchemaUpdaterTest, DropVectorIndex) {
       DROP VECTOR INDEX Index1
     )sql"}),
               StatusIs(error::IndexNotFound("Index1")));
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {
                                            R"sql(
       DROP VECTOR INDEX IF EXISTS VectorIndex2
     )sql"}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
                                                                        R"sql(
       DROP INDEX VectorIndex
     )sql"}));
@@ -2314,7 +2330,7 @@ TEST_P(SchemaUpdaterTest, DropVectorIndex) {
 
 TEST_P(SchemaUpdaterTest, AlterVectorIndex) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
       CREATE TABLE Base (
         K INT64,
@@ -2346,7 +2362,7 @@ TEST_P(SchemaUpdaterTest, AlterVectorIndex) {
   EXPECT_THAT(stored_col, ColumnIs("V", type_factory_.get_int64()));
   EXPECT_THAT(stored_col, SourceColumnIs(col2));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
                                                                        R"sql(
       ALTER VECTOR INDEX VI DROP STORED COLUMN V
     )sql"}));
@@ -2356,7 +2372,7 @@ TEST_P(SchemaUpdaterTest, AlterVectorIndex) {
 TEST_P(SchemaUpdaterTest, CreateSearchIndexWithOptions) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema(
                                      {
                                          R"sql(
         CREATE TABLE T (
@@ -2386,7 +2402,7 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexWithOptions) {
                                      },
                                      "", POSTGRESQL, false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({
                                      R"sql(
         CREATE TABLE T (
           col1 INT64 NOT NULL,
@@ -2461,7 +2477,7 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexWithInvalidOptions) {
         CREATE SEARCH INDEX I1 ON T(col3) WITH ( invalid_option = true )
       )sql"},
             "", POSTGRESQL, false),
-        zetasql_base::testing::StatusIs(
+        googlesql_base::testing::StatusIs(
             absl::StatusCode::kInvalidArgument,
             testing::HasSubstr("Invalid search index option 'invalid_option' "
                                "in <CREATE SEARCH INDEX> statement")));
@@ -2479,7 +2495,7 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexWithInvalidOptions) {
         CREATE SEARCH INDEX I1 ON T(col3) WITH ( sort_order_sharding = 123 )
       )sql"},
             "", POSTGRESQL, false),
-        zetasql_base::testing::StatusIs(
+        googlesql_base::testing::StatusIs(
             absl::StatusCode::kInvalidArgument,
             testing::HasSubstr("Failed to provide valid option value for "
                                "'sort_order_sharding' in <CREATE SEARCH INDEX> "
@@ -2497,7 +2513,7 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexWithInvalidOptions) {
                     R"sql(
         CREATE SEARCH INDEX I1 ON T(col3) OPTIONS ( invalid_option = true )
       )sql"}),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kInvalidArgument,
                     testing::HasSubstr("Option: invalid_option is unknown.")));
     EXPECT_THAT(CreateSchema({
@@ -2511,7 +2527,7 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexWithInvalidOptions) {
                     R"sql(
         CREATE SEARCH INDEX I1 ON T(col3) OPTIONS ( sort_order_sharding = 123 )
       )sql"}),
-                zetasql_base::testing::StatusIs(
+                googlesql_base::testing::StatusIs(
                     absl::StatusCode::kInvalidArgument,
                     testing::HasSubstr(
                         "Unexpected value for option: sort_order_sharding.")));
@@ -2611,7 +2627,7 @@ TEST_P(SchemaUpdaterTest, CreateSearchIndexExceedsMaxKeyColumns) {
           ORDER BY o1, o2, o3, o4
       )sql"},
             "", POSTGRESQL, false),
-        zetasql_base::testing::StatusIs(
+        googlesql_base::testing::StatusIs(
             absl::StatusCode::kInvalidArgument,
             testing::HasSubstr("has too many keys (17); the limit is 16")));
     return;

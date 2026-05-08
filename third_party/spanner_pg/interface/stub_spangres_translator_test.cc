@@ -35,7 +35,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/interface/spangres_translator_test_wrapper.h"
 // clang-format off
 #include "third_party/spanner_pg/interface/parser_without_serialization.h"
@@ -61,7 +61,7 @@ class StubSpangresTranslatorTest : public ::testing::Test {
 TEST_F(StubSpangresTranslatorTest, StubError) {
   EXPECT_THAT(
       translator_->TranslateQuery("SELECT 1234567890123"),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
           testing::HasSubstr("invoked stub SpangresTranslator")));
 }

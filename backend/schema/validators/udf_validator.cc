@@ -20,8 +20,8 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"
@@ -37,8 +37,8 @@
 #include "backend/schema/updater/schema_validation_context.h"
 #include "backend/schema/updater/sql_expression_validators.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -52,11 +52,11 @@ absl::Status ValidateUdfSignatureChange(absl::string_view modify_action,
                                         absl::string_view param_list,
                                         const Udf* dependent_udf,
                                         const Schema* temp_new_schema,
-                                        zetasql::TypeFactory* type_factory) {
+                                        googlesql::TypeFactory* type_factory) {
   // Re-analyze the dependent udf based on the new definition of the dependency
   // in the temporary new schema.
   absl::flat_hash_set<const SchemaNode*> unused_new_deps;
-  std::unique_ptr<zetasql::FunctionSignature> unused_signature;
+  std::unique_ptr<googlesql::FunctionSignature> unused_signature;
   Udf::Determinism determinism_level =
       Udf::Determinism::DETERMINISM_UNSPECIFIED;
   auto status = AnalyzeUdfDefinition(
@@ -65,7 +65,7 @@ absl::Status ValidateUdfSignatureChange(absl::string_view modify_action,
       dependent_udf->is_remote(),
       dependent_udf->language() == Udf::Language::REMOTE,
       dependent_udf->signature()->result_type().type()->TypeName(
-          zetasql::PRODUCT_EXTERNAL),
+          googlesql::PRODUCT_EXTERNAL),
       temp_new_schema, type_factory, &unused_new_deps, &unused_signature,
       &determinism_level);
   if (!status.ok()) {
@@ -81,38 +81,38 @@ absl::Status ValidateUdfSignatureChange(absl::string_view modify_action,
 
 absl::Status UdfValidator::Validate(const Udf* udf,
                                     SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK(!udf->name_.empty());
+  GOOGLESQL_RET_CHECK(!udf->name_.empty());
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(udf->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(udf->postgresql_oid().has_value());
   } else {
-    ZETASQL_RET_CHECK(!udf->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!udf->postgresql_oid().has_value());
   }
 
-  ZETASQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName(
+  GOOGLESQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName(
       udf->GetSchemaNameInfo()->kind, udf->Name()));
 
   for (const SchemaNode* dependency : udf->dependencies()) {
-    ZETASQL_RET_CHECK(!dependency->is_deleted());
+    GOOGLESQL_RET_CHECK(!dependency->is_deleted());
   }
 
   if (udf->is_remote()) {
-    ZETASQL_RET_CHECK_EQ(udf->language(), Udf::Language::LANGUAGE_UNSPECIFIED);
+    GOOGLESQL_RET_CHECK_EQ(udf->language(), Udf::Language::LANGUAGE_UNSPECIFIED);
   }
 
   bool remote_udf =
       udf->language() == Udf::Language::REMOTE || udf->is_remote();
   if (remote_udf) {
-    ZETASQL_RET_CHECK(udf->body_.empty());
-    ZETASQL_RET_CHECK(udf->endpoint_.has_value());
+    GOOGLESQL_RET_CHECK(udf->body_.empty());
+    GOOGLESQL_RET_CHECK(udf->endpoint_.has_value());
     if (udf->max_batching_rows_.has_value()) {
-      ZETASQL_RET_CHECK_GE(*udf->max_batching_rows_, 0);
+      GOOGLESQL_RET_CHECK_GE(*udf->max_batching_rows_, 0);
     }
   } else {
-    ZETASQL_RET_CHECK(udf->language() == Udf::Language::SQL ||
+    GOOGLESQL_RET_CHECK(udf->language() == Udf::Language::SQL ||
               udf->language() == Udf::Language::LANGUAGE_UNSPECIFIED);
-    ZETASQL_RET_CHECK(!udf->body_.empty());
-    ZETASQL_RET_CHECK(!udf->endpoint_.has_value()) << *udf->endpoint_;
-    ZETASQL_RET_CHECK(!udf->max_batching_rows_.has_value()) << *udf->max_batching_rows_;
+    GOOGLESQL_RET_CHECK(!udf->body_.empty());
+    GOOGLESQL_RET_CHECK(!udf->endpoint_.has_value()) << *udf->endpoint_;
+    GOOGLESQL_RET_CHECK(!udf->max_batching_rows_.has_value()) << *udf->max_batching_rows_;
   }
 
   return absl::OkStatus();
@@ -123,22 +123,22 @@ absl::Status UdfValidator::ValidateUpdate(const Udf* udf, const Udf* old_udf,
                                           SchemaValidationContext* context) {
   // During a REPLACE, the udf name's case can change.
   if (context->IsModifiedNode(udf)) {
-    ZETASQL_RET_CHECK(absl::EqualsIgnoreCase(udf->Name(), old_udf->Name()));
+    GOOGLESQL_RET_CHECK(absl::EqualsIgnoreCase(udf->Name(), old_udf->Name()));
   } else {
-    ZETASQL_RET_CHECK_EQ(udf->Name(), old_udf->Name());
+    GOOGLESQL_RET_CHECK_EQ(udf->Name(), old_udf->Name());
   }
   if (udf->is_deleted()) {
     context->global_names()->RemoveName(udf->Name());
     return absl::OkStatus();
   }
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(udf->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(old_udf->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK_EQ(udf->postgresql_oid().value(),
+    GOOGLESQL_RET_CHECK(udf->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(old_udf->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK_EQ(udf->postgresql_oid().value(),
                  old_udf->postgresql_oid().value());
   } else {
-    ZETASQL_RET_CHECK(!udf->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(!old_udf->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!udf->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!old_udf->postgresql_oid().has_value());
   }
 
   for (const SchemaNode* dependency : udf->dependencies()) {
@@ -192,12 +192,12 @@ absl::Status UdfValidator::ValidateUpdate(const Udf* udf, const Udf* old_udf,
       for (int i = 0; i < args.size(); i++) {
         const auto& param = args[i];
         param_list += param.argument_name() + " " +
-                      param.type()->TypeName(zetasql::PRODUCT_EXTERNAL);
+                      param.type()->TypeName(googlesql::PRODUCT_EXTERNAL);
         if (i < args.size() - 1) {
           param_list += ", ";
         }
       }
-      ZETASQL_RETURN_IF_ERROR(ValidateUdfSignatureChange(
+      GOOGLESQL_RETURN_IF_ERROR(ValidateUdfSignatureChange(
           modify_action, dependency_name, param_list, udf,
           context->tmp_new_schema(), context->type_factory()));
     }

@@ -24,7 +24,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/types/span.h"
 #include "backend/schema/catalog/column.h"
@@ -46,7 +46,7 @@ using database_api::DatabaseDialect::POSTGRESQL;
 TEST_P(SchemaUpdaterTest, CheckConstraintBasic) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema(
             {R"(
@@ -59,7 +59,7 @@ TEST_P(SchemaUpdaterTest, CheckConstraintBasic) {
             /*proto_descriptor_bytes=*/"", POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema({
             "CREATE TABLE T ("
@@ -131,36 +131,36 @@ TEST_P(SchemaUpdaterTest, CheckConstraintColumnNameIsCaseInsensitive) {
   std::string add_constraint_ddl =
       "ALTER TABLE T ADD CONSTRAINT C2 CHECK(v > 0)";  // Crash OK
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                          CreateSchema(SchemaForCaseSensitivityTests(POSTGRESQL),
                                       /*proto_descriptor_bytes=*/"", POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
-    ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {add_constraint_ddl},
+    GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {add_constraint_ddl},
                            /*proto_descriptor_bytes=*/"", POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         auto schema,
         CreateSchema(SchemaForCaseSensitivityTests(GOOGLE_STANDARD_SQL)));
-    ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {add_constraint_ddl}));
+    GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {add_constraint_ddl}));
   }
 }
 
 TEST_P(SchemaUpdaterTest, CheckConstraintConstraintNameIsCaseInsensitive) {
   std::string drop_constraint_ddl = "ALTER TABLE T DROP CONSTRAINT c1";
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                          CreateSchema(SchemaForCaseSensitivityTests(POSTGRESQL),
                                       /*proto_descriptor_bytes=*/"", POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
-    ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {drop_constraint_ddl},
+    GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {drop_constraint_ddl},
                            /*proto_descriptor_bytes=*/"", POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         auto schema,
         CreateSchema(SchemaForCaseSensitivityTests(GOOGLE_STANDARD_SQL)));
-    ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {drop_constraint_ddl}));
+    GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {drop_constraint_ddl}));
   }
 }
 
@@ -168,20 +168,20 @@ TEST_P(SchemaUpdaterTest, SqlInlinedFunctionInCheckConstraint) {
   // A SQL-inlined function is a function whose implementation is a SQL string
   // instead of an evaluator.
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                          CreateSchema(SchemaForCaseSensitivityTests(POSTGRESQL),
                                       /*proto_descriptor_bytes=*/"", POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
-    ZETASQL_EXPECT_OK(UpdateSchema(
+    GOOGLESQL_EXPECT_OK(UpdateSchema(
         schema.get(),
         {R"(ALTER TABLE T ADD CONSTRAINT C2 CHECK(arrayoverlap(ARRAY[v], ARRAY[1, 2, 3])))"},
         /*proto_descriptor_bytes=*/"", POSTGRESQL,
         /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         auto schema,
         CreateSchema(SchemaForCaseSensitivityTests(GOOGLE_STANDARD_SQL)));
-    ZETASQL_EXPECT_OK(UpdateSchema(
+    GOOGLESQL_EXPECT_OK(UpdateSchema(
         schema.get(),
         {R"(ALTER TABLE T ADD CONSTRAINT C2 CHECK(ARRAY_INCLUDES(ARRAY[1,2,3], v)))"}));
   }

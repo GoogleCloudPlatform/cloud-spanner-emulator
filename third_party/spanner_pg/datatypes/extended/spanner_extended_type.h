@@ -33,8 +33,8 @@
 #define DATATYPES_EXTENDED_SPANNER_EXTENDED_TYPE_H_
 
 #include "google/spanner/v1/type.pb.h"
-#include "zetasql/public/types/extended_type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/types/extended_type.h"
+#include "googlesql/public/types/type_factory.h"
 
 namespace postgres_translator::spangres {
 namespace datatypes {
@@ -43,12 +43,12 @@ using google::spanner::v1::TypeAnnotationCode;
 
 // Returns a global static instance of a TypeFactory used to construct extended
 // types.
-zetasql::TypeFactory* GetTypeFactory();
+googlesql::TypeFactory* GetTypeFactory();
 
 // SpannerExtendedType is a simple wrapper around ExtendedType that allows
 // accessing the google::spanner::v1::TypeAnnotationCode associated with
 // the extended type. All Spanner extended types should inherit from this class.
-class SpannerExtendedType : public zetasql::ExtendedType {
+class SpannerExtendedType : public googlesql::ExtendedType {
  public:
   explicit SpannerExtendedType(TypeAnnotationCode code);
 

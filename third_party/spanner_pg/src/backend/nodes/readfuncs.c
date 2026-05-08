@@ -2067,6 +2067,47 @@ _readCreateSchemaStmt(void) {
 	READ_DONE();
 }
 
+static CreateFunctionStmt*
+_readCreateFunctionStmt(void)
+{
+	READ_LOCALS(CreateFunctionStmt);
+
+	READ_BOOL_FIELD(is_procedure);
+	READ_BOOL_FIELD(replace);
+	READ_NODE_FIELD(funcname);
+	READ_NODE_FIELD(parameters);
+	READ_NODE_FIELD(returnType);
+	READ_NODE_FIELD(options);
+	READ_NODE_FIELD(sql_body);
+	READ_STRING_FIELD(routine_body_string);
+
+	READ_DONE();
+}
+
+static FunctionParameter*
+_readFunctionParameter(void)
+{
+	READ_LOCALS(FunctionParameter);
+
+	READ_STRING_FIELD(name);
+	READ_NODE_FIELD(argType);
+	READ_ENUM_FIELD(mode, FunctionParameterMode);
+	READ_NODE_FIELD(defexpr);
+	READ_STRING_FIELD(def_expr_string);
+
+	READ_DONE();
+}
+
+static ReturnStmt*
+_readReturnStmt(void)
+{
+	READ_LOCALS(ReturnStmt);
+
+	READ_NODE_FIELD(returnval);
+
+	READ_DONE();
+}
+
 static ViewStmt*
 _readViewStmt(void)
 {
@@ -4551,6 +4592,12 @@ parseNodeString(void)
 		return_value = _readCreateTableAsStmt();
 	else if (MATCH("CREATESCHEMASTMT", 16))
 		return_value = _readCreateSchemaStmt();
+	else if (MATCH("CREATEFUNCTIONSTMT", 18))
+		return_value = _readCreateFunctionStmt();
+	else if (MATCH("FUNCTIONPARAMETER", 17))
+		return_value = _readFunctionParameter();
+	else if (MATCH("RETURN", 6))
+		return_value = _readReturnStmt();
 	else if (MATCH("VIEWSTMT", 8))
 		return_value = _readViewStmt();
 	else if (MATCH("ALTERSPANGRESSTATSSTMT", 22))

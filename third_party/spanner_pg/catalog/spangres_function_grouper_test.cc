@@ -35,7 +35,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/container/btree_map.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "google/protobuf/text_format.h"

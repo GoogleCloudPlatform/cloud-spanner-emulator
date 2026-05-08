@@ -20,7 +20,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 
@@ -31,7 +31,7 @@ namespace backend {
 
 namespace {
 
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 class PgOidAssignerTest : public ::testing::Test {};
 
@@ -46,7 +46,7 @@ TEST_F(PgOidAssignerTest, SingleStatement) {
   // next_postgresql_oid() should not be updated until after EndAssignment().
   EXPECT_EQ(pg_oid_assigner.TEST_next_postgresql_oid(), 100000);
   EXPECT_EQ(pg_oid_assigner.TEST_tentative_next_postgresql_oid(), 100002);
-  ZETASQL_EXPECT_OK(pg_oid_assigner.EndAssignment());  // Marks end of DDL processing.
+  GOOGLESQL_EXPECT_OK(pg_oid_assigner.EndAssignment());  // Marks end of DDL processing.
   EXPECT_EQ(pg_oid_assigner.TEST_next_postgresql_oid(), 100002);
 }
 
@@ -71,7 +71,7 @@ TEST_F(PgOidAssignerTest, IntermediateRollback) {
   EXPECT_EQ(pg_oid_assigner.TEST_next_postgresql_oid(), 100000);
   EXPECT_EQ(pg_oid_assigner.TEST_tentative_next_postgresql_oid(), 100005);
   // End assignment by rolling back to first statement.
-  ZETASQL_EXPECT_OK(pg_oid_assigner.EndAssignmentAtIntermediateSchema(0));
+  GOOGLESQL_EXPECT_OK(pg_oid_assigner.EndAssignmentAtIntermediateSchema(0));
   EXPECT_EQ(pg_oid_assigner.TEST_next_postgresql_oid(), 100002);
 }
 
@@ -112,7 +112,7 @@ TEST_F(PgOidAssignerTest, OidAssigner_Disabled) {
   // next_postgresql_oid() should not be updated until after EndAssignment().
   EXPECT_EQ(pg_oid_assigner.TEST_next_postgresql_oid(), 100000);
   EXPECT_EQ(pg_oid_assigner.TEST_tentative_next_postgresql_oid(), 100000);
-  ZETASQL_EXPECT_OK(pg_oid_assigner.EndAssignment());  // Marks end of DDL processing.
+  GOOGLESQL_EXPECT_OK(pg_oid_assigner.EndAssignment());  // Marks end of DDL processing.
   EXPECT_EQ(pg_oid_assigner.TEST_next_postgresql_oid(), 100000);
 }
 

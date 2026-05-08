@@ -19,11 +19,11 @@
 #include <memory>
 #include <string>
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_options.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_options.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/memory/memory.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
@@ -47,7 +47,7 @@ class IndexHintValidatorTest : public testing::Test {
       : analyzer_options_(MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone)) {}
 
   void SetUp() override {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema_, test::CreateSchemaFromDDL(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema_, test::CreateSchemaFromDDL(
                                       {
                                           R"(
       CREATE TABLE T1 (
@@ -85,10 +85,10 @@ class IndexHintValidatorTest : public testing::Test {
                                          &type_factory_, analyzer_options_);
   }
 
-  std::unique_ptr<const zetasql::AnalyzerOutput> AnalyzeQuery(
+  std::unique_ptr<const googlesql::AnalyzerOutput> AnalyzeQuery(
       const std::string& sql) {
-    std::unique_ptr<const zetasql::AnalyzerOutput> output;
-    ZETASQL_EXPECT_OK(zetasql::AnalyzeStatement(
+    std::unique_ptr<const googlesql::AnalyzerOutput> output;
+    GOOGLESQL_EXPECT_OK(googlesql::AnalyzeStatement(
         sql, analyzer_options_, catalog_.get(), &type_factory_, &output));
     return output;
   }
@@ -96,9 +96,9 @@ class IndexHintValidatorTest : public testing::Test {
   const Schema* schema() const { return schema_.get(); }
 
  private:
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
 
-  const zetasql::AnalyzerOptions analyzer_options_;
+  const googlesql::AnalyzerOptions analyzer_options_;
 
   std::unique_ptr<const FunctionCatalog> fn_catalog_;
 
@@ -111,7 +111,7 @@ TEST_F(IndexHintValidatorTest, ValidateTableIndexHint) {
   auto output = AnalyzeQuery("SELECT k1 FROM T1@{force_index=I1}");
   auto stmt = output->resolved_statement();
   IndexHintValidator validator{schema()};
-  ZETASQL_EXPECT_OK(stmt->Accept(&validator));
+  GOOGLESQL_EXPECT_OK(stmt->Accept(&validator));
 }
 
 TEST_F(IndexHintValidatorTest, InvalidIndexHintReturnsError) {
@@ -156,7 +156,7 @@ TEST_F(IndexHintValidatorTest, ValidIndexHintOnDeleteTargetSucceeds) {
       AnalyzeQuery("DELETE FROM T1@{force_index=I1} WHERE col1 = 'value'");
   auto stmt = output->resolved_statement();
   IndexHintValidator validator{schema()};
-  ZETASQL_EXPECT_OK(stmt->Accept(&validator));
+  GOOGLESQL_EXPECT_OK(stmt->Accept(&validator));
 }
 
 TEST_F(IndexHintValidatorTest,
@@ -188,7 +188,7 @@ TEST_F(IndexHintValidatorTest, DisableNullFilteredIndexCheck) {
   {
     IndexHintValidator validator{schema(),
                                  /*disable_null_filtered_index_check=*/true};
-    ZETASQL_EXPECT_OK(stmt2->resolved_statement()->Accept(&validator));
+    GOOGLESQL_EXPECT_OK(stmt2->resolved_statement()->Accept(&validator));
   }
 }
 
@@ -197,7 +197,7 @@ TEST_F(IndexHintValidatorTest,
   auto output = AnalyzeQuery("SELECT col3 FROM T3@{force_index=I3}");
   auto stmt = output->resolved_statement();
   IndexHintValidator validator{schema()};
-  ZETASQL_EXPECT_OK(stmt->Accept(&validator));
+  GOOGLESQL_EXPECT_OK(stmt->Accept(&validator));
 }
 
 TEST_F(IndexHintValidatorTest, EmulatorManagedIndexName) {
@@ -214,7 +214,7 @@ TEST_F(IndexHintValidatorTest, NonEmulatorManagedIndexName) {
       "SELECT k1 FROM T1@{force_index=IDX_T1_col1_U_EA26CF5871E82340}");
   auto stmt = output->resolved_statement();
   IndexHintValidator validator{schema()};
-  ZETASQL_EXPECT_OK(stmt->Accept(&validator));
+  GOOGLESQL_EXPECT_OK(stmt->Accept(&validator));
 }
 
 }  // namespace

@@ -32,8 +32,8 @@
 #ifndef INTERFACE_STUB_SPANGRES_TRANSLATOR_H_
 #define INTERFACE_STUB_SPANGRES_TRANSLATOR_H_
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/catalog.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -55,12 +55,12 @@ class StubSpangresTranslator : public interfaces::SpangresTranslatorInterface {
   StubSpangresTranslator& operator=(StubSpangresTranslator&&) = delete;
 
   // Returns a FailedPreconditionError.
-  absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>> TranslateQuery(
+  absl::StatusOr<std::unique_ptr<googlesql::AnalyzerOutput>> TranslateQuery(
       interfaces::TranslateQueryParams params) override {
     return absl::FailedPreconditionError("invoked stub SpangresTranslator");
   }
 
-  absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
+  absl::StatusOr<std::unique_ptr<googlesql::AnalyzerOutput>>
   TranslateParsedQuery(interfaces::TranslateParsedQueryParams params) override {
     return absl::FailedPreconditionError("invoked stub SpangresTranslator");
   }

@@ -22,7 +22,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/time/clock.h"
@@ -46,7 +46,7 @@ class ChangeStreamBackfillTest : public ::testing::Test {
   void SetUp() override {
     std::vector<std::string> create_statements = {R"(
                               CREATE CHANGE STREAM C FOR ALL)"};
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         database_, Database::Create(
                        &clock_, kDatabaseId,
                        SchemaChangeOperation{.statements = create_statements}));
@@ -59,7 +59,7 @@ class ChangeStreamBackfillTest : public ::testing::Test {
 
 TEST_F(ChangeStreamBackfillTest, BackfillChangeStreamPartitionTable) {
   {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(
                              ReadWriteOptions(), RetryState()));
     // Check that change stream partition table and change stream data table
@@ -73,7 +73,7 @@ TEST_F(ChangeStreamBackfillTest, BackfillChangeStreamPartitionTable) {
   }
   // Verify current values in table.
   {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         std::unique_ptr<ReadOnlyTransaction> txn,
         database_->CreateReadOnlyTransaction(ReadOnlyOptions()));
     std::unique_ptr<backend::RowCursor> cursor;
@@ -83,8 +83,8 @@ TEST_F(ChangeStreamBackfillTest, BackfillChangeStreamPartitionTable) {
                         "children"};
     read_arg.key_set = KeySet::All();
 
-    ZETASQL_EXPECT_OK(txn->Read(read_arg, &cursor));
-    std::vector<zetasql::Value> values;
+    GOOGLESQL_EXPECT_OK(txn->Read(read_arg, &cursor));
+    std::vector<googlesql::Value> values;
     while (cursor->Next()) {
       values.push_back(cursor->ColumnValue(0));
       values.push_back(cursor->ColumnValue(1));

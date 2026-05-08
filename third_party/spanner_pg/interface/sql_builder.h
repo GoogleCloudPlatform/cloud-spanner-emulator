@@ -34,8 +34,8 @@
 
 #include <string>
 
-#include "zetasql/public/strings.h"
-#include "zetasql/resolved_ast/sql_builder.h"
+#include "googlesql/public/strings.h"
+#include "googlesql/resolved_ast/sql_builder.h"
 
 namespace postgres_translator {
 namespace spangres {
@@ -43,15 +43,15 @@ namespace spangres {
 // SQLBuilder that correctly emits names for tables in nested catalogs.
 // Requires FullName to produce a qualified path, which spanner's gsql catalog
 // objects honor.
-class SQLBuilder : public zetasql::SQLBuilder {
+class SQLBuilder : public googlesql::SQLBuilder {
  public:
   explicit SQLBuilder(const SQLBuilderOptions& options = SQLBuilderOptions())
-      : zetasql::SQLBuilder(options) {}
+      : googlesql::SQLBuilder(options) {}
 
  private:
-  std::string TableToIdentifierLiteral(const zetasql::Table* table) override {
+  std::string TableToIdentifierLiteral(const googlesql::Table* table) override {
     std::vector<std::string> split = absl::StrSplit(table->FullName(), '.');
-    return zetasql::IdentifierPathToString(split);
+    return googlesql::IdentifierPathToString(split);
   }
 };
 

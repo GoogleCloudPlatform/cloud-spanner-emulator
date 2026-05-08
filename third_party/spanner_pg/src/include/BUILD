@@ -56,6 +56,7 @@ cc_library(
         "catalog",
     ],
     visibility = [
+        "//third_party/spanner_pg/ddl:__pkg__",
         "//spanner/datatypes/common/jsonb:__pkg__",
         "//spanner/tests/spangres_end_to_end_test:__subpackages__",
         # Use spangres/postgres_includes for safe PostgreSQL headers in non-PostgreSQL code.
@@ -63,6 +64,7 @@ cc_library(
         "//third_party/spanner_pg/src:__subpackages__",
         # Bootstrap Catalog needs to directly parse the PostgreSQL headers to build the catalog.
         "//third_party/spanner_pg/bootstrap_catalog:__pkg__",
+        "//third_party/spanner_pg/shims:__pkg__",
     ],
     deps = [
         "//third_party/spanner_pg/src/backend:backend_include",

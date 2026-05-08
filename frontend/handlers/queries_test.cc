@@ -22,7 +22,7 @@
 #include "google/spanner/v1/spanner.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -36,7 +36,7 @@
 #include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
 #include "grpcpp/client_context.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -52,7 +52,7 @@ namespace operations_api = ::google::longrunning;
 using testing::ElementsAre;
 using test::EqualsProto;
 using test::proto::Partially;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 enum class SessionType {
   kRegularSession,
@@ -63,13 +63,13 @@ class QueryApiTest : public test::ServerTest,
                      public testing::WithParamInterface<SessionType> {
  protected:
   void SetUp() override {
-    ZETASQL_ASSERT_OK(CreateTestInstance());
-    ZETASQL_ASSERT_OK(CreateTestDatabase());
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
+    GOOGLESQL_ASSERT_OK(CreateTestInstance());
+    GOOGLESQL_ASSERT_OK(CreateTestDatabase());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
                          CreateTestSession(/*multiplexed=*/false));
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_multiplexed_session_uri_,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(test_multiplexed_session_uri_,
                          CreateTestSession(/*multiplexed=*/true));
-    ZETASQL_ASSERT_OK(PopulateTestTable());
+    GOOGLESQL_ASSERT_OK(PopulateTestTable());
   }
 
   std::string GetSessionUri(bool multiplexed) {
@@ -122,9 +122,9 @@ class QueryApiTest : public test::ServerTest,
     )sql");
     request.set_proto_descriptors(GenerateProtoDescriptorBytesAsString());
     operations_api::Operation operation;
-    ZETASQL_RETURN_IF_ERROR(test_env()->database_admin_client()->UpdateDatabaseDdl(
+    GOOGLESQL_RETURN_IF_ERROR(test_env()->database_admin_client()->UpdateDatabaseDdl(
         &context, request, &operation));
-    ZETASQL_RETURN_IF_ERROR(WaitForOperation(operation.name(), &operation));
+    GOOGLESQL_RETURN_IF_ERROR(WaitForOperation(operation.name(), &operation));
     google::rpc::Status status = operation.error();
     return absl::Status(static_cast<absl::StatusCode>(status.code()),
                         status.message());
@@ -200,7 +200,7 @@ TEST_P(QueryApiTest, ExecuteBatchDml) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::ExecuteBatchDmlRequest request = PARSE_TEXT_PROTO(
       R"""(
@@ -218,7 +218,7 @@ TEST_P(QueryApiTest, ExecuteBatchDml) {
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ExecuteBatchDmlResponse response;
-  ZETASQL_ASSERT_OK(ExecuteBatchDml(request, &response));
+  GOOGLESQL_ASSERT_OK(ExecuteBatchDml(request, &response));
   EXPECT_THAT(response, Partially(EqualsProto(
                             R"pb(
                               result_sets {
@@ -241,11 +241,11 @@ TEST_P(QueryApiTest, ExecuteBatchDml) {
   }
 
   spanner_api::CommitResponse commit_response1;
-  ZETASQL_EXPECT_OK(Commit(commit_request, &commit_response1));
+  GOOGLESQL_EXPECT_OK(Commit(commit_request, &commit_response1));
 }
 
 TEST_P(QueryApiTest, ExecuteBatchDmlWithProtos) {
-  ZETASQL_ASSERT_OK(AddProtoTables());
+  GOOGLESQL_ASSERT_OK(AddProtoTables());
 
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }
@@ -254,7 +254,7 @@ TEST_P(QueryApiTest, ExecuteBatchDmlWithProtos) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::ExecuteBatchDmlRequest request = PARSE_TEXT_PROTO(
       R"""(
@@ -272,7 +272,7 @@ TEST_P(QueryApiTest, ExecuteBatchDmlWithProtos) {
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ExecuteBatchDmlResponse response;
-  ZETASQL_ASSERT_OK(ExecuteBatchDml(request, &response));
+  GOOGLESQL_ASSERT_OK(ExecuteBatchDml(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_TRUE(response.has_precommit_token());
   }
@@ -295,7 +295,7 @@ TEST_P(QueryApiTest, ExecuteBatchDmlFailsOnInvalidDmlStatement) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::ExecuteBatchDmlRequest request = PARSE_TEXT_PROTO(
       R"""(
@@ -313,7 +313,7 @@ TEST_P(QueryApiTest, ExecuteBatchDmlFailsOnInvalidDmlStatement) {
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ExecuteBatchDmlResponse response;
-  ZETASQL_ASSERT_OK(ExecuteBatchDml(request, &response));
+  GOOGLESQL_ASSERT_OK(ExecuteBatchDml(request, &response));
   // Ignoring the status.message field to avoid brittle tests.
   EXPECT_THAT(response, Partially(EqualsProto(
                             R"(
@@ -333,7 +333,7 @@ TEST_P(QueryApiTest, ExecuteSql) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::ResultSet response;
-  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  GOOGLESQL_ASSERT_OK(ExecuteSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     // No precommit token for single use transactions.
     ASSERT_FALSE(response.has_precommit_token());
@@ -387,7 +387,7 @@ TEST_P(QueryApiTest, ExecuteSqlWithParameters) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::ResultSet response;
-  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  GOOGLESQL_ASSERT_OK(ExecuteSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     // no precommit token for single use transactions.
     ASSERT_FALSE(response.has_precommit_token());
@@ -415,7 +415,7 @@ TEST_P(QueryApiTest, ExecuteSqlWithParameters) {
 }
 
 TEST_P(QueryApiTest, ExecuteSqlWithProtoParameters) {
-  ZETASQL_ASSERT_OK(AddProtoTables());
+  GOOGLESQL_ASSERT_OK(AddProtoTables());
 
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"pb(
@@ -436,7 +436,7 @@ TEST_P(QueryApiTest, ExecuteSqlWithProtoParameters) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::ResultSet response;
-  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  GOOGLESQL_ASSERT_OK(ExecuteSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     // no precommit token for single use transactions.
     ASSERT_FALSE(response.has_precommit_token());
@@ -473,7 +473,7 @@ TEST_P(QueryApiTest, ExecuteSqlWithDmlAndParameters) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"""(
@@ -486,7 +486,7 @@ TEST_P(QueryApiTest, ExecuteSqlWithDmlAndParameters) {
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
-  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  GOOGLESQL_ASSERT_OK(ExecuteSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_TRUE(response.has_precommit_token());
   }
@@ -522,7 +522,7 @@ TEST_P(QueryApiTest, ExecuteSqlWithDmlReturningAndParameters) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"""(
@@ -535,7 +535,7 @@ TEST_P(QueryApiTest, ExecuteSqlWithDmlReturningAndParameters) {
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
-  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  GOOGLESQL_ASSERT_OK(ExecuteSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_TRUE(response.has_precommit_token());
   }
@@ -580,7 +580,7 @@ TEST_P(QueryApiTest, ExecuteSqlWithDmlReturningReturnsStats) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"""(
@@ -592,7 +592,7 @@ TEST_P(QueryApiTest, ExecuteSqlWithDmlReturningReturnsStats) {
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
-  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  GOOGLESQL_ASSERT_OK(ExecuteSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_TRUE(response.has_precommit_token());
   }
@@ -626,7 +626,7 @@ TEST_P(QueryApiTest, ExecuteStreamingSqlWithDmlReturningReturnsStats) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"""(
@@ -638,7 +638,7 @@ TEST_P(QueryApiTest, ExecuteStreamingSqlWithDmlReturningReturnsStats) {
   request.mutable_transaction()->set_id(transaction_response.id());
 
   std::vector<spanner_api::PartialResultSet> response;
-  ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
+  GOOGLESQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_TRUE(response[0].has_precommit_token());
   }
@@ -671,7 +671,7 @@ TEST_P(QueryApiTest,
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"""(
@@ -684,7 +684,7 @@ TEST_P(QueryApiTest,
   request.mutable_transaction()->set_id(transaction_response.id());
 
   std::vector<spanner_api::PartialResultSet> response;
-  ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
+  GOOGLESQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_TRUE(response[0].has_precommit_token());
   }
@@ -714,7 +714,7 @@ TEST_P(QueryApiTest, ExecuteSqlWithDmlReturningStar) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"""(
@@ -726,7 +726,7 @@ TEST_P(QueryApiTest, ExecuteSqlWithDmlReturningStar) {
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
-  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  GOOGLESQL_ASSERT_OK(ExecuteSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_TRUE(response.has_precommit_token());
   }
@@ -761,7 +761,7 @@ TEST_P(QueryApiTest, ExecuteSqlUpdateReturning) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"""(
@@ -774,7 +774,7 @@ TEST_P(QueryApiTest, ExecuteSqlUpdateReturning) {
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
-  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  GOOGLESQL_ASSERT_OK(ExecuteSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_TRUE(response.has_precommit_token());
   }
@@ -815,7 +815,7 @@ TEST_P(QueryApiTest, ExecuteSqlDmlPlanWithoutReturning) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"""(
@@ -828,7 +828,7 @@ TEST_P(QueryApiTest, ExecuteSqlDmlPlanWithoutReturning) {
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
-  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  GOOGLESQL_ASSERT_OK(ExecuteSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_TRUE(response.has_precommit_token());
   }
@@ -857,7 +857,7 @@ TEST_P(QueryApiTest, ExecuteSqlDmlPlanWithoutReturning) {
 }
 
 TEST_P(QueryApiTest, ExecuteSqlWithDmlAndProtoParameters) {
-  ZETASQL_ASSERT_OK(AddProtoTables());
+  GOOGLESQL_ASSERT_OK(AddProtoTables());
 
   spanner_api::BeginTransactionRequest begin_request = PARSE_TEXT_PROTO(R"pb(
     options { read_write {} }
@@ -866,7 +866,7 @@ TEST_P(QueryApiTest, ExecuteSqlWithDmlAndProtoParameters) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"""(
@@ -879,7 +879,7 @@ TEST_P(QueryApiTest, ExecuteSqlWithDmlAndProtoParameters) {
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
-  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  GOOGLESQL_ASSERT_OK(ExecuteSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_TRUE(response.has_precommit_token());
   }
@@ -918,7 +918,7 @@ TEST_P(QueryApiTest, ExecuteStreamingSql) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   std::vector<spanner_api::PartialResultSet> response;
-  ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
+  GOOGLESQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_FALSE(response.back().has_precommit_token());
   }
@@ -965,7 +965,7 @@ TEST_P(QueryApiTest, ExecuteStreamingSqlWithParameters) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   std::vector<spanner_api::PartialResultSet> response;
-  ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
+  GOOGLESQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_FALSE(response.back().has_precommit_token());
   }
@@ -992,8 +992,8 @@ TEST_P(QueryApiTest, ExecuteStreamingSqlWithParameters) {
 }
 
 TEST_P(QueryApiTest, ExecuteStreamingSqlWithProtoParameters) {
-  ZETASQL_ASSERT_OK(AddProtoTables());
-  ZETASQL_ASSERT_OK(PopulateProtoTable());
+  GOOGLESQL_ASSERT_OK(AddProtoTables());
+  GOOGLESQL_ASSERT_OK(PopulateProtoTable());
 
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"pb(
@@ -1014,7 +1014,7 @@ TEST_P(QueryApiTest, ExecuteStreamingSqlWithProtoParameters) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   std::vector<spanner_api::PartialResultSet> response;
-  ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
+  GOOGLESQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_FALSE(response.back().has_precommit_token());
   }
@@ -1050,7 +1050,7 @@ TEST_P(QueryApiTest, ExecuteStreamingSqlWithDmlAndParameters) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"""(
@@ -1063,7 +1063,7 @@ TEST_P(QueryApiTest, ExecuteStreamingSqlWithDmlAndParameters) {
   request.mutable_transaction()->set_id(transaction_response.id());
 
   std::vector<spanner_api::PartialResultSet> response;
-  ZETASQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
+  GOOGLESQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
   if (GetSessionType() == SessionType::kMultiplexedSession) {
     ASSERT_TRUE(response.back().has_precommit_token());
   }

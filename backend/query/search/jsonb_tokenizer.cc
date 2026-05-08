@@ -18,7 +18,7 @@
 
 #include <string>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "backend/query/search/tokenizer.h"
@@ -30,8 +30,8 @@ namespace backend {
 namespace query {
 namespace search {
 
-absl::StatusOr<zetasql::Value> JsonbTokenizer::Tokenize(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> JsonbTokenizer::Tokenize(
+    absl::Span<const googlesql::Value> args) {
   return TokenListFromStrings({std::string(kJsonbTokenizer)});
 }
 

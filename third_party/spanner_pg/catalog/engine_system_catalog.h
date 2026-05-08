@@ -38,12 +38,12 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/function.h"
-#include "zetasql/public/function.pb.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/function.pb.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -62,8 +62,8 @@
 
 namespace postgres_translator {
 
-typedef std::pair<const zetasql::Function*,
-                  const zetasql::FunctionSignature*>
+typedef std::pair<const googlesql::Function*,
+                  const googlesql::FunctionSignature*>
     FunctionSigPair;
 
 // An abstract class for catalogs which store the PostgresTypeMappings
@@ -77,9 +77,9 @@ typedef std::pair<const zetasql::Function*,
 // during the first query, and then use GetEngineSystemCatalog() to access the
 // SpangresSystemCatalog singleton.
 //
-// All virtual FindX methods from the zetasql::Catalog class besides
+// All virtual FindX methods from the googlesql::Catalog class besides
 // FindType and FindFunction will throw an error.
-// All GetX methods from the zetasql::EnumerableCatalog class besides
+// All GetX methods from the googlesql::EnumerableCatalog class besides
 // GetTypes and GetFunctions will also throw an error.
 // FindConversion and GetConversions will be populated when
 // PostgresTypeMappings have base implementations in at least one
@@ -94,16 +94,16 @@ typedef std::pair<const zetasql::Function*,
 // Each function in this class has a comment stating if it applies to the
 // original PostgreSQL types and functions or if it applies to the mapped
 // builtin types and functions.
-class EngineSystemCatalog : public zetasql::EnumerableCatalog {
+class EngineSystemCatalog : public googlesql::EnumerableCatalog {
  public:
   static EngineSystemCatalog* GetEngineSystemCatalog();
 
   std::string FullName() const override { return name_; }
 
-  // Get the PostgreSQL type by name as a zetasql::Type.
+  // Get the PostgreSQL type by name as a googlesql::Type.
   // Sets *type to nullptr if the type is not found.
   // FindOptions is not currently supported.
-  absl::Status GetType(const std::string& name, const zetasql::Type** type,
+  absl::Status GetType(const std::string& name, const googlesql::Type** type,
                        const FindOptions& options = FindOptions()) override;
 
   // Get the PostgresTypeMapping by name.
@@ -120,8 +120,8 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   //   Extended Type.
   //   If the PostgreSQL type has a mapped builtin type, type is the mapped
   //   builtin type.
-  //   Currently, all of the PostgreSQL types have mapped builtin ZetaSQL
-  //   types so the type will always be the ZetaSQL mapped type.
+  //   Currently, all of the PostgreSQL types have mapped builtin GoogleSQL
+  //   types so the type will always be the GoogleSQL mapped type.
   // - `max_length` specifies the maximum length of the type. Used just for
   //   string types: if a positive int is specified, then only varchar should
   //   be returned, even if the flag
@@ -130,17 +130,17 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // Notice that this result might be overridden by the reverse transformer for
   // RQG purpose. RQG can be configured  to randomly replace TEXT with VARCHAR
   // for increased test coverage since TEXT and VARCHAR in PostgreSQL both map
-  // to STRING in ZetaSQL. In production, table columns with the ZetaSQL
+  // to STRING in GoogleSQL. In production, table columns with the GoogleSQL
   // STRING type will always be reversed transformed to the PostgreSQL TEXT type
   // in the PostgreSQL analyzer.
   const PostgresTypeMapping* GetTypeFromReverseMapping(
-      const zetasql::Type* type, int max_length = 0) const;
+      const googlesql::Type* type, int max_length = 0) const;
 
-  // Get the PostgreSQL function by name as a zetasql::Function.
+  // Get the PostgreSQL function by name as a googlesql::Function.
   // Sets *function to nullptr if the function is not found.
   // FindOptions is not currently supported.
   absl::Status GetFunction(const std::string& name,
-                           const zetasql::Function** function,
+                           const googlesql::Function** function,
                            const FindOptions& options = FindOptions()) override;
 
   // Get the PostgresExtendedFunction by name.
@@ -150,60 +150,60 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
 
   // Get the builtin function by PostgresExprIdentifier.
   // Returns nullptr if the function_id is not found.
-  const zetasql::Function* GetFunction(
+  const googlesql::Function* GetFunction(
       const PostgresExprIdentifier& expr_id) const;
 
   // Get the builtin TableValuedFunction by oid.
   // Returns nullptr if the function is not found.
-  const zetasql::TableValuedFunction* GetTableValuedFunction(
+  const googlesql::TableValuedFunction* GetTableValuedFunction(
       Oid proc_oid) const;
 
   // Returns the Oid for the TVF or an error if the TVF is not found.
   absl::StatusOr<Oid> GetOidForTVF(
-      const zetasql::TableValuedFunction* tvf) const;
+      const googlesql::TableValuedFunction* tvf) const;
 
   // Get the builtin Procedure by oid.
   // Returns nullptr if the procedure is not found.
-  const zetasql::Procedure* GetProcedure(Oid proc_oid) const;
+  const googlesql::Procedure* GetProcedure(Oid proc_oid) const;
 
   // Get the matching function and signature for this oid and set of input
   // argument types.
   // Returns an error if the function call is not supported.
   virtual absl::StatusOr<FunctionAndSignature> GetFunctionAndSignature(
       Oid proc_oid,
-      const std::vector<zetasql::InputArgumentType>& input_argument_types,
-      const zetasql::LanguageOptions& language_options);
+      const std::vector<googlesql::InputArgumentType>& input_argument_types,
+      const googlesql::LanguageOptions& language_options);
 
   // Get the matching function and signature for this expr identifier and set of
   // input argument types.
   // Returns an error if the function call is not supported.
   virtual absl::StatusOr<FunctionAndSignature> GetFunctionAndSignature(
       const PostgresExprIdentifier& expr_id,
-      const std::vector<zetasql::InputArgumentType>& input_argument_types,
-      const zetasql::LanguageOptions& language_options);
+      const std::vector<googlesql::InputArgumentType>& input_argument_types,
+      const googlesql::LanguageOptions& language_options);
 
   // Get the matching procedure and signature for this oid and set of input
   // argument types.
   // Returns an error if the procedure call is not supported.
   absl::StatusOr<ProcedureAndSignature> GetProcedureAndSignature(
       Oid proc_oid,
-      const std::vector<zetasql::InputArgumentType>& input_argument_types,
-      const zetasql::LanguageOptions& language_options);
+      const std::vector<googlesql::InputArgumentType>& input_argument_types,
+      const googlesql::LanguageOptions& language_options);
 
   // Returns true if the cast should be overridden with a built-in function and
   // ResolvedFunctionCall instead of a ResolvedCast.
   // Excludes PG Numeric Functions that are soon-to-be migrated to ResolvedCast
   // instead of ResolvedFunctionCall.
-  bool HasCastOverrideFunction(const zetasql::Type* source_type,
-                               const zetasql::Type* target_type);
+  bool HasCastOverrideFunction(const googlesql::Type* source_type,
+                               const googlesql::Type* target_type);
 
   // Get the matching function and signature for this cast override.
   // Returns an error if the cast is not overridden.
   // Excludes PG Numeric Functions that are soon-to-be migrated to ResolvedCast
   // instead of ResolvedFunctionCall.
   absl::StatusOr<FunctionAndSignature> GetCastOverrideFunctionAndSignature(
-      const zetasql::Type* source_type, const zetasql::Type* target_type,
-      const zetasql::LanguageOptions& language_options);
+      const googlesql::Type* source_type, const googlesql::Type* target_type,
+      const googlesql::LanguageOptions& language_options);
 
   // Get the PostgreSQL proc oid for the reverse transformer.
   // - `function_name` specifies the function name to look up.
@@ -212,12 +212,12 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   //   builtin function, function_name should be the name of the mapped
   //   function. Currently, all of the PostgreSQL functions have mapped builtin
   //   functions so the name will always be the builtin function name.
-  // - `input_argument_types` are the input types from the ZetaSQL resolved
+  // - `input_argument_types` are the input types from the GoogleSQL resolved
   //   AST.
   absl::StatusOr<Oid> GetPgProcOidFromReverseMapping(
       const std::string& function_name,
-      const std::vector<zetasql::InputArgumentType>& input_argument_types,
-      const zetasql::LanguageOptions& language_options);
+      const std::vector<googlesql::InputArgumentType>& input_argument_types,
+      const googlesql::LanguageOptions& language_options);
 
   // Return true if the builtin function is mapped to a PostgreSQL Expr
   // Identifier.
@@ -234,24 +234,24 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // TODO : Enable conversions after we have base implementations
   // for PostgresTypeMappings.
   // FindOptions is not currently supported.
-  absl::Status FindConversion(const zetasql::Type* from_type,
-                              const zetasql::Type* to_type,
+  absl::Status FindConversion(const googlesql::Type* from_type,
+                              const googlesql::Type* to_type,
                               const FindConversionOptions& options,
-                              zetasql::Conversion* conversion) override {
+                              googlesql::Conversion* conversion) override {
     return GetUnimplementedError("conversions");
   }
 
-  // GetTypes is used by the ZetaSQL random query generator to determine
-  // which builtin types can be used in the ZetaSQL resolved AST.
+  // GetTypes is used by the GoogleSQL random query generator to determine
+  // which builtin types can be used in the GoogleSQL resolved AST.
   // Output should be populated with the mapped builtin types.
   absl::Status GetTypes(
-      absl::flat_hash_set<const zetasql::Type*>* output) const override;
+      absl::flat_hash_set<const googlesql::Type*>* output) const override;
 
-  // GetFunctions is used by the ZetaSQL random query generator to determine
-  // which builtin functions can be used in the ZetaSQL resolved AST.
+  // GetFunctions is used by the GoogleSQL random query generator to determine
+  // which builtin functions can be used in the GoogleSQL resolved AST.
   // Output should be populated with the mapped builtin functions.
   absl::Status GetFunctions(
-      absl::flat_hash_set<const zetasql::Function*>* output) const override;
+      absl::flat_hash_set<const googlesql::Function*>* output) const override;
 
   // GetFunctionSigPairs is used by RQG builders to get function signature pairs
   // for a specific function by name.
@@ -264,90 +264,90 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // Returning Functions (SRFs) for the random query generator. Output should be
   // populated with the mapped functions.
   absl::Status GetSetReturningFunctions(
-      absl::flat_hash_set<const zetasql::Function*>* output) const;
+      absl::flat_hash_set<const googlesql::Function*>* output) const;
 
   // GetTableValuedFunctions is used to surface the registered system TVFs and
   // their associated OIDs. Output should be populated with the mapped TVFs.
   absl::Status GetTableValuedFunctions(absl::flat_hash_map<
-      Oid, const zetasql::TableValuedFunction*>* output) const;
+      Oid, const googlesql::TableValuedFunction*>* output) const;
 
   // GetProcedures is used to surface the registered system procedures and
   // their associated OIDs. Output should be populated with the mapped
   // procedures.
   absl::Status GetProcedures(
-      absl::flat_hash_map<Oid, const zetasql::Procedure*>* output) const;
+      absl::flat_hash_map<Oid, const googlesql::Procedure*>* output) const;
 
-  // GetConversions is used by the ZetaSQL random query generator to determine
-  // which type casts between the builtin types (ZetaSQL and Postgres
+  // GetConversions is used by the GoogleSQL random query generator to determine
+  // which type casts between the builtin types (GoogleSQL and Postgres
   // extended) are supported.
   // TODO : enable conversions after we have base implementations
   // for PostgresTypeMappings.
-  absl::Status GetConversions(absl::flat_hash_set<const zetasql::Conversion*>*
+  absl::Status GetConversions(absl::flat_hash_set<const googlesql::Conversion*>*
                                   output) const override {
     return GetUnimplementedError("conversions");
   }
 
   absl::StatusOr<bool> IsValidCast(
-      const zetasql::Type* from_type, const zetasql::Type* to_type,
-      const zetasql::LanguageOptions& language_options);
+      const googlesql::Type* from_type, const googlesql::Type* to_type,
+      const googlesql::LanguageOptions& language_options);
 
   absl::Status FindTable(
-      const absl::Span<const std::string>& path, const zetasql::Table** table,
+      const absl::Span<const std::string>& path, const googlesql::Table** table,
       const FindOptions& options = FindOptions()) override final {
     return GetUnimplementedError("tables");
   }
 
   absl::Status FindModel(
-      const absl::Span<const std::string>& path, const zetasql::Model** model,
+      const absl::Span<const std::string>& path, const googlesql::Model** model,
       const FindOptions& options = FindOptions()) override final {
     return GetUnimplementedError("models");
   }
 
   absl::Status FindConnection(const absl::Span<const std::string>& path,
-                              const zetasql::Connection** connection,
+                              const googlesql::Connection** connection,
                               const FindOptions& options) override final {
     return GetUnimplementedError("connections");
   }
 
   absl::Status FindTableValuedFunction(
       const absl::Span<const std::string>& path,
-      const zetasql::TableValuedFunction** function,
+      const googlesql::TableValuedFunction** function,
       const FindOptions& options = FindOptions()) override final {
     return GetUnimplementedError("table valued functions");
   }
 
   absl::Status FindProcedure(
       const absl::Span<const std::string>& path,
-      const zetasql::Procedure** procedure,
+      const googlesql::Procedure** procedure,
       const FindOptions& options = FindOptions()) override final {
     return GetUnimplementedError("procedures");
   }
 
   absl::Status FindConstantWithPathPrefix(
       const absl::Span<const std::string> path, int* num_names_consumed,
-      const zetasql::Constant** constant,
+      const googlesql::Constant** constant,
       const FindOptions& options = FindOptions()) override final {
     return GetUnimplementedError("constants");
   }
 
-  absl::Status GetCatalogs(absl::flat_hash_set<const zetasql::Catalog*>*
+  absl::Status GetCatalogs(absl::flat_hash_set<const googlesql::Catalog*>*
                                output) const override final {
     return GetUnimplementedError("sub-catalogs");
   }
-  absl::Status GetTables(absl::flat_hash_set<const zetasql::Table*>* output)
+  absl::Status GetTables(absl::flat_hash_set<const googlesql::Table*>* output)
       const override final {
     return GetUnimplementedError("tables");
   }
 
   // Uses the overridden versions of AddTypes and AddFunctions from the derived
   // classes.
-  absl::Status SetUp(const zetasql::LanguageOptions& language_options) {
-    ZETASQL_RETURN_IF_ERROR(AddTypes(language_options));
-    ZETASQL_RETURN_IF_ERROR(AddFunctions(language_options));
+  absl::Status SetUp(const googlesql::LanguageOptions& language_options) {
+    GOOGLESQL_RETURN_IF_ERROR(AddTypes(language_options));
+    GOOGLESQL_RETURN_IF_ERROR(AddFunctions(language_options));
     return absl::OkStatus();
   }
 
-  zetasql::TypeFactory* type_factory() {
+  googlesql::TypeFactory* type_factory() {
     return builtin_function_catalog_->type_factory();
   }
 
@@ -357,7 +357,7 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
 
   // Like GetFunctions(), but return PostgresExtendedFunction objects
   // rather than breaking each supported PostgreSQL function
-  // down into the various ZetaSQL functions that implement its different
+  // down into the various GoogleSQL functions that implement its different
   // type signatures.
   absl::Status GetPostgreSQLFunctions(
       absl::flat_hash_set<const PostgresExtendedFunction*>* output) const;
@@ -365,17 +365,16 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // Like GetFunctions(), but returns all functions in the engine's builtin
   // function catalog, regardless of supprt in this EngineSystemCatalog.
   absl::Status GetBuiltinFunctions(
-      absl::flat_hash_set<const zetasql::Function*>* output) const {
+      absl::flat_hash_set<const googlesql::Function*>* output) const {
     return builtin_function_catalog_->GetFunctions(output);
   }
 
   // Returns true if the function is implemented as a SQL rewrite. Otherwise, it
   // returns false, including in the case when the function is not found.
-  bool IsBuiltinSqlRewriteFunction(
-      const std::string& function_name,
-      const zetasql::LanguageOptions& language_options,
-      zetasql::TypeFactory* type_factory);
-
+    bool IsBuiltinSqlRewriteFunction(
+        const std::string& function_name,
+        const googlesql::LanguageOptions& language_options,
+        googlesql::TypeFactory* type_factory);
 
   // Like GetTypes(), but return PostgresTypeMapping objects
   // rather than the GSQL types that they map to.
@@ -391,8 +390,8 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   }
 
   virtual absl::StatusOr<FunctionAndSignature> GetPgNumericCastFunction(
-      const zetasql::Type* source_type, const zetasql::Type* target_type,
-      const zetasql::LanguageOptions& language_options) = 0;
+      const googlesql::Type* source_type, const googlesql::Type* target_type,
+      const googlesql::LanguageOptions& language_options) = 0;
 
   // Checks whether a given expression requires transformation for comparison.
   // For some types native comparison semantics doesn't match with Postgres'
@@ -400,7 +399,7 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // know whether additional transformation is required on input ResolvedExpr so
   // the underlying database can match semantics.
   virtual bool IsTransformationRequiredForComparison(
-      const zetasql::ResolvedExpr& gsql_expr) {
+      const googlesql::ResolvedExpr& gsql_expr) {
     return false;
   }
 
@@ -410,10 +409,10 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // This function allows a database to create a new ResolvedExpr from the input
   // ResolvedExpr so the underlying database can match semantics. Places this
   // is called from incude: ORDER BY, Comparison Expressions, CASE, IN.
-  virtual absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  virtual absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   GetResolvedExprForComparison(
-      std::unique_ptr<zetasql::ResolvedExpr> gsql_expr,
-      const zetasql::LanguageOptions& language_options) {
+      std::unique_ptr<googlesql::ResolvedExpr> gsql_expr,
+      const googlesql::LanguageOptions& language_options) {
     return gsql_expr;
   }
 
@@ -422,16 +421,16 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // so, it should be handled seperately by calling
   // GetOriginalExprFromComparisonExpr.
   virtual bool IsResolvedExprForComparison(
-      const zetasql::ResolvedExpr& gsql_expr) const {
+      const googlesql::ResolvedExpr& gsql_expr) const {
     return false;
   }
 
   // Given an input `mapped_gsql_expr` return the original ResolvedExpr.
   // Expected only to be called when the input is the result of
   // GetResolvedExprForComparison.
-  virtual absl::StatusOr<const zetasql::ResolvedExpr*>
+  virtual absl::StatusOr<const googlesql::ResolvedExpr*>
   GetOriginalExprFromComparisonExpr(
-      const zetasql::ResolvedExpr& mapped_gsql_expr) const {
+      const googlesql::ResolvedExpr& mapped_gsql_expr) const {
     return absl::UnimplementedError(
         "This catalog does not implement any mappings for comparisons.");
   }
@@ -442,13 +441,13 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
     return std::nullopt;
   }
 
-  // Runs the ZetaSQL Function Signature matcher to see if the input arguments
+  // Runs the GoogleSQL Function Signature matcher to see if the input arguments
   // are compatible with the signature.
   bool SignatureMatches(
-      const std::vector<zetasql::InputArgumentType>& input_arguments,
-      const zetasql::FunctionSignature& googlesql_signature,
-      std::unique_ptr<zetasql::FunctionSignature>* result_signature,
-      const zetasql::LanguageOptions& language_options);
+      const std::vector<googlesql::InputArgumentType>& input_arguments,
+      const googlesql::FunctionSignature& googlesql_signature,
+      std::unique_ptr<googlesql::FunctionSignature>* result_signature,
+      const googlesql::LanguageOptions& language_options);
 
  protected:
   // The EngineSystemCatalog should never be instantiated.
@@ -460,12 +459,12 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
 
   // Must be implemented by derived classes.
   virtual absl::Status AddTypes(
-      const zetasql::LanguageOptions& language_options) = 0;
+      const googlesql::LanguageOptions& language_options) = 0;
   virtual absl::Status AddFunctions(
-      const zetasql::LanguageOptions& language_options) = 0;
+      const googlesql::LanguageOptions& language_options) = 0;
 
   absl::Status AddType(const PostgresTypeMapping* type,
-                       const zetasql::LanguageOptions& language_options);
+                       const googlesql::LanguageOptions& language_options);
 
   // Creates a PostgresExtendedFunctionSignature for a variadic signature.
   // Variadic function signatures are not validated when the EngineSystemCatalog
@@ -474,7 +473,7 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   absl::StatusOr<std::unique_ptr<PostgresExtendedFunctionSignature>>
   BuildVariadicPostgresExtendedFunctionSignature(
       const std::string& mapped_function_name,
-      const zetasql::FunctionSignature& signature, Oid proc_oid,
+      const googlesql::FunctionSignature& signature, Oid proc_oid,
       const std::vector<std::string>& query_features_names);
 
   // Creates a PostgresExtendedFunction using the arguments and adds it to the
@@ -483,16 +482,16 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // builtin function, look up the Oid or function signature and throw an error
   // if either is not found.
   absl::Status AddFunction(const PostgresFunctionArguments& function_arguments,
-                           const zetasql::LanguageOptions& language_options);
+                           const googlesql::LanguageOptions& language_options);
 
   void AddFunctionToReverseMappings(const std::string& proc_name, Oid proc_oid);
 
-  // Creates a mapping between a PostgreSQL proc oid and a ZetaSQL
+  // Creates a mapping between a PostgreSQL proc oid and a GoogleSQL
   // TableValuedFunction by name. Note that the engine_tvf_name is not
   // required to match the PostgreSQL proc name.
   absl::Status AddTVF(Oid proc_oid, const std::string& engine_tvf_name);
 
-  // Creates a mapping between a PostgreSQL proc oid and a ZetaSQL Procedure
+  // Creates a mapping between a PostgreSQL proc oid and a GoogleSQL Procedure
   // by name. Note that the engine_procedure_name is not required to match the
   // PostgreSQL proc name.
   absl::Status AddProcedure(Oid proc_oid,
@@ -511,33 +510,33 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // Excludes PG Numeric Functions that are soon-to-be migrated to ResolvedCast
   // instead of ResolvedFunctionCall.
   absl::Status AddCastOverrideFunction(
-      const zetasql::Type* source_type, const zetasql::Type* target_type,
+      const googlesql::Type* source_type, const googlesql::Type* target_type,
       const std::string& builtin_function_name,
-      const zetasql::LanguageOptions& language_options);
+      const googlesql::LanguageOptions& language_options);
 
   // Get a builtin function by name.
   // Returns a nullptr if the function is not found.
-  absl::StatusOr<const zetasql::Function*> GetBuiltinFunction(
+  absl::StatusOr<const googlesql::Function*> GetBuiltinFunction(
       const std::string& name) const;
 
  private:
-  // Transforms a PostgreSQL type oid into a ZetaSQL FunctionArgumentType.
-  // The PostgreSQL ANYOID type is transformed into a ZetaSQL ARG_TYPE_ANY_1
+  // Transforms a PostgreSQL type oid into a GoogleSQL FunctionArgumentType.
+  // The PostgreSQL ANYOID type is transformed into a GoogleSQL ARG_TYPE_ANY_1
   // function argument type.
   // All other PostgreSQL types are either successfully transformed to a
-  // supported ZetaSQL type or cause an error to be thrown.
-  absl::StatusOr<zetasql::FunctionArgumentType> BuildGsqlFunctionArgumentType(
-      Oid type_oid, zetasql::FunctionEnums::ArgumentCardinality cardinality);
+  // supported GoogleSQL type or cause an error to be thrown.
+  absl::StatusOr<googlesql::FunctionArgumentType> BuildGsqlFunctionArgumentType(
+      Oid type_oid, googlesql::FunctionEnums::ArgumentCardinality cardinality);
 
   // Given the input type oids, output type oid, and variadic type oid of a
-  // PostgreSQL proc, return the corresponding ZetaSQL FunctionSignature.
-  absl::StatusOr<zetasql::FunctionSignature> BuildGsqlFunctionSignature(
+  // PostgreSQL proc, return the corresponding GoogleSQL FunctionSignature.
+  absl::StatusOr<googlesql::FunctionSignature> BuildGsqlFunctionSignature(
       const absl::Span<const Oid>& postgres_input_types,
       Oid postgres_output_type, Oid postgres_variadic_type,
       bool postgres_retset);
 
-  // Transform the PostgreSQL input type oids into ZetaSQL InputArgumentTypes.
-  absl::StatusOr<std::vector<zetasql::InputArgumentType>>
+  // Transform the PostgreSQL input type oids into GoogleSQL InputArgumentTypes.
+  absl::StatusOr<std::vector<googlesql::InputArgumentType>>
   BuildGsqlInputTypeList(const oidvector& postgres_input_types);
 
   // Given a list PG proc candidates, a list of input arguments, and a
@@ -546,18 +545,18 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // If no matching signature is found, return an error.
   absl::StatusOr<Oid> FindMatchingPgProcOid(
       absl::Span<const PgProcData* const> procs,
-      const std::vector<zetasql::InputArgumentType>& input_argument_types,
-      const zetasql::Type* return_type,
-      const zetasql::LanguageOptions& language_options);
+      const std::vector<googlesql::InputArgumentType>& input_argument_types,
+      const googlesql::Type* return_type,
+      const googlesql::LanguageOptions& language_options);
 
   // If the mapped_function has a matching signature, create a copy of the
   // mapped function with just this signature. Otherwise, return an error.
-  absl::StatusOr<std::unique_ptr<zetasql::Function>> BuildMappedFunction(
-      const zetasql::FunctionSignature& postgres_signature,
-      const std::vector<zetasql::InputArgumentType>&
+  absl::StatusOr<std::unique_ptr<googlesql::Function>> BuildMappedFunction(
+      const googlesql::FunctionSignature& postgres_signature,
+      const std::vector<googlesql::InputArgumentType>&
           postgres_input_argument_types,
-      const zetasql::Function* mapped_function,
-      const zetasql::LanguageOptions& language_options);
+      const googlesql::Function* mapped_function,
+      const googlesql::LanguageOptions& language_options);
 
   static absl::Status GetUnimplementedError(absl::string_view not_found_type) {
     return absl::UnimplementedError(
@@ -579,8 +578,8 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // Extended Type and the value is the raw PostgreSQL type name.
   // For PostgreSQL types without a base implementation, the key is the mapped
   // type and the value is the raw PostgreSQL type name.
-  absl::flat_hash_map<const zetasql::Type*, std::string, zetasql::TypeHash,
-                      zetasql::TypeEquals>
+  absl::flat_hash_map<const googlesql::Type*, std::string, googlesql::TypeHash,
+                      googlesql::TypeEquals>
       engine_types_reverse_map_;
 
   // Stores the PostgreSQL functions which are supported in this storage engine.
@@ -598,7 +597,7 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // are also stored here so that catalog creation can verify their existence.
   // The key is the expr identifier -- typically a NodeTag (T_CoalesceExpr) but
   // sometimes a NodeTag and an additional field (T_BoolExpr + BoolExprType).
-  absl::flat_hash_map<PostgresExprIdentifier, const zetasql::Function*>
+  absl::flat_hash_map<PostgresExprIdentifier, const googlesql::Function*>
       pg_expr_to_builtin_function_;
 
   // Store a mapping from a PostgreSQL cast to a engine builtin function.
@@ -607,29 +606,29 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
   // The key is std::pair<source_type, target_type>.
   // Excludes PG Numeric Functions that are soon-to-be migrated to ResolvedCast
   // instead of ResolvedFunctionCall.
-  absl::flat_hash_map<std::pair<const zetasql::Type*, const zetasql::Type*>,
+  absl::flat_hash_map<std::pair<const googlesql::Type*, const googlesql::Type*>,
                       FunctionAndSignature>
       pg_cast_to_builtin_function_;
 
   // Store mappings between PostgreSQL proc oids and TableValuedFunctions.
-  absl::flat_hash_map<Oid, const zetasql::TableValuedFunction*>
+  absl::flat_hash_map<Oid, const googlesql::TableValuedFunction*>
       proc_oid_to_tvf_;
-  absl::flat_hash_map<const zetasql::TableValuedFunction*, Oid>
+  absl::flat_hash_map<const googlesql::TableValuedFunction*, Oid>
       tvf_to_proc_oid_;
 
   // Store mapping from PostgreSQL proc oid to Procedure. There is no reverse
   // mapping because procedures are only used in CALL statements, CALL
   // statements are not used in RQG, and do not have reverse transformer logic.
-  absl::flat_hash_map<Oid, const zetasql::Procedure*> proc_oid_to_procedure_;
+  absl::flat_hash_map<Oid, const googlesql::Procedure*> proc_oid_to_procedure_;
 
   // Stores the reverse mapping for operator functions.
   // Only used by the reverse transformer.
-  // Since multiple PG operators and functions can all map to the same ZetaSQL
+  // Since multiple PG operators and functions can all map to the same GoogleSQL
   // function, the reverse transformer will use the first matching function that
   // it finds. In order to guarantee that operators are tested, this map stores
   // just the set of PG operators which match a mapped function.
   //
-  // For example, dpow and pow both map to the ZetaSQL power function with
+  // For example, dpow and pow both map to the GoogleSQL power function with
   // DOUBLE inputs and outputs, but only dpow is used by the ^ operator.
   // dpow will appear in engine_function_operators_reverse_map_ and pow will
   // appear in engine_function_non_operators_reverse_map_.
@@ -653,7 +652,7 @@ class EngineSystemCatalog : public zetasql::EnumerableCatalog {
       engine_function_expr_reverse_map_;
   // Lists builtin functions for the storage engine that correspond to
   // PostgreSQL cast functions. While PostgreSQL casts are usually transformed
-  // to ZetaSQL ResolvedCasts, engines can choose to have casts to/from
+  // to GoogleSQL ResolvedCasts, engines can choose to have casts to/from
   // engine-defined types transformed to ResolvedFunctionCalls instead.
   // Only used by the reverse transformer.
   absl::flat_hash_set<std::string> engine_cast_functions_;

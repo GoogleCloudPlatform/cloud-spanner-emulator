@@ -54,8 +54,8 @@
 #include "third_party/spanner_pg/ddl/translation_utils.h"
 #include "google/protobuf/repeated_ptr_field.h"
 #include "re2/re2.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 namespace spangres {
@@ -303,7 +303,7 @@ SpangresSchemaPrinterImpl::PrintDDLStatements(
     const google::spanner::emulator::backend::ddl::DDLStatementList& statements) const {
   std::vector<std::string> output;
   for (const google::spanner::emulator::backend::ddl::DDLStatement& statement : statements.statement()) {
-    ZETASQL_ASSIGN_OR_RETURN(std::vector<std::string> printed,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::vector<std::string> printed,
                      PrintDDLStatement(statement));
     output.insert(output.end(), printed.begin(), printed.end());
   }
@@ -427,7 +427,7 @@ SpangresSchemaPrinterImpl::PrintCreateDatabase(
 absl::StatusOr<std::vector<std::string>>
 SpangresSchemaPrinterImpl::PrintAlterDatabase(
     const google::spanner::emulator::backend::ddl::AlterDatabase& statement) const {
-  ZETASQL_RET_CHECK_EQ(statement.alter_type_case(),
+  GOOGLESQL_RET_CHECK_EQ(statement.alter_type_case(),
                google::spanner::emulator::backend::ddl::AlterDatabase::kSetOptions);
 
   return PrintAlterDatabaseSetOptions(QuoteIdentifier(statement.db_name()),
@@ -437,13 +437,16 @@ SpangresSchemaPrinterImpl::PrintAlterDatabase(
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
     const google::spanner::emulator::backend::ddl::AlterTable& statement) const {
   std::string existence_modifier_str = "";
+  if (statement.existence_modifier() == google::spanner::emulator::backend::ddl::IF_EXISTS) {
+    existence_modifier_str = "IF EXISTS ";
+  }
   std::string alter_table =
       StrCat("ALTER TABLE ", existence_modifier_str,
              QuoteQualifiedIdentifier(statement.table_name()));
 
   switch (statement.alter_type_case()) {
     case google::spanner::emulator::backend::ddl::AlterTable::kAddColumn: {
-      ZETASQL_ASSIGN_OR_RETURN(std::string printed_column,
+      GOOGLESQL_ASSIGN_OR_RETURN(std::string printed_column,
                        PrintColumn(statement.add_column().column()));
       std::string if_not_exists = "";
       if (statement.add_column().existence_modifier() ==
@@ -461,7 +464,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
     case google::spanner::emulator::backend::ddl::AlterTable::kAlterColumn: {
       google::spanner::emulator::backend::ddl::AlterTable::AlterColumn alter_column_sdl =
           statement.alter_column();
-      ZETASQL_RET_CHECK(alter_column_sdl.has_column());
+      GOOGLESQL_RET_CHECK(alter_column_sdl.has_column());
       google::spanner::emulator::backend::ddl::ColumnDefinition column = alter_column_sdl.column();
       const std::string alter_column =
           StrCat("ALTER COLUMN ", QuoteIdentifier(column.column_name()));
@@ -472,8 +475,8 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
             return StrCat(alter_table, " ", alter_column, " DROP DEFAULT");
           }
           case google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::SET_DEFAULT: {
-            ZETASQL_RET_CHECK(column.has_column_default());
-            ZETASQL_RET_CHECK(column.column_default().has_expression_origin());
+            GOOGLESQL_RET_CHECK(column.has_column_default());
+            GOOGLESQL_RET_CHECK(column.column_default().has_expression_origin());
             google::spanner::emulator::backend::ddl::SQLExpressionOrigin expression_origin =
                 column.column_default().expression_origin();
             const std::string expression_output =
@@ -490,9 +493,9 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
             return StrCat(alter_table, " ", alter_column, " DROP NOT NULL");
           }
           case google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::ALTER_IDENTITY: {
-            ZETASQL_RET_CHECK(column.has_identity_column());
+            GOOGLESQL_RET_CHECK(column.has_identity_column());
             if (alter_column_sdl.has_identity_alter_start_with_counter()) {
-              ZETASQL_RET_CHECK(column.identity_column().has_start_with_counter());
+              GOOGLESQL_RET_CHECK(column.identity_column().has_start_with_counter());
               return absl::StrCat(
                   alter_table, " ", alter_column, " RESTART COUNTER WITH ",
                   column.identity_column().start_with_counter());
@@ -520,8 +523,8 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
             return StrCat(alter_table, " ", alter_column, " DROP ON UPDATE");
           }
           case google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::SET_ON_UPDATE: {
-            ZETASQL_RET_CHECK(column.has_column_on_update());
-            ZETASQL_RET_CHECK(column.column_on_update().has_expression_origin());
+            GOOGLESQL_RET_CHECK(column.has_column_on_update());
+            GOOGLESQL_RET_CHECK(column.column_on_update().has_expression_origin());
             google::spanner::emulator::backend::ddl::SQLExpressionOrigin expression_origin =
                 column.column_on_update().expression_origin();
             const std::string expression_output =
@@ -533,17 +536,17 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
           }
           default: {
             // We need this here to allow us to add the SET_NOT_NULL and
-            // DROP_NOT_NULL operations in ZetaSQL first/
-            ZETASQL_RET_CHECK_FAIL()
+            // DROP_NOT_NULL operations in GoogleSQL first/
+            GOOGLESQL_RET_CHECK_FAIL()
                 << "Unknown alter column operation type:"
                 << static_cast<int64_t>(alter_column_sdl.operation());
           }
         }
         // Should never get here.
-        ZETASQL_RET_CHECK_FAIL() << "Unknown alter column operation type:"
+        GOOGLESQL_RET_CHECK_FAIL() << "Unknown alter column operation type:"
                          << static_cast<int64_t>(alter_column_sdl.operation());
       } else {
-        ZETASQL_ASSIGN_OR_RETURN(const std::string printed_type, PrintType(column));
+        GOOGLESQL_ASSIGN_OR_RETURN(const std::string printed_type, PrintType(column));
         if (column.has_not_null()) {
           absl::string_view not_null_action =
               column.not_null() ? "SET" : "DROP";
@@ -556,17 +559,17 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
     }
 
     case google::spanner::emulator::backend::ddl::AlterTable::kAddForeignKey: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           std::string printed_foreign_key,
           PrintForeignKey(statement.add_foreign_key().foreign_key()));
       return StrCat(alter_table, " ADD ", printed_foreign_key);
     }
 
     case google::spanner::emulator::backend::ddl::AlterTable::kAddCheckConstraint: {
-      ZETASQL_RET_CHECK(statement.add_check_constraint().has_check_constraint())
+      GOOGLESQL_RET_CHECK(statement.add_check_constraint().has_check_constraint())
           << "Check constraint should not be empty in <ALTER TABLE> add "
              "constraint <CHECK>.";
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           std::string printed_check_constraint,
           PrintCheckConstraint(
               statement.add_check_constraint().check_constraint()));
@@ -594,14 +597,14 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
     }
 
     case google::spanner::emulator::backend::ddl::AlterTable::kSetOnDelete: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           std::string action,
           PrintInterleaveDeleteAction(statement.set_on_delete().action()));
       return StrCat(alter_table, " SET ON DELETE", action);
     }
 
     case google::spanner::emulator::backend::ddl::AlterTable::kSetInterleaveClause: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           std::string interleave,
           PrintInterleaveClause(
               statement.set_interleave_clause().interleave_clause()));
@@ -653,7 +656,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterTable(
       const google::protobuf::FieldDescriptor* field_descriptor =
           google::spanner::emulator::backend::ddl::AlterTable::GetDescriptor()->FindFieldByNumber(
               statement.alter_type_case());
-      ZETASQL_RET_CHECK_FAIL() << "Unsupported alter table type: alter_type_case is: "
+      GOOGLESQL_RET_CHECK_FAIL() << "Unsupported alter table type: alter_type_case is: "
                        << static_cast<int64_t>(statement.alter_type_case())
                        << ", alter type name is: "
                        << (field_descriptor == nullptr
@@ -680,22 +683,22 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateTable(
   // Pattern with indent for each clause in create table
   const std::string_view pattern = "  $0";
   for (const ColumnDefinition& column_definition : statement.column()) {
-    ZETASQL_ASSIGN_OR_RETURN(std::string column_string, PrintColumn(column_definition));
+    GOOGLESQL_ASSIGN_OR_RETURN(std::string column_string, PrintColumn(column_definition));
     create_table_entries.push_back(Substitute(pattern, column_string));
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(std::string primary_key_string,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string primary_key_string,
                    PrintPrimaryKey(statement.primary_key()));
   create_table_entries.push_back(Substitute(pattern, primary_key_string));
 
   for (const ForeignKey& foreign_key : statement.foreign_key()) {
-    ZETASQL_ASSIGN_OR_RETURN(std::string foreign_key_string,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::string foreign_key_string,
                      PrintForeignKey(foreign_key));
     create_table_entries.push_back(Substitute(pattern, foreign_key_string));
   }
 
   for (const CheckConstraint& check_constraint : statement.check_constraint()) {
-    ZETASQL_ASSIGN_OR_RETURN(std::string check_constraint_string,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::string check_constraint_string,
                      PrintCheckConstraint(check_constraint));
     create_table_entries.push_back(
         Substitute(pattern, check_constraint_string));
@@ -739,7 +742,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateTable(
   StrAppend(&after_create, columnar_policy);
 
   if (statement.has_interleave_clause()) {
-    ZETASQL_ASSIGN_OR_RETURN(std::string interleave_in_string,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::string interleave_in_string,
                      PrintInterleaveClause(statement.interleave_clause()));
     StrAppend(&after_create, " ", interleave_in_string);
   }
@@ -958,7 +961,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSearchIndex(
   for (const google::spanner::emulator::backend::ddl::KeyPartClause& partition :
        statement.partition_by()) {
     const std::string name = QuoteIdentifier(partition.key_name());
-    ZETASQL_ASSIGN_OR_RETURN(absl::string_view partition_order,
+    GOOGLESQL_ASSIGN_OR_RETURN(absl::string_view partition_order,
                      PrintSortOrder(partition.order()));
     partition_by.push_back(StrCat(name, partition_order));
   }
@@ -969,7 +972,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSearchIndex(
   for (const google::spanner::emulator::backend::ddl::KeyPartClause& order_by_part :
        statement.order_by()) {
     const std::string name = QuoteIdentifier(order_by_part.key_name());
-    ZETASQL_ASSIGN_OR_RETURN(absl::string_view sort_order,
+    GOOGLESQL_ASSIGN_OR_RETURN(absl::string_view sort_order,
                      PrintSortOrder(order_by_part.order()));
     order_by.push_back(StrCat(name, sort_order));
   }
@@ -1204,11 +1207,11 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropFunction(
       return Substitute("DROP FUNCTION $0$1", if_exists,
                         QuoteQualifiedIdentifier(statement.function_name()));
     case google::spanner::emulator::backend::ddl::Function::INVALID_KIND:
-      ZETASQL_RET_CHECK_FAIL()
+      GOOGLESQL_RET_CHECK_FAIL()
           << "Only VIEW and FUNCTION are supported as function kinds";
   }
   // Should never get here.
-  ZETASQL_RET_CHECK_FAIL() << "Unknown Function type:"
+  GOOGLESQL_RET_CHECK_FAIL() << "Unknown Function type:"
                    << static_cast<int64_t>(statement.function_kind());
 }
 
@@ -1299,9 +1302,10 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateIndex(
   for (const google::spanner::emulator::backend::ddl::KeyPartClause& index_part : statement.key()) {
     std::string key_part;
     const std::string name = QuoteIdentifier(index_part.key_name());
-    ZETASQL_ASSIGN_OR_RETURN(absl::string_view sort_order,
+    GOOGLESQL_ASSIGN_OR_RETURN(absl::string_view sort_order,
                      PrintSortOrder(index_part.order()));
-    key_parts.push_back(StrCat(name, sort_order));
+    key_part = StrCat(name, sort_order);
+    key_parts.push_back(key_part);
   }
 
   std::vector<std::string> include_columns;
@@ -1350,7 +1354,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateIndex(
 
   // Null filtered indexes are not supported in Spangres, therefore it should
   // not be possible for them to appear in schema.
-  ZETASQL_RET_CHECK(!statement.null_filtered());
+  GOOGLESQL_RET_CHECK(!statement.null_filtered());
 
   for (const std::string& column : statement.null_filtered_column()) {
     conditions.push_back(CreateNotNullCondition(column));
@@ -1402,7 +1406,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSequence(
   std::optional<int64_t> skip_range_min, skip_range_max;
   for (const ::google::spanner::emulator::backend::ddl::SetOption& option : statement.set_options()) {
     if (option.option_name() == "sequence_kind") {
-      ZETASQL_RET_CHECK_EQ(option.string_value(), "bit_reversed_positive");
+      GOOGLESQL_RET_CHECK_EQ(option.string_value(), "bit_reversed_positive");
       create_statement_clauses.push_back("BIT_REVERSED_POSITIVE");
     } else if (option.option_name() == "start_with_counter") {
       create_statement_clauses.push_back(
@@ -1416,7 +1420,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateSequence(
   }
 
   if (skip_range_min.has_value()) {
-    ZETASQL_RET_CHECK(skip_range_max.has_value());
+    GOOGLESQL_RET_CHECK(skip_range_max.has_value());
     create_statement_clauses.push_back(absl::Substitute(
         "SKIP RANGE $0 $1", skip_range_min.value(), skip_range_max.value()));
   }
@@ -1478,9 +1482,9 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintSQLSecurityType(
       return "INVOKER";
       break;
     case google::spanner::emulator::backend::ddl::Function::UNSPECIFIED_SQL_SECURITY:
-      ZETASQL_RET_CHECK_FAIL() << "Only SQL SECURITY INVOKER or DEFINER is supported.";
+      GOOGLESQL_RET_CHECK_FAIL() << "Only SQL SECURITY INVOKER or DEFINER is supported.";
   }
-  ZETASQL_RET_CHECK_FAIL() << "Unsupported sql security type: "
+  GOOGLESQL_RET_CHECK_FAIL() << "Unsupported sql security type: "
                    << static_cast<int64_t>(sql_security);
 }
 
@@ -1492,9 +1496,9 @@ SpangresSchemaPrinterImpl::PrintSQLSecurityTypeForView(
       return "security_invoker";
       break;
     case google::spanner::emulator::backend::ddl::Function::UNSPECIFIED_SQL_SECURITY:
-      ZETASQL_RET_CHECK_FAIL() << "Only security_invoker={true,false} are supported.";
+      GOOGLESQL_RET_CHECK_FAIL() << "Only security_invoker={true,false} are supported.";
   }
-  ZETASQL_RET_CHECK_FAIL() << "Unsupported sql security type: "
+  GOOGLESQL_RET_CHECK_FAIL() << "Unsupported sql security type: "
                    << static_cast<int64_t>(sql_security);
 }
 
@@ -1508,7 +1512,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateFunction(
     const google::spanner::emulator::backend::ddl::CreateFunction& statement) const {
   switch (statement.function_kind()) {
     case google::spanner::emulator::backend::ddl::Function_Kind::Function_Kind_VIEW: {
-      ZETASQL_ASSIGN_OR_RETURN(std::string security_type,
+      GOOGLESQL_ASSIGN_OR_RETURN(std::string security_type,
                        PrintSQLSecurityTypeForView(statement.sql_security()));
 
       std::string with_clause = "";
@@ -1524,7 +1528,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateFunction(
           with_clause, statement.sql_body_origin().original_expression());
     }
     case google::spanner::emulator::backend::ddl::Function_Kind::Function_Kind_FUNCTION: {
-      ZETASQL_RET_CHECK(statement.has_sql_body_origin())
+      GOOGLESQL_RET_CHECK(statement.has_sql_body_origin())
           << "SQL body origin is required for function: "
           << statement.function_name();
       std::string function_template =
@@ -1536,7 +1540,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateFunction(
         std::string param_name = IsUdfParameterNameReserved(param.name())
                                      ? ""
                                      : absl::StrCat(param.name(), " ");
-        ZETASQL_ASSIGN_OR_RETURN(std::string param_type,
+        GOOGLESQL_ASSIGN_OR_RETURN(std::string param_type,
                          PrintSpannerType(param.param_typename()));
         std::string default_expression =
             param.default_value_origin().has_original_expression()
@@ -1547,7 +1551,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateFunction(
             absl::StrCat(param_name, param_type, default_expression));
       }
 
-      ZETASQL_ASSIGN_OR_RETURN(std::string return_type,
+      GOOGLESQL_ASSIGN_OR_RETURN(std::string return_type,
                        PrintSpannerType(statement.return_typename()));
       std::string security_type = "";
       if (statement.has_sql_security() &&
@@ -1558,7 +1562,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateFunction(
       }
       std::string volatility_type;
       if (statement.has_determinism()) {
-        ZETASQL_ASSIGN_OR_RETURN(volatility_type,
+        GOOGLESQL_ASSIGN_OR_RETURN(volatility_type,
                          PrintFunctionDeterminism(statement.determinism()));
         volatility_type = " " + volatility_type;
       }
@@ -1570,11 +1574,11 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateFunction(
                         statement.sql_body_origin().original_expression());
     }
     case google::spanner::emulator::backend::ddl::Function_Kind::Function_Kind_INVALID_KIND:
-      ZETASQL_RET_CHECK_FAIL()
+      GOOGLESQL_RET_CHECK_FAIL()
           << "Only VIEW and scalar FUNCTION are supported as function types.";
   }
   // Should never get here.
-  ZETASQL_RET_CHECK_FAIL() << "Unknown Function type:"
+  GOOGLESQL_RET_CHECK_FAIL() << "Unknown Function type:"
                    << static_cast<int64_t>(statement.function_kind());
 }
 
@@ -1588,7 +1592,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintFunctionDeterminism(
     case google::spanner::emulator::backend::ddl::Function::NOT_DETERMINISTIC_VOLATILE:
       return "VOLATILE";
     default:
-      ZETASQL_RET_CHECK_FAIL() << "Unsupported volatility type: " << determinism;
+      GOOGLESQL_RET_CHECK_FAIL() << "Unsupported volatility type: " << determinism;
   }
 }
 
@@ -1605,7 +1609,7 @@ absl::StatusOr<std::string> GoogleSqlTypeNameToSpannerSdlTypeEnumName(
   if (gsql_type_name == "PG.OID") {
     return "PG_OID";
   }
-  ZETASQL_RET_CHECK(!absl::StartsWith(gsql_type_name, "PG."))
+  GOOGLESQL_RET_CHECK(!absl::StartsWith(gsql_type_name, "PG."))
       << "Unexpected type name: " << gsql_type_name;
 
   if (gsql_type_name == "FLOAT32") {
@@ -1615,7 +1619,7 @@ absl::StatusOr<std::string> GoogleSqlTypeNameToSpannerSdlTypeEnumName(
     return "DOUBLE";
   }
 
-  // For standard types, the enum name usually matches the ZetaSQL name (e.g.,
+  // For standard types, the enum name usually matches the GoogleSQL name (e.g.,
   // "INT64", "STRING") The current logic handles arrays, this function assumes
   // the input is a non-array name.
   return gsql_type_name;
@@ -1628,7 +1632,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintSpannerType(
   if (absl::StartsWith(type_name, "ARRAY<") && absl::EndsWith(type_name, ">")) {
     column.set_type(google::spanner::emulator::backend::ddl::ColumnDefinition::ARRAY);
     std::string array_type_name = type_name.substr(6, type_name.size() - 7);
-    ZETASQL_ASSIGN_OR_RETURN(array_type_name, GoogleSqlTypeNameToSpannerSdlTypeEnumName(
+    GOOGLESQL_ASSIGN_OR_RETURN(array_type_name, GoogleSqlTypeNameToSpannerSdlTypeEnumName(
                                           array_type_name));
     if (!google::spanner::emulator::backend::ddl::ColumnDefinition::Type_Parse(array_type_name, &type)) {
       return StatementTranslationError(
@@ -1636,7 +1640,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintSpannerType(
     }
     column.mutable_array_subtype()->set_type(type);
   } else {
-    ZETASQL_ASSIGN_OR_RETURN(std::string sdl_type_name,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::string sdl_type_name,
                      GoogleSqlTypeNameToSpannerSdlTypeEnumName(type_name));
     if (!google::spanner::emulator::backend::ddl::ColumnDefinition::Type_Parse(sdl_type_name, &type)) {
       return StatementTranslationError(
@@ -1668,9 +1672,9 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintType(
   if (column.set_options_size() == 1 &&
       column.set_options(0).option_name() ==
           PGConstants::kInternalCommitTimestampOptionName) {
-    ZETASQL_RET_CHECK(column.set_options(0).has_bool_value() &&
+    GOOGLESQL_RET_CHECK(column.set_options(0).has_bool_value() &&
               column.set_options(0).bool_value());
-    ZETASQL_RET_CHECK_EQ(column.type(), google::spanner::emulator::backend::ddl::ColumnDefinition::TIMESTAMP);
+    GOOGLESQL_RET_CHECK_EQ(column.type(), google::spanner::emulator::backend::ddl::ColumnDefinition::TIMESTAMP);
 
     return "spanner.commit_timestamp";
   }
@@ -1766,7 +1770,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintColumn(
   }
 
   if (column.has_generated_column()) {
-    ZETASQL_RET_CHECK(column.generated_column().has_expression_origin());
+    GOOGLESQL_RET_CHECK(column.generated_column().has_expression_origin());
     const google::spanner::emulator::backend::ddl::SQLExpressionOrigin& generated_column =
         column.generated_column().expression_origin();
     if (column.generated_column().has_stored() &&
@@ -1780,7 +1784,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintColumn(
   }
 
   if (column.has_column_default()) {
-    ZETASQL_RET_CHECK(column.column_default().has_expression_origin());
+    GOOGLESQL_RET_CHECK(column.column_default().has_expression_origin());
     const google::spanner::emulator::backend::ddl::SQLExpressionOrigin& default_column =
         column.column_default().expression_origin();
     const std::string expression_output =
@@ -1791,7 +1795,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintColumn(
   }
 
   if (column.has_column_on_update()) {
-    ZETASQL_RET_CHECK(column.column_on_update().has_expression_origin());
+    GOOGLESQL_RET_CHECK(column.column_on_update().has_expression_origin());
     const google::spanner::emulator::backend::ddl::SQLExpressionOrigin& on_update =
         column.column_on_update().expression_origin();
     const std::string expression_output =
@@ -1802,7 +1806,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintColumn(
   }
 
   if (column.has_identity_column()) {
-    ZETASQL_RET_CHECK(!column.has_column_default() && !column.has_generated_column());
+    GOOGLESQL_RET_CHECK(!column.has_column_default() && !column.has_generated_column());
     StrAppend(&constraint, " GENERATED BY DEFAULT AS IDENTITY");
     std::vector<std::string> identity_column_options;
     if (column.identity_column().has_type()) {
@@ -1844,7 +1848,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintColumn(
       }
     }
   }
-  ZETASQL_ASSIGN_OR_RETURN(absl::string_view printed_type, PrintType(column));
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::string_view printed_type, PrintType(column));
   return StrCat(QuoteIdentifier(column.column_name()), " ", printed_type,
                 constraint);
 }
@@ -1859,7 +1863,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintForeignKeyAction(
     case google::spanner::emulator::backend::ddl::ForeignKey::CASCADE:
       return StrCat(" ", action_type, " CASCADE");
     default:
-      ZETASQL_RET_CHECK_FAIL() << "Unknown foreign key action type:"
+      GOOGLESQL_RET_CHECK_FAIL() << "Unknown foreign key action type:"
                        << static_cast<int64_t>(action);
   }
 }
@@ -1867,7 +1871,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintForeignKeyAction(
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintForeignKey(
     const google::spanner::emulator::backend::ddl::ForeignKey& foreign_key) const {
   // Not supported by Cloud Spanner
-  ZETASQL_RET_CHECK(foreign_key.enforced());
+  GOOGLESQL_RET_CHECK(foreign_key.enforced());
 
   std::string constraint_name = "";
   if (foreign_key.has_constraint_name()) {
@@ -1885,7 +1889,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintForeignKey(
     referenced_columns.push_back(QuoteIdentifier(pk_column));
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(absl::string_view printed_delete_action,
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::string_view printed_delete_action,
                    PrintForeignKeyAction("ON DELETE", foreign_key.on_delete()));
   return StrCat(constraint_name, "FOREIGN KEY (",
                 absl::StrJoin(constrained_columns, ", "), ") REFERENCES ",
@@ -1904,7 +1908,7 @@ SpangresSchemaPrinterImpl::PrintInterleaveDeleteAction(
       return " CASCADE";
   }
   // Should never get here.
-  ZETASQL_RET_CHECK_FAIL() << "Unknown Interleave delete action type:"
+  GOOGLESQL_RET_CHECK_FAIL() << "Unknown Interleave delete action type:"
                    << static_cast<int64_t>(action);
 }
 
@@ -1919,7 +1923,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintInterleaveClause(
   if (interleave_clause.has_on_delete()) {
     StrAppend(&output, " ON DELETE");
 
-    ZETASQL_ASSIGN_OR_RETURN(std::string action, PrintInterleaveDeleteAction(
+    GOOGLESQL_ASSIGN_OR_RETURN(std::string action, PrintInterleaveDeleteAction(
                                              interleave_clause.on_delete()));
     StrAppend(&output, action);
   }
@@ -1955,7 +1959,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintSortOrder(
   }
 
   // Should never get here.
-  ZETASQL_RET_CHECK_FAIL() << "Unknown order type:" << static_cast<int64_t>(order);
+  GOOGLESQL_RET_CHECK_FAIL() << "Unknown order type:" << static_cast<int64_t>(order);
 }
 
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintPrimaryKey(
@@ -2004,7 +2008,7 @@ SpangresSchemaPrinterImpl::PrintAlterDatabaseSetOptions(
       } else if (option.has_int64_value()) {
         value = std::to_string(option.int64_value());
       } else {
-        ZETASQL_RET_CHECK_FAIL();
+        GOOGLESQL_RET_CHECK_FAIL();
       }
       output.push_back(StrCat(base, " SET ", QuoteIdentifier(*pg_option_name),
                               " = ", value));

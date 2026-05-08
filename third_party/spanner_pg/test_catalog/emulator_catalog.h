@@ -32,14 +32,14 @@
 #ifndef TEST_CATALOG_EMULATOR_CATALOG_H_
 #define TEST_CATALOG_EMULATOR_CATALOG_H_
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
 
 namespace postgres_translator::spangres::test {
 
-std::unique_ptr<zetasql::EnumerableCatalog> GetEmulatorCatalog();
+std::unique_ptr<googlesql::EnumerableCatalog> GetEmulatorCatalog();
 
-zetasql::AnalyzerOptions GetPGEmulatorTestAnalyzerOptions();
+googlesql::AnalyzerOptions GetPGEmulatorTestAnalyzerOptions();
 
 }  // namespace postgres_translator::spangres::test
 

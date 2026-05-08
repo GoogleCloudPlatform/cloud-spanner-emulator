@@ -229,6 +229,17 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 
 %}
 
+%{
+#include "parser/scanner.h"
+%}
+
+%code requires {
+#include "parser/scanner.h"
+#include "nodes/nodes.h"
+#include "nodes/parsenodes.h"
+#include "nodes/pg_list.h"
+}
+
 %pure-parser
 %expect 0
 %name-prefix="base_yy"
@@ -346,7 +357,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 		// SPANGRES END
 		CreateLocalityGroupStmt AlterLocalityGroupStmt
     // SPANGRES BEGIN
-    // TODO: expose when queue is implemented.
+		// TODO: expose when queue is implemented.
     // SPANGRES END
 
 %type <node>	select_no_parens select_with_parens select_clause
@@ -412,7 +423,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 
 %type <str>		copy_file_name
 				access_method_clause attr_name
-				table_access_method_clause name cursor_name file_name
+				table_access_method_clause name cursor_name file_name spangres_hint_key
 				opt_index_name cluster_index_specification
 
 %type <list>	func_name handler_name qual_Op qual_all_Op subquery_Op
@@ -701,6 +712,7 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
  * DOT_DOT is unused in the core SQL grammar, and so will always provoke
  * parse errors.  It is needed by PL/pgSQL.
  */
+
 %token <str>	IDENT UIDENT FCONST SCONST USCONST BCONST XCONST Op
 %token <ival>	ICONST PARAM
 %token			TYPECAST DOT_DOT COLON_EQUALS EQUALS_GREATER
@@ -711,7 +723,6 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
  * src/include/parser/kwlist.h and add new keywords to the appropriate one
  * of the reserved-or-not-so-reserved keyword lists, below; search
  * this file for "Keyword category lists".
- */
 
 /* ordinary key words in alphabetical order */
 %token <keyword> ABORT_P ABSOLUTE_P ACCESS ACTION ADD_P ADMIN AFTER
@@ -748,7 +759,8 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 
 	GENERATED GLOBAL GRANT GRANTED GREATEST GROUP_P GROUPING GROUPS
 
-	HANDLER HAVING HEADER_P HOLD HOUR_P
+	HANDLER
+	HAVING HEADER_P HOLD HOUR_P
 	// SPANGRES BEGIN
 	HIDDEN
 	// SPANGRES END
@@ -887,7 +899,8 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
  * Using the same precedence as IDENT seems right for the reasons given above.
  */
 %nonassoc	UNBOUNDED		/* ideally would have same precedence as IDENT */
-%nonassoc	IDENT PARTITION RANGE ROWS GROUPS PRECEDING FOLLOWING CUBE ROLLUP
+%nonassoc	IDENT
+%nonassoc	PARTITION RANGE ROWS GROUPS PRECEDING FOLLOWING CUBE ROLLUP
 %left		Op OPERATOR		/* multi-character ops and user-defined operators */
 %left		'+' '-'
 %left		'*' '/' '%'
@@ -1079,7 +1092,7 @@ stmt:
 			| CreatePolicyStmt
 			| CreatePLangStmt
       // SPANGRES BEGIN
-      // TODO: expose when queue is implemented.
+		  // TODO: expose when queue is implemented.
       // SPANGRES END
 			| CreateSchemaStmt
 			// SPANGRES BEGIN
@@ -18920,9 +18933,13 @@ spangres_hint_list:
 	| spangres_hint_list ',' spangres_hint_entry { $$ = lappend($1, $3); }
 	;
 
+spangres_hint_key:
+	IDENT { $$ = $1; }
+	;
+
 spangres_hint_entry:
-	IDENT '=' a_expr { $$ = makeDefElem($1, $3, @1); }
-	| IDENT '.' IDENT '=' a_expr
+	spangres_hint_key '=' a_expr { $$ = makeDefElem($1, $3, @1); }
+	| spangres_hint_key '.' spangres_hint_key '=' a_expr
 		{
 			$$ = makeDefElemExtended($1, $3, $5, DEFELEM_UNSPEC, @1);
 		}

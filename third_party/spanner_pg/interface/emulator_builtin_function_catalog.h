@@ -35,12 +35,12 @@
 #include <memory>
 #include <string>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/status/statusor.h"
 #include "backend/query/function_catalog.h"
 #include "third_party/spanner_pg/interface/engine_builtin_function_catalog.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 namespace spangres {
@@ -59,9 +59,9 @@ class EmulatorBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
   ~EmulatorBuiltinFunctionCatalog() {
   }
 
-  absl::StatusOr<const zetasql::Function*> GetFunction(
+  absl::StatusOr<const googlesql::Function*> GetFunction(
       const std::string& name) const override {
-    const zetasql::Function* function;
+    const googlesql::Function* function;
     function_catalog_->GetFunction(name, &function);
     if (function == nullptr) {
       return absl::NotFoundError(absl::StrCat(name, " function not found"));
@@ -69,15 +69,15 @@ class EmulatorBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
     return function;
   }
 
-  absl::StatusOr<const zetasql::Procedure*> GetProcedure(
+  absl::StatusOr<const googlesql::Procedure*> GetProcedure(
       const std::string& name) const override {
     return absl::UnimplementedError("GetProcedure is not supported");
   }
 
   // TODO: b/313936285 - Add builtin TVF support to the Emulator.
-  absl::StatusOr<const zetasql::TableValuedFunction*> GetTableValuedFunction(
+  absl::StatusOr<const googlesql::TableValuedFunction*> GetTableValuedFunction(
       const std::string& name) const override {
-    const zetasql::TableValuedFunction* tvf;
+    const googlesql::TableValuedFunction* tvf;
     function_catalog_->GetTableValuedFunction(name, &tvf);
     if (tvf == nullptr) {
       return absl::NotFoundError(
@@ -87,15 +87,15 @@ class EmulatorBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
   }
 
   absl::Status GetFunctions(
-      absl::flat_hash_set<const zetasql::Function*>* output) const override {
-    ZETASQL_RET_CHECK_NE(output, nullptr);
-    ZETASQL_RET_CHECK(output->empty());
+      absl::flat_hash_set<const googlesql::Function*>* output) const override {
+    GOOGLESQL_RET_CHECK_NE(output, nullptr);
+    GOOGLESQL_RET_CHECK(output->empty());
     function_catalog_->GetFunctions(output);
     return absl::OkStatus();
   }
 
   absl::Status GetProcedures(
-      absl::flat_hash_set<const zetasql::Procedure*>* output) const override {
+      absl::flat_hash_set<const googlesql::Procedure*>* output) const override {
     return absl::OkStatus();
   }
 

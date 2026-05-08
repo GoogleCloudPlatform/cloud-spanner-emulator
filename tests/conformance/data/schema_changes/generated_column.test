@@ -508,6 +508,58 @@ CREATE TABLE T (
 ERROR:.* Error parsing the definition of generated column `T`.`expr`: The PENDING_COMMIT_TIMESTAMP\(\) function may only be used as a value for INSERT or UPDATE of an appropriately typed column. It cannot be used in SELECT, or as the input to any other scalar expression.
 
 ==
+# ARRAY_FILTER function.
+CREATE TABLE TableWithArrayFilter (
+  id INT64,
+  num_array ARRAY<INT64>,
+  gen ARRAY<INT64> AS (ARRAY_FILTER(num_array, e -> e > 0)) STORED,
+) PRIMARY KEY(id);
+--
+CREATE TABLE TableWithArrayFilter (
+  id INT64,
+  num_array ARRAY<INT64>,
+  gen ARRAY<INT64> AS (ARRAY_FILTER(num_array, e -> e > 0)) STORED,
+) PRIMARY KEY(id);
+==
+# ARRAY_FIRST function.
+CREATE TABLE TableWithArrayFirst (
+  id INT64,
+  num_array ARRAY<INT64>,
+  gen INT64 AS (ARRAY_FIRST(num_array)) STORED,
+) PRIMARY KEY(id);
+--
+CREATE TABLE TableWithArrayFirst (
+  id INT64,
+  num_array ARRAY<INT64>,
+  gen INT64 AS (ARRAY_FIRST(num_array)) STORED,
+) PRIMARY KEY(id);
+==
+# ARRAY_LAST function.
+CREATE TABLE TableWithArrayLast (
+  id INT64,
+  num_array ARRAY<INT64>,
+  gen INT64 AS (ARRAY_LAST(num_array)) STORED,
+) PRIMARY KEY(id);
+--
+CREATE TABLE TableWithArrayLast (
+  id INT64,
+  num_array ARRAY<INT64>,
+  gen INT64 AS (ARRAY_LAST(num_array)) STORED,
+) PRIMARY KEY(id);
+==
+# ARRAY_TRANSFORM function.
+CREATE TABLE TableWithArrayTransform (
+  id INT64,
+  num_array ARRAY<INT64>,
+  gen ARRAY<INT64> AS (ARRAY_TRANSFORM(num_array, e -> e + 1)) STORED,
+) PRIMARY KEY(id);
+--
+CREATE TABLE TableWithArrayTransform (
+  id INT64,
+  num_array ARRAY<INT64>,
+  gen ARRAY<INT64> AS (ARRAY_TRANSFORM(num_array, e -> e + 1)) STORED,
+) PRIMARY KEY(id);
+==
 # NOT NULL constraint on non-stored generated column.
 # --regex
 CREATE TABLE T (

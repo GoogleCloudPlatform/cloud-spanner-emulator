@@ -18,7 +18,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
@@ -45,7 +45,7 @@ class OperationApiTest : public test::ServerTest {
       instance { config: "emulator-config" display_name: "" node_count: 3 }
     )");
     grpc::ClientContext ctx;
-    ZETASQL_EXPECT_OK(test_env()->instance_admin_client()->CreateInstance(&ctx, request,
+    GOOGLESQL_EXPECT_OK(test_env()->instance_admin_client()->CreateInstance(&ctx, request,
                                                                   &operation));
   }
 };
@@ -56,7 +56,7 @@ TEST_F(OperationApiTest, ListsOperations) {
   )");
   operations_api::ListOperationsResponse response;
   grpc::ClientContext context;
-  ZETASQL_EXPECT_OK(test_env()->operations_client()->ListOperations(&context, request,
+  GOOGLESQL_EXPECT_OK(test_env()->operations_client()->ListOperations(&context, request,
                                                             &response));
   EXPECT_THAT(response, test::proto::Partially(test::EqualsProto(R"(
                 operations {
@@ -73,7 +73,7 @@ TEST_F(OperationApiTest, ListsOperationsInvalidUri) {
   grpc::ClientContext context;
   EXPECT_THAT(test_env()->operations_client()->ListOperations(&context, request,
                                                               &response),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::MatchesRegex(".*Invalid instance uri.*")));
 }
@@ -84,7 +84,7 @@ TEST_F(OperationApiTest, GetOperation) {
   )");
   operations_api::Operation operation;
   grpc::ClientContext context;
-  ZETASQL_EXPECT_OK(test_env()->operations_client()->GetOperation(&context, request,
+  GOOGLESQL_EXPECT_OK(test_env()->operations_client()->GetOperation(&context, request,
                                                           &operation));
   EXPECT_THAT(
       operation,
@@ -100,7 +100,7 @@ TEST_F(OperationApiTest, GetOperationInvalidUri) {
   grpc::ClientContext context;
   EXPECT_THAT(test_env()->operations_client()->GetOperation(&context, request,
                                                             &operation),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::MatchesRegex(".*Invalid operation uri.*")));
 }

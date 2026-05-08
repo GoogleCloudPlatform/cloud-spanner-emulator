@@ -31,14 +31,14 @@
 
 #include "third_party/spanner_pg/test_catalog/spanner_test_catalog.h"
 
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/catalog.h"
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/test_catalog/emulator_catalog.h"
 
 namespace postgres_translator::spangres::test {
 
-zetasql::EnumerableCatalog* GetSpangresTestSpannerUserCatalog() {
-  static std::unique_ptr<zetasql::EnumerableCatalog>
+googlesql::EnumerableCatalog* GetSpangresTestSpannerUserCatalog() {
+  static std::unique_ptr<googlesql::EnumerableCatalog>
         emulator_catalog = GetEmulatorCatalog();
   return emulator_catalog.get();
 }

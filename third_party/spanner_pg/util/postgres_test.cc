@@ -32,7 +32,7 @@
 #include "third_party/spanner_pg/util/postgres.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/src/backend/catalog/pg_namespace_d.h"
@@ -43,8 +43,8 @@ namespace {
 
 TEST(PostgresUtilsTest, ArrayUnnestProcOid) {
   // Verify that the returned OID maps to the expected proc.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid array_unnest_oid, GetArrayUnnestProcOid());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid array_unnest_oid, GetArrayUnnestProcOid());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const PgProcData* proc_proto,
       PgBootstrapCatalog::Default()->GetProcProto(array_unnest_oid));
   EXPECT_EQ(proc_proto->pronamespace(), PG_CATALOG_NAMESPACE);

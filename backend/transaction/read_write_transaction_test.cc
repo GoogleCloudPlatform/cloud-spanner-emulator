@@ -25,7 +25,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -57,15 +57,15 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::values::Int64;
-using zetasql::values::String;
-using zetasql_base::testing::StatusIs;
+using googlesql::values::Int64;
+using googlesql::values::String;
+using googlesql_base::testing::StatusIs;
 
 class ReadWriteTransactionTest : public testing::Test {
  public:
   ReadWriteTransactionTest() = default;
   void SetUp() override {
-    type_factory_ = std::make_unique<zetasql::TypeFactory>();
+    type_factory_ = std::make_unique<googlesql::TypeFactory>();
     lock_manager_ = std::make_unique<LockManager>(&clock_);
     storage_ = std::make_unique<InMemoryStorage>();
     versioned_catalog_ =
@@ -96,7 +96,7 @@ class ReadWriteTransactionTest : public testing::Test {
   Clock clock_;
 
   // The type factory must outlive the type objects that it has made.
-  std::unique_ptr<zetasql::TypeFactory> type_factory_;
+  std::unique_ptr<googlesql::TypeFactory> type_factory_;
 
   // Internal state of database exposed for the purpose of testing.
   std::unique_ptr<LockManager> lock_manager_;
@@ -136,7 +136,7 @@ class ReadWriteTransactionTest : public testing::Test {
                               .columns = columns};
 
     std::unique_ptr<backend::RowCursor> cursor;
-    ZETASQL_RETURN_IF_ERROR(txn->Read(read_arg, &cursor));
+    GOOGLESQL_RETURN_IF_ERROR(txn->Read(read_arg, &cursor));
 
     std::vector<ValueList> rows;
     while (cursor->Next()) {
@@ -149,7 +149,7 @@ class ReadWriteTransactionTest : public testing::Test {
   }
 
   auto IsOkAndHoldsRows(const std::vector<ValueList>& rows) {
-    return zetasql_base::testing::IsOkAndHolds(testing::ElementsAreArray(rows));
+    return googlesql_base::testing::IsOkAndHolds(testing::ElementsAreArray(rows));
   }
 };
 
@@ -163,8 +163,8 @@ TEST_F(ReadWriteTransactionTest, CanReadAfterFlush) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
@@ -180,8 +180,8 @@ TEST_F(ReadWriteTransactionTest, CanReadAfterFlush) {
                 {"int64_col", "string_col"},
                 {{Int64(1), String("new-value1")}});
   m2.AddDeleteOp("test_table", KeySet(Key({Int64(2)})));
-  ZETASQL_EXPECT_OK(txn2->Write(m2));
-  ZETASQL_EXPECT_OK(txn2->Commit());
+  GOOGLESQL_EXPECT_OK(txn2->Write(m2));
+  GOOGLESQL_EXPECT_OK(txn2->Commit());
 
   // Verify that updates are flushed to underlying storage.
   auto txn3 = CreateReadWriteTransaction();
@@ -227,14 +227,14 @@ TEST_F(ReadWriteTransactionTest, Commit) {
                {"int64_col", "string_col"}, {{Int64(3), String("value")}});
 
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
 
   // Commit the transaction.
   absl::Time before_commit_timestamp_ = clock_.Now();
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify Commit Timestamp.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_timestamp_, txn1->GetCommitTimestamp());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_timestamp_, txn1->GetCommitTimestamp());
   EXPECT_GT(commit_timestamp_, before_commit_timestamp_);
   EXPECT_EQ(txn1->state(), ReadWriteTransaction::State::kCommitted);
 
@@ -253,10 +253,10 @@ TEST_F(ReadWriteTransactionTest, CommitWithNoBufferedMutation) {
 
   // Commit the transaction.
   auto txn = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn->Commit());
+  GOOGLESQL_EXPECT_OK(txn->Commit());
 
   // Verify Commit Timestamp.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_timestamp_, txn->GetCommitTimestamp());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_timestamp_, txn->GetCommitTimestamp());
   EXPECT_GT(commit_timestamp_, before_commit_timestamp_);
   EXPECT_EQ(txn->state(), ReadWriteTransaction::State::kCommitted);
 }
@@ -273,11 +273,11 @@ TEST_F(ReadWriteTransactionTest, CommitWithMultipleChangesToDatabase) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify Commit Timestamp.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_timestamp_, txn1->GetCommitTimestamp());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_timestamp_, txn1->GetCommitTimestamp());
   EXPECT_GT(commit_timestamp_, before_commit_timestamp_);
   EXPECT_EQ(txn1->state(), ReadWriteTransaction::State::kCommitted);
 
@@ -302,7 +302,7 @@ TEST_F(ReadWriteTransactionTest,
                 {"int64_col", "string_col"}, {{Int64(1), String("value-1")}});
 
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m1));
+  GOOGLESQL_EXPECT_OK(txn1->Write(m1));
 
   // Before commiting first transaction, starting another transaction is in
   // progress. Write for second transaction should consistently ABORT.
@@ -315,12 +315,12 @@ TEST_F(ReadWriteTransactionTest,
   }
 
   // Commit the first transaction.
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
   EXPECT_EQ(txn1->state(), ReadWriteTransaction::State::kCommitted);
 
   // Now, secondary transaction can write / commit.
-  ZETASQL_EXPECT_OK(txn2->Write(m2));
-  ZETASQL_EXPECT_OK(txn2->Commit());
+  GOOGLESQL_EXPECT_OK(txn2->Write(m2));
+  GOOGLESQL_EXPECT_OK(txn2->Commit());
   EXPECT_EQ(txn2->state(), ReadWriteTransaction::State::kCommitted);
 
   config::set_abort_current_transaction_probability(current_probability);
@@ -337,8 +337,8 @@ TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
                     {"int64_col", "int64_val_col"}, {{Int64(1), Int64(0)}});
 
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(seed_m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(seed_m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
   EXPECT_EQ(txn1->state(), ReadWriteTransaction::State::kCommitted);
 
   // Read args.
@@ -363,7 +363,7 @@ TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
             while (cursor->Next()) {
               cur_val = cursor->ColumnValue(0).int64_value();
             }
-            ZETASQL_ASSERT_OK(cursor->Status());
+            GOOGLESQL_ASSERT_OK(cursor->Status());
             Mutation m;
             m.AddWriteOp(MutationOpType::kUpdate, "test_table",
                          {"int64_col", "int64_val_col"},
@@ -373,7 +373,7 @@ TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
             if (status.ok()) {
               status.Update(cur_txn->Commit());
               if (status.ok()) {
-                ZETASQL_ASSERT_OK(status);
+                GOOGLESQL_ASSERT_OK(status);
 
                 EXPECT_EQ(cur_txn->state(),
                           ReadWriteTransaction::State::kCommitted);
@@ -397,7 +397,7 @@ TEST_F(ReadWriteTransactionTest, ConcurrentTransactionsEventuallySucceed) {
   // Verify the value.
   auto txn2 = CreateReadWriteTransaction();
   std::unique_ptr<backend::RowCursor> cursor;
-  ZETASQL_EXPECT_OK(txn2->Read(read_arg, &cursor));
+  GOOGLESQL_EXPECT_OK(txn2->Read(read_arg, &cursor));
   int final_val;
   while (cursor->Next()) {
     final_val = cursor->ColumnValue(0).int64_value();
@@ -412,8 +412,8 @@ TEST_F(ReadWriteTransactionTest, OneTransactionDoesNotBlockAllOthers) {
                     {"int64_col", "int64_val_col"}, {{Int64(1), Int64(0)}});
 
   auto setup_txn = CreateReadWriteTransaction();
-  ZETASQL_ASSERT_OK(setup_txn->Write(seed_m));
-  ZETASQL_ASSERT_OK(setup_txn->Commit());
+  GOOGLESQL_ASSERT_OK(setup_txn->Write(seed_m));
+  GOOGLESQL_ASSERT_OK(setup_txn->Commit());
   ASSERT_EQ(setup_txn->state(), ReadWriteTransaction::State::kCommitted);
 
   // Read args.
@@ -426,18 +426,18 @@ TEST_F(ReadWriteTransactionTest, OneTransactionDoesNotBlockAllOthers) {
   // the value, but not (yet) commit.
   auto cur_txn = CreateReadWriteTransaction();
   std::unique_ptr<backend::RowCursor> cursor;
-  ZETASQL_ASSERT_OK(cur_txn->Read(read_arg, &cursor));
+  GOOGLESQL_ASSERT_OK(cur_txn->Read(read_arg, &cursor));
   // Increment and save this value to the database.
   int cur_val = 0;
   while (cursor->Next()) {
     cur_val = cursor->ColumnValue(0).int64_value();
   }
-  ZETASQL_ASSERT_OK(cursor->Status());
+  GOOGLESQL_ASSERT_OK(cursor->Status());
   Mutation m;
   m.AddWriteOp(MutationOpType::kUpdate, "test_table",
                {"int64_col", "int64_val_col"},
                {{Int64(1), Int64(cur_val + 1)}});
-  ZETASQL_ASSERT_OK(cur_txn->Write(m));
+  GOOGLESQL_ASSERT_OK(cur_txn->Write(m));
 
   // Start another read/write transaction that will read and update the same
   // value. We do this in a retry loop to make sure it eventually succeeds.
@@ -450,12 +450,12 @@ TEST_F(ReadWriteTransactionTest, OneTransactionDoesNotBlockAllOthers) {
       while (cursor->Next()) {
         cur_val = cursor->ColumnValue(0).int64_value();
       }
-      ZETASQL_ASSERT_OK(cursor->Status());
+      GOOGLESQL_ASSERT_OK(cursor->Status());
       m.AddWriteOp(MutationOpType::kUpdate, "test_table",
                    {"int64_col", "int64_val_col"},
                    {{Int64(1), Int64(cur_val + 1)}});
-      ZETASQL_ASSERT_OK(other_txn->Write(m));
-      ZETASQL_ASSERT_OK(other_txn->Commit());
+      GOOGLESQL_ASSERT_OK(other_txn->Write(m));
+      GOOGLESQL_ASSERT_OK(other_txn->Commit());
       ASSERT_EQ(other_txn->state(), ReadWriteTransaction::State::kCommitted);
       break;
     } else {
@@ -473,12 +473,12 @@ TEST_F(ReadWriteTransactionTest, OneTransactionDoesNotBlockAllOthers) {
 
   // Verify the value.
   auto verify_txn = CreateReadWriteTransaction();
-  ZETASQL_ASSERT_OK(verify_txn->Read(read_arg, &cursor));
+  GOOGLESQL_ASSERT_OK(verify_txn->Read(read_arg, &cursor));
   int final_val;
   while (cursor->Next()) {
     final_val = cursor->ColumnValue(0).int64_value();
   }
-  ZETASQL_ASSERT_OK(verify_txn->Commit());
+  GOOGLESQL_ASSERT_OK(verify_txn->Commit());
   EXPECT_EQ(final_val, 1);
 }
 
@@ -499,7 +499,7 @@ TEST_F(ReadWriteTransactionTest, ConcurrentSchemaUpdatesWithTransactions) {
                     },
                     type_factory_.get())
                     .value();
-  ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
+  GOOGLESQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
   action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
                                        /*function_catalog=*/nullptr,
                                        type_factory_.get());
@@ -510,7 +510,7 @@ TEST_F(ReadWriteTransactionTest, ConcurrentSchemaUpdatesWithTransactions) {
   Mutation m;
   m.AddWriteOp(MutationOpType::kInsert, "new_table",
                {"int64_col", "string_col"}, {{Int64(1), String("value")}});
-  ZETASQL_EXPECT_OK(txn->Write(m));
+  GOOGLESQL_EXPECT_OK(txn->Write(m));
 
   // Schema change to verify the transaction is aborted in subsequent requests.
   schema = test::CreateSchemaFromDDL(
@@ -524,7 +524,7 @@ TEST_F(ReadWriteTransactionTest, ConcurrentSchemaUpdatesWithTransactions) {
                },
                type_factory_.get())
                .value();
-  ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
+  GOOGLESQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
   action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
                                        /*function_catalog=*/nullptr,
                                        type_factory_.get());
@@ -544,11 +544,11 @@ TEST_F(ReadWriteTransactionTest, CommitWithNoEffectiveChangesToDatabase) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify Commit Timestamp.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_timestamp_, txn1->GetCommitTimestamp());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_timestamp_, txn1->GetCommitTimestamp());
   EXPECT_GT(commit_timestamp_, before_commit_timestamp_);
   EXPECT_EQ(txn1->state(), ReadWriteTransaction::State::kCommitted);
 
@@ -561,7 +561,7 @@ TEST_F(ReadWriteTransactionTest, CommitWithNoEffectiveChangesToDatabase) {
 TEST_F(ReadWriteTransactionTest, DuplicateCommitFails) {
   // Commit the transaction.
   auto txn = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn->Commit());
+  GOOGLESQL_EXPECT_OK(txn->Commit());
 
   // Verify Commit State.
   EXPECT_EQ(txn->state(), ReadWriteTransaction::State::kCommitted);
@@ -573,7 +573,7 @@ TEST_F(ReadWriteTransactionTest, DuplicateCommitFails) {
 TEST_F(ReadWriteTransactionTest, CommitAfterRollbackFails) {
   // Rollback transaction.
   auto txn = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn->Rollback());
+  GOOGLESQL_EXPECT_OK(txn->Rollback());
   EXPECT_EQ(txn->state(), ReadWriteTransaction::State::kRolledback);
 
   // Call commit on a rolled-back transaction should fail.
@@ -593,8 +593,8 @@ TEST_F(ReadWriteTransactionTest, FailsReadWithInvalidIndex) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify that reading from an invalid index fails.
   auto txn2 = CreateReadWriteTransaction();
@@ -611,8 +611,8 @@ TEST_F(ReadWriteTransactionTest, CanReadUsingIndex) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
@@ -629,8 +629,8 @@ TEST_F(ReadWriteTransactionTest, IndexInsertTest) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
@@ -658,8 +658,8 @@ TEST_F(ReadWriteTransactionTest, IndexUpdateTest) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify the index contains value "new-value" and not "value"
   auto txn2 = CreateReadWriteTransaction();
@@ -681,8 +681,8 @@ TEST_F(ReadWriteTransactionTest, IndexDeleteTest) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
@@ -705,8 +705,8 @@ TEST_F(ReadWriteTransactionTest, IndexDeleteAreIdempotentTest) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
@@ -736,7 +736,7 @@ TEST_F(ReadWriteTransactionTest, IndexUniquenessMultiStatementFailTest) {
                 {"int64_col", "string_col"}, {{Int64(4), String("value")}});
 
   auto txn = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn->Write(m1));
+  GOOGLESQL_EXPECT_OK(txn->Write(m1));
   EXPECT_THAT(txn->Write(m2), StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
@@ -748,14 +748,14 @@ TEST_F(ReadWriteTransactionTest, DeduplicationInsertAndUpdateSameStatement) {
   m.AddWriteOp(MutationOpType::kUpdate, "test_table",
                {"int64_col", "string_col"}, {{Int64(10), String("val2")}});
 
-  ZETASQL_EXPECT_OK(txn->Write(m));
+  GOOGLESQL_EXPECT_OK(txn->Write(m));
 
   backend::ReadArg arg;
   arg.table = "test_table";
   arg.key_set = KeySet{Key{{Int64(10)}}};
   arg.columns = {"string_col"};
   std::unique_ptr<backend::RowCursor> cursor;
-  ZETASQL_EXPECT_OK(txn->Read(arg, &cursor));
+  GOOGLESQL_EXPECT_OK(txn->Read(arg, &cursor));
 
   EXPECT_TRUE(cursor->Next());
   EXPECT_EQ(cursor->ColumnValue(0), String("val2"));
@@ -773,14 +773,14 @@ TEST_F(ReadWriteTransactionTest,
                {"int64_col", "string_col"}, {{Int64(10), String("val2")}});
 
   // This should not fail because the operations are merged.
-  ZETASQL_EXPECT_OK(txn->Write(m));
+  GOOGLESQL_EXPECT_OK(txn->Write(m));
 
   backend::ReadArg arg;
   arg.table = "test_table";
   arg.key_set = KeySet{Key{{Int64(10)}}};
   arg.columns = {"string_col", "int64_val_col"};
   std::unique_ptr<backend::RowCursor> cursor;
-  ZETASQL_EXPECT_OK(txn->Read(arg, &cursor));
+  GOOGLESQL_EXPECT_OK(txn->Read(arg, &cursor));
 
   EXPECT_TRUE(cursor->Next());
   EXPECT_EQ(cursor->ColumnValue(0), String("val2"));
@@ -807,21 +807,21 @@ TEST_F(ReadWriteTransactionTest, DeduplicationDeleteAndInsertSameStatement) {
   Mutation m1;
   m1.AddWriteOp(MutationOpType::kInsert, "test_table",
                 {"int64_col", "string_col"}, {{Int64(10), String("initial")}});
-  ZETASQL_EXPECT_OK(txn->Write(m1));
+  GOOGLESQL_EXPECT_OK(txn->Write(m1));
 
   Mutation m2;
   m2.AddDeleteOp("test_table", KeySet{Key{{Int64(10)}}});
   m2.AddWriteOp(MutationOpType::kInsert, "test_table",
                 {"int64_col", "string_col"}, {{Int64(10), String("new")}});
 
-  ZETASQL_EXPECT_OK(txn->Write(m2));
+  GOOGLESQL_EXPECT_OK(txn->Write(m2));
 
   backend::ReadArg arg;
   arg.table = "test_table";
   arg.key_set = KeySet{Key{{Int64(10)}}};
   arg.columns = {"string_col"};
   std::unique_ptr<backend::RowCursor> cursor;
-  ZETASQL_EXPECT_OK(txn->Read(arg, &cursor));
+  GOOGLESQL_EXPECT_OK(txn->Read(arg, &cursor));
 
   EXPECT_TRUE(cursor->Next());
   EXPECT_EQ(cursor->ColumnValue(0), String("new"));
@@ -834,7 +834,7 @@ TEST_F(ReadWriteTransactionTest, DeduplicationMultipleUpdatesSameStatement) {
   m_insert.AddWriteOp(MutationOpType::kInsert, "test_table",
                       {"int64_col", "string_col"},
                       {{Int64(11), String("initial")}});
-  ZETASQL_EXPECT_OK(txn->Write(m_insert));
+  GOOGLESQL_EXPECT_OK(txn->Write(m_insert));
 
   Mutation m_update;
   m_update.AddWriteOp(MutationOpType::kUpdate, "test_table",
@@ -843,14 +843,14 @@ TEST_F(ReadWriteTransactionTest, DeduplicationMultipleUpdatesSameStatement) {
   m_update.AddWriteOp(MutationOpType::kUpdate, "test_table",
                       {"int64_col", "string_col"},
                       {{Int64(11), String("update2")}});
-  ZETASQL_EXPECT_OK(txn->Write(m_update));
+  GOOGLESQL_EXPECT_OK(txn->Write(m_update));
 
   backend::ReadArg arg;
   arg.table = "test_table";
   arg.key_set = KeySet{Key{{Int64(11)}}};
   arg.columns = {"string_col"};
   std::unique_ptr<backend::RowCursor> cursor;
-  ZETASQL_EXPECT_OK(txn->Read(arg, &cursor));
+  GOOGLESQL_EXPECT_OK(txn->Read(arg, &cursor));
 
   EXPECT_TRUE(cursor->Next());
   EXPECT_EQ(cursor->ColumnValue(0), String("update2"));
@@ -865,14 +865,14 @@ TEST_F(ReadWriteTransactionTest, DeduplicationInsertAndDeleteSameStatement) {
                {{Int64(12), String("to_be_deleted")}});
   m.AddDeleteOp("test_table", KeySet{Key{{Int64(12)}}});
 
-  ZETASQL_EXPECT_OK(txn->Write(m));
+  GOOGLESQL_EXPECT_OK(txn->Write(m));
 
   backend::ReadArg arg;
   arg.table = "test_table";
   arg.key_set = KeySet{Key{{Int64(12)}}};
   arg.columns = {"string_col"};
   std::unique_ptr<backend::RowCursor> cursor;
-  ZETASQL_EXPECT_OK(txn->Read(arg, &cursor));
+  GOOGLESQL_EXPECT_OK(txn->Read(arg, &cursor));
 
   EXPECT_FALSE(cursor->Next());
 }
@@ -894,8 +894,8 @@ TEST_F(ReadWriteTransactionTest, InsertSucceeds) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
@@ -927,8 +927,8 @@ TEST_F(ReadWriteTransactionTest, CanInsertWithCaseInsensitiveColumns) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
@@ -1022,7 +1022,7 @@ TEST_F(GeneratedPrimaryKeyTransactionTest, FailsWhenFeatureDisabled) {
                         )",
                   },
                   type_factory_.get()),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Generated column `new_table.k2` cannot "
                                      "be part of the primary key.")));
@@ -1041,7 +1041,7 @@ TEST_F(GeneratedPrimaryKeyTransactionTest, InsertMutationsTableWithOnlyKeys) {
                     },
                     type_factory_.get())
                     .value();
-  ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
+  GOOGLESQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
   action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
                                        /*function_catalog=*/nullptr,
                                        type_factory_.get());
@@ -1050,7 +1050,7 @@ TEST_F(GeneratedPrimaryKeyTransactionTest, InsertMutationsTableWithOnlyKeys) {
 
   Mutation m;
   m.AddWriteOp(MutationOpType::kInsert, "new_table", {"k1"}, {{Int64(1)}});
-  ZETASQL_EXPECT_OK(txn->Write(m));
+  GOOGLESQL_EXPECT_OK(txn->Write(m));
 }
 
 TEST_F(GeneratedPrimaryKeyTransactionTest, InsertMutations) {
@@ -1063,8 +1063,8 @@ TEST_F(GeneratedPrimaryKeyTransactionTest, InsertMutations) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
@@ -1093,7 +1093,7 @@ TEST_F(GeneratedPrimaryKeyTransactionTest,
                 )sql"},
                     type_factory_.get())
                     .value();
-  ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
+  GOOGLESQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
   action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
                                        /*function_catalog=*/nullptr,
                                        type_factory_.get());
@@ -1109,8 +1109,8 @@ TEST_F(GeneratedPrimaryKeyTransactionTest,
                {{Int64(1), Int64(2), Int64(2)}});
 
   // Commit the transaction.
-  ZETASQL_EXPECT_OK(txn->Write(m));
-  ZETASQL_EXPECT_OK(txn->Commit());
+  GOOGLESQL_EXPECT_OK(txn->Write(m));
+  GOOGLESQL_EXPECT_OK(txn->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
@@ -1130,7 +1130,7 @@ TEST_F(GeneratedPrimaryKeyTransactionTest,
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
   EXPECT_THAT(txn1->Write(m),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kFailedPrecondition,
                   testing::HasSubstr(
                       "The value of generated primary key column "
@@ -1145,14 +1145,14 @@ TEST_F(GeneratedPrimaryKeyTransactionTest, DuplicateKeyInsertionsFail) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_ASSERT_OK(txn1->Write(m));
-  ZETASQL_ASSERT_OK(txn1->Commit());
+  GOOGLESQL_ASSERT_OK(txn1->Write(m));
+  GOOGLESQL_ASSERT_OK(txn1->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
   EXPECT_THAT(ReadAll(txn2.get(), {"k1", "k2", "k3", "k4"}),
               IsOkAndHoldsRows({{Int64(1), Int64(1), Int64(1), Int64(1)}}));
-  ZETASQL_EXPECT_OK(txn2->Commit());
+  GOOGLESQL_EXPECT_OK(txn2->Commit());
 
   Mutation m2;
   m2.AddWriteOp(MutationOpType::kInsert, "test_table", {"k1", "k2", "k4"},
@@ -1162,7 +1162,7 @@ TEST_F(GeneratedPrimaryKeyTransactionTest, DuplicateKeyInsertionsFail) {
   auto txn3 = CreateReadWriteTransaction();
   EXPECT_THAT(
       txn3->Write(m2),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kAlreadyExists,
           testing::HasSubstr(
               "Table test_table: Row {Int64(1), Int64(1)} already exists.")));
@@ -1177,8 +1177,8 @@ TEST_F(GeneratedPrimaryKeyTransactionTest, UpdateNonPkSamePk) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
@@ -1211,14 +1211,14 @@ TEST_F(GeneratedPrimaryKeyTransactionTest,
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
   EXPECT_THAT(ReadAll(txn2.get(), {"k1", "k2", "k3", "k4"}),
               IsOkAndHoldsRows({{Int64(1), Int64(1), Int64(1), Int64(50)}}));
-  ZETASQL_EXPECT_OK(txn2->Commit());
+  GOOGLESQL_EXPECT_OK(txn2->Commit());
 
   Mutation m2;
   m2.AddWriteOp(MutationOpType::kUpdate, "test_table", {"k1", "k4"},
@@ -1229,7 +1229,7 @@ TEST_F(GeneratedPrimaryKeyTransactionTest,
   auto txn3 = CreateReadWriteTransaction();
   EXPECT_THAT(
       txn3->Write(m2),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
           testing::HasSubstr("The value of generated primary key column "
                              "`test_table.k3` must be explicitly specified")));
@@ -1242,14 +1242,14 @@ TEST_F(GeneratedPrimaryKeyTransactionTest, FailsUpdateAsRowDoesntExist) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
   EXPECT_THAT(ReadAll(txn2.get(), {"k1", "k2", "k3", "k4"}),
               IsOkAndHoldsRows({{Int64(1), Int64(1), Int64(1), Int64(1)}}));
-  ZETASQL_EXPECT_OK(txn2->Commit());
+  GOOGLESQL_EXPECT_OK(txn2->Commit());
 
   Mutation m2;
   m2.AddWriteOp(MutationOpType::kUpdate, "test_table", {"k1", "k3", "k4"},
@@ -1258,7 +1258,7 @@ TEST_F(GeneratedPrimaryKeyTransactionTest, FailsUpdateAsRowDoesntExist) {
   // Row to update not is found.
   auto txn3 = CreateReadWriteTransaction();
   EXPECT_THAT(txn3->Write(m2),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kNotFound,
                   testing::HasSubstr("Row {Int64(1), Int64(2)} not found.")));
 }
@@ -1271,14 +1271,14 @@ TEST_F(GeneratedPrimaryKeyTransactionTest,
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn1->Write(m));
-  ZETASQL_EXPECT_OK(txn1->Commit());
+  GOOGLESQL_EXPECT_OK(txn1->Write(m));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
   EXPECT_THAT(ReadAll(txn2.get(), {"k1", "k2", "k3", "k4"}),
               IsOkAndHoldsRows({{Int64(1), Int64(1), Int64(1), Int64(1)}}));
-  ZETASQL_EXPECT_OK(txn2->Commit());
+  GOOGLESQL_EXPECT_OK(txn2->Commit());
 
   Mutation m2;
   m2.AddWriteOp(MutationOpType::kInsertOrUpdate, "test_table",
@@ -1289,7 +1289,7 @@ TEST_F(GeneratedPrimaryKeyTransactionTest,
   // update operations.
   auto txn3 = CreateReadWriteTransaction();
   EXPECT_THAT(txn3->Write(m2),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kFailedPrecondition,
                   testing::HasSubstr(
                       "Cannot write into generated column `test_table.k3`.")));
@@ -1305,8 +1305,8 @@ TEST_F(GeneratedPrimaryKeyTransactionTest, DeleteMutations) {
 
   // Commit the transaction.
   auto txn1 = CreateReadWriteTransaction();
-  ZETASQL_ASSERT_OK(txn1->Write(m));
-  ZETASQL_ASSERT_OK(txn1->Commit());
+  GOOGLESQL_ASSERT_OK(txn1->Write(m));
+  GOOGLESQL_ASSERT_OK(txn1->Commit());
 
   // Verify the values.
   auto txn2 = CreateReadWriteTransaction();
@@ -1314,13 +1314,13 @@ TEST_F(GeneratedPrimaryKeyTransactionTest, DeleteMutations) {
               IsOkAndHoldsRows({{Int64(1), Int64(1), Int64(1), Int64(1)},
                                 {Int64(1), Int64(2), Int64(2), Int64(2)},
                                 {Int64(3), Int64(3), Int64(3), Int64(3)}}));
-  ZETASQL_ASSERT_OK(txn2->Commit());
+  GOOGLESQL_ASSERT_OK(txn2->Commit());
 
   Mutation m2;
   m2.AddDeleteOp("test_table", KeySet(Key({Int64(1), Int64(1)})));
   auto txn3 = CreateReadWriteTransaction();
-  ZETASQL_EXPECT_OK(txn3->Write(m2));
-  ZETASQL_EXPECT_OK(txn3->Commit());
+  GOOGLESQL_EXPECT_OK(txn3->Write(m2));
+  GOOGLESQL_EXPECT_OK(txn3->Commit());
 
   auto txn4 = CreateReadWriteTransaction();
   EXPECT_THAT(ReadAll(txn4.get(), {"k1", "k2", "k3", "k4"}),
@@ -1347,7 +1347,7 @@ TEST_F(GeneratedPrimaryKeyTransactionTest,
       type_factory_.get(),
       /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
       /*latest_schema=*/schema.get());
-  ZETASQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
+  GOOGLESQL_ASSERT_OK(versioned_catalog_->AddSchema(clock_.Now(), std::move(schema)));
   action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
                                        &function_catalog, type_factory_.get());
 
@@ -1356,8 +1356,8 @@ TEST_F(GeneratedPrimaryKeyTransactionTest,
   Mutation m;
   m.AddWriteOp(MutationOpType::kInsert, "new_table", {"value"}, {{Int64(1)}});
   // Commit the transaction.
-  ZETASQL_ASSERT_OK(txn->Write(m));
-  ZETASQL_ASSERT_OK(txn->Commit());
+  GOOGLESQL_ASSERT_OK(txn->Write(m));
+  GOOGLESQL_ASSERT_OK(txn->Commit());
 
   // Verify the values.
   EXPECT_THAT(ReadAll(CreateReadWriteTransaction().get(),

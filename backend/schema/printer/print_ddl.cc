@@ -23,11 +23,11 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/strings.h"
-#include "zetasql/public/types/struct_type.h"
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/strings.h"
+#include "googlesql/public/types/struct_type.h"
+#include "googlesql/public/types/type.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -61,7 +61,7 @@
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 #include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
 #include "google/protobuf/repeated_ptr_field.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -89,9 +89,9 @@ std::string PrintColumnNameList(absl::Span<const Column* const> columns) {
 
 // Converts a column type and it's length (if applicable) to the corresponding
 // DDL type string.
-std::string TypeToString(const zetasql::Type* type,
+std::string TypeToString(const googlesql::Type* type,
                          std::optional<int64_t> max_length) {
-  std::string type_name = type->TypeName(zetasql::PRODUCT_EXTERNAL,
+  std::string type_name = type->TypeName(googlesql::PRODUCT_EXTERNAL,
                                          /*use_external_float32=*/true);
   if (type->IsString() || type->IsBytes()) {
     absl::StrAppend(
@@ -124,11 +124,11 @@ std::string RowDeletionPolicyToString(const ddl::RowDeletionPolicy& policy) {
   return str;
 }
 
-std::string ColumnTypeToString(const zetasql::Type* type,
+std::string ColumnTypeToString(const googlesql::Type* type,
                                std::optional<int64_t> max_length) {
   if (type->IsStruct()) {
     std::vector<std::string> fields;
-    for (const zetasql::StructField& field : type->AsStruct()->fields()) {
+    for (const googlesql::StructField& field : type->AsStruct()->fields()) {
       fields.push_back(absl::StrCat(
           field.name, " ", ColumnTypeToString(field.type, std::nullopt)));
     }
@@ -213,6 +213,17 @@ std::string PrintKeyColumn(const KeyColumn* column) {
                           (column->is_descending() ? " DESC" : ""));
 }
 
+std::string PrintIndexFilter(const Index* index) {
+  if (index->null_filtered_columns().empty()) {
+    return "";
+  }
+  return absl::StrJoin(index->null_filtered_columns(), " AND ",
+                       [](std::string* out, const Column* column) {
+                         absl::StrAppend(out, PrintName(column->Name()),
+                                         " IS NOT NULL");
+                       });
+}
+
 std::string PrintIndex(const Index* index) {
   std::string ddl_string;
   absl::StrAppend(&ddl_string, "CREATE", (index->is_unique() ? " UNIQUE" : ""),
@@ -239,17 +250,23 @@ std::string PrintIndex(const Index* index) {
     absl::StrAppend(&ddl_string, absl::StrJoin(storing_clause, ", "), ")");
   }
 
-  if (index->is_search_index()) {
-    if (!index->partition_by().empty()) {
-      absl::StrAppend(&ddl_string, " PARTITION BY ");
-      std::vector<std::string> partition_by_clause;
-      partition_by_clause.reserve(index->partition_by().size());
-      for (int i = 0; i < index->partition_by().size(); ++i) {
-        partition_by_clause.push_back(
-            PrintName(index->partition_by()[i]->Name()));
-      }
-      absl::StrAppend(&ddl_string, absl::StrJoin(partition_by_clause, ", "));
+  if (index->parent()) {
+    absl::StrAppend(&ddl_string, ", INTERLEAVE IN ",
+                    PrintName(index->parent()->Name()));
+  }
+
+  if (!index->partition_by().empty()) {
+    absl::StrAppend(&ddl_string, " PARTITION BY ");
+    std::vector<std::string> partition_by_clause;
+    partition_by_clause.reserve(index->partition_by().size());
+    for (int i = 0; i < index->partition_by().size(); ++i) {
+      partition_by_clause.push_back(
+          PrintName(index->partition_by()[i]->Name()));
     }
+    absl::StrAppend(&ddl_string, absl::StrJoin(partition_by_clause, ", "));
+  }
+
+  if (index->is_search_index()) {
     if (!index->order_by().empty()) {
       absl::StrAppend(&ddl_string, " ORDER BY ");
       std::vector<std::string> order_by_clause;
@@ -265,6 +282,13 @@ std::string PrintIndex(const Index* index) {
       }
       absl::StrAppend(&ddl_string, absl::StrJoin(order_by_clause, ", "));
     }
+  }
+
+  if (!index->is_null_filtered() && !index->null_filtered_columns().empty()) {
+    absl::StrAppend(&ddl_string, " WHERE ", PrintIndexFilter(index));
+  }
+
+  if (index->is_search_index()) {
     ddl::SearchIndexOptionsProto options = index->search_index_options();
     std::vector<std::string> options_str;
     if (options.has_sort_order_sharding()) {
@@ -281,18 +305,7 @@ std::string PrintIndex(const Index* index) {
       absl::StrAppend(&ddl_string, " OPTIONS (",
                       absl::StrJoin(options_str, ", "), ")");
     }
-  }
-
-  if (index->is_vector_index()) {
-    if (!index->null_filtered_columns().empty()) {
-      absl::StrAppend(&ddl_string, " WHERE ",
-                      absl::StrJoin(index->null_filtered_columns(), " AND ",
-                                    [](std::string* out, const Column* column) {
-                                      absl::StrAppend(
-                                          out, PrintName(column->Name()));
-                                      absl::StrAppend(out, " IS NOT NULL");
-                                    }));
-    }
+  } else if (index->is_vector_index()) {
     ddl::VectorIndexOptionsProto options = index->vector_index_options();
     std::vector<std::string> options_str;
     if (options.has_tree_depth()) {
@@ -310,7 +323,7 @@ std::string PrintIndex(const Index* index) {
     if (options.has_distance_type()) {
       options_str.push_back(absl::StrCat(
           "distance_type = ",
-          zetasql::ToSingleQuotedStringLiteral(options.distance_type())));
+          googlesql::ToSingleQuotedStringLiteral(options.distance_type())));
     }
     if (options.has_leaf_scatter_factor()) {
       options_str.push_back(absl::StrCat("leaf_scatter_factor = ",
@@ -327,7 +340,7 @@ std::string PrintIndex(const Index* index) {
     if (options.has_locality_group()) {
       options_str.push_back(absl::StrCat(
           "locality_group = ",
-          zetasql::ToSingleQuotedStringLiteral(options.locality_group())));
+          googlesql::ToSingleQuotedStringLiteral(options.locality_group())));
     }
     if (!options_str.empty()) {
       absl::StrAppend(&ddl_string, " OPTIONS ( ",
@@ -335,9 +348,6 @@ std::string PrintIndex(const Index* index) {
     }
   }
 
-  if (index->parent()) {
-    absl::StrAppend(&ddl_string, ", INTERLEAVE IN ", index->parent()->Name());
-  }
   return ddl_string;
 }
 
@@ -364,7 +374,7 @@ std::string PrintOptions(::google::protobuf::RepeatedPtrField<ddl::SetOption> op
         } else if (option.has_double_value()) {
           absl::StrAppend(out, option.double_value());
         } else if (option.has_string_value()) {
-          absl::StrAppend(out, zetasql::ToSingleQuotedStringLiteral(
+          absl::StrAppend(out, googlesql::ToSingleQuotedStringLiteral(
                                    option.string_value()));
         } else if (!option.string_list_value().empty()) {
           absl::StrAppend(
@@ -373,7 +383,7 @@ std::string PrintOptions(::google::protobuf::RepeatedPtrField<ddl::SetOption> op
                   option.string_list_value(), ", ",
                   [](std::string* out, const std::string& option) {
                     absl::StrAppend(
-                        out, zetasql::ToSingleQuotedStringLiteral(option));
+                        out, googlesql::ToSingleQuotedStringLiteral(option));
                   }),
               "]");
 
@@ -458,7 +468,7 @@ std::string PrintModelOptions(const Model* model) {
   if (model->endpoint().has_value()) {
     options.push_back(absl::StrCat(
         "endpoint = ",
-        zetasql::ToSingleQuotedStringLiteral(*model->endpoint())));
+        googlesql::ToSingleQuotedStringLiteral(*model->endpoint())));
   }
 
   if (!model->endpoints().empty()) {
@@ -468,7 +478,7 @@ std::string PrintModelOptions(const Model* model) {
                       [](std::string* out, const std::string& endpoint) {
                         absl::StrAppend(
                             out,
-                            zetasql::ToSingleQuotedStringLiteral(endpoint));
+                            googlesql::ToSingleQuotedStringLiteral(endpoint));
                       }),
         " ]"));
   }
@@ -819,21 +829,21 @@ std::string PrintUdf(const Udf* udf) {
   std::string udf_string =
       absl::Substitute("CREATE FUNCTION $0", PrintName(udf->Name()));
 
-  const zetasql::FunctionSignature* signature = udf->signature();
+  const googlesql::FunctionSignature* signature = udf->signature();
   if (signature) {
-    const std::vector<zetasql::FunctionArgumentType>& arguments =
+    const std::vector<googlesql::FunctionArgumentType>& arguments =
         signature->arguments();
     std::vector<std::string> arg_strings;
 
     for (int i = 0; i < arguments.size(); ++i) {
-      const zetasql::FunctionArgumentType& arg = arguments[i];
+      const googlesql::FunctionArgumentType& arg = arguments[i];
       std::string arg_string =
           absl::StrCat(arg.argument_name(), " ",
-                       arg.type()->TypeName(zetasql::PRODUCT_EXTERNAL));
+                       arg.type()->TypeName(googlesql::PRODUCT_EXTERNAL));
       if (arg.HasDefault()) {
         absl::StrAppend(&arg_string, " DEFAULT ",
                         arg.GetDefault().value().GetSQLLiteral(
-                            zetasql::PRODUCT_EXTERNAL));
+                            googlesql::PRODUCT_EXTERNAL));
       }
 
       arg_strings.push_back(arg_string);
@@ -842,7 +852,7 @@ std::string PrintUdf(const Udf* udf) {
     absl::StrAppend(&udf_string, "(", absl::StrJoin(arg_strings, ", "), ")");
     absl::StrAppend(
         &udf_string, " RETURNS ",
-        signature->result_type().type()->TypeName(zetasql::PRODUCT_EXTERNAL));
+        signature->result_type().type()->TypeName(googlesql::PRODUCT_EXTERNAL));
   }
 
   if (udf->language() == Udf::Language::REMOTE) {
@@ -911,7 +921,7 @@ std::string PrintLocalityGroupOptions(
             ddl::kInternalLocalityGroupStorageOptionName) {
           absl::StrAppend(out, ddl::kLocalityGroupStorageOptionName, " = ");
           absl::StrAppend(out,
-                          zetasql::ToSingleQuotedStringLiteral(
+                          googlesql::ToSingleQuotedStringLiteral(
                               option.bool_value()
                                   ? ddl::kLocalityGroupStorageOptionSSDVal
                                   : ddl::kLocalityGroupStorageOptionHDDVal));
@@ -923,7 +933,7 @@ std::string PrintLocalityGroupOptions(
               absl::StrAppend(out, ddl::kLocalityGroupSpillTimeSpanOptionName,
                               " = ");
               absl::StrAppend(
-                  out, zetasql::ToSingleQuotedStringLiteral(raw_time_span));
+                  out, googlesql::ToSingleQuotedStringLiteral(raw_time_span));
             }
           }
         }
@@ -936,12 +946,12 @@ absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
   if (schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
     absl::StatusOr<std::unique_ptr<SpangresSchemaPrinter>> printer =
         postgres_translator::spangres::CreateSpangresDirectSchemaPrinter();
-    ZETASQL_RETURN_IF_ERROR(printer.status());
+    GOOGLESQL_RETURN_IF_ERROR(printer.status());
     ddl::DDLStatementList ddl_statements = schema->Dump();
     for (const ddl::DDLStatement& statement : ddl_statements.statement()) {
       absl::StatusOr<std::vector<std::string>> printed_statements =
           (*printer)->PrintDDLStatementForEmulator(statement);
-      ZETASQL_RETURN_IF_ERROR(printed_statements.status());
+      GOOGLESQL_RETURN_IF_ERROR(printed_statements.status());
       statements.insert(statements.end(), (*printed_statements).begin(),
                         (*printed_statements).end());
     }

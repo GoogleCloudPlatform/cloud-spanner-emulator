@@ -38,7 +38,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -56,7 +56,7 @@ SetUpPgMemoryArena() {
 class PgEvaluatorTest : public testing::Test {
  protected:
   void SetUp() override {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(pg_arena_, SetUpPgMemoryArena());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_arena_, SetUpPgMemoryArena());
   }
 
  private:
@@ -67,7 +67,7 @@ template <typename T>
 class PgEvaluatorTestWithParam : public testing::TestWithParam<T> {
  protected:
   void SetUp() override {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(pg_arena_, SetUpPgMemoryArena());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_arena_, SetUpPgMemoryArena());
   }
 
  private:

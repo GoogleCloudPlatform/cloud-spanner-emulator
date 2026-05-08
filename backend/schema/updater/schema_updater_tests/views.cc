@@ -19,10 +19,10 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"
@@ -66,7 +66,7 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(ViewsTest, Basic) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
     CREATE TABLE t(
       col1 bigint primary key,
@@ -80,7 +80,7 @@ TEST_P(ViewsTest, Basic) {
                                       database_api::DatabaseDialect::POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       CREATE TABLE T(
         col1 INT64,
         col2 STRING(MAX)
@@ -121,7 +121,7 @@ TEST_P(ViewsTest, Basic) {
 TEST_P(ViewsTest, OrderBy) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
     CREATE TABLE t(
       col1 bigint primary key,
@@ -135,7 +135,7 @@ TEST_P(ViewsTest, OrderBy) {
                                       database_api::DatabaseDialect::POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       CREATE TABLE T(
         col1 INT64,
         col2 STRING(MAX)
@@ -168,7 +168,7 @@ TEST_P(ViewsTest, OrderBy) {
 
 TEST_P(ViewsTest, IndexDependency) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
       col2 STRING(MAX)
@@ -201,7 +201,7 @@ TEST_P(ViewsTest, IndexDependency) {
 
 TEST_P(ViewsTest, MultipleTableDependencies) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
       col2 STRING(MAX)
@@ -231,7 +231,7 @@ TEST_P(ViewsTest, MultipleTableDependencies) {
 
 TEST_P(ViewsTest, ViewDependsOnView) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
       col2 STRING(MAX)
@@ -252,7 +252,7 @@ TEST_P(ViewsTest, ViewDependsOnView) {
   EXPECT_EQ(v2->dependencies().size(), 1);
   EXPECT_EQ(v2->dependencies()[0], v1);
   EXPECT_EQ(v2->security(), View::SqlSecurity::INVOKER);
-  EXPECT_EQ(v2->columns()[0].type, zetasql::types::Int64Type());
+  EXPECT_EQ(v2->columns()[0].type, googlesql::types::Int64Type());
   EXPECT_EQ(v2->columns()[0].name, "k2");
   EXPECT_THAT(absl::StripAsciiWhitespace(v2->body()),
               testing::StrEq("SELECT V1.k1 AS k2 FROM V1"));
@@ -268,7 +268,7 @@ TEST_P(ViewsTest, MissingDependency) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(
       CreateSchema({"CREATE VIEW V SQL SECURITY INVOKER AS SELECT * FROM T"}),
-      ::zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
+      ::googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
                                   testing::HasSubstr("Table not found: T")));
 }
 
@@ -284,7 +284,7 @@ TEST_P(ViewsTest, ViewAnalysisError_UnsupportedFunction) {
       CREATE VIEW MYVIEW SQL SECURITY INVOKER AS SELECT
       APPROX_COUNT_DISTINCT(T.k1) AS C1 FROM T GROUP BY T.k1
       )"}),
-              ::zetasql_base::testing::StatusIs(
+              ::googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr(
                       "Unsupported built-in function: APPROX_COUNT_DISTINCT")));
@@ -303,7 +303,7 @@ TEST_P(ViewsTest, ViewAnalysisError_UnsupportedFunction_PrunedColumn) {
         SELECT S.k1 FROM
         (SELECT T.k1, APPROX_COUNT_DISTINCT(T.k2) FROM T GROUP BY T.k1) S
       ))"}),
-              ::zetasql_base::testing::StatusIs(
+              ::googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr(
                       "Unsupported built-in function: APPROX_COUNT_DISTINCT")));
@@ -311,7 +311,7 @@ TEST_P(ViewsTest, ViewAnalysisError_UnsupportedFunction_PrunedColumn) {
 
 TEST_P(ViewsTest, ViewReplace) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
       col2 STRING(MAX)
@@ -324,9 +324,9 @@ TEST_P(ViewsTest, ViewReplace) {
   auto view = schema->FindView("V");
   EXPECT_EQ(view->columns().size(), 2);
   EXPECT_EQ(view->columns()[0].name, "col1");
-  EXPECT_EQ(view->columns()[0].type, zetasql::types::Int64Type());
+  EXPECT_EQ(view->columns()[0].type, googlesql::types::Int64Type());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto new_schema,
       UpdateSchema(schema.get(),
                    {
@@ -338,12 +338,12 @@ TEST_P(ViewsTest, ViewReplace) {
   EXPECT_NE(new_view, nullptr);
   EXPECT_EQ(new_view->columns().size(), 1);
   EXPECT_EQ(new_view->columns()[0].name, "col2");
-  EXPECT_EQ(new_view->columns()[0].type, zetasql::types::StringType());
+  EXPECT_EQ(new_view->columns()[0].type, googlesql::types::StringType());
 }
 
 TEST_P(ViewsTest, ViewReplace_NoCircularDependency) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE VIEW v1 SQL SECURITY INVOKER AS
     SELECT 1 AS k1
   )",
@@ -358,7 +358,7 @@ TEST_P(ViewsTest, ViewReplace_NoCircularDependency) {
                        "CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS "
                        "SELECT V2.k2 FROM V2",
                    }),
-      ::zetasql_base::testing::StatusIs(
+      ::googlesql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
           testing::HasSubstr("Cannot replace VIEW `v1` because new definition "
                              "is recursive.")));
@@ -366,7 +366,7 @@ TEST_P(ViewsTest, ViewReplace_NoCircularDependency) {
 
 TEST_P(ViewsTest, ViewReplaceDependentViewInvalidDefinition) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE VIEW v1 SQL SECURITY INVOKER AS
     SELECT 1 AS k1, 2 AS k2
   )",
@@ -381,7 +381,7 @@ TEST_P(ViewsTest, ViewReplaceDependentViewInvalidDefinition) {
                        "CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS "
                        "SELECT 1 AS k1",
                    }),
-      ::zetasql_base::testing::StatusIs(
+      ::googlesql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
           testing::ContainsRegex(
               "Cannot alter VIEW .* The new definition causes "
@@ -391,7 +391,7 @@ TEST_P(ViewsTest, ViewReplaceDependentViewInvalidDefinition) {
 
 TEST_P(ViewsTest, ViewReplaceDependentViewIncompatibleTypeChange) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE VIEW v1 SQL SECURITY INVOKER AS
     SELECT 1 AS k1, 2 AS k2
   )",
@@ -409,7 +409,7 @@ TEST_P(ViewsTest, ViewReplaceDependentViewIncompatibleTypeChange) {
                        "CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS "
                        "SELECT 1 AS k1, CAST('2' AS STRING) AS k2",
                    }),
-      ::zetasql_base::testing::StatusIs(
+      ::googlesql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
           testing::ContainsRegex(
               "Cannot alter VIEW `V1`. Action would implicitly change the "
@@ -420,7 +420,7 @@ TEST_P(ViewsTest, ViewReplaceDependentViewIncompatibleTypeChange) {
                            {
                                "ALTER TABLE T1 ALTER COLUMN col1 BYTES(MAX)",
                            }),
-              ::zetasql_base::testing::StatusIs(
+              ::googlesql_base::testing::StatusIs(
                   absl::StatusCode::kFailedPrecondition,
                   testing::ContainsRegex(
                       "Cannot alter column `T1.col1`. Action would implicitly "
@@ -431,7 +431,7 @@ TEST_P(ViewsTest, ViewReplaceDependentViewIncompatibleTypeChange) {
 
 TEST_P(ViewsTest, ViewReplace_DependentViewCompatibleTypeChange) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE VIEW v1 SQL SECURITY INVOKER AS
     SELECT 'a' AS k1
   )",
@@ -446,7 +446,7 @@ TEST_P(ViewsTest, ViewReplace_DependentViewCompatibleTypeChange) {
 
   // Explicit cast on the output of V1 ensures that the dependent view V2
   // is still valid after the output type of V1 is changed.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto new_schema,
       UpdateSchema(schema.get(),
                    {
@@ -457,8 +457,8 @@ TEST_P(ViewsTest, ViewReplace_DependentViewCompatibleTypeChange) {
   auto v2 = new_schema->FindView("V2");
   EXPECT_NE(v2, nullptr);
   EXPECT_EQ(v2->columns().size(), 2);
-  EXPECT_EQ(v2->columns()[0].type, zetasql::types::StringType());
-  EXPECT_EQ(v2->columns()[1].type, zetasql::types::StringType());
+  EXPECT_EQ(v2->columns()[0].type, googlesql::types::StringType());
+  EXPECT_EQ(v2->columns()[1].type, googlesql::types::StringType());
 }
 
 TEST_P(ViewsTest, StrictNameResolutionMode) {
@@ -473,14 +473,14 @@ TEST_P(ViewsTest, StrictNameResolutionMode) {
     CREATE VIEW V SQL SECURITY INVOKER AS
     SELECT * FROM T1
   )"}),
-              ::zetasql_base::testing::StatusIs(
+              ::googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("SELECT * is not allowed")));
 }
 
 TEST_P(ViewsTest, DropViewBasic) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
       col2 STRING(MAX)
@@ -491,7 +491,7 @@ TEST_P(ViewsTest, DropViewBasic) {
     SELECT T1.col1, T1.col2 FROM T1
   )"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_chema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_chema,
                        UpdateSchema(schema.get(), {"DROP VIEW V"}));
   EXPECT_THAT(new_chema->views(), testing::IsEmpty());
   EXPECT_EQ(new_chema->FindView("V"), nullptr);
@@ -500,7 +500,7 @@ TEST_P(ViewsTest, DropViewBasic) {
 
 TEST_P(ViewsTest, UnnamedColumnView) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto schema, CreateSchema({
                        "CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS c",
                    }));
@@ -512,7 +512,7 @@ TEST_P(ViewsTest, UnnamedColumnView) {
 
 TEST_P(ViewsTest, ViewNotFound) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto schema, CreateSchema({
                        "CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 AS c",
                        "DROP VIEW V",
@@ -520,24 +520,24 @@ TEST_P(ViewsTest, ViewNotFound) {
 
   EXPECT_THAT(
       UpdateSchema(schema.get(), {"DROP VIEW V"}),
-      ::zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound,
+      ::googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound,
                                   testing::HasSubstr("View not found: V")));
 }
 
 TEST_P(ViewsTest, ViewIfExistsNotFound) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto schema, CreateSchema({
                        "CREATE VIEW V SQL SECURITY INVOKER AS SELECT 1 as c",
                        "DROP VIEW V",
                    }));
 
-  ZETASQL_ASSERT_OK(UpdateSchema(schema.get(), {"DROP VIEW IF EXISTS V"}));
+  GOOGLESQL_ASSERT_OK(UpdateSchema(schema.get(), {"DROP VIEW IF EXISTS V"}));
 }
 
 TEST_P(ViewsTest, ViewIfExistsNotFoundPG) {
   if (GetParam() != POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto schema,
       CreateSchema(
           {R"(CREATE VIEW users_view SQL SECURITY INVOKER AS SELECT 1)",
@@ -546,7 +546,7 @@ TEST_P(ViewsTest, ViewIfExistsNotFoundPG) {
           database_api::DatabaseDialect::POSTGRESQL,
           /*use_gsql_to_pg_translation=*/false));
 
-  ZETASQL_ASSERT_OK(UpdateSchema(schema.get(), {"DROP VIEW IF EXISTS users_view"},
+  GOOGLESQL_ASSERT_OK(UpdateSchema(schema.get(), {"DROP VIEW IF EXISTS users_view"},
                          /*proto_descriptor_bytes=*/"",
                          database_api::DatabaseDialect::POSTGRESQL,
                          /*use_gsql_to_pg_translation=*/false));
@@ -554,7 +554,7 @@ TEST_P(ViewsTest, ViewIfExistsNotFoundPG) {
 
 TEST_P(ViewsTest, PrintViewBasic) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
     ) PRIMARY KEY(col1)
@@ -566,14 +566,14 @@ TEST_P(ViewsTest, PrintViewBasic) {
 
   EXPECT_THAT(
       PrintDDLStatements(schema.get()),
-      zetasql_base::testing::IsOkAndHolds(testing::ElementsAreArray(
+      googlesql_base::testing::IsOkAndHolds(testing::ElementsAreArray(
           {"CREATE TABLE T1 (\n  col1 INT64,\n) PRIMARY KEY(col1)",
            "CREATE VIEW V SQL SECURITY INVOKER AS SELECT T1.col1 FROM T1"})));
 }
 
 TEST_P(ViewsTest, DropView_Dependencies) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
     CREATE TABLE T1(
       col1 INT64,
@@ -590,19 +590,19 @@ TEST_P(ViewsTest, DropView_Dependencies) {
                                     }));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {"DROP VIEW V1"}),
-              ::zetasql_base::testing::StatusIs(
+              ::googlesql_base::testing::StatusIs(
                   absl::StatusCode::kFailedPrecondition,
                   testing::HasSubstr("Cannot drop VIEW `V1` on which there "
                                      "are dependent views: V2.")));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {"DROP TABLE T1"}),
-              ::zetasql_base::testing::StatusIs(
+              ::googlesql_base::testing::StatusIs(
                   absl::StatusCode::kFailedPrecondition,
                   testing::HasSubstr("Cannot drop TABLE `T1` on which there "
                                      "are dependent views: V1.")));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {"ALTER TABLE T1 DROP COLUMN col2"}),
-              ::zetasql_base::testing::StatusIs(
+              ::googlesql_base::testing::StatusIs(
                   absl::StatusCode::kFailedPrecondition,
                   testing::HasSubstr("Cannot drop column `col2` on which there "
                                      "are dependent views: V1.")));
@@ -610,7 +610,7 @@ TEST_P(ViewsTest, DropView_Dependencies) {
 
 TEST_P(ViewsTest, DropViewIsCaseSensitive) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1(
       col1 INT64,
       col2 STRING(MAX)
@@ -628,7 +628,7 @@ TEST_P(ViewsTest, DropViewIsCaseSensitive) {
 TEST_P(ViewsTest, SqlInlinedFunctionsInViews) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
     CREATE TABLE t(
       col1 bigint primary key,
@@ -642,7 +642,7 @@ TEST_P(ViewsTest, SqlInlinedFunctionsInViews) {
                                       database_api::DatabaseDialect::POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       CREATE TABLE T(
         col1 INT64,
         col2 STRING(MAX)
@@ -694,7 +694,7 @@ TEST_P(ViewsTest, ForUpdateInViewsUnsupported) {
                              /*proto_descriptor_bytes=*/"",
                              database_api::DatabaseDialect::POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
-                ::zetasql_base::testing::StatusIs(
+                ::googlesql_base::testing::StatusIs(
                     absl::StatusCode::kInvalidArgument,
                     testing::HasSubstr("Unexpected lock mode in query")));
   } else {
@@ -709,7 +709,7 @@ TEST_P(ViewsTest, ForUpdateInViewsUnsupported) {
         SELECT T.col1, T.col2 FROM T
         FOR UPDATE
     )"}),
-                ::zetasql_base::testing::StatusIs(
+                ::googlesql_base::testing::StatusIs(
                     absl::StatusCode::kInvalidArgument,
                     testing::HasSubstr("Unexpected lock mode in query")));
   }
@@ -721,7 +721,7 @@ TEST_P(ViewsTest, PGTranslationErrorReturnsViewBodyDefinitionError) {
                            /*proto_descriptor_bytes=*/"",
                            database_api::DatabaseDialect::POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false),
-              ::zetasql_base::testing::StatusIs(
+              ::googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr(
                       "Error analyzing the definition of view `myview`:")));

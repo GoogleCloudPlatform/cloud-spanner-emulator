@@ -33,7 +33,7 @@ edition = "2023";
 
 package postgres_translator;
 
-import "zetasql/public/function.proto";
+import "googlesql/public/function.proto";
 
 message ArgumentTypeProto {
   uint32 oid = 1;
@@ -46,8 +46,8 @@ message FunctionNamePathProto {
 
 message FunctionArgumentProto {
   ArgumentTypeProto type = 1;
-  zetasql.FunctionEnums.ArgumentCardinality cardinality = 2;
-  zetasql.FunctionEnums.NamedArgumentKind named_argument_kind = 3;
+  googlesql.FunctionEnums.ArgumentCardinality cardinality = 2;
+  googlesql.FunctionEnums.NamedArgumentKind named_argument_kind = 3;
   string name = 4;
   string default_value = 5;
 }
@@ -68,7 +68,7 @@ message FunctionProto {
   repeated FunctionSignatureProto signatures = 3;
   repeated string enable_in_catalog = 4;
   reserved 5;
-  zetasql.FunctionEnums.Mode mode = 6;
+  googlesql.FunctionEnums.Mode mode = 6;
 }
 
 message CatalogProto {

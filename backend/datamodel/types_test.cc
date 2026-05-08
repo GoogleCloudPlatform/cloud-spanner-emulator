@@ -18,10 +18,10 @@
 
 #include <vector>
 
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
@@ -40,7 +40,7 @@ class TypesTest : public ::testing::Test {
  public:
   TypesTest() = default;
 
-  std::vector<const zetasql::Type*> supported_types() {
+  std::vector<const googlesql::Type*> supported_types() {
     return {
         type_factory_.get_int64(),     type_factory_.get_bool(),
         type_factory_.get_double(),    type_factory_.get_string(),
@@ -51,8 +51,8 @@ class TypesTest : public ::testing::Test {
     };
   }
 
-  std::vector<const zetasql::Type*> unsupported_types() {
-    std::vector<const zetasql::Type*> unsupported_types = {
+  std::vector<const googlesql::Type*> unsupported_types() {
+    std::vector<const googlesql::Type*> unsupported_types = {
         type_factory_.get_int32(),
         type_factory_.get_interval(),
     };
@@ -60,7 +60,7 @@ class TypesTest : public ::testing::Test {
     return unsupported_types;
   }
 
-  std::vector<const zetasql::Type*> supported_key_types() {
+  std::vector<const googlesql::Type*> supported_key_types() {
     return {
         type_factory_.get_int64(),     type_factory_.get_bool(),
         type_factory_.get_double(),    type_factory_.get_string(),
@@ -70,7 +70,7 @@ class TypesTest : public ::testing::Test {
     };
   }
 
-  std::vector<const zetasql::Type*> unsupported_key_types() {
+  std::vector<const googlesql::Type*> unsupported_key_types() {
     return {
         type_factory_.get_float(), type_factory_.get_tokenlist(),
         type_factory_.get_json(),  GetPgJsonbType(),
@@ -79,36 +79,36 @@ class TypesTest : public ::testing::Test {
   }
 
  protected:
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
 };
 
 TEST_F(TypesTest, SupportedColumnType) {
-  for (const zetasql::Type* type : supported_types()) {
+  for (const googlesql::Type* type : supported_types()) {
     EXPECT_TRUE(IsSupportedColumnType(type));
-    const zetasql::ArrayType* array_type;
-    ZETASQL_ASSERT_OK(type_factory_.MakeArrayType(type, &array_type));
+    const googlesql::ArrayType* array_type;
+    GOOGLESQL_ASSERT_OK(type_factory_.MakeArrayType(type, &array_type));
     EXPECT_TRUE(IsSupportedColumnType(array_type));
   }
 
-  for (const zetasql::Type* type : unsupported_types()) {
+  for (const googlesql::Type* type : unsupported_types()) {
     EXPECT_FALSE(IsSupportedColumnType(type));
   }
 }
 
 void TestArrayTypesForSupportedKeyColumnType(
-    zetasql::TypeFactory* type_factory, const zetasql::Type* type) {
-  const zetasql::ArrayType* array_type;
-  ZETASQL_ASSERT_OK(type_factory->MakeArrayType(type, &array_type));
+    googlesql::TypeFactory* type_factory, const googlesql::Type* type) {
+  const googlesql::ArrayType* array_type;
+  GOOGLESQL_ASSERT_OK(type_factory->MakeArrayType(type, &array_type));
   EXPECT_FALSE(IsSupportedKeyColumnType(array_type));
 }
 
 TEST_F(TypesTest, SupportedKeyColumnType) {
-  for (const zetasql::Type* type : supported_key_types()) {
+  for (const googlesql::Type* type : supported_key_types()) {
     EXPECT_TRUE(IsSupportedKeyColumnType(type));
     TestArrayTypesForSupportedKeyColumnType(&type_factory_, type);
   }
 
-  for (const zetasql::Type* type : unsupported_key_types()) {
+  for (const googlesql::Type* type : unsupported_key_types()) {
     EXPECT_FALSE(IsSupportedKeyColumnType(type));
     TestArrayTypesForSupportedKeyColumnType(&type_factory_, type);
   }

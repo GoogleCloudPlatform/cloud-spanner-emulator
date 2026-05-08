@@ -22,7 +22,7 @@
 #include <vector>
 
 #include "absl/status/status.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 
 namespace google {
 namespace spanner {
@@ -72,7 +72,7 @@ class PgOidAssigner {
   absl::Status EndAssignmentAtIntermediateSchema(
       uint32_t last_successful_index) {
     if (enabled_) {
-      ZETASQL_RET_CHECK_LT(last_successful_index,
+      GOOGLESQL_RET_CHECK_LT(last_successful_index,
                    intermediate_next_postgresql_oids_.size());
       next_postgresql_oid_ =
           intermediate_next_postgresql_oids_[last_successful_index];
@@ -86,7 +86,7 @@ class PgOidAssigner {
   // value as the last intermediate OID.
   absl::Status EndAssignment() {
     if (enabled_) {
-      ZETASQL_RET_CHECK(!intermediate_next_postgresql_oids_.empty());
+      GOOGLESQL_RET_CHECK(!intermediate_next_postgresql_oids_.empty());
       next_postgresql_oid_ = intermediate_next_postgresql_oids_.back();
       intermediate_next_postgresql_oids_.clear();
       tentative_next_postgresql_oid_ = next_postgresql_oid_;

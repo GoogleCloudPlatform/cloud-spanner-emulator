@@ -29,10 +29,10 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include "zetasql/public/types/timestamp_util.h"
+#include "googlesql/public/types/timestamp_util.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
 #include "third_party/spanner_pg/interface/datetime_evaluators.h"
@@ -44,19 +44,19 @@ namespace {
 
 inline constexpr char kDefaultTimezone[] = "UTC";
 
-using ::zetasql::types::kDateMax;
-using ::zetasql::types::kDateMin;
+using ::googlesql::types::kDateMax;
+using ::googlesql::types::kDateMin;
 using ::postgres_translator::CleanupTimezone;
 using ::postgres_translator::InitTimezone;
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 class ToDateTest : public PgEvaluatorTest {
  protected:
   void SetUp() override {
     PgEvaluatorTest::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {

@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "backend/schema/catalog/column.h"
@@ -41,7 +41,7 @@ using database_api::DatabaseDialect::POSTGRESQL;
 TEST_P(SchemaUpdaterTest, CreateLocalityGroupBasic) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema({R"( CREATE LOCALITY GROUP lg )"}));
   const LocalityGroup* locality_group = schema->FindLocalityGroup("lg");
   ASSERT_NE(locality_group, nullptr);
@@ -51,9 +51,9 @@ TEST_P(SchemaUpdaterTest, CreateLocalityGroupBasic) {
 TEST_P(SchemaUpdaterTest, CreateLocalityGroupIfNotExists) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema({R"( CREATE LOCALITY GROUP lg )"}));
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(),
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(),
                          {R"( CREATE LOCALITY GROUP IF NOT EXISTS lg )"}));
 }
 
@@ -80,7 +80,7 @@ TEST_P(SchemaUpdaterTest, CreateDefaultLocalityGroup) {
 TEST_P(SchemaUpdaterTest, CreateLocalityGroupWithOptions) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE LOCALITY GROUP lg
       OPTIONS (storage = 'ssd', ssd_to_hdd_spill_timespan = '10m')
     )"}));
@@ -100,21 +100,21 @@ TEST_P(SchemaUpdaterTest, CreateLocalityGroupWithInvalidOptions) {
       CREATE LOCALITY GROUP lg
       OPTIONS (storage = 'ddd', ssd_to_hdd_spill_timespan = '10m')
     )"}),
-              ::zetasql_base::testing::StatusIs(
+              ::googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Unexpected value for option: storage.")));
   EXPECT_THAT(CreateSchema({R"(
       CREATE LOCALITY GROUP lg
       OPTIONS (storage = 'ssd', ssd_to_hdd_spill_timespan = '10')
     )"}),
-              ::zetasql_base::testing::StatusIs(
+              ::googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Cannot parse 10 as a valid timestamp")));
 
   EXPECT_THAT(CreateSchema({R"(
       CREATE LOCALITY GROUP lg OPTIONS (type = 'ssd')
     )"}),
-              ::zetasql_base::testing::StatusIs(
+              ::googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Option: type is unknown.")));
 }
@@ -122,11 +122,11 @@ TEST_P(SchemaUpdaterTest, CreateLocalityGroupWithInvalidOptions) {
 TEST_P(SchemaUpdaterTest, AlterLocalityGroupBasic) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE LOCALITY GROUP lg
       OPTIONS (storage = 'ssd', ssd_to_hdd_spill_timespan = '10m')
     )"}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {R"(
       ALTER LOCALITY GROUP lg SET OPTIONS (storage = 'hdd', ssd_to_hdd_spill_timespan = '1h')
     )"}));
   const LocalityGroup* locality_group = updated_schema->FindLocalityGroup("lg");
@@ -141,7 +141,7 @@ TEST_P(SchemaUpdaterTest, AlterLocalityGroupBasic) {
 TEST_P(SchemaUpdaterTest, AlterDefaultLocalityGroup) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       ALTER LOCALITY GROUP default
       SET OPTIONS (storage = 'ssd', ssd_to_hdd_spill_timespan = '10m')
     )"}));
@@ -153,7 +153,7 @@ TEST_P(SchemaUpdaterTest, AlterDefaultLocalityGroup) {
     EXPECT_EQ(timespan, "disk:10m");
   }
   // Update the default locality group again.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {R"(
       ALTER LOCALITY GROUP default SET OPTIONS (storage = 'hdd', ssd_to_hdd_spill_timespan = '1h')
     )"}));
   const LocalityGroup* updated_locality_group =
@@ -170,11 +170,11 @@ TEST_P(SchemaUpdaterTest, AlterDefaultLocalityGroup) {
 TEST_P(SchemaUpdaterTest, AlterLocalityGroupWithIF_EXISTS) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE LOCALITY GROUP lg
       OPTIONS (storage = 'ssd', ssd_to_hdd_spill_timespan = '10m')
     )"}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {R"(
       ALTER LOCALITY GROUP IF EXISTS alter_lg SET OPTIONS (storage = 'hdd', ssd_to_hdd_spill_timespan = '1h')
     )"}));
   const LocalityGroup* locality_group = updated_schema->FindLocalityGroup("lg");
@@ -188,7 +188,7 @@ TEST_P(SchemaUpdaterTest, AlterLocalityGroupWithIF_EXISTS) {
 TEST_P(SchemaUpdaterTest, AlterLocalityGroupNotFound) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE LOCALITY GROUP lg
       OPTIONS (storage = 'ssd', ssd_to_hdd_spill_timespan = '10m')
     )"}));
@@ -201,7 +201,7 @@ TEST_P(SchemaUpdaterTest, AlterLocalityGroupNotFound) {
 TEST_P(SchemaUpdaterTest, DropLocalityGroupBasic) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE LOCALITY GROUP lg
       OPTIONS (storage = 'ssd', ssd_to_hdd_spill_timespan = '10m')
     )"}));
@@ -209,14 +209,14 @@ TEST_P(SchemaUpdaterTest, DropLocalityGroupBasic) {
   EXPECT_NE(locality_group, nullptr);
   EXPECT_EQ(locality_group->Name(), "lg");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {R"(
       DROP LOCALITY GROUP lg
     )"}));
 
   EXPECT_EQ(updated_schema->FindLocalityGroup("lg"), nullptr);
 
   // Test drop locality group if exists.
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
       DROP LOCALITY GROUP IF EXISTS lg
     )"}));
 }
@@ -224,7 +224,7 @@ TEST_P(SchemaUpdaterTest, DropLocalityGroupBasic) {
 TEST_P(SchemaUpdaterTest, DropUsedLocalityGroup) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE LOCALITY GROUP lg
       OPTIONS (storage = 'ssd', ssd_to_hdd_spill_timespan = '10m')
     )",
@@ -264,7 +264,7 @@ TEST_P(SchemaUpdaterTest, DropDefaultLocalityGroup) {
 TEST_P(SchemaUpdaterTest, AssignLocalityGroupToColumn) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE LOCALITY GROUP lg
       OPTIONS (storage = 'ssd', ssd_to_hdd_spill_timespan = '10m')
     )",
@@ -287,7 +287,7 @@ TEST_P(SchemaUpdaterTest, AssignLocalityGroupToColumn) {
 TEST_P(SchemaUpdaterTest, AlterColumnScopedLocalityGroup) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE LOCALITY GROUP old_lg
       OPTIONS (storage = 'ssd', ssd_to_hdd_spill_timespan = '10m')
     )",
@@ -312,7 +312,7 @@ TEST_P(SchemaUpdaterTest, AlterColumnScopedLocalityGroup) {
   EXPECT_EQ(column->locality_group()->Name(), "old_lg");
 
   // Change the locality group of the c1 column.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T ALTER COLUMN c1 SET OPTIONS (locality_group = 'new_lg')
     )"}));
 
@@ -338,7 +338,7 @@ TEST_P(SchemaUpdaterTest, AlterColumnScopedLocalityGroup) {
 TEST_P(SchemaUpdaterTest, AlterTableScopedLocalityGroup) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE LOCALITY GROUP old_lg
       OPTIONS (storage = 'ssd', ssd_to_hdd_spill_timespan = '10m')
     )",
@@ -364,7 +364,7 @@ TEST_P(SchemaUpdaterTest, AlterTableScopedLocalityGroup) {
   EXPECT_EQ(table->locality_group()->Name(), "old_lg");
 
   // Change the locality group of the table T.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto updated_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T SET OPTIONS (locality_group = 'new_lg')
     )"}));
 

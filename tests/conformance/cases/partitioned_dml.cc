@@ -19,7 +19,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -37,7 +37,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class PartitionedDmlTest
     : public DatabaseTest,
@@ -47,11 +47,11 @@ class PartitionedDmlTest
       : feature_flags_({.enable_bit_reversed_positive_sequences = true}) {}
 
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchemaFromFile("partitioned_dml.test"));
+    GOOGLESQL_RETURN_IF_ERROR(SetSchemaFromFile("partitioned_dml.test"));
 
     // Create a raw session for tests which cannot use the C++ client library
     // directly.
-    ZETASQL_RETURN_IF_ERROR(CreateSession(database()->FullName()));
+    GOOGLESQL_RETURN_IF_ERROR(CreateSession(database()->FullName()));
     return absl::OkStatus();
   }
 
@@ -62,7 +62,7 @@ class PartitionedDmlTest
 
  protected:
   void PopulateDatabase() {
-    ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+    GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(
         "INSERT INTO Users(ID, Name, Age) Values (1, 'Levin', 27), "
         "(2, 'Mark', 32), (10, 'Douglas', 31)")}));
   }
@@ -72,7 +72,7 @@ class PartitionedDmlTest
     spanner_api::CreateSessionRequest request;
     request.set_database(std::string(database_uri));  // NOLINT
     spanner_api::Session response;
-    ZETASQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
+    GOOGLESQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
     session_name_ = response.name();
     return absl::OkStatus();
   }
@@ -83,7 +83,7 @@ class PartitionedDmlTest
     spanner_api::BeginTransactionRequest request;
     request.set_session(session_name_);
     request.mutable_options()->mutable_partitioned_dml();
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         raw_client()->BeginTransaction(&context, request, &response));
     return response.id();
   }
@@ -99,7 +99,7 @@ class PartitionedDmlTest
     request.set_sql(statement.sql());
     request.set_seqno(seqno);
 
-    ZETASQL_RETURN_IF_ERROR(raw_client()->ExecuteSql(&context, request, &response));
+    GOOGLESQL_RETURN_IF_ERROR(raw_client()->ExecuteSql(&context, request, &response));
     return response;
   }
 
@@ -120,7 +120,7 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(PartitionedDmlTest, UpdateRowsSucceed) {
   PopulateDatabase();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PartitionedDmlResult result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PartitionedDmlResult result,
                        ExecutePartitionedDml(SqlStatement(
                            "UPDATE Users SET Name = NULL WHERE ID > 1")));
   EXPECT_EQ(result.row_count_lower_bound, 2);
@@ -135,7 +135,7 @@ TEST_P(PartitionedDmlTest, UpdateRowsUsingSequenceSucceed) {
   }
   PopulateDatabase();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       PartitionedDmlResult result,
       ExecutePartitionedDml(SqlStatement(
           "UPDATE Users SET Age = GET_INTERNAL_SEQUENCE_STATE(SEQUENCE "
@@ -144,7 +144,7 @@ TEST_P(PartitionedDmlTest, UpdateRowsUsingSequenceSucceed) {
   EXPECT_THAT(Query("SELECT count(*) FROM Users WHERE Age IS NULL"),
               IsOkAndHoldsRows({{1}}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       result, ExecutePartitionedDml(SqlStatement(
                   "UPDATE Users SET Age = GET_NEXT_SEQUENCE_VALUE(SEQUENCE "
                   "mysequence) WHERE ID = 1")));
@@ -157,7 +157,7 @@ TEST_P(PartitionedDmlTest, UpdateRowsUsingSequenceSucceed) {
 TEST_P(PartitionedDmlTest, DeleteAllRowsSucceed) {
   PopulateDatabase();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       PartitionedDmlResult result,
       ExecutePartitionedDml(SqlStatement("DELETE FROM Users WHERE true")));
   EXPECT_EQ(result.row_count_lower_bound, 3);
@@ -224,7 +224,7 @@ TEST_P(PartitionedDmlTest, UpdateRowsWithCommitTimestampSucceed) {
   }
   PopulateDatabase();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PartitionedDmlResult result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PartitionedDmlResult result,
                        ExecutePartitionedDml(SqlStatement(
                            "UPDATE Users SET Updated = "
                            "PENDING_COMMIT_TIMESTAMP() WHERE ID > 1")));

@@ -28,7 +28,7 @@ namespace backend {
 
 absl::Status RowExistenceValidator::Validate(const ActionContext* ctx,
                                              const InsertOp& op) const {
-  ZETASQL_ASSIGN_OR_RETURN(bool row_exists, ctx->store()->Exists(op.table, op.key));
+  GOOGLESQL_ASSIGN_OR_RETURN(bool row_exists, ctx->store()->Exists(op.table, op.key));
   if (row_exists) {
     return error::RowAlreadyExists(op.table->Name(), op.key.DebugString());
   }
@@ -37,7 +37,7 @@ absl::Status RowExistenceValidator::Validate(const ActionContext* ctx,
 
 absl::Status RowExistenceValidator::Validate(const ActionContext* ctx,
                                              const UpdateOp& op) const {
-  ZETASQL_ASSIGN_OR_RETURN(bool row_exists, ctx->store()->Exists(op.table, op.key));
+  GOOGLESQL_ASSIGN_OR_RETURN(bool row_exists, ctx->store()->Exists(op.table, op.key));
   if (!row_exists) {
     return error::RowNotFound(op.table->Name(), op.key.DebugString());
   }

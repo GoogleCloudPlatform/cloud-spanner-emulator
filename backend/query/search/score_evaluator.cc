@@ -19,14 +19,14 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_split.h"
 #include "absl/types/span.h"
 #include "backend/query/search/search_evaluator_helpers.h"
 #include "backend/query/search/tokenizer.h"
 #include "common/errors.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -35,10 +35,10 @@ namespace backend {
 namespace query {
 namespace search {
 
-absl::StatusOr<zetasql::Value> ScoreEvaluator::Evaluate(
-    absl::Span<const zetasql::Value> args) {
-  const zetasql::Value tokenlist = args[0];
-  const zetasql::Value query_string = args[1];
+absl::StatusOr<googlesql::Value> ScoreEvaluator::Evaluate(
+    absl::Span<const googlesql::Value> args) {
+  const googlesql::Value tokenlist = args[0];
+  const googlesql::Value query_string = args[1];
 
   if (!tokenlist.type()->IsTokenList()) {
     return error::ColumnNotSearchable(tokenlist.type()->DebugString());
@@ -51,7 +51,7 @@ absl::StatusOr<zetasql::Value> ScoreEvaluator::Evaluate(
   TokenMap token_map;
   bool source_is_null = false;
   if (!tokenlist.is_null()) {
-    ZETASQL_ASSIGN_OR_RETURN(token_map, SearchHelper::BuildTokenMap(tokenlist, "SCORE",
+    GOOGLESQL_ASSIGN_OR_RETURN(token_map, SearchHelper::BuildTokenMap(tokenlist, "SCORE",
                                                             source_is_null));
   }
 
@@ -69,7 +69,7 @@ absl::StatusOr<zetasql::Value> ScoreEvaluator::Evaluate(
     }
   }
 
-  return zetasql::Value::Double(score);
+  return googlesql::Value::Double(score);
 }
 
 }  // namespace search

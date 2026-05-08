@@ -31,6 +31,7 @@
 #include "miscadmin.h"
 #include "nodes/extensible.h"
 #include "nodes/pathnodes.h"
+#include "third_party/spanner_pg/src/include/nodes/parsenodes.h"
 #include "utils/datum.h"
 
 #include "nodes/nodes.h"

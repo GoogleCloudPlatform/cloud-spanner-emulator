@@ -33,7 +33,7 @@
 #include "common/errors.h"
 #include "common/limits.h"
 #include "farmhash.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -95,8 +95,8 @@ absl::Status GlobalSchemaNames::AddName(absl::string_view type,
 absl::StatusOr<std::string> GlobalSchemaNames::GenerateForeignKeyName(
     absl::string_view referencing_table_name,
     absl::string_view referenced_table_name) {
-  ZETASQL_RET_CHECK(!referencing_table_name.empty());
-  ZETASQL_RET_CHECK(!referenced_table_name.empty());
+  GOOGLESQL_RET_CHECK(!referencing_table_name.empty());
+  GOOGLESQL_RET_CHECK(!referenced_table_name.empty());
   std::string base =
       MakeBaseName("FK", {referencing_table_name, referenced_table_name});
   return GenerateSequencedName("Foreign Key", base, MakeFingerprint(base));
@@ -104,7 +104,7 @@ absl::StatusOr<std::string> GlobalSchemaNames::GenerateForeignKeyName(
 
 absl::StatusOr<std::string> GlobalSchemaNames::GenerateCheckConstraintName(
     absl::string_view table_name) {
-  ZETASQL_RET_CHECK(!table_name.empty());
+  GOOGLESQL_RET_CHECK(!table_name.empty());
   std::string base = MakeBaseName("CK", {table_name});
   return GenerateSequencedName("Check Constraint", base, MakeFingerprint(base));
 }
@@ -116,7 +116,7 @@ std::string GlobalSchemaNames::GenerateSequencedName(
     std::string suffix = absl::StrCat(fingerprint, kSeparator, sequence);
     std::string name = MakeName(base, suffix);
     if (names_.insert(name).second) {
-      ZETASQL_VLOG(1) << "Generated " << type << " name: " << name;
+      GOOGLESQL_VLOG(1) << "Generated " << type << " name: " << name;
       return name;
     }
   }
@@ -125,8 +125,8 @@ std::string GlobalSchemaNames::GenerateSequencedName(
 absl::StatusOr<std::string> GlobalSchemaNames::GenerateManagedIndexName(
     absl::string_view table_name, const std::vector<std::string>& column_names,
     bool null_filtered, bool unique) {
-  ZETASQL_RET_CHECK(!table_name.empty());
-  ZETASQL_RET_CHECK(!column_names.empty());
+  GOOGLESQL_RET_CHECK(!table_name.empty());
+  GOOGLESQL_RET_CHECK(!column_names.empty());
   // Index column names.
   std::string columns = absl::StrJoin(column_names, kSeparator);
   // Base name = index prefix + table name + column names.
@@ -149,18 +149,18 @@ absl::StatusOr<std::string> GlobalSchemaNames::GenerateManagedIndexName(
   // Full name = truncated(index prefix + table name + column names)
   //             + index codes + fingerprint.
   std::string name = MakeName(base, suffix);
-  ZETASQL_VLOG(1) << "Generated managed index name: " << name;
+  GOOGLESQL_VLOG(1) << "Generated managed index name: " << name;
   return name;
 }
 
 absl::Status GlobalSchemaNames::ValidateSchemaName(absl::string_view type,
                                                    absl::string_view name) {
-  ZETASQL_RET_CHECK(!name.empty());
+  GOOGLESQL_RET_CHECK(!name.empty());
   const auto& [schema_part, name_part] = SDLObjectName::SplitSchemaName(name);
   if (!schema_part.empty()) {
     // Check is run for objects to ensure the named schema exists before making
     // it here, so minimal check will run on the schema_part.
-    ZETASQL_RETURN_IF_ERROR(ValidateSchemaName(type, name_part));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateSchemaName(type, name_part));
     if (!IsSDLTypeAllowedInNamedSchema(type)) {
       return error::SchemaObjectTypeUnsupportedInNamedSchema(type, name);
     }
@@ -207,7 +207,7 @@ absl::Status GlobalSchemaNames::ValidateSchemaName(absl::string_view type,
 
 absl::Status GlobalSchemaNames::ValidateNamedSchemaName(
     absl::string_view named_schema_name) {
-  ZETASQL_RETURN_IF_ERROR(ValidateSchemaName("Schema", named_schema_name));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateSchemaName("Schema", named_schema_name));
   if (ReservedSchemaNames().contains(std::string(named_schema_name)) ||
       // To avoid possible schema collision in the future, we block some prefix
       // below:
@@ -226,7 +226,7 @@ absl::Status GlobalSchemaNames::ValidateNamedSchemaName(
 absl::Status GlobalSchemaNames::ValidateConstraintName(
     absl::string_view table_name, absl::string_view constraint_type,
     absl::string_view constraint_name) {
-  ZETASQL_RETURN_IF_ERROR(ValidateSchemaName(constraint_type, constraint_name));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateSchemaName(constraint_type, constraint_name));
   for (absl::string_view reserved_prefix : {"PK_", "CK_IS_NOT_NULL_"}) {
     if (absl::StartsWithIgnoreCase(constraint_name, reserved_prefix)) {
       return error::InvalidConstraintName(constraint_type, constraint_name,

@@ -20,10 +20,10 @@
 #include <memory>
 #include <vector>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/evaluator.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/evaluator.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "backend/access/write.h"
@@ -46,14 +46,14 @@ namespace backend {
 class EvaluatedColumnEffector : public Effector {
  public:
   explicit EvaluatedColumnEffector(
-      const Table* table, const zetasql::AnalyzerOptions& analyzer_options,
-      zetasql::Catalog* function_catalog, bool for_keys = false);
+      const Table* table, const googlesql::AnalyzerOptions& analyzer_options,
+      googlesql::Catalog* function_catalog, bool for_keys = false);
 
   // Computes the value of the given 'evaluated_column' based on the given
   // 'row_column_values'.
-  absl::StatusOr<zetasql::Value> ComputeEvaluatedColumnValue(
+  absl::StatusOr<googlesql::Value> ComputeEvaluatedColumnValue(
       const Column* evaluated_column,
-      const zetasql::ParameterValueMap& row_column_values) const;
+      const googlesql::ParameterValueMap& row_column_values) const;
 
   // Computed the default/evaluated values of primary key columns (if any) based
   // on the given `mutation_op`. Those columns are returned via
@@ -61,12 +61,12 @@ class EvaluatedColumnEffector : public Effector {
   // `evaluated_values`.
   absl::Status Effect(
       const MutationOp& mutation_op,
-      std::vector<std::vector<zetasql::Value>>* evaluated_values,
+      std::vector<std::vector<googlesql::Value>>* evaluated_values,
       std::vector<const Column*>* columns_with_evaluated_values) const;
 
  private:
-  absl::Status Initialize(const zetasql::AnalyzerOptions& analyzer_options,
-                          zetasql::Catalog* function_catalog);
+  absl::Status Initialize(const googlesql::AnalyzerOptions& analyzer_options,
+                          googlesql::Catalog* function_catalog);
   absl::Status Effect(const ActionContext* ctx,
                       const InsertOp& op) const override;
   absl::Status Effect(const ActionContext* ctx,
@@ -77,7 +77,7 @@ class EvaluatedColumnEffector : public Effector {
   }
 
   absl::Status Effect(const ActionContext* ctx, const Key& key,
-                      zetasql::ParameterValueMap* column_values,
+                      googlesql::ParameterValueMap* column_values,
                       bool is_update_op, bool apply_on_update) const;
 
   const Table* table_;
@@ -93,7 +93,7 @@ class EvaluatedColumnEffector : public Effector {
 
   // Map of evaluated and default columns to their corresponding expressions.
   absl::flat_hash_map<const Column*,
-                      std::unique_ptr<zetasql::PreparedExpression>>
+                      std::unique_ptr<googlesql::PreparedExpression>>
       expressions_;
 };
 

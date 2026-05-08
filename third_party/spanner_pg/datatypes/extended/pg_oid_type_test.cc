@@ -34,12 +34,12 @@
 #include <cstdint>
 
 #include "google/spanner/v1/type.pb.h"
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/strings/str_cat.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
 
@@ -54,16 +54,16 @@ using ::postgres_translator::spangres::datatypes::SpannerExtendedType;
 TEST(PgOidTypeTest, GetExtendedType) {
   const SpannerExtendedType* pg_type = GetPgOidType();
   EXPECT_TRUE(pg_type->code() == TypeAnnotationCode::PG_OID);
-  EXPECT_EQ(pg_type->ShortTypeName(zetasql::PRODUCT_EXTERNAL), "PG.OID");
+  EXPECT_EQ(pg_type->ShortTypeName(googlesql::PRODUCT_EXTERNAL), "PG.OID");
   EXPECT_TRUE(pg_type->Equals(GetPgOidType()));
   EXPECT_TRUE(pg_type->Equivalent(GetPgOidType()));
 
   EXPECT_TRUE(pg_type->SupportsEquality());
-  EXPECT_TRUE(pg_type->SupportsEquality(zetasql::LanguageOptions{}));
-  EXPECT_TRUE(pg_type->SupportsGrouping(zetasql::LanguageOptions{}));
-  EXPECT_TRUE(pg_type->SupportsPartitioning(zetasql::LanguageOptions{}));
+  EXPECT_TRUE(pg_type->SupportsEquality(googlesql::LanguageOptions{}));
+  EXPECT_TRUE(pg_type->SupportsGrouping(googlesql::LanguageOptions{}));
+  EXPECT_TRUE(pg_type->SupportsPartitioning(googlesql::LanguageOptions{}));
   EXPECT_TRUE(pg_type->SupportsOrdering());
-  EXPECT_TRUE(pg_type->SupportsOrdering(zetasql::LanguageOptions{},
+  EXPECT_TRUE(pg_type->SupportsOrdering(googlesql::LanguageOptions{},
                                         /*type_description=*/nullptr));
 }
 
@@ -74,8 +74,8 @@ using ValueErrorsTest = PgOidTypeTest;
 
 TEST_P(ValuePropertiesTest, ValueProperties) {
   uint32_t input_oid = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value pg_oid, CreatePgOidValue(input_oid));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int64_t oid_val, GetPgOidValue(pg_oid));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value pg_oid, CreatePgOidValue(input_oid));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int64_t oid_val, GetPgOidValue(pg_oid));
   EXPECT_EQ(oid_val, input_oid);
 
   EXPECT_TRUE(pg_oid.type()->Equals(GetPgOidType()));

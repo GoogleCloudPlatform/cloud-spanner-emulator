@@ -17,9 +17,9 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_ML_MODEL_EVALUATOR_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_ML_MODEL_EVALUATOR_H_
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/json_value.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/json_value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "backend/common/case.h"
@@ -35,11 +35,11 @@ class ModelEvaluator {
     // Model input column.
     const QueryableModelColumn* model_column;
     // Value of the input column.
-    zetasql::Value* value;
+    googlesql::Value* value;
   };
 
   static absl::Status DefaultPredict(
-      const zetasql::Model* model,
+      const googlesql::Model* model,
       const CaseInsensitiveStringMap<const ModelColumn>& model_inputs,
       CaseInsensitiveStringMap<ModelColumn>& model_outputs);
 
@@ -47,15 +47,15 @@ class ModelEvaluator {
   // If UNIMPLEMENTED error is returned, evaluator will fallback to
   // DefaultModel.
   static absl::Status Predict(
-      const zetasql::Model* model,
+      const googlesql::Model* model,
       const CaseInsensitiveStringMap<const ModelColumn>& model_inputs,
       CaseInsensitiveStringMap<ModelColumn>& model_outputs);
 
   // Prediction function for PG dialect which operates on JSONB values.
   static absl::Status PgPredict(absl::string_view endpoint,
-                                const zetasql::JSONValueConstRef& instance,
-                                const zetasql::JSONValueConstRef& parameters,
-                                zetasql::JSONValueRef prediction);
+                                const googlesql::JSONValueConstRef& instance,
+                                const googlesql::JSONValueConstRef& parameters,
+                                googlesql::JSONValueRef prediction);
 };
 
 }  // namespace google::spanner::emulator::backend

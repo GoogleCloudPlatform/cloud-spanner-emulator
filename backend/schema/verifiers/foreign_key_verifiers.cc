@@ -21,7 +21,7 @@
 #include <memory>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "backend/common/ids.h"
 #include "backend/schema/catalog/foreign_key.h"
@@ -57,16 +57,16 @@ absl::Status VerifyForeignKeyData(const ForeignKey* foreign_key,
   int column_count = foreign_key->referencing_columns().size();
   TableID referenced_data_table_id = foreign_key->referenced_data_table()->id();
   std::unique_ptr<StorageIterator> referencing_iterator;
-  ZETASQL_RETURN_IF_ERROR(storage->Read(
+  GOOGLESQL_RETURN_IF_ERROR(storage->Read(
       timestamp, foreign_key->referencing_data_table()->id(), KeyRange::All(),
       DataColumnIds(foreign_key->referencing_data_table(), column_count),
       &referencing_iterator));
   while (referencing_iterator->Next()) {
-    Key constraint_key(std::vector<zetasql::Value>(
+    Key constraint_key(std::vector<googlesql::Value>(
         referencing_iterator->Key().column_values().begin(),
         referencing_iterator->Key().column_values().begin() + column_count));
     std::unique_ptr<StorageIterator> referenced_iterator;
-    ZETASQL_RETURN_IF_ERROR(storage->Read(timestamp, referenced_data_table_id,
+    GOOGLESQL_RETURN_IF_ERROR(storage->Read(timestamp, referenced_data_table_id,
                                   KeyRange::Point(constraint_key), {},
                                   &referenced_iterator));
     if (!referenced_iterator->Next() && referenced_iterator->Status().ok()) {
@@ -75,7 +75,7 @@ absl::Status VerifyForeignKeyData(const ForeignKey* foreign_key,
           foreign_key->referenced_table()->Name(),
           constraint_key.DebugString());
     }
-    ZETASQL_RETURN_IF_ERROR(referenced_iterator->Status());
+    GOOGLESQL_RETURN_IF_ERROR(referenced_iterator->Status());
   }
   return referencing_iterator->Status();
 }

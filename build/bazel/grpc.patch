@@ -1,32 +1,19 @@
-diff --git a/BUILD b/BUILD
-index 8e036bbc85..76dc6a641c 100644
---- a/BUILD
-+++ b/BUILD
-@@ -581,6 +581,7 @@ grpc_cc_library(
-     defines = ["GRPC_NO_XDS"],
-     external_deps = [
-         "absl/base:core_headers",
-+        "absl/status",
-     ],
-     language = "c++",
-     public_hdrs = GRPC_PUBLIC_HDRS,
 diff --git a/bazel/grpc_extra_deps.bzl b/bazel/grpc_extra_deps.bzl
-index a370fe4496..f79e9852a5 100644
+index 4a8e18ce17..cfbfd15678 100644
 --- a/bazel/grpc_extra_deps.bzl
 +++ b/bazel/grpc_extra_deps.bzl
-@@ -51,9 +51,6 @@ def grpc_extra_deps(ignore_version_differences = False):
+@@ -64,9 +64,6 @@ def grpc_extra_deps(ignore_version_differences = False):
  
      api_dependencies()
  
 -    go_rules_dependencies()
--    go_register_toolchains(version = "1.20")
+-    go_register_toolchains(version = "1.22.5")
 -    gazelle_dependencies()
  
      # Pull-in the go 3rd party dependencies for protoc_gen_validate, which is
      # needed for building C++ xDS protos
-
 diff --git a/include/grpcpp/impl/status.h b/include/grpcpp/impl/status.h
-index 94c0e80a9b..266e67ccd2 100644
+index 94c0e80a9b..23253ffee1 100644
 --- a/include/grpcpp/impl/status.h
 +++ b/include/grpcpp/impl/status.h
 @@ -21,6 +21,7 @@
@@ -48,4 +35,16 @@ index 94c0e80a9b..266e67ccd2 100644
    /// Construct an instance with \a code,  \a error_message and
    /// \a error_details. It is an error to construct an OK status with non-empty
    /// \a error_message and/or \a error_details.
+diff --git a/src/core/util/glob.cc b/src/core/util/glob.cc
+index 1b1c16e23d..22e54259f0 100644
+--- a/src/core/util/glob.cc
++++ b/src/core/util/glob.cc
+@@ -12,6 +12,8 @@
+ // See the License for the specific language governing permissions and
+ // limitations under the License.
  
++#include <algorithm>
++
+ #include "absl/strings/string_view.h"
+ 
+ namespace grpc_core {

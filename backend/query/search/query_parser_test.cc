@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/query/search/SearchQueryParserTreeConstants.h"
@@ -110,7 +110,7 @@ void TestParseSearchQuery(absl::string_view search_query,
                             "\texpect: ", expected_result, "\n"));
 
   QueryParser parser(search_query);
-  ZETASQL_EXPECT_OK(parser.ParseSearchQuery());
+  GOOGLESQL_EXPECT_OK(parser.ParseSearchQuery());
 
   std::string rquery;
   GetRQueryString(parser.Tree(), rquery);
@@ -121,7 +121,7 @@ void TestParseFailure(absl::string_view search_query,
                       absl::string_view expected_error) {
   QueryParser parser(search_query);
   absl::Status status = parser.ParseSearchQuery();
-  EXPECT_THAT(status, ::zetasql_base::testing::StatusIs(
+  EXPECT_THAT(status, ::googlesql_base::testing::StatusIs(
                           absl::StatusCode::kInvalidArgument,
                           ::testing::HasSubstr(expected_error)));
 }

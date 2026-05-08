@@ -23,8 +23,8 @@
 #include "absl/strings/string_view.h"
 #include "backend/common/case.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -43,14 +43,14 @@ namespace backend {
 // GraphDependencyHelper<absl::string_view, IdentityFunction>
 //   gdh("generated_column");
 //
-// ZETASQL_RETURN_IF_ERROR(gdh.AddNode("A"));
-// ZETASQL_RETURN_IF_ERROR(gdh.AddNode("B"));
-// ZETASQL_RETURN_IF_ERROR(gdh.AddNode("C"));
-// ZETASQL_RETURN_IF_ERROR(gdh.AddEdge("A", "B"));
-// ZETASQL_RETURN_IF_ERROR(gdh.AddEdge("B", "C"));
-// ZETASQL_RETURN_IF_ERROR(gdh.AddEdge("C", "B"));
+// GOOGLESQL_RETURN_IF_ERROR(gdh.AddNode("A"));
+// GOOGLESQL_RETURN_IF_ERROR(gdh.AddNode("B"));
+// GOOGLESQL_RETURN_IF_ERROR(gdh.AddNode("C"));
+// GOOGLESQL_RETURN_IF_ERROR(gdh.AddEdge("A", "B"));
+// GOOGLESQL_RETURN_IF_ERROR(gdh.AddEdge("B", "C"));
+// GOOGLESQL_RETURN_IF_ERROR(gdh.AddEdge("C", "B"));
 //
-// ZETASQL_RETURN_IF_ERROR(gdh.DetectCycle()); // <-- Will fail because there is a cycle
+// GOOGLESQL_RETURN_IF_ERROR(gdh.DetectCycle()); // <-- Will fail because there is a cycle
 //
 // Template Parameters:
 // * TData: Type of object stored in the graph. It must have a public copy
@@ -139,11 +139,11 @@ template <class TData, absl::string_view (*TGetId)(const TData&)>
 absl::Status GraphDependencyHelper<TData, TGetId>::AddEdgeIfNotExists(
     absl::string_view from, absl::string_view to) {
   auto it = nodes_by_name_.find(std::string(from));
-  ZETASQL_RET_CHECK(it != nodes_by_name_.end()) << "from: " << from;
+  GOOGLESQL_RET_CHECK(it != nodes_by_name_.end()) << "from: " << from;
   NodeInfo* node_from = it->second;
 
   it = nodes_by_name_.find(std::string(to));
-  ZETASQL_RET_CHECK(it != nodes_by_name_.end()) << "to: " << to;
+  GOOGLESQL_RET_CHECK(it != nodes_by_name_.end()) << "to: " << to;
   NodeInfo* node_to = it->second;
 
   if (node_from->edges_set.insert(node_to).second) {
@@ -162,7 +162,7 @@ template <class TData, absl::string_view (*TGetId)(const TData&)>
 absl::Status GraphDependencyHelper<TData, TGetId>::TopologicalOrder(
     std::vector<TData>* data_values) {
   VisitingState state;
-  ZETASQL_RETURN_IF_ERROR(VisitNodes(&state));
+  GOOGLESQL_RETURN_IF_ERROR(VisitNodes(&state));
   data_values->reserve(state.post_traversal.size());
   for (NodeInfo* node_info : state.post_traversal) {
     data_values->push_back(node_info->value);
@@ -174,10 +174,10 @@ template <class TData, absl::string_view (*TGetId)(const TData&)>
 absl::Status GraphDependencyHelper<TData, TGetId>::VisitNode(
     VisitingState* state, NodeInfo* node) {
   state->visiting.push_back(node);
-  ZETASQL_RET_CHECK(state->pre_traversal.insert(node).second);
+  GOOGLESQL_RET_CHECK(state->pre_traversal.insert(node).second);
   for (NodeInfo* node_adj : node->edges) {
     if (!state->pre_traversal.contains(node_adj)) {
-      ZETASQL_RETURN_IF_ERROR(VisitNode(state, node_adj));
+      GOOGLESQL_RETURN_IF_ERROR(VisitNode(state, node_adj));
     } else {
       for (NodeInfo* visiting_node : state->visiting) {
         if (visiting_node == node_adj) {
@@ -201,7 +201,7 @@ absl::Status GraphDependencyHelper<TData, TGetId>::VisitNodes(
     VisitingState* state) {
   for (auto& node : nodes_) {
     if (!state->pre_traversal.contains(node.get())) {
-      ZETASQL_RETURN_IF_ERROR(VisitNode(state, node.get()));
+      GOOGLESQL_RETURN_IF_ERROR(VisitNode(state, node.get()));
     }
   }
   return absl::OkStatus();

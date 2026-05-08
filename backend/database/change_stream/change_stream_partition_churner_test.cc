@@ -20,10 +20,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
@@ -37,7 +37,7 @@
 #include "backend/transaction/options.h"
 #include "backend/transaction/read_only_transaction.h"
 #include "common/clock.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -75,7 +75,7 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
                                                   R"(
     CREATE CHANGE STREAM change_stream_one FOR ALL
   )"};
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         db_, Database::Create(
                  &clock_, kDatabaseId,
                  SchemaChangeOperation{.statements = create_statements}));
@@ -129,7 +129,7 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
   }
   absl::StatusOr<StaleAndActivePartitions> GetChangeStreamPartitions(
       std::string change_stream_name, Database* db) {
-    ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<ReadOnlyTransaction> txn,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<ReadOnlyTransaction> txn,
                      db->CreateReadOnlyTransaction(ReadOnlyOptions()));
     std::unique_ptr<backend::RowCursor> cursor;
     backend::ReadArg read_arg;
@@ -138,8 +138,8 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
                         "parents",         "children",   "next_churn"};
     read_arg.key_set = KeySet::All();
 
-    ZETASQL_EXPECT_OK(txn->Read(read_arg, &cursor));
-    std::vector<zetasql::Value> values;
+    GOOGLESQL_EXPECT_OK(txn->Read(read_arg, &cursor));
+    std::vector<googlesql::Value> values;
 
     std::vector<TestChurnedPartitions> stale_partitions;
     std::vector<TestChurnedPartitions> active_partitions;
@@ -148,7 +148,7 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
       const absl::Time start_time = cursor->ColumnValue(1).ToTime();
       std::vector<std::string> parents;
       if (!cursor->ColumnValue(3).is_null()) {
-        const std::vector<zetasql::Value>& parents_cursor =
+        const std::vector<googlesql::Value>& parents_cursor =
             cursor->ColumnValue(3).elements();
 
         for (const auto& parent : parents_cursor) {
@@ -160,7 +160,7 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
       }
       std::vector<std::string> children;
       if (!cursor->ColumnValue(4).is_null()) {
-        const std::vector<zetasql::Value>& children_cursor =
+        const std::vector<googlesql::Value>& children_cursor =
             cursor->ColumnValue(4).elements();
 
         for (const auto& child : children_cursor) {
@@ -207,7 +207,7 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
       ASSERT_TRUE(!token.children.empty() || !token.parents.empty());
       for (const auto& child : token.children) {
         // Get the child token for the stale token.
-        ZETASQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions child_partition,
+        GOOGLESQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions child_partition,
                              GetPartition(stale_and_active_partitions, child));
         // Verify that the child's start time and the stale token's end time
         // is the same.
@@ -217,7 +217,7 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
         // for each of the child's parents, verify that the parent exists and
         // contains the child in its childrens list.
         for (const auto& parent : child_partition.parents) {
-          ZETASQL_ASSERT_OK_AND_ASSIGN(
+          GOOGLESQL_ASSERT_OK_AND_ASSIGN(
               TestChurnedPartitions parent_partition,
               GetPartition(stale_and_active_partitions, parent));
           // Verify that each parent contains the correct information.
@@ -227,7 +227,7 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
       }
       // Verify that the child token's parents contains the stale token
       for (const auto& parent : token.parents) {
-        ZETASQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions parent_partition,
+        GOOGLESQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions parent_partition,
                              GetPartition(stale_and_active_partitions, parent));
         // Verify that each parent contains the correct information.
         ASSERT_THAT(parent_partition.children,
@@ -236,7 +236,7 @@ class ChangeStreamPartitionChurnerTest : public ::testing::Test {
         // For each parent, go through it's children's list and verify that
         // the child contains the parent in the parent's list.
         for (const auto& child : parent_partition.children) {
-          ZETASQL_ASSERT_OK_AND_ASSIGN(
+          GOOGLESQL_ASSERT_OK_AND_ASSIGN(
               TestChurnedPartitions child_partition,
               GetPartition(stale_and_active_partitions, child));
           // Verify that each parent contains the correct information.
@@ -266,7 +266,7 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamChurning) {
   absl::SleepFor(
       absl::GetFlag(FLAGS_change_stream_churn_thread_sleep_interval) * 5);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(StaleAndActivePartitions stale_and_active_partitions,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(StaleAndActivePartitions stale_and_active_partitions,
                        GetChangeStreamPartitions(change_stream_one, db_.get()));
   // We expect that there are at least two stale partitions for the existing
   // change stream, since we have slept for 5x the current churn interval.
@@ -282,7 +282,7 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamChurning) {
   absl::SleepFor(
       absl::GetFlag(FLAGS_change_stream_churn_thread_sleep_interval) * 5);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(stale_and_active_partitions,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(stale_and_active_partitions,
                        GetChangeStreamPartitions(change_stream_one, db_.get()));
   // We expect that there are at least four stale partitions for the existing
   // change stream, since we have slept again for 5x the current churn interval.
@@ -291,7 +291,7 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamChurning) {
   EXPECT_GE(stale_and_active_partitions.active_partitions.size(), 2);
   VerifyStaleAndActivePartitions(stale_and_active_partitions);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(stale_and_active_partitions,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(stale_and_active_partitions,
                        GetChangeStreamPartitions(change_stream_two, db_.get()));
   // We expect that there are at least two stale partitions for the newly
   // added change stream, since we have slept for 5x the current churn interval.
@@ -306,7 +306,7 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamChurning) {
 
   absl::SleepFor(absl::Seconds(5));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(stale_and_active_partitions,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(stale_and_active_partitions,
                        GetChangeStreamPartitions(change_stream_one, db_.get()));
   // We expect that there are at least six stale partitions for the existing
   // change_stream_one, since we have slept for 5x the current churn
@@ -316,7 +316,7 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamChurning) {
   EXPECT_GE(stale_and_active_partitions.active_partitions.size(), 2);
   VerifyStaleAndActivePartitions(stale_and_active_partitions);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(stale_and_active_partitions,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(stale_and_active_partitions,
                        GetChangeStreamPartitions(change_stream_two, db_.get()));
   // We expect that there are at least four stale partitions for the existing
   // change stream, since we have slept again for 5x the current churn interval.
@@ -325,7 +325,7 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamChurning) {
   EXPECT_GE(stale_and_active_partitions.active_partitions.size(), 2);
   VerifyStaleAndActivePartitions(stale_and_active_partitions);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       stale_and_active_partitions,
       GetChangeStreamPartitions(change_stream_three, db_.get()));
   // We expect that there are at least two stale partitions for the newly
@@ -350,7 +350,7 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamSplitAndMerge) {
   std::string change_stream_disable_churning = "change_stream_disable_churning";
   AddChangeStream(change_stream_disable_churning);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       StaleAndActivePartitions stale_and_active_partitions,
       GetChangeStreamPartitions(change_stream_disable_churning, db_.get()));
   ASSERT_EQ(stale_and_active_partitions.stale_partitions.size(), 0);
@@ -382,7 +382,7 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamSplitAndMerge) {
   // tokens and 2 stale ones.
   bool split_occurred = false;
   bool merge_occurred = false;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       stale_and_active_partitions,
       GetChangeStreamPartitions(change_stream_disable_churning, db_.get()));
   ASSERT_EQ(stale_and_active_partitions.stale_partitions.size(), 2);
@@ -395,7 +395,7 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamSplitAndMerge) {
       if (active_token.parents.size() > 1) {
         merge_occurred = true;
       }
-      ZETASQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions parent_partition,
+      GOOGLESQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions parent_partition,
                            GetPartition(stale_and_active_partitions, parent));
       // Verify that each parent should contain the token in its children's
       // list.
@@ -439,7 +439,7 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamSplitAndMerge) {
   ChurnPartitionsForChangeStream(change_stream_disable_churning);
   // Two tokens have merged, the other token has moved. Thus, there should be
   // 2+3=5 stale tokens, and two active tokens.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       stale_and_active_partitions,
       GetChangeStreamPartitions(change_stream_disable_churning, db_.get()));
   ASSERT_EQ(stale_and_active_partitions.stale_partitions.size(), 5);
@@ -452,7 +452,7 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamSplitAndMerge) {
       merge_occurred = true;
     }
     for (const auto& parent : active_token.parents) {
-      ZETASQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions parent_partition,
+      GOOGLESQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions parent_partition,
                            GetPartition(stale_and_active_partitions, parent));
       ASSERT_THAT(parent_partition.children,
                   testing::Contains(active_token.partition_token));
@@ -484,7 +484,7 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamSplitAndMerge) {
   ChurnPartitionsForChangeStream(change_stream_disable_churning);
   // One token has split, the other has moved. Thus, there should be 5+2=7
   // stale tokens, and three active tokens.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       stale_and_active_partitions,
       GetChangeStreamPartitions(change_stream_disable_churning, db_.get()));
   ASSERT_EQ(stale_and_active_partitions.stale_partitions.size(), 7);
@@ -497,7 +497,7 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamSplitAndMerge) {
       merge_occurred = true;
     }
     for (const auto& parent : active_token.parents) {
-      ZETASQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions parent_partition,
+      GOOGLESQL_ASSERT_OK_AND_ASSIGN(TestChurnedPartitions parent_partition,
                            GetPartition(stale_and_active_partitions, parent));
       ASSERT_THAT(parent_partition.children,
                   testing::Contains(active_token.partition_token));

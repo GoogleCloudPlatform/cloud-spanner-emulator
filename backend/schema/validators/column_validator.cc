@@ -19,11 +19,11 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/simple_catalog.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -45,8 +45,8 @@
 #include "common/feature_flags.h"
 #include "common/limits.h"
 #include "google/protobuf/descriptor.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -55,15 +55,15 @@ namespace backend {
 
 namespace {
 
-bool IsResizeable(const zetasql::Type* type) {
+bool IsResizeable(const googlesql::Type* type) {
   if (type->IsString() || type->IsBytes()) {
     return true;
   }
   return false;
 }
 
-bool IsAllowedTypeChange(const zetasql::Type* old_column_type,
-                         const zetasql::Type* new_column_type) {
+bool IsAllowedTypeChange(const googlesql::Type* old_column_type,
+                         const googlesql::Type* new_column_type) {
   if (old_column_type->Equals(new_column_type)) {
     return true;
   }
@@ -109,8 +109,8 @@ bool IsAllowedTypeChange(const zetasql::Type* old_column_type,
 // Validates size reductions and column type changes.
 absl::Status CheckAllowedColumnTypeChange(
     const Column* old_column, const Column* new_column,
-    const zetasql::Type* old_column_type,
-    const zetasql::Type* new_column_type, SchemaValidationContext* context) {
+    const googlesql::Type* old_column_type,
+    const googlesql::Type* new_column_type, SchemaValidationContext* context) {
   if (!IsAllowedTypeChange(old_column_type, new_column_type)) {
     return error::CannotChangeColumnType(new_column->Name(),
                                          ToString(old_column_type),
@@ -147,7 +147,7 @@ absl::Status CheckAllowedColumnTypeChange(
 absl::Status ValidateColumnSignatureChange(
     absl::string_view modify_action, absl::string_view dependency_name,
     const Column* dependent_column, const Table* dependent_table,
-    const Schema* temp_new_schema, zetasql::TypeFactory* type_factory) {
+    const Schema* temp_new_schema, googlesql::TypeFactory* type_factory) {
   // Re-analyze the dependent view based on the new definition of the
   // dependency in the temporary new schema.
   if (!dependent_column->expression().has_value()) {
@@ -155,7 +155,7 @@ absl::Status ValidateColumnSignatureChange(
   }
   absl::flat_hash_set<const SchemaNode*> unused_udf_dependencies;
   absl::flat_hash_set<std::string> dependent_column_names;
-  std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
+  std::vector<googlesql::SimpleTable::NameAndType> name_and_types;
   for (const Column* column : dependent_table->columns()) {
     name_and_types.emplace_back(column->Name(), column->GetType());
   }
@@ -178,7 +178,7 @@ absl::Status ValidateColumnSignatureChange(
 
 }  // namespace
 
-bool ColumnValidator::TypeExistsInProtoBundle(const zetasql::Type* type,
+bool ColumnValidator::TypeExistsInProtoBundle(const googlesql::Type* type,
                                               const ProtoBundle* proto_bundle) {
   if (type->IsProto()) {
     const google::protobuf::Descriptor* type_descriptor = type->AsProto()->descriptor();
@@ -197,26 +197,26 @@ bool ColumnValidator::TypeExistsInProtoBundle(const zetasql::Type* type,
 }
 
 absl::Status ColumnValidator::ValidateTypeExistsInProtoBundle(
-    const zetasql::Type* type, const ProtoBundle* proto_bundle,
+    const googlesql::Type* type, const ProtoBundle* proto_bundle,
     const std::string& column_name) {
-  ZETASQL_RET_CHECK(proto_bundle != nullptr && (type->IsProto() || type->IsEnum()));
+  GOOGLESQL_RET_CHECK(proto_bundle != nullptr && (type->IsProto() || type->IsEnum()));
 
   return TypeExistsInProtoBundle(type, proto_bundle)
              ? absl::OkStatus()
              : error::DeletedTypeStillInUse(
-                   type->TypeName(zetasql::PRODUCT_EXTERNAL,
+                   type->TypeName(googlesql::PRODUCT_EXTERNAL,
                                   /*use_external_float32=*/true),
                    column_name);
 }
 
 absl::Status ColumnValidator::Validate(const Column* column,
                                        SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK_NE(column->table_, nullptr);
-  ZETASQL_RET_CHECK(!column->name_.empty());
-  ZETASQL_RET_CHECK(!column->id_.empty());
-  ZETASQL_RET_CHECK(column->type_ != nullptr && IsSupportedColumnType(column->type_));
-  const zetasql::Type* base_type = BaseType(column->type_);
-  ZETASQL_RET_CHECK(!column->declared_max_length_.has_value() ||
+  GOOGLESQL_RET_CHECK_NE(column->table_, nullptr);
+  GOOGLESQL_RET_CHECK(!column->name_.empty());
+  GOOGLESQL_RET_CHECK(!column->id_.empty());
+  GOOGLESQL_RET_CHECK(column->type_ != nullptr && IsSupportedColumnType(column->type_));
+  const googlesql::Type* base_type = BaseType(column->type_);
+  GOOGLESQL_RET_CHECK(!column->declared_max_length_.has_value() ||
             base_type->IsString() || base_type->IsBytes());
 
   if (column->name_.length() > limits::kMaxSchemaIdentifierLength) {
@@ -227,8 +227,8 @@ absl::Status ColumnValidator::Validate(const Column* column,
   }
 
   if (column->source_column_) {
-    ZETASQL_RET_CHECK(column->type_->Equals(column->source_column_->type_));
-    ZETASQL_RET_CHECK(column->declared_max_length_ ==
+    GOOGLESQL_RET_CHECK(column->type_->Equals(column->source_column_->type_));
+    GOOGLESQL_RET_CHECK(column->declared_max_length_ ==
               column->source_column_->declared_max_length_);
   }
 
@@ -260,7 +260,7 @@ absl::Status ColumnValidator::Validate(const Column* column,
   }
 
   if (base_type->IsProto() || base_type->IsEnum()) {
-    ZETASQL_RETURN_IF_ERROR(ValidateTypeExistsInProtoBundle(
+    GOOGLESQL_RETURN_IF_ERROR(ValidateTypeExistsInProtoBundle(
         base_type, context->proto_bundle(), column->FullName()));
   }
 
@@ -285,9 +285,9 @@ absl::Status ColumnValidator::Validate(const Column* column,
       return error::DefaultCommitTimestampWithoutOption(column->Name());
     }
     if (context->is_postgresql_dialect()) {
-      ZETASQL_RET_CHECK(column->postgresql_oid().has_value());
+      GOOGLESQL_RET_CHECK(column->postgresql_oid().has_value());
     } else {
-      ZETASQL_RET_CHECK(!column->postgresql_oid().has_value());
+      GOOGLESQL_RET_CHECK(!column->postgresql_oid().has_value());
     }
   }
 
@@ -297,9 +297,9 @@ absl::Status ColumnValidator::Validate(const Column* column,
           column->FullName());
     }
     if (context->is_postgresql_dialect()) {
-      ZETASQL_RET_CHECK(column->postgresql_oid().has_value());
+      GOOGLESQL_RET_CHECK(column->postgresql_oid().has_value());
     } else {
-      ZETASQL_RET_CHECK(!column->postgresql_oid().has_value());
+      GOOGLESQL_RET_CHECK(!column->postgresql_oid().has_value());
     }
     if (!EmulatorFeatureFlags::instance().flags().enable_generated_pk &&
         column->table()->FindKeyColumn(column->Name())) {
@@ -349,11 +349,11 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
   }
 
   // Once set, column ID should never change.
-  ZETASQL_RET_CHECK_EQ(column->id(), old_column->id());
+  GOOGLESQL_RET_CHECK_EQ(column->id(), old_column->id());
 
   // For a non-deleted column, the objects it depends on should
   // also be alive.
-  ZETASQL_RET_CHECK(!column->table_->is_deleted());
+  GOOGLESQL_RET_CHECK(!column->table_->is_deleted());
   // It is invalid to drop a column which is referenced by a generated column.
   for (const Column* dep : column->dependent_columns()) {
     if (dep->is_deleted()) {
@@ -401,7 +401,7 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
     // There is no valid scenario under which a source column drop should
     // trigger a cascading drop on referencing column.
     if (column->source_column_->is_deleted()) {
-      ZETASQL_RET_CHECK_NE(column->table_->owner_index(), nullptr);
+      GOOGLESQL_RET_CHECK_NE(column->table_->owner_index(), nullptr);
       return error::InvalidDropColumnWithDependency(
           column->name_, column->table_->owner_index()->indexed_table()->Name(),
           column->table_->owner_index()->Name());
@@ -415,7 +415,7 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
   }
 
   // Check for size reduction and type change.
-  ZETASQL_RETURN_IF_ERROR(CheckAllowedColumnTypeChange(
+  GOOGLESQL_RETURN_IF_ERROR(CheckAllowedColumnTypeChange(
       old_column, column, old_column->GetType(), column->type_, context));
 
   if (column->type_->IsTimestamp()) {
@@ -453,16 +453,16 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
   if (context->is_postgresql_dialect()) {
     // Default and generated columns must have OIDs.
     if (old_column->is_generated() || old_column->has_default_value()) {
-      ZETASQL_RET_CHECK(old_column->postgresql_oid().has_value());
+      GOOGLESQL_RET_CHECK(old_column->postgresql_oid().has_value());
     }
     if (column->is_generated() || column->has_default_value()) {
-      ZETASQL_RET_CHECK(column->postgresql_oid().has_value());
+      GOOGLESQL_RET_CHECK(column->postgresql_oid().has_value());
     }
     // Alter statement may change the default value which would be assigned a
     // new OID so don't assert that the OIDs are the same.
   } else {
-    ZETASQL_RET_CHECK(!old_column->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(!column->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!old_column->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!column->postgresql_oid().has_value());
   }
 
   for (const SchemaNode* dep : column->udf_dependencies()) {
@@ -481,7 +481,7 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
       }
       // No need to check modifications on index dependencies as indexes
       // cannot currently be altered.
-      ZETASQL_RETURN_IF_ERROR(ValidateColumnSignatureChange(
+      GOOGLESQL_RETURN_IF_ERROR(ValidateColumnSignatureChange(
           modify_action, dependency_name, column, column->table(),
           context->tmp_new_schema(), context->type_factory()));
     }
@@ -492,12 +492,12 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
 
 absl::Status KeyColumnValidator::Validate(const KeyColumn* key_column,
                                           SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK_NE(key_column->column_, nullptr);
+  GOOGLESQL_RET_CHECK_NE(key_column->column_, nullptr);
   std::string type_name =
       key_column->column_->GetType()->IsArray()
           ? "ARRAY"
           : key_column->column_->GetType()->ShortTypeName(
-                zetasql::PRODUCT_EXTERNAL, /*use_external_float32=*/true);
+                googlesql::PRODUCT_EXTERNAL, /*use_external_float32=*/true);
   if (!IsSupportedKeyColumnType(key_column->column_->GetType())) {
     auto owner_index = key_column->column()->table()->owner_index();
 
@@ -508,13 +508,13 @@ absl::Status KeyColumnValidator::Validate(const KeyColumn* key_column,
 
     if (owner_index != nullptr && owner_index->is_vector_index() &&
         key_column->column_->GetType()->IsArray()) {
-      const zetasql::Type* element_type =
+      const googlesql::Type* element_type =
           key_column->column_->GetType()->AsArray()->element_type();
       if (element_type->IsFloat() || element_type->IsDouble()) {
         return absl::OkStatus();
       }
       type_name = key_column->column_->GetType()->ShortTypeName(
-          zetasql::PRODUCT_EXTERNAL, true);
+          googlesql::PRODUCT_EXTERNAL, true);
     }
 
     if (owner_index != nullptr) {
@@ -564,19 +564,19 @@ absl::Status KeyColumnValidator::ValidateUpdate(
     }
   }
 
-  ZETASQL_RET_CHECK(!key_column->column_->is_deleted());
-  ZETASQL_RET_CHECK_EQ(key_column->is_descending_, old_key_column->is_descending_);
+  GOOGLESQL_RET_CHECK(!key_column->column_->is_deleted());
+  GOOGLESQL_RET_CHECK_EQ(key_column->is_descending_, old_key_column->is_descending_);
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK_EQ(old_key_column->postgresql_oid().has_value(),
+    GOOGLESQL_RET_CHECK_EQ(old_key_column->postgresql_oid().has_value(),
                  key_column->postgresql_oid().has_value());
     if (old_key_column->postgresql_oid().has_value() &&
         key_column->postgresql_oid().has_value()) {
-      ZETASQL_RET_CHECK_EQ(old_key_column->postgresql_oid().value(),
+      GOOGLESQL_RET_CHECK_EQ(old_key_column->postgresql_oid().value(),
                    key_column->postgresql_oid().value());
     }
   } else {
-    ZETASQL_RET_CHECK(!old_key_column->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(!key_column->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!old_key_column->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!key_column->postgresql_oid().has_value());
   }
   return absl::OkStatus();
 }

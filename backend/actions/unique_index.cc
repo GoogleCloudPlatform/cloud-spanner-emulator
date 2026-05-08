@@ -22,8 +22,8 @@
 #include "backend/datamodel/key_range.h"
 #include "backend/storage/iterator.h"
 #include "common/errors.h"
+#include "googlesql/base/status_macros.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -44,7 +44,7 @@ absl::Status UniqueIndexVerifier::Verify(const ActionContext* ctx,
   // Find all entries for the the given index key. We allow reading pending
   // commit timestamp columns here for consistency with actual Spanner which
   // permits multiple inserts to the same unique index.
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<StorageIterator> itr,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<StorageIterator> itr,
                    ctx->store()->Read(
                        index_->index_data_table(), KeyRange::Prefix(index_key),
                        {}, /*allow_pending_commit_timestamps_in_read=*/true));
@@ -58,7 +58,7 @@ absl::Status UniqueIndexVerifier::Verify(const ActionContext* ctx,
     return error::UniqueIndexConstraintViolation(index_->Name(),
                                                  index_key.DebugString());
   }
-  ZETASQL_RETURN_IF_ERROR(itr->Status());
+  GOOGLESQL_RETURN_IF_ERROR(itr->Status());
   return absl::OkStatus();
 }
 

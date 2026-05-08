@@ -114,6 +114,9 @@ class Schema {
   // Same as FindIndex but case-sensitive.
   const Index* FindIndexCaseSensitive(const std::string& index_name) const;
 
+  // Dumps the index to ddl::CreateIndex.
+  void DumpIndex(const Index* index, ddl::CreateIndex& create_index) const;
+
   // Finds all indexes with the given name.
   std::vector<const Index*> FindIndexesUnderName(
       const std::string& index_name) const;

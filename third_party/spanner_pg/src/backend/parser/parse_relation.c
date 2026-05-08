@@ -3239,7 +3239,7 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
  * SPANGRES: Look up function by Oid in catalog adapter and return its column
  * information. This requires that the catalog adapter has already seen this
  * table when the query's FROM clause was first processed by the analyzer.
- * To utilize ZetaSQL's Table class, we do this in C++ with a wrapper.
+ * To utilize GoogleSQL's Table class, we do this in C++ with a wrapper.
  */
 // SPANGRES BEGIN
 // Visible for testing (non-static)

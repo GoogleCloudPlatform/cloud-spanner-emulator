@@ -24,7 +24,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/time/time.h"
@@ -35,7 +35,7 @@
 #include "backend/transaction/options.h"
 #include "backend/transaction/read_write_transaction.h"
 #include "common/clock.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -43,9 +43,9 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::values::Int64;
-using zetasql::values::NullInt64;
-using zetasql_base::testing::StatusIs;
+using googlesql::values::Int64;
+using googlesql::values::NullInt64;
+using googlesql_base::testing::StatusIs;
 
 constexpr char kDatabaseId[] = "test-db";
 
@@ -55,7 +55,7 @@ constexpr char kDatabaseId[] = "test-db";
 class ForeignKeyVerifiersTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    ZETASQL_ASSERT_OK(CreateDatabase({R"(
+    GOOGLESQL_ASSERT_OK(CreateDatabase({R"(
         CREATE TABLE T (
           A INT64,
           B INT64,
@@ -78,7 +78,7 @@ class ForeignKeyVerifiersTest : public ::testing::Test {
   }
 
   absl::Status CreateDatabase(const std::vector<std::string>& statements) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         database_,
         Database::Create(&clock_, kDatabaseId,
                          SchemaChangeOperation{.statements = statements}));
@@ -89,7 +89,7 @@ class ForeignKeyVerifiersTest : public ::testing::Test {
     int succesful;
     absl::Status status;
     absl::Time timestamp;
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         database_->UpdateSchema(SchemaChangeOperation{.statements = statements},
                                 &succesful, &timestamp, &status));
     return status;
@@ -99,11 +99,11 @@ class ForeignKeyVerifiersTest : public ::testing::Test {
               const std::vector<int>& values) {
     Mutation m;
     m.AddWriteOp(MutationOpType::kInsert, table, columns, {AsList(values)});
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(
                              ReadWriteOptions(), RetryState()));
-    ZETASQL_ASSERT_OK(txn->Write(m));
-    ZETASQL_ASSERT_OK(txn->Commit());
+    GOOGLESQL_ASSERT_OK(txn->Write(m));
+    GOOGLESQL_ASSERT_OK(txn->Commit());
   }
 
   ValueList AsList(const std::vector<int>& values) {
@@ -118,12 +118,12 @@ class ForeignKeyVerifiersTest : public ::testing::Test {
   std::unique_ptr<Database> database_;
 };
 
-TEST_F(ForeignKeyVerifiersTest, NoExistingData) { ZETASQL_EXPECT_OK(AddForeignKey()); }
+TEST_F(ForeignKeyVerifiersTest, NoExistingData) { GOOGLESQL_EXPECT_OK(AddForeignKey()); }
 
 TEST_F(ForeignKeyVerifiersTest, ValidExistingData) {
   Insert("T", {"A", "B", "C"}, {1, 2, 3});
   Insert("U", {"X", "Y", "Z"}, {4, 3, 2});
-  ZETASQL_EXPECT_OK(AddForeignKey());
+  GOOGLESQL_EXPECT_OK(AddForeignKey());
 }
 
 TEST_F(ForeignKeyVerifiersTest, InvalidExistingData) {

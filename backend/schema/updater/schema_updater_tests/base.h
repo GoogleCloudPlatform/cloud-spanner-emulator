@@ -22,10 +22,10 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
@@ -169,7 +169,6 @@ class SchemaUpdaterTest
             .enable_search_index = true,
             .enable_default_time_zone = true,
             .enable_interleave_in = true,
-            .enable_alter_table_if_exists = true,
         }) {}
   absl::StatusOr<std::unique_ptr<const Schema>> CreateSchema(
       absl::Span<const std::string> statements,
@@ -196,7 +195,7 @@ class SchemaUpdaterTest
   }
 
   std::unique_ptr<SpangresSchemaPrinter> pg_schema_printer_;
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
   TableIDGenerator table_id_generator_;
   ColumnIDGenerator column_id_generator_;
   std::unique_ptr<PgOidAssigner> pg_oid_assigner_;

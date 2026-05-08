@@ -31,17 +31,17 @@
 
 #include "third_party/spanner_pg/shims/memory_reservation_holder.h"
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "third_party/spanner_pg/interface/memory_reservation_manager.h"
 #include "third_party/spanner_pg/src/spangres/memory_cc.h"
-#include "zetasql/base/status_builder.h"
+#include "googlesql/base/status_builder.h"
 
 namespace postgres_translator {
 
 absl::StatusOr<MemoryReservationHolder> MemoryReservationHolder::Create(
     interfaces::MemoryReservationManager* manager) {
   if (thread_memory_reservation) {
-    return zetasql_base::InternalErrorBuilder()
+    return googlesql_base::InternalErrorBuilder()
            << "Nesting MemoryReservationHolders is not supported";
   }
 

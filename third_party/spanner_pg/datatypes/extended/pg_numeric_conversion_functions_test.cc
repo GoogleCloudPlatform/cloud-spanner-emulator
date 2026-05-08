@@ -34,13 +34,13 @@
 #include <optional>
 #include <string>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/datatypes/extended/conversion_finder.h"
@@ -65,17 +65,17 @@ MATCHER_P(EqPG, result,
 }
 }  // namespace
 
-using FindConversionOptions = ::zetasql::Catalog::FindConversionOptions;
+using FindConversionOptions = ::googlesql::Catalog::FindConversionOptions;
 using ConversionSourceExpressionKind =
-    ::zetasql::Catalog::ConversionSourceExpressionKind;
+    ::googlesql::Catalog::ConversionSourceExpressionKind;
 
 static void TestConversion(
-    const zetasql::Type* from, const zetasql::Type* to,
-    const zetasql::Value& input,
-    const std::optional<zetasql::Value>& expected_output,
+    const googlesql::Type* from, const googlesql::Type* to,
+    const googlesql::Value& input,
+    const std::optional<googlesql::Value>& expected_output,
     bool is_error = false, std::optional<absl::string_view> error_msg = "") {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      zetasql::Conversion conversion,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      googlesql::Conversion conversion,
       FindExtendedTypeConversion(
           from, to,
           FindConversionOptions(
@@ -83,9 +83,9 @@ static void TestConversion(
 
   if (!is_error) {
     EXPECT_THAT(conversion.evaluator().Eval(input),
-                zetasql_base::testing::IsOkAndHolds(EqPG(expected_output)));
+                googlesql_base::testing::IsOkAndHolds(EqPG(expected_output)));
   } else {
-    absl::StatusOr<zetasql::Value> converted_value =
+    absl::StatusOr<googlesql::Value> converted_value =
         conversion.evaluator().Eval(input);
     EXPECT_FALSE(converted_value.ok());
     EXPECT_EQ(converted_value.status().message(), error_msg);
@@ -96,17 +96,17 @@ class PgNumericInt64ConversionTest : public testing::TestWithParam<int64_t> {};
 
 TEST_P(PgNumericInt64ConversionTest, ConvertInt64ToPgNumericSuccess) {
   TestConversion(
-      zetasql::types::Int64Type(), GetPgNumericType(),
-      zetasql::Value::Int64(GetParam()),
+      googlesql::types::Int64Type(), GetPgNumericType(),
+      googlesql::Value::Int64(GetParam()),
       CreatePgNumericValueWithMemoryContext(std::to_string(GetParam()))
           .value());
 }
 
 TEST_P(PgNumericInt64ConversionTest, ConvertPgNumericToInt64Success) {
   TestConversion(
-      GetPgNumericType(), zetasql::types::Int64Type(),
+      GetPgNumericType(), googlesql::types::Int64Type(),
       CreatePgNumericValueWithMemoryContext(std::to_string(GetParam())).value(),
-      zetasql::Value::Int64(GetParam()));
+      googlesql::Value::Int64(GetParam()));
 }
 
 INSTANTIATE_TEST_SUITE_P(NumericInt64, PgNumericInt64ConversionTest,
@@ -117,17 +117,17 @@ class PgNumericDoubleConversionTest : public testing::TestWithParam<double> {};
 
 TEST_P(PgNumericDoubleConversionTest, ConvertDoubleToPgNumericSuccess) {
   TestConversion(
-      zetasql::types::DoubleType(), GetPgNumericType(),
-      zetasql::Value::Double(GetParam()),
+      googlesql::types::DoubleType(), GetPgNumericType(),
+      googlesql::Value::Double(GetParam()),
       CreatePgNumericValueWithMemoryContext(std::to_string(GetParam()))
           .value());
 }
 
 TEST_P(PgNumericDoubleConversionTest, ConvertPgNumericToDoubleSuccess) {
   TestConversion(
-      GetPgNumericType(), zetasql::types::DoubleType(),
+      GetPgNumericType(), googlesql::types::DoubleType(),
       CreatePgNumericValueWithMemoryContext(std::to_string(GetParam())).value(),
-      zetasql::Value::Double(GetParam()));
+      googlesql::Value::Double(GetParam()));
 }
 
 INSTANTIATE_TEST_SUITE_P(NumericDouble, PgNumericDoubleConversionTest,
@@ -137,15 +137,15 @@ class PgNumericStringConversionTest
     : public testing::TestWithParam<std::string> {};
 
 TEST_P(PgNumericStringConversionTest, ConvertStringToPgNumericSuccess) {
-  TestConversion(zetasql::types::StringType(), GetPgNumericType(),
-                 zetasql::Value::String(GetParam()),
+  TestConversion(googlesql::types::StringType(), GetPgNumericType(),
+                 googlesql::Value::String(GetParam()),
                  CreatePgNumericValueWithMemoryContext(GetParam()).value());
 }
 
 TEST_P(PgNumericStringConversionTest, ConvertPgNumericToStringSuccess) {
-  TestConversion(GetPgNumericType(), zetasql::types::StringType(),
+  TestConversion(GetPgNumericType(), googlesql::types::StringType(),
                  CreatePgNumericValueWithMemoryContext(GetParam()).value(),
-                 zetasql::Value::String(GetParam()));
+                 googlesql::Value::String(GetParam()));
 }
 
 INSTANTIATE_TEST_SUITE_P(NumericString, PgNumericStringConversionTest,

@@ -55,7 +55,7 @@ class ScopedSchemaChangeLock {
   absl::Status Wait() {
     absl::Status s = lock_handle_->Wait();
     if (!s.ok()) {
-      ZETASQL_RET_CHECK_EQ(s.code(), absl::StatusCode::kAborted);
+      GOOGLESQL_RET_CHECK_EQ(s.code(), absl::StatusCode::kAborted);
       return error::ConcurrentSchemaChangeOrReadWriteTxnInProgress();
     }
     return absl::OkStatus();

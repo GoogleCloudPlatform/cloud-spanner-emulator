@@ -18,13 +18,13 @@
 #include "google/spanner/v1/query_plan.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "google/cloud/spanner/results.h"
 #include "tests/conformance/common/database_test_base.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -33,7 +33,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class QueryModesTest
     : public DatabaseTest,
@@ -46,10 +46,10 @@ class QueryModesTest
 
  public:
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchemaFromFile("query_modes.test"));
+    GOOGLESQL_RETURN_IF_ERROR(SetSchemaFromFile("query_modes.test"));
 
-    ZETASQL_RETURN_IF_ERROR(Insert("Users", {"ID", "Name"}, {1, "John"}).status());
-    ZETASQL_RETURN_IF_ERROR(Insert("Users", {"ID", "Name"}, {2, "Peter"}).status());
+    GOOGLESQL_RETURN_IF_ERROR(Insert("Users", {"ID", "Name"}, {1, "John"}).status());
+    GOOGLESQL_RETURN_IF_ERROR(Insert("Users", {"ID", "Name"}, {2, "Peter"}).status());
 
     return absl::OkStatus();
   }

@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -43,7 +43,7 @@ namespace {
 using cloud::spanner::JsonB;
 using cloud::spanner::MakePgNumeric;
 using cloud::spanner::PgNumeric;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class DmlTest
     : public DatabaseTest,
@@ -67,7 +67,7 @@ class DmlTest
  protected:
   void PopulateDatabase() {
     // Write fixure data to use in delete tests.
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         CommitDml({SqlStatement("INSERT INTO users(id, name, age) VALUES "
                                 "(1, 'Levin', 27), (2, 'Mark', 32), "
                                 "(10, 'Douglas', 31)")}));
@@ -87,7 +87,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(DmlTest, CanInsertAndUpdateInSameTransaction) {
   // Note that column Age is not part of update columns.
-  ZETASQL_ASSERT_OK(CommitDml(
+  GOOGLESQL_ASSERT_OK(CommitDml(
       {SqlStatement("INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27)"),
        SqlStatement("UPDATE users SET name = 'Mark' WHERE id = 1")}));
   EXPECT_THAT(Query("SELECT id, name, age FROM users"),
@@ -96,10 +96,10 @@ TEST_P(DmlTest, CanInsertAndUpdateInSameTransaction) {
 
 TEST_P(DmlTest, InsertsNullValuesForUnspecifiedColumns) {
   // Nullable columns that are not specified are assigned default null values.
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       CommitDml({SqlStatement("INSERT INTO users(id, updated) VALUES "
                               "(10, '2015-10-13T02:19:40Z')")}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto timestamp,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto timestamp,
                        ParseRFC3339TimeSeconds("2015-10-13T02:19:40Z"));
   EXPECT_THAT(Query("SELECT id, name, age, updated FROM users"),
               IsOkAndHoldsRows({{10, Null<std::string>(), Null<std::int64_t>(),
@@ -107,7 +107,7 @@ TEST_P(DmlTest, InsertsNullValuesForUnspecifiedColumns) {
 }
 
 TEST_P(DmlTest, CanInsertPrimaryKeyOnly) {
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("INSERT INTO users(id) VALUES (10)")}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement("INSERT INTO users(id) VALUES (10)")}));
   EXPECT_THAT(Query("SELECT id, name, age, updated FROM users"),
               IsOkAndHoldsRows({{10, Null<std::string>(), Null<std::int64_t>(),
                                  Null<Timestamp>()}}));
@@ -121,9 +121,9 @@ TEST_P(DmlTest, CanDeleteFromTable) {
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     // PG doesn't need a WHERE clause.
-    ZETASQL_EXPECT_OK(CommitDml({SqlStatement("DELETE FROM users")}));
+    GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement("DELETE FROM users")}));
   } else {
-    ZETASQL_EXPECT_OK(CommitDml({SqlStatement("DELETE FROM users WHERE true")}));
+    GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement("DELETE FROM users WHERE true")}));
   }
 
   EXPECT_THAT(Query("SELECT id, name, age FROM users"), IsOkAndHoldsRows({}));
@@ -136,7 +136,7 @@ TEST_P(DmlTest, CanDeleteRangeFromTable) {
                   {{1, "Levin", 27}, {2, "Mark", 32}, {10, "Douglas", 31}}));
 
   // Should delete only user with id 2.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       CommitDml({SqlStatement("DELETE FROM users WHERE id > 1 AND id < 10")}));
 
   EXPECT_THAT(Query("SELECT id, name, age FROM users ORDER BY id"),
@@ -149,7 +149,7 @@ TEST_P(DmlTest, DeleteWithEmptyKeysIsNoOp) {
               IsOkAndHoldsRows(
                   {{1, "Levin", 27}, {2, "Mark", 32}, {10, "Douglas", 31}}));
 
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement("DELETE FROM users WHERE false")}));
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement("DELETE FROM users WHERE false")}));
 
   EXPECT_THAT(Query("SELECT id, name, age FROM users ORDER BY id"),
               IsOkAndHoldsRows(
@@ -157,10 +157,10 @@ TEST_P(DmlTest, DeleteWithEmptyKeysIsNoOp) {
 }
 
 TEST_P(DmlTest, CanExecuteUpdateAfterDelete) {
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       CommitDml({SqlStatement("INSERT INTO users(id, updated) VALUES "
                               "(10, '2015-10-13T02:19:40Z')")}));
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("DELETE FROM users WHERE id = 10"),
        SqlStatement("UPDATE users SET name = 'Mark' WHERE id = 10")}));
 
@@ -168,14 +168,14 @@ TEST_P(DmlTest, CanExecuteUpdateAfterDelete) {
 }
 
 TEST_P(DmlTest, CanUpdateWithNullValue) {
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       CommitDml({SqlStatement("INSERT INTO users(id, name, age) "
                               "VALUES (1, 'Levin', 27)")}));
   ASSERT_THAT(Query("SELECT id, name, age FROM users WHERE name IS NOT NULL"),
               IsOkAndHoldsRows({{1, "Levin", 27}}));
 
   // Update name to Null in the existing row.
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       CommitDml({SqlStatement("UPDATE users SET name = NULL WHERE true")}));
   EXPECT_THAT(Query("SELECT id, name, age FROM users WHERE name IS NOT NULL"),
               IsOkAndHoldsRows({}));
@@ -186,7 +186,7 @@ TEST_P(DmlTest, CanInsertIntoTableWithNullableKey) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();
   }
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       CommitDml({SqlStatement("INSERT INTO nullable(key, value) "
                               "Values (NULL, 'Value1')")}));
   EXPECT_THAT(Query("SELECT key, value FROM nullable"),
@@ -207,7 +207,7 @@ TEST_P(DmlTest, CannotInsertMultipleRowsIntoSingletonTable) {
 
   // Cannot insert multiple rows in multiple dml statements either in a
   // singleton table.
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       CommitDml({SqlStatement("INSERT INTO singleton (col1, col2) Values "
                               "('val11', 'val21')")}));
   EXPECT_THAT(
@@ -221,7 +221,7 @@ TEST_P(DmlTest, CanUpdateEmptySingletonTable) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();
   }
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("UPDATE singleton SET col1 = 'val1' WHERE true")}));
   EXPECT_THAT(Query("SELECT col1, col2 FROM singleton"), IsOkAndHoldsRows({}));
 }
@@ -231,10 +231,10 @@ TEST_P(DmlTest, CanUpdateSingletonTable) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();
   }
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       CommitDml({SqlStatement("INSERT INTO singleton (col1, col2) Values "
                               "('val11', 'val21')")}));
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(
       "UPDATE singleton SET col1 = 'val12', col2 = 'val22' WHERE true")}));
   EXPECT_THAT(Query("SELECT col1, col2 FROM singleton"),
               IsOkAndHoldsRows({{"val12", "val22"}}));
@@ -246,7 +246,7 @@ TEST_P(DmlTest, CanDeleteFromEmptySingletonTable) {
     GTEST_SKIP();
   }
   EXPECT_THAT(Query("SELECT col1, col2 FROM singleton"), IsOkAndHoldsRows({}));
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("DELETE FROM singleton WHERE true")}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement("DELETE FROM singleton WHERE true")}));
   EXPECT_THAT(Query("SELECT col1, col2 FROM singleton"), IsOkAndHoldsRows({}));
 }
 
@@ -255,10 +255,10 @@ TEST_P(DmlTest, CanDeleteFromSingletonTable) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();
   }
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       CommitDml({SqlStatement("INSERT INTO singleton (col1, col2) Values "
                               "('val11', 'val21')")}));
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("DELETE FROM singleton WHERE true")}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement("DELETE FROM singleton WHERE true")}));
   EXPECT_THAT(Query("SELECT col1, col2 FROM singleton"), IsOkAndHoldsRows({}));
 }
 
@@ -267,10 +267,10 @@ TEST_P(DmlTest, DeleteWithEmptyKeysIsNoOpForSingletonTable) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();
   }
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       CommitDml({SqlStatement("INSERT INTO singleton (col1, col2) Values "
                               "('val11', 'val21')")}));
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("DELETE FROM singleton WHERE false")}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement("DELETE FROM singleton WHERE false")}));
   EXPECT_THAT(Query("SELECT col1, col2 FROM singleton"),
               IsOkAndHoldsRows({{"val11", "val21"}}));
 }
@@ -293,14 +293,14 @@ TEST_P(DmlTest, CanInsertToArrayColumns) {
                            : "VALUES(1, ARRAY<INT64>[10])";
 
   // Array literals.
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(
       absl::StrCat("INSERT INTO arrayfields(key, arraycol) ", values))}));
 
   // Array parameters.
   values = (GetParam() == database_api::DatabaseDialect::POSTGRESQL)
                ? "VALUES($1, $2)"
                : "VALUES(@p1, @p2)";
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(
       absl::StrCat("INSERT INTO arrayfields(key, arraycol) ", values),
       SqlStatement::ParamType{
           {"p1", Value(2)},
@@ -319,7 +319,7 @@ TEST_P(DmlTest, CanInsertMultipleRowsUsingStructParam) {
     GTEST_SKIP();
   }
   using StructType = std::tuple<int64_t, std::string>;
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(
       "INSERT INTO users(id, name) "
       "SELECT * FROM UNNEST(@p1)",
       SqlStatement::ParamType{
@@ -336,7 +336,7 @@ TEST_P(DmlTest, CannotCommitWithBadMutation) {
                           : "\"abc\"";
 
   Transaction txn{Transaction::ReadWriteOptions{}};
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto result,
       ExecuteDmlTransaction(
           txn, SqlStatement(absl::Substitute(
@@ -371,9 +371,9 @@ TEST_P(DmlTest, CanUseIndexHintInInsertStatement) {
     GTEST_SKIP();
   }
 
-  ZETASQL_EXPECT_OK(Insert("nullable", {"key", "value"}, {1, "Peter"}));
+  GOOGLESQL_EXPECT_OK(Insert("nullable", {"key", "value"}, {1, "Peter"}));
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       CommitDml({SqlStatement("INSERT INTO users(id, name) "
                               "SELECT key, value "
                               "FROM nullable@{force_index=nullableindex} ")}));
@@ -388,12 +388,12 @@ TEST_P(DmlTest, CanUseIndexHintInDeleteStatement) {
     GTEST_SKIP();
   }
 
-  ZETASQL_EXPECT_OK(Insert("nullable", {"key", "value"}, {1, "Peter"}));
+  GOOGLESQL_EXPECT_OK(Insert("nullable", {"key", "value"}, {1, "Peter"}));
 
   EXPECT_THAT(Query("SELECT key, value FROM nullable"),
               IsOkAndHoldsRow({1, "Peter"}));
 
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("DELETE FROM nullable@{force_index=nullableindex} "
                     "WHERE value = 'Peter'")}));
 
@@ -406,14 +406,14 @@ TEST_P(DmlTest, CanUseForceIndexHintInUpdateStatement) {
     GTEST_SKIP();
   }
 
-  ZETASQL_EXPECT_OK(Insert("nullable", {"key", "value"}, {1, "Peter"}));
-  ZETASQL_EXPECT_OK(Insert("nullable", {"key", "value"}, {2, "James"}));
+  GOOGLESQL_EXPECT_OK(Insert("nullable", {"key", "value"}, {1, "Peter"}));
+  GOOGLESQL_EXPECT_OK(Insert("nullable", {"key", "value"}, {2, "James"}));
 
   EXPECT_THAT(Query("SELECT key, value FROM nullable ORDER BY key"),
               IsOkAndHoldsRows({{1, "Peter"}, {2, "James"}}));
 
   // This UPDATE should use the index to find the row.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       CommitDml({SqlStatement("UPDATE nullable@{force_index=nullableindex} n "
                               "SET n.value = 'Smith' "
                               "WHERE n.value = 'Peter'")}));
@@ -425,28 +425,28 @@ TEST_P(DmlTest, CanUseForceIndexHintInUpdateStatement) {
 TEST_P(DmlTest, GroupByScanOptimizationHintSyntax) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_EXPECT_OK(Insert("users", {"id", "name", "age"}, {1, "John", 30}));
-  ZETASQL_EXPECT_OK(Insert("users", {"id", "name", "age"}, {2, "Jane", 30}));
+  GOOGLESQL_EXPECT_OK(Insert("users", {"id", "name", "age"}, {1, "John", 30}));
+  GOOGLESQL_EXPECT_OK(Insert("users", {"id", "name", "age"}, {2, "Jane", 30}));
 
-  ZETASQL_EXPECT_OK(Query(
+  GOOGLESQL_EXPECT_OK(Query(
       "SELECT age FROM users@{GROUPBY_SCAN_OPTIMIZATION=TRUE} GROUP BY age"));
-  ZETASQL_EXPECT_OK(Query(
+  GOOGLESQL_EXPECT_OK(Query(
       "SELECT age FROM users@{GROUPBY_SCAN_OPTIMIZATION=FALSE} GROUP BY age"));
 }
 
 TEST_P(DmlTest, IndexStrategyForceIndexUnionHint) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK(UpdateSchema(
+  GOOGLESQL_ASSERT_OK(UpdateSchema(
       {"CREATE TABLE TableWithMultiIndex (K INT64, ColA INT64, ColB INT64, Val "
        "STRING(MAX)) PRIMARY KEY(K)",
        "CREATE INDEX IndexColA ON TableWithMultiIndex(ColA)",
        "CREATE INDEX IndexColB ON TableWithMultiIndex(ColB)"}));
-  ZETASQL_EXPECT_OK(Insert("TableWithMultiIndex", {"K", "ColA", "ColB", "Val"},
+  GOOGLESQL_EXPECT_OK(Insert("TableWithMultiIndex", {"K", "ColA", "ColB", "Val"},
                    {1, 10, 100, "A"}));
-  ZETASQL_EXPECT_OK(Insert("TableWithMultiIndex", {"K", "ColA", "ColB", "Val"},
+  GOOGLESQL_EXPECT_OK(Insert("TableWithMultiIndex", {"K", "ColA", "ColB", "Val"},
                    {2, 20, 200, "B"}));
-  ZETASQL_EXPECT_OK(Insert("TableWithMultiIndex", {"K", "ColA", "ColB", "Val"},
+  GOOGLESQL_EXPECT_OK(Insert("TableWithMultiIndex", {"K", "ColA", "ColB", "Val"},
                    {3, 10, 300, "C"}));
 
   EXPECT_THAT(Query("SELECT K, Val FROM "
@@ -459,24 +459,24 @@ TEST_P(DmlTest, HintsWithScanMethod) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();
   }
-  ZETASQL_EXPECT_OK(Insert("users", {"id", "name"}, {1, "John"}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(Insert("users", {"id", "name"}, {1, "John"}));
+  GOOGLESQL_EXPECT_OK(
       Query("SELECT ID, Name FROM "
             "users@{SCAN_METHOD=BATCH}"));
 }
 TEST_P(DmlTest, SeekableKeySizeHintTest) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       UpdateSchema({"CREATE TABLE SeekTable (K1 INT64, K2 INT64, V INT64) "
                     "PRIMARY KEY(K1, K2)",
                     "CREATE INDEX SeekIndex ON SeekTable(K1, K2)"}));
-  ZETASQL_EXPECT_OK(Insert("SeekTable", {"K1", "K2", "V"}, {1, 1, 100}));
+  GOOGLESQL_EXPECT_OK(Insert("SeekTable", {"K1", "K2", "V"}, {1, 1, 100}));
 
   if (in_prod_env()) {
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         Query("SELECT V FROM SeekTable@{FORCE_INDEX=SeekIndex, "
               "SEEKABLE_KEY_SIZE=1} WHERE K1 = 1 AND K2 = 1"));
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         Query("SELECT V FROM SeekTable@{FORCE_INDEX=SeekIndex, "
               "SEEKABLE_KEY_SIZE=0} WHERE K1 = 1 AND K2 = 1"));
   } else {  // Emulator behavior
@@ -506,10 +506,10 @@ TEST_P(DmlTest, CanUseIndexHintInUpdateStatement) {
     GTEST_SKIP();
   }
 
-  ZETASQL_EXPECT_OK(Insert("nullable", {"key", "value"}, {1, "Peter"}));
-  ZETASQL_EXPECT_OK(Insert("users", {"id", "name"}, {1, "Paul"}));
+  GOOGLESQL_EXPECT_OK(Insert("nullable", {"key", "value"}, {1, "Peter"}));
+  GOOGLESQL_EXPECT_OK(Insert("users", {"id", "name"}, {1, "Paul"}));
 
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(
       "UPDATE users SET name = 'Peter' "
       "WHERE id IN "
       "(SELECT key FROM nullable@{force_index=nullableindex})")}));
@@ -525,19 +525,19 @@ TEST_P(DmlTest, NumericKey) {
   }
 
   // Insert DML
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(
       "INSERT INTO numerictable(key, val) VALUES (NUMERIC'-12.3', -1), "
       "(NUMERIC'0', 0), (NUMERIC'12.3', 1)")}));
 
   // Update DML
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("UPDATE numerictable SET val = 2 WHERE key = 12.3")}));
 
   EXPECT_THAT(Query("SELECT t.val FROM numerictable t ORDER BY t.key"),
               IsOkAndHoldsRows({{-1}, {0}, {2}}));
 
   // Delete DML
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       CommitDml({SqlStatement("DELETE FROM numerictable t WHERE t.key < 0")}));
 
   EXPECT_THAT(Query("SELECT t.val FROM numerictable t ORDER BY t.key"),
@@ -552,12 +552,12 @@ TEST_P(DmlTest, NumericType) {
   }
 
   // Insert DML
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("INSERT INTO numerictable(id, val) VALUES (-1, -12.3), "
                     "(0, 0.1), (1, 12.3)")}));
 
   // Update DML
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("UPDATE numerictable SET val = 2.2 WHERE id = 1")}));
 
   EXPECT_THAT(Query("SELECT t.val FROM numerictable t ORDER BY t.id"),
@@ -566,7 +566,7 @@ TEST_P(DmlTest, NumericType) {
                                 {*MakePgNumeric("2.2")}}));
 
   // Delete DML
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       CommitDml({SqlStatement("DELETE FROM numerictable t WHERE t.id < 0")}));
 
   EXPECT_THAT(
@@ -580,12 +580,12 @@ TEST_P(DmlTest, JsonType) {
                           : R"(JSON '{"a":"str"}')";
 
   // Insert DML
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(absl::Substitute(R"(
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(absl::Substitute(R"(
         INSERT INTO jsontable(id, val) VALUES (3, $0)
   )",
                                                      value))}));
 
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(R"(
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(R"(
         INSERT INTO jsontable(id, val) VALUES (4, NULL)
   )")}));
 
@@ -614,7 +614,7 @@ TEST_P(DmlTest, JsonType) {
   value = GetParam() == database_api::DatabaseDialect::POSTGRESQL
               ? R"('{"a":"newstr", "b":123}')"
               : R"(JSON '{"a":"newstr", "b":123}')";
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(absl::Substitute(
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(absl::Substitute(
       R"(UPDATE jsontable SET val = $0 WHERE id = 3)", value))}));
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
@@ -639,7 +639,7 @@ TEST_P(DmlTest, ReturningCommitTimestamp) {
   // Commit timestamp columns can be returned as long as the value is not
   // PENDING_COMMIT_TIMESTAMP.
   std::vector<ValueRow> result;
-  ZETASQL_EXPECT_OK(CommitDmlReturning(
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning(
       {SqlStatement(absl::Substitute(
           "INSERT INTO committimestamptable(id, commit_ts) VALUES "
           "(1, '2000-01-01') $0 commit_ts;",
@@ -690,7 +690,7 @@ TEST_P(DmlTest, Returning) {
 
   // Insert THEN RETURN
   std::vector<ValueRow> result_for_insert;
-  ZETASQL_EXPECT_OK(CommitDmlReturning(
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning(
       {SqlStatement(absl::Substitute(
           "INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27) "
           "$0 age;",
@@ -705,7 +705,7 @@ TEST_P(DmlTest, Returning) {
 
   // Update THEN RETURN
   std::vector<ValueRow> result_for_update;
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       CommitDmlReturning({SqlStatement(absl::Substitute(
                              "UPDATE users SET age = age + 1 WHERE id = 1 "
                              "$0 age, name;",
@@ -719,7 +719,7 @@ TEST_P(DmlTest, Returning) {
 
   // Delete THEN RETURN
   std::vector<ValueRow> result_for_delete;
-  ZETASQL_EXPECT_OK(CommitDmlReturning(
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning(
       {SqlStatement(absl::Substitute("DELETE FROM users WHERE id = 1 "
                                      "$0 name, age;",
                                      returning))},
@@ -731,7 +731,7 @@ TEST_P(DmlTest, Returning) {
 }
 
 TEST_P(DmlTest, ReturningWithAction) {
-  // WITH ACTION is available in ZetaSQL only.
+  // WITH ACTION is available in GoogleSQL only.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     GTEST_SKIP();
   }
@@ -742,7 +742,7 @@ TEST_P(DmlTest, ReturningWithAction) {
 
   // Insert THEN RETURN WITH ACTION returns "INSERT" as action string
   std::vector<ValueRow> result_for_insert;
-  ZETASQL_EXPECT_OK(CommitDmlReturning(
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning(
       {SqlStatement("INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27) "
                     "THEN RETURN WITH ACTION AS action age;")},
       result_for_insert));
@@ -752,7 +752,7 @@ TEST_P(DmlTest, ReturningWithAction) {
 
   // Update THEN RETURN WITH ACTION returns "UPDATE" as action string
   std::vector<ValueRow> result_for_update;
-  ZETASQL_EXPECT_OK(CommitDmlReturning(
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning(
       {SqlStatement("UPDATE users SET age = age + 1 WHERE id = 1 "
                     "THEN RETURN WITH ACTION AS action age, name;")},
       result_for_update));
@@ -761,7 +761,7 @@ TEST_P(DmlTest, ReturningWithAction) {
 
   // Delete THEN RETURN WITH ACTION returns "DELETE" as action string
   std::vector<ValueRow> result_for_delete;
-  ZETASQL_EXPECT_OK(CommitDmlReturning(
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning(
       {SqlStatement("DELETE FROM users WHERE id = 1 "
                     "THEN RETURN WITH ACTION AS action name, age;")},
       result_for_delete));
@@ -776,7 +776,7 @@ TEST_P(DmlTest, ReturningGeneratedColumns) {
 
   // Insert THEN RETURN
   std::vector<ValueRow> result_for_insert;
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       CommitDmlReturning({SqlStatement(absl::Substitute(
                              "INSERT INTO tablegen(k, v1, v2) VALUES (1, 1, 1) "
                              "$0 g1, g2, g3 + 1, v3;",
@@ -790,7 +790,7 @@ TEST_P(DmlTest, ReturningGeneratedColumns) {
 
   // Update THEN RETURN
   std::vector<ValueRow> result_for_update;
-  ZETASQL_EXPECT_OK(CommitDmlReturning(
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning(
       {SqlStatement(absl::Substitute("UPDATE tablegen SET v1 = 3 WHERE k = 1 "
                                      "$0 g1, g2, g3 + 1;",
                                      returning))},
@@ -802,7 +802,7 @@ TEST_P(DmlTest, ReturningGeneratedColumns) {
 
   // Delete THEN RETURN
   std::vector<ValueRow> result_for_delete;
-  ZETASQL_EXPECT_OK(CommitDmlReturning(
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning(
       {SqlStatement(absl::Substitute("DELETE FROM tablegen WHERE k = 1 "
                                      "$0 g1, g2, g3 + 1, v3;",
                                      returning))},
@@ -814,7 +814,7 @@ TEST_P(DmlTest, ReturningGeneratedColumns) {
 }
 
 TEST_P(DmlTest, ReadGeneratedColumnsWithIntervalExpression) {
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("INSERT INTO tablegen(k, v1, v2) VALUES (1, 1, 1) ")}));
 
   EXPECT_THAT(Query("SELECT v1, v2, b1, b2 FROM tablegen WHERE k = 1;"),
@@ -823,13 +823,13 @@ TEST_P(DmlTest, ReadGeneratedColumnsWithIntervalExpression) {
 
 TEST_P(DmlTest, InsertGPK) {
   // Insert with `gpktable1`.
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("INSERT INTO gpktable1(k1, v1, v2) VALUES (1, 1, 0) ")}));
   EXPECT_THAT(Query("SELECT k1, k2_stored, v2 + 5 FROM gpktable1 WHERE k1 = 1"),
               IsOkAndHoldsRow({1, 2, 5}));
 
   // Insert with `gpktable2`.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       CommitDml({SqlStatement("INSERT INTO gpktable2(k1, v1) VALUES (1, 1)")}));
   EXPECT_THAT(
       Query("SELECT k1, k2_stored, v2_stored + 5 FROM gpktable2 WHERE k1 = 1"),
@@ -848,7 +848,7 @@ TEST_P(DmlTest, UpsertDmlSimpleTable) {
   } else {
     sql = absl::Substitute(sql, "OR IGNORE", "");
   }
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
   EXPECT_THAT(
       Query("SELECT id, name, age FROM users WHERE id < 10 ORDER BY id"),
       IsOkAndHoldsRows({{1, "Levin", 27},
@@ -867,7 +867,7 @@ TEST_P(DmlTest, UpsertDmlSimpleTable) {
   } else {
     sql = absl::Substitute(sql, "OR UPDATE", "");
   }
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
   EXPECT_THAT(
       Query("SELECT id, name, age FROM users WHERE id < 10 ORDER BY id"),
       IsOkAndHoldsRows({{1, "Bob", 31},
@@ -890,7 +890,7 @@ TEST_P(DmlTest, InsertOnConflictDmlSimpleTable) {
       "VALUES (3, 'John', 30), (1, 'Bob', 31), (5, 'Susan', 28) "
       "ON CONFLICT(id) DO NOTHING ",
       returning_clause);
-  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
   absl::StatusOr<std::vector<ValueRow>> rows_or = returning_rows;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     EXPECT_THAT(rows_or,
@@ -916,7 +916,7 @@ TEST_P(DmlTest, InsertOnConflictDmlSimpleTable) {
       "(5, 'Susan', 25), (6, 'Bill', 25) "
       "ON CONFLICT(id) DO UPDATE SET age = excluded.age + users.age ",
       returning_clause);
-  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
   rows_or = returning_rows;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows({{3, "John", 65},
@@ -955,7 +955,7 @@ TEST_P(DmlTest, MultipleInsertOnConflictDmlInTransaction) {
       "VALUES (3, 'John', 35), (1, 'Bob', 31), "
       "(5, 'Susan', 25), (6, 'Bill', 25) "
       "ON CONFLICT(id) DO UPDATE SET age = excluded.age + users.age "));
-  ZETASQL_EXPECT_OK(CommitDmlTransaction(txn, sql_statements));
+  GOOGLESQL_EXPECT_OK(CommitDmlTransaction(txn, sql_statements));
 
   EXPECT_THAT(
       Query("SELECT id, name, age FROM users WHERE id < 10 ORDER BY id"),
@@ -970,12 +970,12 @@ TEST_P(DmlTest, InsertOnConflictDmlOnUniqueIndexAsConflictTarget) {
   // in PG.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK(UpdateSchema(
+  GOOGLESQL_ASSERT_OK(UpdateSchema(
       {"CREATE TABLE TableWithIndex (K INT64, ColA INT64, ColB INT64, Val "
        "STRING(MAX)) PRIMARY KEY(K)",
        "CREATE UNIQUE INDEX IndexColA ON TableWithIndex(ColA)"}));
   // Load data
-  ZETASQL_EXPECT_OK(Insert("TableWithIndex", {"K", "ColA", "ColB", "Val"},
+  GOOGLESQL_EXPECT_OK(Insert("TableWithIndex", {"K", "ColA", "ColB", "Val"},
                    {1, 10, 100, "A"}));
 
   std::vector<ValueRow> returning_rows;
@@ -986,7 +986,7 @@ TEST_P(DmlTest, InsertOnConflictDmlOnUniqueIndexAsConflictTarget) {
       "INSERT INTO TableWithIndex(K, ColA, ColB) "
       "VALUES (5, 10, 10), (2, 2, 2) "
       "ON CONFLICT(ColA) DO NOTHING THEN RETURN K, ColA, ColB";
-  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
   absl::StatusOr<std::vector<ValueRow>> rows_or = returning_rows;
   EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows({{2, 2, 2}}));
 
@@ -997,7 +997,7 @@ TEST_P(DmlTest, InsertOnConflictDmlOnUniqueIndexAsConflictTarget) {
       "VALUES (5, 10, 10), (2, 2, 2), (100, 100, 100) "
       "ON CONFLICT ON UNIQUE CONSTRAINT IndexColA DO NOTHING "
       "THEN RETURN K, ColA, ColB";
-  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
   rows_or = returning_rows;
   EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows({{100, 100, 100}}));
 
@@ -1011,7 +1011,7 @@ TEST_P(DmlTest, InsertOnConflictDmlOnUniqueIndexAsConflictTarget) {
       "ON CONFLICT(ColA) DO UPDATE SET ColB = excluded.ColB + 1, "
       "Val = CONCAT('updated_', TableWithIndex.Val) "
       "THEN RETURN WITH ACTION AS action K, ColA, ColB, Val";
-  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
   rows_or = returning_rows;
   EXPECT_THAT(rows_or,
               IsOkAndHoldsUnorderedRows({{20, 20, 20, "20", "INSERT"},
@@ -1023,12 +1023,12 @@ TEST_P(DmlTest, InsertOnConflictDmlNamedSchema) {
   // in PG.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK(UpdateSchema(
+  GOOGLESQL_ASSERT_OK(UpdateSchema(
       {"CREATE SCHEMA s1",
        "CREATE TABLE s1.TestTable (K INT64, Val INT64) PRIMARY KEY(K)",
        "CREATE UNIQUE INDEX s1.TestIndex ON s1.TestTable(Val)"}));
   // Load data
-  ZETASQL_EXPECT_OK(Insert("s1.TestTable", {"K", "Val"}, {1, 1}));
+  GOOGLESQL_EXPECT_OK(Insert("s1.TestTable", {"K", "Val"}, {1, 1}));
 
   std::vector<ValueRow> returning_rows;
   // INSERT ON CONFLICT DO NOTHING DML.
@@ -1039,7 +1039,7 @@ TEST_P(DmlTest, InsertOnConflictDmlNamedSchema) {
       "VALUES (1, 1), (2, 2) "
       "ON CONFLICT(K) DO NOTHING "
       "THEN RETURN K, Val";
-  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
   absl::StatusOr<std::vector<ValueRow>> rows_or = returning_rows;
   EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows({{2, 2}}));
 
@@ -1052,7 +1052,7 @@ TEST_P(DmlTest, InsertOnConflictDmlNamedSchema) {
       "ON CONFLICT ON UNIQUE CONSTRAINT TestIndex "
       "DO UPDATE SET Val = excluded.Val "
       "THEN RETURN K, Val";
-  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
   rows_or = returning_rows;
   EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows({{3, 3}}));
 
@@ -1065,14 +1065,14 @@ TEST_P(DmlTest, InsertOnConflictDmlNamedSchema) {
       "ON CONFLICT ON UNIQUE CONSTRAINT TestIndex "
       "DO UPDATE SET TestTable.Val = excluded.Val + 1 "
       "THEN RETURN WITH ACTION AS action K, Val";
-  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
   rows_or = returning_rows;
   EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows({{3, 4, "UPDATE"}}));
 }
 
 TEST_P(DmlTest, UpsertDmlGeneratedColumnTable) {
   // Populate `tablegen` table
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("INSERT INTO tablegen(k, v1, v2) VALUES (1, 1, 1);")}));
 
   // INSERT OR IGNORE DML.
@@ -1084,7 +1084,7 @@ TEST_P(DmlTest, UpsertDmlGeneratedColumnTable) {
   } else {
     sql = absl::Substitute(sql, "OR IGNORE", "");
   }
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
   EXPECT_THAT(Query("SELECT k, g2, v3 FROM tablegen WHERE TRUE ORDER BY k"),
               IsOkAndHoldsRows({{1, 2, 2}, {2, 4, 2}, {5, 10, 2}}));
 
@@ -1100,7 +1100,7 @@ TEST_P(DmlTest, UpsertDmlGeneratedColumnTable) {
   } else {
     sql = absl::Substitute(sql, "OR UPDATE", "");
   }
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
   EXPECT_THAT(
       Query("SELECT k, g1, g2, v3 FROM tablegen WHERE TRUE ORDER BY k"),
       IsOkAndHoldsRows({{1, 21, 20, 1}, {2, 41, 40, 2}, {5, 101, 100, 5}}));
@@ -1113,7 +1113,7 @@ TEST_P(DmlTest, InsertOnConflictDmlGeneratedColumnTable) {
           ? "RETURNING k, v1, v2, v3"
           : "THEN RETURN WITH ACTION AS action k, v1, v2, v3, g1, g2";
   // Populate `tablegen` table
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("INSERT INTO tablegen(k, v1, v2) VALUES (1, 1, 1);")}));
 
   // INSERT ON CONFLICT DO NOTHING DML.
@@ -1122,7 +1122,7 @@ TEST_P(DmlTest, InsertOnConflictDmlGeneratedColumnTable) {
       "VALUES (2, 2, 2), (1, 2, 2) ON CONFLICT(k) DO NOTHING ",
       returning_clause);
 
-  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
   absl::StatusOr<std::vector<ValueRow>> rows_or = returning_rows;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows({{2, 2, 2, 2}}));
@@ -1141,7 +1141,7 @@ TEST_P(DmlTest, InsertOnConflictDmlGeneratedColumnTable) {
       "ON CONFLICT(k) DO UPDATE SET "
       "v1 = excluded.v1 + tablegen.v1 + 1, v3 = excluded.v3 * 2 ",
       returning_clause);
-  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, returning_rows));
   rows_or = returning_rows;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     EXPECT_THAT(rows_or, IsOkAndHoldsUnorderedRows(
@@ -1170,7 +1170,7 @@ TEST_P(DmlTest, InsertOnConflictDmlGeneratedColumnTable) {
 
 TEST_P(DmlTest, ReturningUpsertDml) {
   // Populate `tablegen` table
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("INSERT INTO tablegen(k, v1, v2) VALUES (1, 1, 1);")}));
 
   // Test UPSERT queries with returning clause.
@@ -1190,7 +1190,7 @@ TEST_P(DmlTest, ReturningUpsertDml) {
     sql = absl::Substitute(sql, "OR IGNORE", "",
                            "THEN RETURN WITH ACTION AS action k, g1, g2, v3");
   }
-  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, result_for_insert_ignore));
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, result_for_insert_ignore));
   absl::StatusOr<std::vector<ValueRow>> result_or = result_for_insert_ignore;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     EXPECT_THAT(result_or, IsOkAndHoldsRow({2, 2, 2, 2}));
@@ -1219,7 +1219,7 @@ TEST_P(DmlTest, ReturningUpsertDml) {
     sql = absl::Substitute(sql, "OR UPDATE", "",
                            "THEN RETURN WITH ACTION AS action k, g1, g2, v3");
   }
-  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, result_for_insert_update));
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, result_for_insert_update));
   absl::StatusOr<std::vector<ValueRow>> result_or1 = result_for_insert_update;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     EXPECT_THAT(result_or1, IsOkAndHoldsRow({5, 50, 50, 5}));
@@ -1248,7 +1248,7 @@ TEST_P(DmlTest, ReturningUpsertDml) {
     sql = absl::Substitute(sql, "OR UPDATE", "",
                            "THEN RETURN WITH ACTION AS action k, g1, g2, v3");
   }
-  ZETASQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, result_for_insert_update2));
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning({SqlStatement(sql)}, result_for_insert_update2));
   absl::StatusOr<std::vector<ValueRow>> result_or2 = result_for_insert_update2;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     EXPECT_THAT(result_or2, IsOkAndHoldsRow({2, 20, 20, 20}));
@@ -1265,7 +1265,7 @@ TEST_P(DmlTest, ReturningUpsertDml) {
 
 TEST_P(DmlTest, UpsertDmlGeneratedPrimaryKeyTable) {
   // Populate `gpktable2` table
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("INSERT INTO gpktable2(k1, v1) VALUES (1, 1);")}));
 
   // INSERT OR IGNORE DML.
@@ -1277,7 +1277,7 @@ TEST_P(DmlTest, UpsertDmlGeneratedPrimaryKeyTable) {
     sql = absl::Substitute(sql, "OR IGNORE", "");
   }
 
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
   EXPECT_THAT(Query("SELECT k1, k2_stored, v1, v2_stored FROM gpktable2 "
                     "WHERE TRUE ORDER BY k1"),
               IsOkAndHoldsRows({{1, 3, 1, 6}, {2, 6, 2, 7}, {5, 15, 5, 10}}));
@@ -1291,7 +1291,7 @@ TEST_P(DmlTest, UpsertDmlGeneratedPrimaryKeyTable) {
   } else {
     sql = absl::Substitute(sql, "OR UPDATE", "");
   }
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(sql)}));
   EXPECT_THAT(
       Query("SELECT k1, k2_stored, v1, v2_stored FROM gpktable2 "
             "WHERE TRUE ORDER BY k1"),
@@ -1309,7 +1309,7 @@ TEST_P(DmlTest, ReturningGPK) {
 
   // Insert THEN RETURN with `gpktable1`.
   std::vector<ValueRow> result_for_insert1;
-  ZETASQL_EXPECT_OK(CommitDmlReturning(
+  GOOGLESQL_EXPECT_OK(CommitDmlReturning(
       {SqlStatement(
           absl::Substitute("INSERT INTO gpktable1(k1, v1, v2) VALUES (1, 1, 0) "
                            "$0 k1, k2_stored, v2 + 5;",
@@ -1322,7 +1322,7 @@ TEST_P(DmlTest, ReturningGPK) {
 
   // Insert THEN RETURN with `gpktable2`.
   std::vector<ValueRow> result_for_insert2;
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       CommitDmlReturning({SqlStatement(absl::Substitute(
                              "INSERT INTO gpktable2(k1, v1) VALUES (1, 1) "
                              "$0 k1, k2_stored, v2_stored + 5;",
@@ -1366,7 +1366,7 @@ TEST_P(DmlTest, LockScannedRangesHintInInsert) {
       GetParam() == database_api::DatabaseDialect::POSTGRESQL
           ? "/*@lock_scanned_ranges=exclusive*/"
           : "@{lock_scanned_ranges=EXCLUSIVE}";
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(absl::Substitute(
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(absl::Substitute(
       "$0INSERT INTO users(id, name, age) VALUES (5, 'Levin', 27)",
       lock_hint))}));
   EXPECT_THAT(Query("SELECT id, name, age FROM users WHERE id = 5"),
@@ -1381,7 +1381,7 @@ TEST_P(DmlTest, LockScannedRangesHintInUpdate) {
       GetParam() == database_api::DatabaseDialect::POSTGRESQL
           ? "/*@lock_scanned_ranges=exclusive*/"
           : "@{lock_scanned_ranges=EXCLUSIVE}";
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(absl::Substitute(
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(absl::Substitute(
       "$0UPDATE users SET name = 'Mark' WHERE id = 1", lock_hint))}));
   EXPECT_THAT(Query("SELECT id, name, age FROM users WHERE id = 1"),
               IsOkAndHoldsRows({{1, "Mark", 27}}));
@@ -1395,7 +1395,7 @@ TEST_P(DmlTest, LockScannedRangesHintInDelete) {
       GetParam() == database_api::DatabaseDialect::POSTGRESQL
           ? "/*@lock_scanned_ranges=exclusive*/"
           : "@{lock_scanned_ranges=EXCLUSIVE}";
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(
       absl::Substitute("$0DELETE FROM users WHERE id = 10", lock_hint))}));
   EXPECT_THAT(Query("SELECT id, name, age FROM users WHERE id = 10"),
               IsOkAndHoldsRows({}));

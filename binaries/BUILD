@@ -38,7 +38,7 @@ cc_binary(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/base",
+        "@com_google_googlesql//googlesql/base",
     ],
 )
 

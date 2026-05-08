@@ -45,7 +45,7 @@ namespace postgres_translator {
 // Class used internally by the postgres translator as a global identifier of a
 // user's table.
 //
-// This is necessitated by different zetasql::Table and zetasql::Catalog
+// This is necessitated by different googlesql::Table and googlesql::Catalog
 // implementations that have different global identifier semantics (for example,
 // some implement table->FullName() as a global identifier, others do not).
 class TableName {
@@ -68,7 +68,7 @@ class TableName {
   // Checks whether this is a single empty string.
   bool IsEmpty() const;
 
-  // Gets an absl::Span view for zetasql::Catalog lookups.
+  // Gets an absl::Span view for googlesql::Catalog lookups.
   absl::Span<const std::string> AsSpan() const { return name_; }
 
   // Returns the namespace name of this name, nullptr if name is not qualified.

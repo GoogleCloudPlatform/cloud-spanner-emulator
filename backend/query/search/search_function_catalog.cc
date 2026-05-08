@@ -22,13 +22,13 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/function.pb.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/json_value.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/function.pb.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/json_value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -51,7 +51,7 @@
 #include "backend/query/search/substring_tokenizer.h"
 #include "backend/query/search/tokenlist_concat.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -116,54 +116,54 @@ constexpr char kTokenizeJsonFunctionName[] = "tokenize_json";
 // Function name for tokenizing jsonb.
 constexpr char kTokenizeJsonbFunctionName[] = "tokenize_jsonb";
 
-zetasql::FunctionArgumentTypeOptions GetArgumentTypeOptions(
+googlesql::FunctionArgumentTypeOptions GetArgumentTypeOptions(
     absl::string_view arg_name,
-    zetasql::FunctionEnums::NamedArgumentKind named_argument,
+    googlesql::FunctionEnums::NamedArgumentKind named_argument,
     bool is_required, bool must_be_constant) {
-  zetasql::FunctionArgumentTypeOptions result;
+  googlesql::FunctionArgumentTypeOptions result;
   result.set_argument_name(arg_name, named_argument);
   result.set_cardinality(is_required
-                             ? zetasql::FunctionArgumentType::REQUIRED
-                             : zetasql::FunctionArgumentType::OPTIONAL);
+                             ? googlesql::FunctionArgumentType::REQUIRED
+                             : googlesql::FunctionArgumentType::OPTIONAL);
   result.set_must_be_constant(must_be_constant);
   return result;
 }
 
-zetasql::FunctionArgumentTypeOptions GetPositionalRequiredArgumentTypeOptions(
+googlesql::FunctionArgumentTypeOptions GetPositionalRequiredArgumentTypeOptions(
     absl::string_view arg_name, bool must_be_constant = true) {
-  return GetArgumentTypeOptions(arg_name, zetasql::kPositionalOnly,
+  return GetArgumentTypeOptions(arg_name, googlesql::kPositionalOnly,
                                 /*is_required=*/true, must_be_constant);
 }
 
-zetasql::FunctionArgumentTypeOptions GetRequiredArgumentTypeOptions(
+googlesql::FunctionArgumentTypeOptions GetRequiredArgumentTypeOptions(
     absl::string_view arg_name, bool must_be_constant = true) {
-  return GetArgumentTypeOptions(arg_name, zetasql::kPositionalOrNamed,
+  return GetArgumentTypeOptions(arg_name, googlesql::kPositionalOrNamed,
                                 /*is_required=*/true, must_be_constant);
 }
 
-zetasql::FunctionArgumentTypeOptions GetNamedOptionalArgTypeOptions(
+googlesql::FunctionArgumentTypeOptions GetNamedOptionalArgTypeOptions(
     absl::string_view arg_name, bool must_be_constant = true) {
-  return GetArgumentTypeOptions(arg_name, zetasql::kNamedOnly,
+  return GetArgumentTypeOptions(arg_name, googlesql::kNamedOnly,
                                 /*is_required=*/false, must_be_constant);
 }
 
-absl::StatusOr<zetasql::Value> EvalToken(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> EvalToken(
+    absl::Span<const googlesql::Value> args) {
   return ExactMatchTokenizer::Tokenize(args);
 }
 
-std::unique_ptr<zetasql::Function> TokenFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
-  zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(zetasql::FunctionEvaluator(EvalToken));
+std::unique_ptr<googlesql::Function> TokenFunction(
+    googlesql::TypeFactory* type_factory, const std::string& catalog_name) {
+  googlesql::FunctionOptions function_options;
+  function_options.set_evaluator(googlesql::FunctionEvaluator(EvalToken));
   function_options.set_arguments_are_coercible(false);
   function_options.set_supports_safe_error_mode(false);
 
-  const zetasql::Type* string_type = type_factory->get_string();
-  const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
-  const zetasql::Type* bytes_type = type_factory->get_bytes();
-  const zetasql::ArrayType* string_array_type = nullptr;
-  const zetasql::ArrayType* bytes_array_type = nullptr;
+  const googlesql::Type* string_type = type_factory->get_string();
+  const googlesql::Type* tokenlist_type = type_factory->get_tokenlist();
+  const googlesql::Type* bytes_type = type_factory->get_bytes();
+  const googlesql::ArrayType* string_array_type = nullptr;
+  const googlesql::ArrayType* bytes_array_type = nullptr;
   if (!type_factory->MakeArrayType(string_type, &string_array_type).ok() ||
       !type_factory->MakeArrayType(bytes_type, &bytes_array_type).ok()) {
     // Don't expect either of them to fail.
@@ -172,25 +172,25 @@ std::unique_ptr<zetasql::Function> TokenFunction(
 
   // Signature:
   //  TOKEN(string|byte|array[string|byte] value)
-  return std::make_unique<zetasql::Function>(
-      kTokenFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{
-          zetasql::FunctionSignature{
+  return std::make_unique<googlesql::Function>(
+      kTokenFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{
+          googlesql::FunctionSignature{
               tokenlist_type,
               {{string_type,
                 GetPositionalRequiredArgumentTypeOptions("value", false)}},
               nullptr},
-          zetasql::FunctionSignature{
+          googlesql::FunctionSignature{
               tokenlist_type,
               {{bytes_type,
                 GetPositionalRequiredArgumentTypeOptions("value", false)}},
               nullptr},
-          zetasql::FunctionSignature{
+          googlesql::FunctionSignature{
               tokenlist_type,
               {{string_array_type,
                 GetPositionalRequiredArgumentTypeOptions("value", false)}},
               nullptr},
-          zetasql::FunctionSignature{
+          googlesql::FunctionSignature{
               tokenlist_type,
               {{bytes_array_type,
                 GetPositionalRequiredArgumentTypeOptions("value", false)}},
@@ -199,25 +199,25 @@ std::unique_ptr<zetasql::Function> TokenFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalTokenizeNumber(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> EvalTokenizeNumber(
+    absl::Span<const googlesql::Value> args) {
   return NumericTokenizer::Tokenize(args);
 }
 
-std::unique_ptr<zetasql::Function> TokenizeNumberFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name,
+std::unique_ptr<googlesql::Function> TokenizeNumberFunction(
+    googlesql::TypeFactory* type_factory, const std::string& catalog_name,
     database_api::DatabaseDialect dialect) {
-  zetasql::FunctionOptions function_options;
+  googlesql::FunctionOptions function_options;
   function_options.set_evaluator(
-      zetasql::FunctionEvaluator(EvalTokenizeNumber));
+      googlesql::FunctionEvaluator(EvalTokenizeNumber));
   function_options.set_arguments_are_coercible(false);
   function_options.set_supports_safe_error_mode(false);
 
-  const zetasql::Type* string_type = type_factory->get_string();
-  const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
-  const zetasql::Type* int64_type = type_factory->get_int64();
-  const zetasql::Type* uint64_type = type_factory->get_uint64();
-  const zetasql::Type* double_type = type_factory->get_double();
+  const googlesql::Type* string_type = type_factory->get_string();
+  const googlesql::Type* tokenlist_type = type_factory->get_tokenlist();
+  const googlesql::Type* int64_type = type_factory->get_int64();
+  const googlesql::Type* uint64_type = type_factory->get_uint64();
+  const googlesql::Type* double_type = type_factory->get_double();
 
   // Signature:
   //  TOKENIZE_NUMBER(int64_t|uint64|double|array[int64|uint64_t|double] value,
@@ -228,17 +228,17 @@ std::unique_ptr<zetasql::Function> TokenizeNumberFunction(
   //                  int64_t|uint64|double granularity = 1,
   //                  int64_t tree_base = 2,
   //                  int64_t precision = 15)
-  std::vector<const zetasql::Type*> numeric_types{int64_type, uint64_type,
+  std::vector<const googlesql::Type*> numeric_types{int64_type, uint64_type,
                                                     double_type};
 
-  std::vector<zetasql::FunctionSignature> signatures;
+  std::vector<googlesql::FunctionSignature> signatures;
   std::vector<std::string> precision_names = {"ieee_precision"};
   if (dialect == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
     precision_names.push_back("precision");
   }
   for (auto& precision_name : precision_names) {
     for (auto type : numeric_types) {
-      const zetasql::FunctionArgumentTypeList tokenize_number_args = {
+      const googlesql::FunctionArgumentTypeList tokenize_number_args = {
           {string_type, GetNamedOptionalArgTypeOptions("comparison_type")},
           {string_type, GetNamedOptionalArgTypeOptions("algorithm")},
           {type, GetNamedOptionalArgTypeOptions("min")},
@@ -247,75 +247,75 @@ std::unique_ptr<zetasql::Function> TokenizeNumberFunction(
           {int64_type, GetNamedOptionalArgTypeOptions("tree_base")},
           {int64_type, GetNamedOptionalArgTypeOptions(precision_name)}};
 
-      zetasql::FunctionArgumentTypeList num_arg_type_list = {
+      googlesql::FunctionArgumentTypeList num_arg_type_list = {
           {type, GetRequiredArgumentTypeOptions("value", false)}};
       num_arg_type_list.insert(num_arg_type_list.end(),
                                tokenize_number_args.begin(),
                                tokenize_number_args.end());
-      signatures.push_back(zetasql::FunctionSignature{
+      signatures.push_back(googlesql::FunctionSignature{
           tokenlist_type, num_arg_type_list, nullptr});
 
-      const zetasql::ArrayType* array_type;
+      const googlesql::ArrayType* array_type;
       if (type_factory->MakeArrayType(type, &array_type).ok()) {
-        zetasql::FunctionArgumentTypeList array_arg_type_list = {
+        googlesql::FunctionArgumentTypeList array_arg_type_list = {
             {array_type, GetRequiredArgumentTypeOptions("value", false)}};
         array_arg_type_list.insert(array_arg_type_list.end(),
                                    tokenize_number_args.begin(),
                                    tokenize_number_args.end());
-        zetasql::FunctionSignature signature{tokenlist_type,
+        googlesql::FunctionSignature signature{tokenlist_type,
                                                array_arg_type_list, nullptr};
-        signatures.push_back(zetasql::FunctionSignature{
+        signatures.push_back(googlesql::FunctionSignature{
             tokenlist_type, array_arg_type_list, nullptr});
       }
     }
   }
 
-  return std::make_unique<zetasql::Function>(
-      kTokenizeNumberFunctionName, catalog_name, zetasql::Function::SCALAR,
+  return std::make_unique<googlesql::Function>(
+      kTokenizeNumberFunctionName, catalog_name, googlesql::Function::SCALAR,
       signatures, function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalTokenizeBool(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> EvalTokenizeBool(
+    absl::Span<const googlesql::Value> args) {
   return BoolTokenizer::Tokenize(args);
 }
 
-std::unique_ptr<zetasql::Function> TokenizeBoolFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
-  zetasql::FunctionOptions function_options;
+std::unique_ptr<googlesql::Function> TokenizeBoolFunction(
+    googlesql::TypeFactory* type_factory, const std::string& catalog_name) {
+  googlesql::FunctionOptions function_options;
   function_options.set_evaluator(
-      zetasql::FunctionEvaluator(EvalTokenizeBool));
+      googlesql::FunctionEvaluator(EvalTokenizeBool));
   function_options.set_supports_safe_error_mode(false);
 
-  const zetasql::Type* bool_type = type_factory->get_bool();
-  const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
+  const googlesql::Type* bool_type = type_factory->get_bool();
+  const googlesql::Type* tokenlist_type = type_factory->get_tokenlist();
 
   // Signature: TOKENIZE_BOOL(bool value)
-  return std::make_unique<zetasql::Function>(
-      kTokenizeBoolFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
+  return std::make_unique<googlesql::Function>(
+      kTokenizeBoolFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{googlesql::FunctionSignature{
           tokenlist_type,
           {{bool_type, GetRequiredArgumentTypeOptions("value", false)}},
           nullptr}},
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalTokenizeFullText(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> EvalTokenizeFullText(
+    absl::Span<const googlesql::Value> args) {
   return PlainFullTextTokenizer::Tokenize(args);
 }
 
-std::unique_ptr<zetasql::Function> TokenizeFullTextFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
-  zetasql::FunctionOptions function_options;
+std::unique_ptr<googlesql::Function> TokenizeFullTextFunction(
+    googlesql::TypeFactory* type_factory, const std::string& catalog_name) {
+  googlesql::FunctionOptions function_options;
   function_options.set_evaluator(
-      zetasql::FunctionEvaluator(EvalTokenizeFullText));
+      googlesql::FunctionEvaluator(EvalTokenizeFullText));
   function_options.set_arguments_are_coercible(false);
   function_options.set_supports_safe_error_mode(false);
 
-  const zetasql::Type* string_type = type_factory->get_string();
-  const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
-  const zetasql::ArrayType* string_array_type = nullptr;
+  const googlesql::Type* string_type = type_factory->get_string();
+  const googlesql::Type* tokenlist_type = type_factory->get_tokenlist();
+  const googlesql::ArrayType* string_array_type = nullptr;
   if (!type_factory->MakeArrayType(string_type, &string_array_type).ok()) {
     // Don't expect the call would fail.
     ABSL_LOG(FATAL) << "Fail to make ARRAY<STRING> or ARRAY<BYTE> types.";
@@ -325,50 +325,50 @@ std::unique_ptr<zetasql::Function> TokenizeFullTextFunction(
   //                              string language_tag = NULL,
   //                              string content_type = "text/plain",
   //                              string token_category = NULL)
-  const zetasql::FunctionArgumentTypeList tokenize_fulltext_args = {
+  const googlesql::FunctionArgumentTypeList tokenize_fulltext_args = {
       {string_type, GetNamedOptionalArgTypeOptions("language_tag", false)},
       {string_type, GetNamedOptionalArgTypeOptions("content_type")},
       {string_type, GetNamedOptionalArgTypeOptions("token_category")},
   };
-  zetasql::FunctionArgumentTypeList string_arg_type_list = {
+  googlesql::FunctionArgumentTypeList string_arg_type_list = {
       {string_type, GetRequiredArgumentTypeOptions("value", false)}};
   string_arg_type_list.insert(string_arg_type_list.end(),
                               tokenize_fulltext_args.begin(),
                               tokenize_fulltext_args.end());
-  zetasql::FunctionArgumentTypeList string_array_arg_type_list = {
+  googlesql::FunctionArgumentTypeList string_array_arg_type_list = {
       {string_array_type, GetRequiredArgumentTypeOptions("value", false)}};
   string_array_arg_type_list.insert(string_array_arg_type_list.end(),
                                     tokenize_fulltext_args.begin(),
                                     tokenize_fulltext_args.end());
 
-  return std::make_unique<zetasql::Function>(
-      kTokenizeFullTextFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{
-          zetasql::FunctionSignature{tokenlist_type, string_arg_type_list,
+  return std::make_unique<googlesql::Function>(
+      kTokenizeFullTextFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{
+          googlesql::FunctionSignature{tokenlist_type, string_arg_type_list,
                                        nullptr},
-          zetasql::FunctionSignature{tokenlist_type,
+          googlesql::FunctionSignature{tokenlist_type,
                                        string_array_arg_type_list, nullptr}},
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalTokenizeSubstring(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> EvalTokenizeSubstring(
+    absl::Span<const googlesql::Value> args) {
   return SubstringTokenizer::Tokenize(args);
 }
 
-std::unique_ptr<zetasql::Function> TokenizeSubstringFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
-  zetasql::FunctionOptions function_options;
+std::unique_ptr<googlesql::Function> TokenizeSubstringFunction(
+    googlesql::TypeFactory* type_factory, const std::string& catalog_name) {
+  googlesql::FunctionOptions function_options;
   function_options.set_evaluator(
-      zetasql::FunctionEvaluator(EvalTokenizeSubstring));
+      googlesql::FunctionEvaluator(EvalTokenizeSubstring));
   function_options.set_supports_safe_error_mode(false);
   function_options.set_arguments_are_coercible(false);
 
-  const zetasql::Type* string_type = type_factory->get_string();
-  const zetasql::Type* int_type = type_factory->get_int64();
-  const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
-  const zetasql::Type* bool_type = type_factory->get_bool();
-  const zetasql::ArrayType* string_array_type = nullptr;
+  const googlesql::Type* string_type = type_factory->get_string();
+  const googlesql::Type* int_type = type_factory->get_int64();
+  const googlesql::Type* tokenlist_type = type_factory->get_tokenlist();
+  const googlesql::Type* bool_type = type_factory->get_bool();
+  const googlesql::ArrayType* string_array_type = nullptr;
   if (!type_factory->MakeArrayType(string_type, &string_array_type).ok()) {
     // Don't expect the call would fail.
     ABSL_LOG(FATAL) << "Fail to make ARRAY<STRING> type.";
@@ -389,7 +389,7 @@ std::unique_ptr<zetasql::Function> TokenizeSubstringFunction(
   // as ["all"]. It is recommended to use `relative_search_types` over
   // `support_relative_search` as the latter may be subjected to deprecation in
   // the future.
-  const zetasql::FunctionArgumentTypeList tokenize_substring_args = {
+  const googlesql::FunctionArgumentTypeList tokenize_substring_args = {
       {int_type, GetNamedOptionalArgTypeOptions("ngram_size_max")},
       {int_type, GetNamedOptionalArgTypeOptions("ngram_size_min")},
       {bool_type, GetNamedOptionalArgTypeOptions("support_relative_search")},
@@ -400,41 +400,41 @@ std::unique_ptr<zetasql::Function> TokenizeSubstringFunction(
       {bool_type,
        GetNamedOptionalArgTypeOptions("short_tokens_only_for_anchors")},
       {string_type, GetNamedOptionalArgTypeOptions("language_tag", false)}};
-  zetasql::FunctionArgumentTypeList string_arg_type_list = {
+  googlesql::FunctionArgumentTypeList string_arg_type_list = {
       {string_type, GetRequiredArgumentTypeOptions("value", false)}};
   string_arg_type_list.insert(string_arg_type_list.end(),
                               tokenize_substring_args.begin(),
                               tokenize_substring_args.end());
-  zetasql::FunctionArgumentTypeList string_array_arg_type_list = {
+  googlesql::FunctionArgumentTypeList string_array_arg_type_list = {
       {string_array_type, GetRequiredArgumentTypeOptions("value", false)}};
   string_array_arg_type_list.insert(string_array_arg_type_list.end(),
                                     tokenize_substring_args.begin(),
                                     tokenize_substring_args.end());
-  return std::make_unique<zetasql::Function>(
-      kTokenizeSubstringFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{
-          zetasql::FunctionSignature{tokenlist_type, string_arg_type_list,
+  return std::make_unique<googlesql::Function>(
+      kTokenizeSubstringFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{
+          googlesql::FunctionSignature{tokenlist_type, string_arg_type_list,
                                        nullptr},
-          zetasql::FunctionSignature{tokenlist_type,
+          googlesql::FunctionSignature{tokenlist_type,
                                        string_array_arg_type_list, nullptr}},
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalTokenlistConcat(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> EvalTokenlistConcat(
+    absl::Span<const googlesql::Value> args) {
   return TokenlistConcat::Concat(args);
 }
 
-std::unique_ptr<zetasql::Function> TokenlistConcatFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
-  zetasql::FunctionOptions function_options;
+std::unique_ptr<googlesql::Function> TokenlistConcatFunction(
+    googlesql::TypeFactory* type_factory, const std::string& catalog_name) {
+  googlesql::FunctionOptions function_options;
   function_options.set_evaluator(
-      zetasql::FunctionEvaluator(EvalTokenlistConcat));
+      googlesql::FunctionEvaluator(EvalTokenlistConcat));
   function_options.set_arguments_are_coercible(false);
   function_options.set_supports_safe_error_mode(false);
 
-  const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
-  const zetasql::ArrayType* tokenlist_array_type = nullptr;
+  const googlesql::Type* tokenlist_type = type_factory->get_tokenlist();
+  const googlesql::ArrayType* tokenlist_array_type = nullptr;
   if (!type_factory->MakeArrayType(tokenlist_type, &tokenlist_array_type)
            .ok()) {
     // Don't expect the call would fail.
@@ -442,9 +442,9 @@ std::unique_ptr<zetasql::Function> TokenlistConcatFunction(
   }
 
   // Signature: TOKENLIST_CONCAT(ARRAY<TOKENLIST>)
-  return std::make_unique<zetasql::Function>(
-      kTokenlistConcatFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
+  return std::make_unique<googlesql::Function>(
+      kTokenlistConcatFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{googlesql::FunctionSignature{
           tokenlist_type,
           {{tokenlist_array_type,
             GetRequiredArgumentTypeOptions("tokens", false)}},
@@ -452,30 +452,30 @@ std::unique_ptr<zetasql::Function> TokenlistConcatFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalSearch(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> EvalSearch(
+    absl::Span<const googlesql::Value> args) {
   return SearchEvaluator::Evaluate(args);
 }
 
-std::unique_ptr<zetasql::Function> SearchFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
-  zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(zetasql::FunctionEvaluator(EvalSearch));
+std::unique_ptr<googlesql::Function> SearchFunction(
+    googlesql::TypeFactory* type_factory, const std::string& catalog_name) {
+  googlesql::FunctionOptions function_options;
+  function_options.set_evaluator(googlesql::FunctionEvaluator(EvalSearch));
   function_options.set_arguments_are_coercible(false);
   function_options.set_supports_safe_error_mode(false);
 
-  const zetasql::Type* string_type = type_factory->get_string();
-  const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
-  const zetasql::Type* bool_type = type_factory->get_bool();
+  const googlesql::Type* string_type = type_factory->get_string();
+  const googlesql::Type* tokenlist_type = type_factory->get_tokenlist();
+  const googlesql::Type* bool_type = type_factory->get_bool();
 
   // Signature: SEARCH(tokenlist value,
   //                   string query,
   //                   bool enhance_query = false,
   //                   string language_tag = NULL)
-  return std::make_unique<zetasql::Function>(
-      kSearchFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{
-          zetasql::FunctionSignature{
+  return std::make_unique<googlesql::Function>(
+      kSearchFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{
+          googlesql::FunctionSignature{
               bool_type,
               {{tokenlist_type,
                 GetRequiredArgumentTypeOptions("tokens", false)},
@@ -487,31 +487,31 @@ std::unique_ptr<zetasql::Function> SearchFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalSearchSubstring(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> EvalSearchSubstring(
+    absl::Span<const googlesql::Value> args) {
   return SearchSubstringEvaluator::Evaluate(args);
 }
 
-std::unique_ptr<zetasql::Function> SearchSubstringFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
-  zetasql::FunctionOptions function_options;
+std::unique_ptr<googlesql::Function> SearchSubstringFunction(
+    googlesql::TypeFactory* type_factory, const std::string& catalog_name) {
+  googlesql::FunctionOptions function_options;
   function_options.set_evaluator(
-      zetasql::FunctionEvaluator(EvalSearchSubstring));
+      googlesql::FunctionEvaluator(EvalSearchSubstring));
   function_options.set_arguments_are_coercible(false);
   function_options.set_supports_safe_error_mode(false);
 
-  const zetasql::Type* string_type = type_factory->get_string();
-  const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
-  const zetasql::Type* bool_type = type_factory->get_bool();
+  const googlesql::Type* string_type = type_factory->get_string();
+  const googlesql::Type* tokenlist_type = type_factory->get_tokenlist();
+  const googlesql::Type* bool_type = type_factory->get_bool();
 
   // Signature: SEARCH_SUBSTRING(tokenlist value,
   //                             string query,
   //                             string relative_search_type = NULL,
   //                             string language_tag = NULL)
-  return std::make_unique<zetasql::Function>(
-      kSearchSubstringFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{
-          zetasql::FunctionSignature{
+  return std::make_unique<googlesql::Function>(
+      kSearchSubstringFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{
+          googlesql::FunctionSignature{
               bool_type,
               {{tokenlist_type,
                 GetRequiredArgumentTypeOptions("tokens", false)},
@@ -524,34 +524,34 @@ std::unique_ptr<zetasql::Function> SearchSubstringFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalScore(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> EvalScore(
+    absl::Span<const googlesql::Value> args) {
   return ScoreEvaluator::Evaluate(args);
 }
 
-std::unique_ptr<zetasql::Function> ScoreFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
-  zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(zetasql::FunctionEvaluator(EvalScore));
+std::unique_ptr<googlesql::Function> ScoreFunction(
+    googlesql::TypeFactory* type_factory, const std::string& catalog_name) {
+  googlesql::FunctionOptions function_options;
+  function_options.set_evaluator(googlesql::FunctionEvaluator(EvalScore));
   function_options.set_arguments_are_coercible(false);
   function_options.set_supports_safe_error_mode(false);
 
-  const zetasql::Type* double_type = type_factory->get_double();
-  const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
-  const zetasql::Type* string_type = type_factory->get_string();
-  const zetasql::Type* bytes_type = type_factory->get_bytes();
-  const zetasql::Type* bool_type = type_factory->get_bool();
-  const zetasql::Type* json_type = type_factory->get_json();
+  const googlesql::Type* double_type = type_factory->get_double();
+  const googlesql::Type* tokenlist_type = type_factory->get_tokenlist();
+  const googlesql::Type* string_type = type_factory->get_string();
+  const googlesql::Type* bytes_type = type_factory->get_bytes();
+  const googlesql::Type* bool_type = type_factory->get_bool();
+  const googlesql::Type* json_type = type_factory->get_json();
 
   // Signature: SCORE(tokenlist value,
   //                  string query,
   //                  bool enhance_query = false,
   //                  string language_tag = NULL,
   //                  json options = NULL)
-  return std::make_unique<zetasql::Function>(
-      kScoreFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{
-          zetasql::FunctionSignature{
+  return std::make_unique<googlesql::Function>(
+      kScoreFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{
+          googlesql::FunctionSignature{
               double_type,
               {
                   {tokenlist_type,
@@ -562,7 +562,7 @@ std::unique_ptr<zetasql::Function> ScoreFunction(
                   {json_type, GetNamedOptionalArgTypeOptions("options", false)},
               },
               nullptr},
-          zetasql::FunctionSignature{
+          googlesql::FunctionSignature{
               double_type,
               {
                   {tokenlist_type,
@@ -577,45 +577,45 @@ std::unique_ptr<zetasql::Function> ScoreFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalSnippet(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> EvalSnippet(
+    absl::Span<const googlesql::Value> args) {
   auto snippet_value = SnippetEvaluator::Evaluate(args);
   if (!snippet_value.ok()) {
     return snippet_value.status();
   }
   std::optional<std::string> snippet = snippet_value.value();
   if (!snippet.has_value()) {
-    return zetasql::Value::NullJson();
+    return googlesql::Value::NullJson();
   }
-  ZETASQL_ASSIGN_OR_RETURN(auto json_value,
-                   zetasql::JSONValue::ParseJSONString(snippet.value()));
-  return zetasql::Value::Json(std::move(json_value));
+  GOOGLESQL_ASSIGN_OR_RETURN(auto json_value,
+                   googlesql::JSONValue::ParseJSONString(snippet.value()));
+  return googlesql::Value::Json(std::move(json_value));
 }
 
-absl::StatusOr<zetasql::Value> EvalSnippetPG(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> EvalSnippetPG(
+    absl::Span<const googlesql::Value> args) {
   auto snippet_value = SnippetEvaluator::Evaluate(args);
   if (!snippet_value.ok()) {
     return snippet_value.status();
   }
   std::optional<std::string> snippet = snippet_value.value();
   if (!snippet.has_value()) {
-    return zetasql::Value::Null(GetPgJsonbType());
+    return googlesql::Value::Null(GetPgJsonbType());
   }
   return CreatePgJsonbValue(snippet.value());
 }
 
-std::unique_ptr<zetasql::Function> SnippetFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name,
+std::unique_ptr<googlesql::Function> SnippetFunction(
+    googlesql::TypeFactory* type_factory, const std::string& catalog_name,
     database_api::DatabaseDialect dialect) {
-  zetasql::FunctionOptions function_options;
+  googlesql::FunctionOptions function_options;
   function_options.set_arguments_are_coercible(false);
   function_options.set_supports_safe_error_mode(false);
 
-  const zetasql::Type* string_type = type_factory->get_string();
-  const zetasql::Type* bool_type = type_factory->get_bool();
-  const zetasql::Type* int64_type = type_factory->get_int64();
-  const zetasql::Type* json_type = type_factory->get_json();
+  const googlesql::Type* string_type = type_factory->get_string();
+  const googlesql::Type* bool_type = type_factory->get_bool();
+  const googlesql::Type* int64_type = type_factory->get_int64();
+  const googlesql::Type* json_type = type_factory->get_json();
   auto pg_jsonb = postgres_translator::spangres::datatypes::GetPgJsonbType();
 
   // Signature: SNIPPET(string value,
@@ -627,10 +627,10 @@ std::unique_ptr<zetasql::Function> SnippetFunction(
   //                    string content_type = "text/html")
 
   if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
-    function_options.set_evaluator(zetasql::FunctionEvaluator(EvalSnippetPG));
-    return std::make_unique<zetasql::Function>(
-        kSnippetFunctionName, catalog_name, zetasql::Function::SCALAR,
-        std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
+    function_options.set_evaluator(googlesql::FunctionEvaluator(EvalSnippetPG));
+    return std::make_unique<googlesql::Function>(
+        kSnippetFunctionName, catalog_name, googlesql::Function::SCALAR,
+        std::vector<googlesql::FunctionSignature>{googlesql::FunctionSignature{
             pg_jsonb,
             {{string_type, GetRequiredArgumentTypeOptions("value", false)},
              {string_type, GetRequiredArgumentTypeOptions("query")},
@@ -645,10 +645,10 @@ std::unique_ptr<zetasql::Function> SnippetFunction(
         function_options);
   }
 
-  function_options.set_evaluator(zetasql::FunctionEvaluator(EvalSnippet));
-  return std::make_unique<zetasql::Function>(
-      kSnippetFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
+  function_options.set_evaluator(googlesql::FunctionEvaluator(EvalSnippet));
+  return std::make_unique<googlesql::Function>(
+      kSnippetFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{googlesql::FunctionSignature{
           json_type,
           {{string_type, GetRequiredArgumentTypeOptions("value", false)},
            {string_type, GetRequiredArgumentTypeOptions("query")},
@@ -662,24 +662,24 @@ std::unique_ptr<zetasql::Function> SnippetFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalTokenizeNgrams(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> EvalTokenizeNgrams(
+    absl::Span<const googlesql::Value> args) {
   return NgramsTokenizer::Tokenize(args);
 }
 
-std::unique_ptr<zetasql::Function> TokenizeNgramsFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
-  zetasql::FunctionOptions function_options;
+std::unique_ptr<googlesql::Function> TokenizeNgramsFunction(
+    googlesql::TypeFactory* type_factory, const std::string& catalog_name) {
+  googlesql::FunctionOptions function_options;
   function_options.set_evaluator(
-      zetasql::FunctionEvaluator(EvalTokenizeNgrams));
+      googlesql::FunctionEvaluator(EvalTokenizeNgrams));
   function_options.set_arguments_are_coercible(false);
   function_options.set_supports_safe_error_mode(false);
 
-  const zetasql::Type* string_type = type_factory->get_string();
-  const zetasql::Type* int_type = type_factory->get_int64();
-  const zetasql::Type* bool_type = type_factory->get_bool();
-  const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
-  const zetasql::ArrayType* string_array_type = nullptr;
+  const googlesql::Type* string_type = type_factory->get_string();
+  const googlesql::Type* int_type = type_factory->get_int64();
+  const googlesql::Type* bool_type = type_factory->get_bool();
+  const googlesql::Type* tokenlist_type = type_factory->get_tokenlist();
+  const googlesql::ArrayType* string_array_type = nullptr;
   if (!type_factory->MakeArrayType(string_type, &string_array_type).ok()) {
     // Don't expect the call would fail.
     ABSL_LOG(ERROR) << "Fail to make ARRAY<STRING> type.";
@@ -689,57 +689,57 @@ std::unique_ptr<zetasql::Function> TokenizeNgramsFunction(
   //                               int64_t ngram_size_max = 4,
   //                               int64_t ngram_size_min = 1,
   //                               bool remove_diacritics = false)
-  const zetasql::FunctionArgumentTypeList tokenize_ngrams_args = {
+  const googlesql::FunctionArgumentTypeList tokenize_ngrams_args = {
       {int_type, GetNamedOptionalArgTypeOptions("ngram_size_max")},
       {int_type, GetNamedOptionalArgTypeOptions("ngram_size_min")},
       {bool_type, GetNamedOptionalArgTypeOptions("remove_diacritics")}};
-  zetasql::FunctionArgumentTypeList string_arg_type_list = {
+  googlesql::FunctionArgumentTypeList string_arg_type_list = {
       {string_type, GetRequiredArgumentTypeOptions("value", false)}};
   string_arg_type_list.insert(string_arg_type_list.end(),
                               tokenize_ngrams_args.begin(),
                               tokenize_ngrams_args.end());
-  zetasql::FunctionArgumentTypeList string_array_arg_type_list = {
+  googlesql::FunctionArgumentTypeList string_array_arg_type_list = {
       {string_array_type, GetRequiredArgumentTypeOptions("value", false)}};
   string_array_arg_type_list.insert(string_array_arg_type_list.end(),
                                     tokenize_ngrams_args.begin(),
                                     tokenize_ngrams_args.end());
-  return std::make_unique<zetasql::Function>(
-      kTokenizeNgramsFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{
-          zetasql::FunctionSignature{tokenlist_type, string_arg_type_list,
+  return std::make_unique<googlesql::Function>(
+      kTokenizeNgramsFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{
+          googlesql::FunctionSignature{tokenlist_type, string_arg_type_list,
                                        nullptr},
-          zetasql::FunctionSignature{tokenlist_type,
+          googlesql::FunctionSignature{tokenlist_type,
                                        string_array_arg_type_list, nullptr}},
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalSearchNgrams(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> EvalSearchNgrams(
+    absl::Span<const googlesql::Value> args) {
   return SearchNgramsEvaluator::Evaluate(args);
 }
 
-std::unique_ptr<zetasql::Function> SearchNgramsFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
-  zetasql::FunctionOptions function_options;
+std::unique_ptr<googlesql::Function> SearchNgramsFunction(
+    googlesql::TypeFactory* type_factory, const std::string& catalog_name) {
+  googlesql::FunctionOptions function_options;
   function_options.set_evaluator(
-      zetasql::FunctionEvaluator(EvalSearchNgrams));
+      googlesql::FunctionEvaluator(EvalSearchNgrams));
   function_options.set_supports_safe_error_mode(false);
 
-  const zetasql::Type* string_type = type_factory->get_string();
-  const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
-  const zetasql::Type* int_type = type_factory->get_int64();
-  const zetasql::Type* double_type = type_factory->get_double();
-  const zetasql::Type* bool_type = type_factory->get_bool();
+  const googlesql::Type* string_type = type_factory->get_string();
+  const googlesql::Type* tokenlist_type = type_factory->get_tokenlist();
+  const googlesql::Type* int_type = type_factory->get_int64();
+  const googlesql::Type* double_type = type_factory->get_double();
+  const googlesql::Type* bool_type = type_factory->get_bool();
 
   // Signature: SEARCH_NGRAMS(tokenlist value,
   //                          string query,
   //                          int64_t min_ngrams = 2,
   //                          double min_ngrams_percent = 0,
   //                          string language_tag = NULL)
-  return std::make_unique<zetasql::Function>(
-      kSearchNgramsFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{
-          zetasql::FunctionSignature{
+  return std::make_unique<googlesql::Function>(
+      kSearchNgramsFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{
+          googlesql::FunctionSignature{
               bool_type,
               {{tokenlist_type,
                 GetRequiredArgumentTypeOptions("tokens", false)},
@@ -753,29 +753,29 @@ std::unique_ptr<zetasql::Function> SearchNgramsFunction(
       function_options);
 }
 
-absl::StatusOr<zetasql::Value> EvalScoreNgrams(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> EvalScoreNgrams(
+    absl::Span<const googlesql::Value> args) {
   return ScoreNgramsEvaluator::Evaluate(args);
 }
 
-std::unique_ptr<zetasql::Function> ScoreNgramsFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name) {
-  zetasql::FunctionOptions function_options;
-  function_options.set_evaluator(zetasql::FunctionEvaluator(EvalScoreNgrams));
+std::unique_ptr<googlesql::Function> ScoreNgramsFunction(
+    googlesql::TypeFactory* type_factory, const std::string& catalog_name) {
+  googlesql::FunctionOptions function_options;
+  function_options.set_evaluator(googlesql::FunctionEvaluator(EvalScoreNgrams));
   function_options.set_supports_safe_error_mode(false);
 
-  const zetasql::Type* double_type = type_factory->get_double();
-  const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
-  const zetasql::Type* string_type = type_factory->get_string();
+  const googlesql::Type* double_type = type_factory->get_double();
+  const googlesql::Type* tokenlist_type = type_factory->get_tokenlist();
+  const googlesql::Type* string_type = type_factory->get_string();
 
   // Signature: SCORE_NGRAMS(tokenlist value,
   //                         string ngrams_query,
   //                         string algorithm = "trigrams",
   //                         string language_tag = NULL)
-  return std::make_unique<zetasql::Function>(
-      kScoreNgramsFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{
-          zetasql::FunctionSignature{
+  return std::make_unique<googlesql::Function>(
+      kScoreNgramsFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{
+          googlesql::FunctionSignature{
               double_type,
               {
                   {tokenlist_type,
@@ -789,35 +789,35 @@ std::unique_ptr<zetasql::Function> ScoreNgramsFunction(
       function_options);
 }
 
-std::unique_ptr<zetasql::Function> TokenizeJsonFunction(
-    zetasql::TypeFactory* type_factory, const std::string& catalog_name,
+std::unique_ptr<googlesql::Function> TokenizeJsonFunction(
+    googlesql::TypeFactory* type_factory, const std::string& catalog_name,
     database_api::DatabaseDialect dialect) {
-  zetasql::FunctionOptions function_options;
+  googlesql::FunctionOptions function_options;
   function_options.set_arguments_are_coercible(false);
   function_options.set_supports_safe_error_mode(false);
 
-  const zetasql::Type* tokenlist_type = type_factory->get_tokenlist();
+  const googlesql::Type* tokenlist_type = type_factory->get_tokenlist();
   if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
     // Signature: TOKENIZE_JSONB(jsonb value)
     function_options.set_evaluator(
-        zetasql::FunctionEvaluator(JsonbTokenizer::Tokenize));
+        googlesql::FunctionEvaluator(JsonbTokenizer::Tokenize));
     auto pg_jsonb = postgres_translator::spangres::datatypes::GetPgJsonbType();
-    return std::make_unique<zetasql::Function>(
-        kTokenizeJsonbFunctionName, catalog_name, zetasql::Function::SCALAR,
-        std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
+    return std::make_unique<googlesql::Function>(
+        kTokenizeJsonbFunctionName, catalog_name, googlesql::Function::SCALAR,
+        std::vector<googlesql::FunctionSignature>{googlesql::FunctionSignature{
             tokenlist_type,
             {{pg_jsonb, GetRequiredArgumentTypeOptions("value", false)}},
             nullptr}},
         function_options);
   }
 
-  // ZetaSQL dialect signature: TOKENIZE_JSON(json value).
+  // GoogleSQL dialect signature: TOKENIZE_JSON(json value).
   function_options.set_evaluator(
-      zetasql::FunctionEvaluator(JsonTokenizer::Tokenize));
-  const zetasql::Type* json_type = type_factory->get_json();
-  return std::make_unique<zetasql::Function>(
-      kTokenizeJsonFunctionName, catalog_name, zetasql::Function::SCALAR,
-      std::vector<zetasql::FunctionSignature>{zetasql::FunctionSignature{
+      googlesql::FunctionEvaluator(JsonTokenizer::Tokenize));
+  const googlesql::Type* json_type = type_factory->get_json();
+  return std::make_unique<googlesql::Function>(
+      kTokenizeJsonFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{googlesql::FunctionSignature{
           tokenlist_type,
           {{json_type, GetRequiredArgumentTypeOptions("value", false)}},
           nullptr}},
@@ -825,11 +825,11 @@ std::unique_ptr<zetasql::Function> TokenizeJsonFunction(
 }
 }  // namespace
 
-absl::flat_hash_map<std::string, std::unique_ptr<zetasql::Function>>
-GetSearchFunctions(zetasql::TypeFactory* type_factory,
+absl::flat_hash_map<std::string, std::unique_ptr<googlesql::Function>>
+GetSearchFunctions(googlesql::TypeFactory* type_factory,
                    const std::string& catalog_name,
                    database_api::DatabaseDialect dialect) {
-  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::Function>>
+  absl::flat_hash_map<std::string, std::unique_ptr<googlesql::Function>>
       function_map;
   auto token_func = TokenFunction(type_factory, catalog_name);
   function_map[token_func->Name()] = std::move(token_func);

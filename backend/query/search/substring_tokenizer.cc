@@ -19,9 +19,9 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/functions/string.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/functions/string.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
@@ -30,7 +30,7 @@
 #include "absl/types/span.h"
 #include "backend/query/search/tokenizer.h"
 #include "common/errors.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -68,19 +68,19 @@ absl::Status SubstringTokenizer::ValidateNgramSize(int ngram_size_min,
 }
 
 absl::StatusOr<int> SubstringTokenizer::ParseRelativeSearchTypes(
-    absl::Span<const zetasql::Value> args) {
+    absl::Span<const googlesql::Value> args) {
   constexpr int kSupportRelativeSearch = 3;
   constexpr int kRelativeSearchTypes = 5;
 
   // Default relative search type is none if the argument is not present.
   int supported_types = RelativeSearchType::None;
-  zetasql::Value support_relative_search =
+  googlesql::Value support_relative_search =
       args.size() > kSupportRelativeSearch ? args[kSupportRelativeSearch]
-                                           : zetasql::Value::NullBool();
-  zetasql::Value relative_search_types =
+                                           : googlesql::Value::NullBool();
+  googlesql::Value relative_search_types =
       args.size() > kRelativeSearchTypes
           ? args[kRelativeSearchTypes]
-          : zetasql::Value::Null(zetasql::types::BoolArrayType());
+          : googlesql::Value::Null(googlesql::types::BoolArrayType());
 
   // Only one of support_relative_search and relative_search_types is supported.
   if (!support_relative_search.is_null() && !relative_search_types.is_null()) {
@@ -96,7 +96,7 @@ absl::StatusOr<int> SubstringTokenizer::ParseRelativeSearchTypes(
         // All is requested, no need to parse the rest.
         break;
       }
-      ZETASQL_ASSIGN_OR_RETURN(RelativeSearchType parsed_type,
+      GOOGLESQL_ASSIGN_OR_RETURN(RelativeSearchType parsed_type,
                        ParseRelativeSearchType(type.string_value()));
       supported_types = supported_types | parsed_type;
     }
@@ -112,8 +112,8 @@ absl::StatusOr<int> SubstringTokenizer::ParseRelativeSearchTypes(
   return supported_types;
 }
 
-absl::StatusOr<zetasql::Value> SubstringTokenizer::Tokenize(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> SubstringTokenizer::Tokenize(
+    absl::Span<const googlesql::Value> args) {
   // argument indexes
   constexpr int kValue = 0;
   constexpr int kNgramMax = 1;
@@ -123,12 +123,12 @@ absl::StatusOr<zetasql::Value> SubstringTokenizer::Tokenize(
       GetIntParameterValue(args, kNgramMax, kDefaultNgramSizeMax);
   int ngram_size_min =
       GetIntParameterValue(args, kNgramMin, kDefaultNgramSizeMin);
-  ZETASQL_RETURN_IF_ERROR(ValidateNgramSize(ngram_size_min, ngram_size_max));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateNgramSize(ngram_size_min, ngram_size_max));
 
-  ZETASQL_ASSIGN_OR_RETURN(auto relative_search_types, ParseRelativeSearchTypes(args));
+  GOOGLESQL_ASSIGN_OR_RETURN(auto relative_search_types, ParseRelativeSearchTypes(args));
 
   std::vector<std::string> token_list;
-  const zetasql::Value& text = args[kValue];
+  const googlesql::Value& text = args[kValue];
   // Always add tokenize function signature as the first token. Also add value
   // to indicate if the source is null .
   // support_relative_search argument is not currently respected so it is not
@@ -141,24 +141,24 @@ absl::StatusOr<zetasql::Value> SubstringTokenizer::Tokenize(
 
   if (!text.is_null()) {
     auto process_single_value =
-        [&](const zetasql::Value& value) -> absl::Status {
+        [&](const googlesql::Value& value) -> absl::Status {
       std::string lower_str;
       absl::Status status;
-      zetasql::functions::LowerUtf8(value.string_value(), &lower_str,
+      googlesql::functions::LowerUtf8(value.string_value(), &lower_str,
                                       &status);
-      ZETASQL_RETURN_IF_ERROR(status);
+      GOOGLESQL_RETURN_IF_ERROR(status);
       token_list.push_back(lower_str);
       return absl::OkStatus();
     };
 
     if (text.type()->IsArray()) {
       for (auto& value : text.elements()) {
-        ZETASQL_RETURN_IF_ERROR(process_single_value(value));
+        GOOGLESQL_RETURN_IF_ERROR(process_single_value(value));
         // Add array gap so evaluator will handle cross array phrase search.
         token_list.push_back(kGapString);
       }
     } else {
-      ZETASQL_RETURN_IF_ERROR(process_single_value(text));
+      GOOGLESQL_RETURN_IF_ERROR(process_single_value(text));
     }
   }
 

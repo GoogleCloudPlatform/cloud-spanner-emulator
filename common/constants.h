@@ -20,7 +20,7 @@
 #include <cstdint>
 #include <limits>
 
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 
 constexpr int64_t kInt64Max = std::numeric_limits<int64_t>::max();
 
@@ -61,7 +61,7 @@ constexpr char kCommitTimestampIdentifier[] = "spanner.commit_timestamp()";
 // have a timestamp in future and thus this sentinel value is not a valid value
 // for the column to be passed by a client.
 constexpr absl::Time kCommitTimestampValueSentinel =
-    absl::FromUnixMicros(zetasql::types::kTimestampMax);
+    absl::FromUnixMicros(googlesql::types::kTimestampMax);
 
 // gRPC ResourceInfo binary metadata header.
 constexpr char kResourceInfoBinaryHeader[] = "google.rpc.resourceinfo-bin";

@@ -19,8 +19,8 @@
 #include <algorithm>
 #include <string>
 
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/type.pb.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.pb.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
@@ -30,9 +30,9 @@
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -89,7 +89,7 @@ absl::Status Column::ValidateUpdate(const SchemaNode* orig,
 
 absl::Status Column::DeepClone(SchemaGraphEditor* editor,
                                const SchemaNode* orig) {
-  ZETASQL_ASSIGN_OR_RETURN(const auto* table_clone, editor->Clone(table_));
+  GOOGLESQL_ASSIGN_OR_RETURN(const auto* table_clone, editor->Clone(table_));
   table_ = table_clone->As<const Table>();
   // The column should be deleted if the table containing the column
   // is deleted.
@@ -97,31 +97,31 @@ absl::Status Column::DeepClone(SchemaGraphEditor* editor,
     MarkDeleted();
   }
 
-  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&change_streams_));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(editor->CloneVector(&change_streams_));
+  GOOGLESQL_RETURN_IF_ERROR(
       editor->CloneVector(&change_streams_explicitly_tracking_column_));
 
   if (locality_group_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* locality_group_clone,
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* locality_group_clone,
                      editor->Clone(locality_group_));
     locality_group_ = locality_group_clone->As<const LocalityGroup>();
   }
 
   for (const Column*& column : dependent_columns_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(column));
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(column));
     column = schema_node->As<const Column>();
   }
   for (const SchemaNode*& dependency : sequences_used_) {
-    ZETASQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dependency));
+    GOOGLESQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dependency));
     dependency = cloned_dep;
   }
   for (const SchemaNode*& dependency : udf_dependencies_) {
-    ZETASQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dependency));
+    GOOGLESQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dependency));
     dependency = cloned_dep;
   }
 
   if (source_column_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* source_column_clone,
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* source_column_clone,
                      editor->Clone(source_column_));
     source_column_ = source_column_clone->As<const Column>();
     // Source column's type attributes must be copied explicitly as they
@@ -130,7 +130,7 @@ absl::Status Column::DeepClone(SchemaGraphEditor* editor,
     // the null-filtering index.
     type_ = source_column_->type_;
     declared_max_length_ = source_column_->declared_max_length_;
-    ZETASQL_RET_CHECK(!table_->is_public());
+    GOOGLESQL_RET_CHECK(!table_->is_public());
     // is_nullable should be false for null-filtered index columns, otherwise
     // it should be the same as the source column.
     is_nullable_ =
@@ -161,7 +161,7 @@ absl::Status KeyColumn::ValidateUpdate(const SchemaNode* orig,
 
 absl::Status KeyColumn::DeepClone(SchemaGraphEditor* editor,
                                   const SchemaNode* orig) {
-  ZETASQL_ASSIGN_OR_RETURN(const auto* cloned_column, editor->Clone(column_));
+  GOOGLESQL_ASSIGN_OR_RETURN(const auto* cloned_column, editor->Clone(column_));
   column_ = cloned_column->As<const Column>();
   if (column_->is_deleted()) {
     MarkDeleted();

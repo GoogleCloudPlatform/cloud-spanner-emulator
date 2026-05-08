@@ -34,10 +34,10 @@
 
 #include <memory>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/id_string.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_column.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/id_string.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_column.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/node_hash_map.h"
 #include "absl/hash/hash.h"
@@ -52,14 +52,14 @@ namespace postgres_translator {
 // The bool value is true if the reference is to a column from more than one
 // enclosing VarIndexScope away; i.e. a column that was already a correlated
 // reference in the enclosing query.
-typedef std::map<zetasql::ResolvedColumn, bool> CorrelatedColumnsSet;
+typedef std::map<googlesql::ResolvedColumn, bool> CorrelatedColumnsSet;
 
 // A list of the CorrelatedColumnsSets attached to all VarIndexScopes traversed
 // while looking up a name.  The sets are ordered from child scopes to
 // parent scopes; i.e. the outermost query's VarIndexScope is last.
 typedef std::vector<CorrelatedColumnsSet*> CorrelatedColumnsSetList;
 
-typedef absl::node_hash_map<const zetasql::Column*, zetasql::ResolvedColumn>
+typedef absl::node_hash_map<const googlesql::Column*, googlesql::ResolvedColumn>
     ColumnMap;
 
 // The index of a Postgres `Var` (i.e. a column).
@@ -96,17 +96,17 @@ class VarIndexTarget {
   VarIndexTarget() : kind_(ACCESS_ERROR) {}
 
   // Construct a VarIndexTarget pointing at a column.
-  VarIndexTarget(const zetasql::ResolvedColumn& column)
+  VarIndexTarget(const googlesql::ResolvedColumn& column)
       : kind_(COLUMN), column_(column) {}
 
   Kind kind() const { return kind_; }
-  const zetasql::ResolvedColumn& column() const { return column_; }
+  const googlesql::ResolvedColumn& column() const { return column_; }
 
  private:
   Kind kind_;
 
   // Populated if kind_ is COLUMN.
-  zetasql::ResolvedColumn column_;
+  googlesql::ResolvedColumn column_;
 };
 
 typedef absl::flat_hash_map<VarIndex, VarIndexTarget, absl::Hash<VarIndex>>
@@ -139,7 +139,7 @@ typedef absl::flat_hash_map<VarIndex, VarIndexTarget, absl::Hash<VarIndex>>
 //   level.  To allow this, LookupVarIndex returns a list of
 //   CorrelatedColumnsSets.
 //
-// Modeled off of ZetaSQL's NameScope.
+// Modeled off of GoogleSQL's NameScope.
 class VarIndexScope {
  public:
   // Make a scope with no underlying fallback scope.
@@ -167,7 +167,7 @@ class VarIndexScope {
   // non-NULL, and making the mappings from <current_scope> visible over top of
   // it.
   //
-  // ZetaSQL's constructor also accepts a <correlated_columns_set>, but there
+  // GoogleSQL's constructor also accepts a <correlated_columns_set>, but there
   // do not seem to be any callsites that pass it in, so we do not include it
   // here.
   VarIndexScope(const VarIndexScope* previous_scope,
@@ -178,7 +178,7 @@ class VarIndexScope {
   // invalidated if they do not appear in group_by_map and overridden if they do
   // appear in group_by_map, to create a post group-by scope.
   std::unique_ptr<const VarIndexScope> CreatePostGroupByScope(
-      const std::unordered_map<const Var*, zetasql::ResolvedColumn>&
+      const std::unordered_map<const Var*, googlesql::ResolvedColumn>&
           group_by_map) const {
     auto new_scope = std::make_unique<VarIndexScope>(
         previous_scope_, var_index_map_, correlated_columns_set_);
@@ -224,7 +224,7 @@ class VarIndexScope {
   // before the ones attached to their parent scopes.
   absl::StatusOr<bool> LookupVarIndex(
       const VarIndex& var_index, Index var_levels_up,
-      zetasql::ResolvedColumn* column,
+      googlesql::ResolvedColumn* column,
       CorrelatedColumnsSetList* correlated_columns_sets) const {
     if (correlated_columns_sets != nullptr) {
       correlated_columns_sets->clear();
@@ -234,7 +234,7 @@ class VarIndexScope {
     const VarIndexScope* current = this;
     while (current != nullptr) {
       // Traverse to the correct query/subquery level.
-      // Rather than having a single scope per subquery level, ZetaSQL and
+      // Rather than having a single scope per subquery level, GoogleSQL and
       // Spangres may have one or two scopes per subquery level, depending on
       // if the subquery is in the FROM clause or another clause.
       //
@@ -264,7 +264,7 @@ class VarIndexScope {
       if (level != var_levels_up) {
         if (current->correlated_columns_set_ != nullptr) {
           // This is an subquery wrapper scope. Increment the level.
-          ZETASQL_RET_CHECK(current->var_index_map().empty());
+          GOOGLESQL_RET_CHECK(current->var_index_map().empty());
           ++level;
         }
         current = current->previous_scope_;
@@ -324,14 +324,14 @@ class VarIndexScope {
   }
 
   bool MapVarIndexToColumn(const VarIndex& var_index,
-                           const zetasql::ResolvedColumn& column,
+                           const googlesql::ResolvedColumn& column,
                            bool allow_override = false) {
     return MapVarIndexToTarget(var_index, {column}, allow_override);
   }
 
   void MapCatalogColumnToResolvedColumn(
-      const zetasql::Column& catalog_column,
-      const zetasql::ResolvedColumn& resolved_column) {
+      const googlesql::Column& catalog_column,
+      const googlesql::ResolvedColumn& resolved_column) {
     if (catalog_columns_to_resolved_columns_map_.contains(&catalog_column)) {
       // Column already mapped, so skip. Otherwise, invalid column references
       // are used in the forward transformation which will error at validation.
@@ -399,7 +399,7 @@ class VarIndexScope {
 
 // ExprTransformerInfo is used to transform and validate an expression.
 // It is passed recursively down through all expression transformation.
-// Originally modeled after ZetaSQL's ExprResolutionInfo.
+// Originally modeled after GoogleSQL's ExprResolutionInfo.
 class ExprTransformerInfo {
  public:
   // Construct an ExprTransformerInfo that may allow aggregation.
@@ -413,7 +413,7 @@ class ExprTransformerInfo {
       bool allows_aggregation_in, bool use_post_grouping_columns_in,
       const char* clause_name_in, TransformerInfo* transformer_info_in,
       const Expr* top_level_ast_expr_in = nullptr,
-      zetasql::IdString column_alias_in = zetasql::IdString())
+      googlesql::IdString column_alias_in = googlesql::IdString())
       : var_index_scope(var_index_scope_in),
         aggregate_var_index_scope(aggregate_var_index_scope_in),
         allows_aggregation(allows_aggregation_in),
@@ -431,7 +431,7 @@ class ExprTransformerInfo {
       const VarIndexScope* var_index_scope_in,
       TransformerInfo* transformer_info_in,
       const Expr* top_level_ast_expr_in = nullptr,
-      zetasql::IdString column_alias_in = zetasql::IdString()) {
+      googlesql::IdString column_alias_in = googlesql::IdString()) {
     return ExprTransformerInfo(var_index_scope_in, var_index_scope_in,
                                /*allows_aggregation_in=*/true,
                                /*use_post_grouping_columns_in=*/false,
@@ -512,7 +512,7 @@ class ExprTransformerInfo {
   // be used as the name of the resolved column when the top-level AST
   // expression being resolved is an aggregate or an analytic function. This
   // field is set only when resolving SELECT columns.
-  const zetasql::IdString column_alias = zetasql::IdString();
+  const googlesql::IdString column_alias = googlesql::IdString();
 };
 }  // namespace postgres_translator
 

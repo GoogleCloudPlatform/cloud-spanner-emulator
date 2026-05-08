@@ -35,14 +35,14 @@
 #include <optional>
 #include <string>
 
-#include "zetasql/public/cast.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/cast.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/datatypes/extended/conversion_finder.h"
@@ -51,25 +51,25 @@
 namespace postgres_translator::spangres {
 namespace datatypes {
 
-using FindConversionOptions = ::zetasql::Catalog::FindConversionOptions;
+using FindConversionOptions = ::googlesql::Catalog::FindConversionOptions;
 using ConversionSourceExpressionKind =
-    ::zetasql::Catalog::ConversionSourceExpressionKind;
+    ::googlesql::Catalog::ConversionSourceExpressionKind;
 
 static void TestConversion(
-    const zetasql::Type* from, const zetasql::Type* to,
-    const zetasql::Value& input,
-    const std::optional<zetasql::Value>& expected_output,
+    const googlesql::Type* from, const googlesql::Type* to,
+    const googlesql::Value& input,
+    const std::optional<googlesql::Value>& expected_output,
     bool is_error = false, std::optional<absl::string_view> error_msg = "") {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      zetasql::Conversion conversion,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      googlesql::Conversion conversion,
       FindExtendedTypeConversion(
           from, to,
           FindConversionOptions(
               /*is_explicit=*/true, ConversionSourceExpressionKind::kOther)));
-  absl::StatusOr<zetasql::Value> converted_value =
+  absl::StatusOr<googlesql::Value> converted_value =
       conversion.evaluator().Eval(input);
   if (!is_error) {
-    ZETASQL_ASSERT_OK(converted_value);
+    GOOGLESQL_ASSERT_OK(converted_value);
     EXPECT_EQ(converted_value.value(), expected_output);
   } else {
     EXPECT_FALSE(converted_value.ok());
@@ -80,26 +80,26 @@ static void TestConversion(
 class PgOidConversionSuccessTest : public testing::TestWithParam<int64_t> {};
 
 TEST_P(PgOidConversionSuccessTest, ConvertPgOidToInt64Success) {
-  TestConversion(GetPgOidType(), zetasql::types::Int64Type(),
+  TestConversion(GetPgOidType(), googlesql::types::Int64Type(),
                  CreatePgOidValue(GetParam()).value(),
-                 zetasql::Value::Int64(GetParam()));
+                 googlesql::Value::Int64(GetParam()));
 }
 
 TEST_P(PgOidConversionSuccessTest, ConvertInt64ToPgOidSuccess) {
-  TestConversion(zetasql::types::Int64Type(), GetPgOidType(),
-                 zetasql::Value::Int64(GetParam()),
+  TestConversion(googlesql::types::Int64Type(), GetPgOidType(),
+                 googlesql::Value::Int64(GetParam()),
                  CreatePgOidValue(GetParam()).value());
 }
 
 TEST_P(PgOidConversionSuccessTest, ConvertPgOidToStringSuccess) {
-  TestConversion(GetPgOidType(), zetasql::types::StringType(),
+  TestConversion(GetPgOidType(), googlesql::types::StringType(),
                  CreatePgOidValue(GetParam()).value(),
-                 zetasql::Value::String(std::to_string(GetParam())));
+                 googlesql::Value::String(std::to_string(GetParam())));
 }
 
 TEST_P(PgOidConversionSuccessTest, ConvertStringToPgOidSuccess) {
-  TestConversion(zetasql::types::StringType(), GetPgOidType(),
-                 zetasql::Value::String(std::to_string(GetParam())),
+  TestConversion(googlesql::types::StringType(), GetPgOidType(),
+                 googlesql::Value::String(std::to_string(GetParam())),
                  CreatePgOidValue(GetParam()).value());
 }
 
@@ -111,14 +111,14 @@ INSTANTIATE_TEST_SUITE_P(PgOidSuccess, PgOidConversionSuccessTest,
 class PgOidConversionErrorTest : public testing::TestWithParam<int64_t> {};
 
 TEST_P(PgOidConversionErrorTest, ConvertInt64ToPgOidError) {
-  TestConversion(zetasql::types::Int64Type(), GetPgOidType(),
-                 zetasql::Value::Int64(GetParam()), std::nullopt,
+  TestConversion(googlesql::types::Int64Type(), GetPgOidType(),
+                 googlesql::Value::Int64(GetParam()), std::nullopt,
                  /* is_error= */ true, "bigint out of range");
 }
 
 TEST_P(PgOidConversionErrorTest, ConvertStringToPgOidError) {
-  TestConversion(zetasql::types::StringType(), GetPgOidType(),
-                 zetasql::Value::String(std::to_string(GetParam())),
+  TestConversion(googlesql::types::StringType(), GetPgOidType(),
+                 googlesql::Value::String(std::to_string(GetParam())),
                  std::nullopt, /* is_error= */ true,
                  "varchar out of range");
 }
@@ -131,8 +131,8 @@ INSTANTIATE_TEST_SUITE_P(
                     (int64_t)std::numeric_limits<uint32_t>::max() + 1));
 
 TEST(PGOidConversionErrorTest, CoverStringToPgOidInvalidString) {
-  TestConversion(zetasql::types::StringType(), GetPgOidType(),
-                 zetasql::Value::String("invalid string"), std::nullopt,
+  TestConversion(googlesql::types::StringType(), GetPgOidType(),
+                 googlesql::Value::String("invalid string"), std::nullopt,
                  /* is_error = */ true, "invalid varchar");
 }
 

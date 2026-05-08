@@ -33,45 +33,45 @@
 #define CATALOG_EMULATOR_FUNCTIONS_H_
 
 // Contains constants and functions for adding Spanner PG functions to the
-// emulator catalog for use by the PG to ZetaSQL translator.
+// emulator catalog for use by the PG to GoogleSQL translator.
 
 #include <memory>
 #include <string>
 #include <vector>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/table_valued_function.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/table_valued_function.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "third_party/spanner_pg/catalog/emulator_function_evaluators.h"
 
 namespace postgres_translator {
 
-// ZetaSQL builtin functions.
-  inline constexpr char kZetaSQLAbsFunctionName[] = "abs";
-  inline constexpr char kZetaSQLCeilFunctionName[] = "ceil";
-  inline constexpr char kZetaSQLCeilingFunctionName[] = "ceiling";
-  inline constexpr char kZetaSQLFloorFunctionName[] = "floor";
-  inline constexpr char kZetaSQLModFunctionName[] = "mod";
-  inline constexpr char kZetaSQLTruncFunctionName[] = "trunc";
+// GoogleSQL builtin functions.
+  inline constexpr char kGoogleSQLAbsFunctionName[] = "abs";
+  inline constexpr char kGoogleSQLCeilFunctionName[] = "ceil";
+  inline constexpr char kGoogleSQLCeilingFunctionName[] = "ceiling";
+  inline constexpr char kGoogleSQLFloorFunctionName[] = "floor";
+  inline constexpr char kGoogleSQLModFunctionName[] = "mod";
+  inline constexpr char kGoogleSQLTruncFunctionName[] = "trunc";
 
-  inline constexpr char kZetaSQLSubscriptFunctionName[] = "$subscript";
-  inline constexpr char kZetaSQLJsonTypeFunctionName[] = "json_type";
-  inline constexpr char kZetaSQLJsonQueryArrayFunctionName[] =
+  inline constexpr char kGoogleSQLSubscriptFunctionName[] = "$subscript";
+  inline constexpr char kGoogleSQLJsonTypeFunctionName[] = "json_type";
+  inline constexpr char kGoogleSQLJsonQueryArrayFunctionName[] =
       "json_query_array";
 
-  inline constexpr char kZetaSQLAddFunctionName[] = "$add";
-  inline constexpr char kZetaSQLDivideFunctionName[] = "$divide";
-  inline constexpr char kZetaSQLDivTruncFunctionName[] = "div";
-  inline constexpr char kZetaSQLMultiplyFunctionName[] = "$multiply";
-  inline constexpr char kZetaSQLSubtractFunctionName[] = "$subtract";
-  inline constexpr char kZetaSQLUminusFunctionName[] = "$unary_minus";
+  inline constexpr char kGoogleSQLAddFunctionName[] = "$add";
+  inline constexpr char kGoogleSQLDivideFunctionName[] = "$divide";
+  inline constexpr char kGoogleSQLDivTruncFunctionName[] = "div";
+  inline constexpr char kGoogleSQLMultiplyFunctionName[] = "$multiply";
+  inline constexpr char kGoogleSQLSubtractFunctionName[] = "$subtract";
+  inline constexpr char kGoogleSQLUminusFunctionName[] = "$unary_minus";
 
-  inline constexpr char kZetaSQLMinFunctionName[] = "min";
-  inline constexpr char kZetaSQLMaxFunctionName[] = "max";
+  inline constexpr char kGoogleSQLMinFunctionName[] = "min";
+  inline constexpr char kGoogleSQLMaxFunctionName[] = "max";
 
-  // PG casting functions that override the ZetaSQL/Spanner casting functions.
+  // PG casting functions that override the GoogleSQL/Spanner casting functions.
   inline constexpr char kPGCastToDateFunctionName[] = "pg.cast_to_date";
   inline constexpr char kPGCastToTimestampFunctionName[] =
       "pg.cast_to_timestamp";
@@ -92,6 +92,7 @@ namespace postgres_translator {
   // PG array functions.
   inline constexpr char kPGArrayLengthFunctionName[] = "pg.array_length";
   inline constexpr char kPGArrayUpperFunctionName[] = "pg.array_upper";
+  inline constexpr char kPGGenerateArrayFunctionName[] = "pg.generate_array";
 
   // PG comparison functions.
   inline constexpr char kPGTextregexneFunctionName[] = "pg.textregexne";
@@ -191,9 +192,9 @@ namespace postgres_translator {
   inline constexpr char kPGIntervalExtractFunctionName[] =
       "pg.extract_interval";
 
-  using SpannerPGFunctions = std::vector<std::unique_ptr<zetasql::Function>>;
+  using SpannerPGFunctions = std::vector<std::unique_ptr<googlesql::Function>>;
   using SpannerPGTVFs =
-      std::vector<std::unique_ptr<zetasql::TableValuedFunction>>;
+      std::vector<std::unique_ptr<googlesql::TableValuedFunction>>;
 
   // Returns Spanner-specific implementations of PG functions.
   SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name);
@@ -202,53 +203,53 @@ namespace postgres_translator {
   SpannerPGTVFs GetSpannerPGTVFs(const std::string& catalog_name);
 
   // Evaluators exported for supporting type coercion.
-  absl::StatusOr<zetasql::Value> EvalCastNumericToInt64(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalCastNumericToInt64(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalCastNumericToDouble(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalCastNumericToDouble(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalCastNumericToFloat(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalCastNumericToFloat(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalCastNumericToString(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalCastNumericToString(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalCastToNumeric(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalCastToNumeric(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalToJsonb(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalToJsonb(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalCastToOid(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalCastToOid(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalCastOidToInt64(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalCastOidToInt64(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalCastOidToString(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalCastOidToString(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalCastIntervalToString(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalCastIntervalToString(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalCastStringToInterval(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalCastStringToInterval(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalToChar(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalToChar(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalExtract(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalExtract(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalTimestamptzTrunc(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalTimestamptzTrunc(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalCastToTimestamp(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalCastToTimestamp(
+      absl::Span<const googlesql::Value> args);
 
-  absl::StatusOr<zetasql::Value> EvalCastToString(
-      absl::Span<const zetasql::Value> args);
+  absl::StatusOr<googlesql::Value> EvalCastToString(
+      absl::Span<const googlesql::Value> args);
 }  // namespace postgres_translator
 
 #endif  // CATALOG_EMULATOR_FUNCTIONS_H_

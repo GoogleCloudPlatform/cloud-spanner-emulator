@@ -20,7 +20,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/strings/match.h"
 #include "absl/time/time.h"
@@ -29,7 +29,7 @@
 #include "frontend/collections/database_manager.h"
 #include "frontend/entities/database.h"
 #include "frontend/entities/session.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -42,7 +42,7 @@ class SessionManagerTest : public testing::Test {
       : session_manager_(&clock_), database_manager_(&clock_) {}
 
   void SetUp() override {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         database_,
         database_manager_.CreateDatabase(
             "projects/test-p/instances/test-i/databases/test-database", {}));
@@ -58,12 +58,12 @@ class SessionManagerTest : public testing::Test {
 
 TEST_F(SessionManagerTest, CreateSession) {
   absl::Time start_time = absl::Now();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> actual,
       session_manager_.CreateSession(test_labels_, multiplexed_, database_,
                                      /*mux_txn_manager=*/nullptr));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> actual_multiplexed,
       session_manager_.CreateSession(test_labels_, true, database_,
                                      /*mux_txn_manager=*/nullptr));
@@ -80,11 +80,11 @@ TEST_F(SessionManagerTest, CreateSession) {
 }
 
 TEST_F(SessionManagerTest, GetSession) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> expected,
       session_manager_.CreateSession(test_labels_, multiplexed_, database_,
                                      /*mux_txn_manager=*/nullptr));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> actual,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> actual,
                        session_manager_.GetSession(expected->session_uri()));
   EXPECT_EQ(actual->session_uri(), expected->session_uri());
   EXPECT_EQ(actual->create_time(), expected->create_time());
@@ -93,11 +93,11 @@ TEST_F(SessionManagerTest, GetSession) {
 }
 
 TEST_F(SessionManagerTest, GetSessionIncludesMultiplexedFlag) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> expected,
       session_manager_.CreateSession(test_labels_, true, database_,
                                      /*mux_txn_manager=*/nullptr));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> actual,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> actual,
                        session_manager_.GetSession(expected->session_uri()));
   EXPECT_TRUE(actual->multiplexed());
   EXPECT_EQ(actual->session_uri(), expected->session_uri());
@@ -107,53 +107,53 @@ TEST_F(SessionManagerTest, GetSessionIncludesMultiplexedFlag) {
 }
 
 TEST_F(SessionManagerTest, GetSessionFailsAfterVersionGcDuration) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> expected,
       session_manager_.CreateSession(test_labels_, multiplexed_, database_,
                                      /*mux_txn_manager=*/nullptr));
   // Set the approximate_last_use_time to earlier than gc duration.
   expected->set_approximate_last_use_time(absl::Now() - absl::Hours(1.5));
   EXPECT_THAT(session_manager_.GetSession(expected->session_uri()),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(SessionManagerTest, GetMultiplexedSessionFailsAfterVersionGcDuration) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> expected,
       session_manager_.CreateSession(test_labels_, true, database_,
                                      /*mux_txn_manager=*/nullptr));
   // Set the approximate_last_use_time to earlier than regular session gc
   // duration.
   expected->set_approximate_last_use_time(absl::Now() - absl::Hours(1.5));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> actual,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> actual,
                        session_manager_.GetSession(expected->session_uri()));
   EXPECT_TRUE(actual->multiplexed());
   // Set the approximate_last_use_time to earlier than multiplexed session gc
   // duration.
   expected->set_approximate_last_use_time(absl::Now() - absl::Hours(28.5 * 24));
   EXPECT_THAT(session_manager_.GetSession(expected->session_uri()),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(SessionManagerTest, DeleteSession) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> actual,
       session_manager_.CreateSession(test_labels_, multiplexed_, database_,
                                      /*mux_txn_manager=*/nullptr));
-  ZETASQL_EXPECT_OK(session_manager_.DeleteSession(actual->session_uri()));
+  GOOGLESQL_EXPECT_OK(session_manager_.DeleteSession(actual->session_uri()));
   EXPECT_THAT(session_manager_.GetSession(actual->session_uri()),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(SessionManagerTest, ListSessions) {
   int num = 5;
   std::shared_ptr<Session> expected;
   for (int i = 0; i < num; i++) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
                                        test_labels_, multiplexed_, database_,
                                        /*mux_txn_manager=*/nullptr));
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<std::shared_ptr<Session>> actual,
       session_manager_.ListSessions(database_->database_uri()));
   EXPECT_EQ(actual.size(), num);
@@ -167,12 +167,12 @@ TEST_F(SessionManagerTest, ListSessionsIncludesMultiplexedFlag) {
   int num = 5;
   std::shared_ptr<Session> expected;
   for (int i = 0; i < num; i++) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
                                        test_labels_,
                                        /*multiplexed=*/true, database_,
                                        /*mux_txn_manager=*/nullptr));
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<std::shared_ptr<Session>> actual,
       session_manager_.ListSessions(database_->database_uri()));
   // ListSessions API does not return any multiplexed sessions.
@@ -183,12 +183,12 @@ TEST_F(SessionManagerTest, ListSessionsReturnsMultiplexedSessions) {
   int num = 5;
   std::shared_ptr<Session> expected;
   for (int i = 0; i < num; i++) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
                                        test_labels_,
                                        /*multiplexed=*/true, database_,
                                        /*mux_txn_manager=*/nullptr));
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<std::shared_ptr<Session>> actual,
       session_manager_.ListSessions(database_->database_uri(),
                                     /*include_multiplex_sessions=*/true));
@@ -198,14 +198,14 @@ TEST_F(SessionManagerTest, ListSessionsReturnsMultiplexedSessions) {
 TEST_F(SessionManagerTest,
        ListSessionsReturnsMultiplexedSessionsAfterGcDuration) {
   std::shared_ptr<Session> expected;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       expected, session_manager_.CreateSession(test_labels_,
                                                /*multiplexed=*/true, database_,
                                                /*mux_txn_manager=*/nullptr));
   // Set the approximate_last_use_time to earlier than multiplexed session gc
   // duration.
   expected->set_approximate_last_use_time(absl::Now() - absl::Minutes(90));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<std::shared_ptr<Session>> actual,
       session_manager_.ListSessions(database_->database_uri(),
                                     /*include_multiplex_sessions=*/true));
@@ -214,31 +214,31 @@ TEST_F(SessionManagerTest,
 
 TEST_F(SessionManagerTest,
        DeleteSessionIncludesMultiplexedFlagAndDropMultiplexSessionsIsTrue) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> expected,
       session_manager_.CreateSession(test_labels_,
                                      /*multiplexed=*/true, database_,
                                      /*mux_txn_manager=*/nullptr));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> actual,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> actual,
                        session_manager_.GetSession(expected->session_uri()));
   EXPECT_EQ(actual, expected);
 
   // DeleteSession API with delete_multiplex_sessions = true deletes multiplexed
   // sessions.
-  ZETASQL_EXPECT_OK(session_manager_.DeleteSession(expected->session_uri(),
+  GOOGLESQL_EXPECT_OK(session_manager_.DeleteSession(expected->session_uri(),
                                            /*delete_multiplex_sessions=*/true));
   EXPECT_THAT(session_manager_.GetSession(expected->session_uri()),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(SessionManagerTest,
        DeleteSessionIncludesMultiplexedFlagAndDropMultiplexSessionsIsFalse) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Session> expected,
       session_manager_.CreateSession(test_labels_,
                                      /*multiplexed=*/true, database_,
                                      /*mux_txn_manager=*/nullptr));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> actual,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> actual,
                        session_manager_.GetSession(expected->session_uri()));
   EXPECT_EQ(actual, expected);
 
@@ -250,25 +250,25 @@ TEST_F(SessionManagerTest,
 
 TEST_F(SessionManagerTest, ListSessionsWithSimilarPrefix) {
   int num = 5;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Database> database1,
       database_manager_.CreateDatabase(
           "projects/test-p/instances/test-i/databases/test", {}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Database> database2,
       database_manager_.GetDatabase(
           "projects/test-p/instances/test-i/databases/test-database"));
 
   std::shared_ptr<Session> expected;
   for (int i = 0; i < num; i++) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
                                        test_labels_, multiplexed_, database1,
                                        /*mux_txn_manager=*/nullptr));
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(expected, session_manager_.CreateSession(
                                      test_labels_, multiplexed_, database2,
                                      /*mux_txn_manager=*/nullptr));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<std::shared_ptr<Session>> actual,
       session_manager_.ListSessions(database1->database_uri()));
   EXPECT_EQ(actual.size(), num);

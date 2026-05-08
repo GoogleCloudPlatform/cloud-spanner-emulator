@@ -35,17 +35,17 @@
 #include <string>
 
 #include "google/spanner/v1/type.pb.h"
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/types/array_type.h"
-#include "zetasql/public/types/collation.h"
-#include "zetasql/public/types/simple_value.h"
-#include "zetasql/public/types/type_modifiers.h"
-#include "zetasql/public/types/type_parameters.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/types/array_type.h"
+#include "googlesql/public/types/collation.h"
+#include "googlesql/public/types/simple_value.h"
+#include "googlesql/public/types/type_modifiers.h"
+#include "googlesql/public/types/type_parameters.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
@@ -54,33 +54,33 @@
 namespace {
 
 using ::google::spanner::v1::TypeAnnotationCode;
-using ::zetasql::Collation;
-using ::zetasql::ExtendedTypeParameters;
-using ::zetasql::SimpleValue;
-using ::zetasql::TypeModifiers;
-using ::zetasql::TypeParameters;
-using ::zetasql::TypeParameterValue;
+using ::googlesql::Collation;
+using ::googlesql::ExtendedTypeParameters;
+using ::googlesql::SimpleValue;
+using ::googlesql::TypeModifiers;
+using ::googlesql::TypeParameters;
+using ::googlesql::TypeParameterValue;
 using ::postgres_translator::spangres::datatypes::CreatePgNumericValue;
 using ::postgres_translator::spangres::datatypes::GetPgNumericArrayType;
 using ::postgres_translator::spangres::datatypes::GetPgNumericType;
 using ::postgres_translator::spangres::datatypes::SpannerExtendedType;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 using PgNumericTypeTest = postgres_translator::test::ValidMemoryContext;
 
 TEST_F(PgNumericTypeTest, ValidateTypeProperties) {
   const SpannerExtendedType* pg_type = GetPgNumericType();
   EXPECT_TRUE(pg_type->code() == TypeAnnotationCode::PG_NUMERIC);
-  EXPECT_EQ(pg_type->ShortTypeName(zetasql::PRODUCT_EXTERNAL), "PG.NUMERIC");
+  EXPECT_EQ(pg_type->ShortTypeName(googlesql::PRODUCT_EXTERNAL), "PG.NUMERIC");
   EXPECT_TRUE(pg_type->Equals(GetPgNumericType()));
   EXPECT_TRUE(pg_type->Equivalent(GetPgNumericType()));
 
   EXPECT_TRUE(pg_type->SupportsEquality());
-  EXPECT_TRUE(pg_type->SupportsEquality(zetasql::LanguageOptions{}));
-  EXPECT_TRUE(pg_type->SupportsGrouping(zetasql::LanguageOptions{}));
-  EXPECT_TRUE(pg_type->SupportsPartitioning(zetasql::LanguageOptions{}));
+  EXPECT_TRUE(pg_type->SupportsEquality(googlesql::LanguageOptions{}));
+  EXPECT_TRUE(pg_type->SupportsGrouping(googlesql::LanguageOptions{}));
+  EXPECT_TRUE(pg_type->SupportsPartitioning(googlesql::LanguageOptions{}));
   EXPECT_TRUE(pg_type->SupportsOrdering());
-  EXPECT_TRUE(pg_type->SupportsOrdering(zetasql::LanguageOptions{},
+  EXPECT_TRUE(pg_type->SupportsOrdering(googlesql::LanguageOptions{},
                                         /*type_description=*/nullptr));
 }
 
@@ -91,34 +91,34 @@ TypeParameters MakeValidTypeParameters(int64_t precision, int64_t scale) {
 
 TEST_F(PgNumericTypeTest, ValidateTypeParameters) {
   const SpannerExtendedType* pg_type = GetPgNumericType();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::string type_name_with_no_parameters,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::string type_name_with_no_parameters,
                        pg_type->TypeNameWithModifiers(
-                           TypeModifiers(), zetasql::PRODUCT_EXTERNAL));
+                           TypeModifiers(), googlesql::PRODUCT_EXTERNAL));
   EXPECT_EQ(type_name_with_no_parameters, "PG.NUMERIC");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::string type_name_with_parameters,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::string type_name_with_parameters,
                        pg_type->TypeNameWithModifiers(
                            TypeModifiers::MakeTypeModifiers(
                                MakeValidTypeParameters(5, 3), Collation()),
-                           zetasql::PRODUCT_EXTERNAL));
+                           googlesql::PRODUCT_EXTERNAL));
   EXPECT_EQ(type_name_with_parameters, "PG.NUMERIC(5,3)");
 
-  ZETASQL_EXPECT_OK(pg_type->ValidateAndResolveTypeParameters(
+  GOOGLESQL_EXPECT_OK(pg_type->ValidateAndResolveTypeParameters(
       {TypeParameterValue(SimpleValue::Int64(4)),
        TypeParameterValue(SimpleValue::Int64(2))},
-      zetasql::PRODUCT_EXTERNAL));
+      googlesql::PRODUCT_EXTERNAL));
   EXPECT_THAT(pg_type->ValidateAndResolveTypeParameters(
-                  {}, zetasql::PRODUCT_EXTERNAL),
+                  {}, googlesql::PRODUCT_EXTERNAL),
               StatusIs(absl::StatusCode::kInvalidArgument));
 
-  ZETASQL_EXPECT_OK(pg_type->ValidateResolvedTypeParameters(
-      MakeValidTypeParameters(4, 2), zetasql::PRODUCT_EXTERNAL));
+  GOOGLESQL_EXPECT_OK(pg_type->ValidateResolvedTypeParameters(
+      MakeValidTypeParameters(4, 2), googlesql::PRODUCT_EXTERNAL));
   EXPECT_THAT(pg_type->ValidateResolvedTypeParameters(
-                  TypeParameters(), zetasql::PRODUCT_EXTERNAL),
+                  TypeParameters(), googlesql::PRODUCT_EXTERNAL),
               StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(PgNumericTypeTest, ValueProperties) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value pg_numeric,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value pg_numeric,
                        CreatePgNumericValue("123456789.01234567890123456789"));
   EXPECT_TRUE(pg_numeric.type()->Equals(GetPgNumericType()));
   EXPECT_EQ(pg_numeric.DebugString(), "123456789.01234567890123456789");
@@ -130,27 +130,27 @@ TEST_F(PgNumericTypeTest, ValueProperties) {
             "pg.cast_to_numeric('123456789.01234567890123456789')");
   EXPECT_FALSE(pg_numeric.is_null());
 
-  zetasql::Value copy_pg_numeric = pg_numeric;
+  googlesql::Value copy_pg_numeric = pg_numeric;
   EXPECT_TRUE(pg_numeric.Equals(copy_pg_numeric));
   EXPECT_EQ(pg_numeric, copy_pg_numeric);
   EXPECT_FALSE(pg_numeric.LessThan(copy_pg_numeric));
   EXPECT_FALSE(copy_pg_numeric.LessThan(pg_numeric));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value nan_numeric,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value nan_numeric,
                        CreatePgNumericValue("NaN"));
   EXPECT_FALSE(pg_numeric.Equals(nan_numeric));
   EXPECT_TRUE(pg_numeric.LessThan(nan_numeric));
 }
 
 TEST_F(PgNumericTypeTest, SpecialCaseValidation) {
-  ZETASQL_EXPECT_OK(CreatePgNumericValue("nan"));
-  ZETASQL_EXPECT_OK(CreatePgNumericValue("naN"));
-  ZETASQL_EXPECT_OK(CreatePgNumericValue("nAn"));
-  ZETASQL_EXPECT_OK(CreatePgNumericValue("nAN"));
-  ZETASQL_EXPECT_OK(CreatePgNumericValue("Nan"));
-  ZETASQL_EXPECT_OK(CreatePgNumericValue("NaN"));
-  ZETASQL_EXPECT_OK(CreatePgNumericValue("NAn"));
-  ZETASQL_EXPECT_OK(CreatePgNumericValue("NAN"));
+  GOOGLESQL_EXPECT_OK(CreatePgNumericValue("nan"));
+  GOOGLESQL_EXPECT_OK(CreatePgNumericValue("naN"));
+  GOOGLESQL_EXPECT_OK(CreatePgNumericValue("nAn"));
+  GOOGLESQL_EXPECT_OK(CreatePgNumericValue("nAN"));
+  GOOGLESQL_EXPECT_OK(CreatePgNumericValue("Nan"));
+  GOOGLESQL_EXPECT_OK(CreatePgNumericValue("NaN"));
+  GOOGLESQL_EXPECT_OK(CreatePgNumericValue("NAn"));
+  GOOGLESQL_EXPECT_OK(CreatePgNumericValue("NAN"));
   EXPECT_THAT(CreatePgNumericValue("-NaN"),
               StatusIs(absl::StatusCode::kInvalidArgument));
   EXPECT_THAT(CreatePgNumericValue("+NaN"),
@@ -169,8 +169,8 @@ TEST_F(PgNumericTypeTest, SpecialCaseValidation) {
               StatusIs(absl::StatusCode::kInvalidArgument));
   EXPECT_THAT(CreatePgNumericValue("00123456789..12345600000"),
               StatusIs(absl::StatusCode::kInvalidArgument));
-  ZETASQL_EXPECT_OK(CreatePgNumericValue("00123456789."));
-  ZETASQL_EXPECT_OK(CreatePgNumericValue(".00123456789"));
+  GOOGLESQL_EXPECT_OK(CreatePgNumericValue("00123456789."));
+  GOOGLESQL_EXPECT_OK(CreatePgNumericValue(".00123456789"));
 }
 
 TEST_F(PgNumericTypeTest, InfinityValidation) {
@@ -183,11 +183,11 @@ TEST_F(PgNumericTypeTest, InfinityValidation) {
 }
 
 TEST_F(PgNumericTypeTest, NaNComparison) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value nan, CreatePgNumericValue("NaN"));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value other_nan, CreatePgNumericValue("NaN"));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value whole_number,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value nan, CreatePgNumericValue("NaN"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value other_nan, CreatePgNumericValue("NaN"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value whole_number,
                        CreatePgNumericValue("00001234567890"));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value numeric,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value numeric,
                        CreatePgNumericValue("00123456789.00012345600000"));
 
   EXPECT_TRUE(nan.Equals(other_nan));
@@ -199,11 +199,11 @@ TEST_F(PgNumericTypeTest, NaNComparison) {
 }
 
 TEST_F(PgNumericTypeTest, ValueComparison) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value numeric,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value numeric,
                        CreatePgNumericValue("00001234567890.00"));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value smaller_numeric,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value smaller_numeric,
                        CreatePgNumericValue("+00123456789.00012345600000"));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value smallest_numeric,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value smallest_numeric,
                        CreatePgNumericValue("-00123456789.00012345600000"));
 
   EXPECT_TRUE(numeric.Equals(numeric));
@@ -434,12 +434,12 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(FixedPgNumericTypeTest, ReturnsOk) {
   TestCase test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value fixed_precision_numeric,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value fixed_precision_numeric,
                        postgres_translator::spangres::datatypes::
                            CreatePgNumericValueWithPrecisionAndScale(
                                test_case.arbitrary_numeric, test_case.precision,
                                test_case.scale));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       absl::Cord normalized,
       postgres_translator::spangres::datatypes::GetPgNumericNormalizedValue(
           fixed_precision_numeric));
@@ -447,10 +447,10 @@ TEST_P(FixedPgNumericTypeTest, ReturnsOk) {
 }
 
 TEST(PgNumericArrayTypeTest, ValidateTypeProperties) {
-  const zetasql::ArrayType* type = GetPgNumericArrayType();
+  const googlesql::ArrayType* type = GetPgNumericArrayType();
   ASSERT_NE(type, nullptr);
   EXPECT_TRUE(type->element_type()->Equals(GetPgNumericType()));
-  EXPECT_EQ(type->ShortTypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(type->ShortTypeName(googlesql::PRODUCT_EXTERNAL),
             "ARRAY<PG.NUMERIC>");
 }
 

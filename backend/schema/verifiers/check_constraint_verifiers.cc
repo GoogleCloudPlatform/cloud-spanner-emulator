@@ -19,7 +19,7 @@
 #include <memory>
 #include <vector>
 
-#include "zetasql/public/analyzer_options.h"
+#include "googlesql/public/analyzer_options.h"
 #include "absl/status/status.h"
 #include "backend/actions/check_constraint.h"
 #include "backend/datamodel/key_range.h"
@@ -41,7 +41,7 @@ absl::Status VerifyCheckConstraintData(const CheckConstraint* check_constraint,
       context->type_factory(),
       /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
       /*latest_schema=*/context->validated_new_schema());
-  zetasql::AnalyzerOptions analyzer_options = MakeGoogleSqlAnalyzerOptions(
+  googlesql::AnalyzerOptions analyzer_options = MakeGoogleSqlAnalyzerOptions(
       context->validated_new_schema()->default_time_zone());
   Catalog catalog(context->validated_new_schema(), &function_catalog,
                   context->type_factory(), analyzer_options);
@@ -53,21 +53,21 @@ absl::Status VerifyCheckConstraintData(const CheckConstraint* check_constraint,
   absl::Time timestamp = context->pending_commit_timestamp();
   std::unique_ptr<StorageIterator> iterator;
   std::vector<ColumnID> column_ids = GetColumnIDs(table->columns());
-  ZETASQL_RETURN_IF_ERROR(storage->Read(timestamp, table->id(), KeyRange::All(),
+  GOOGLESQL_RETURN_IF_ERROR(storage->Read(timestamp, table->id(), KeyRange::All(),
                                 column_ids, &iterator));
 
   // Loop through every row of the table and validate the check constraints.
   while (iterator->Next()) {
-    zetasql::ParameterValueMap row_column_values;
+    googlesql::ParameterValueMap row_column_values;
     for (int i = 0; i < iterator->NumColumns(); ++i) {
       // Storage returns invalid values if a value is not present, in which case
       // we convert it into a typed NULL.
       row_column_values[table->columns()[i]->Name()] =
           iterator->ColumnValue(i).is_valid()
               ? iterator->ColumnValue(i)
-              : zetasql::Value::Null(table->columns()[i]->GetType());
+              : googlesql::Value::Null(table->columns()[i]->GetType());
     }
-    ZETASQL_RETURN_IF_ERROR(verifier.VerifyRow(row_column_values, iterator->Key()));
+    GOOGLESQL_RETURN_IF_ERROR(verifier.VerifyRow(row_column_values, iterator->Key()));
   }
   return iterator->Status();
 }

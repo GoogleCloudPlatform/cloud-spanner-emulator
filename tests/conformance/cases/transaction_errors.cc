@@ -17,10 +17,13 @@
 #include <string>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "googlesql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
 #include "tests/conformance/common/database_test_base.h"
 
 namespace google {
@@ -30,37 +33,20 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
-class TransactionErrorTest : public DatabaseTest {
+class TransactionErrorTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
+ public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
  public:
   absl::Status SetUpDatabase() override {
-    return SetSchema({
-        R"(
-          CREATE TABLE Users(
-            ID       INT64 NOT NULL,
-            Name     STRING(MAX),
-            Age      INT64,
-            Updated  TIMESTAMP,
-          ) PRIMARY KEY (ID)
-        )",
-        R"(
-          CREATE TABLE Nullable(
-            Key      INT64,
-            Value    STRING(MAX),
-          ) PRIMARY KEY (Key)
-        )",
-        R"(
-          CREATE TABLE Singleton(
-            Col1     STRING(MAX),
-            Col2     STRING(MAX),
-          ) PRIMARY KEY ()
-        )",
-        R"(CREATE TABLE ArrayFields(
-            Key      INT64,
-            ArrayCol ARRAY<INT64>,
-          ) PRIMARY KEY(Key)
-        )"});
+    return SetSchemaFromFile("transaction_errors.test");
   }
 
  protected:
@@ -83,16 +69,24 @@ class TransactionErrorTest : public DatabaseTest {
   }
 };
 
-TEST_F(TransactionErrorTest, DMLTableNotFoundDoesNotInvalidateTransaction) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectTransactionErrorTest, TransactionErrorTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<TransactionErrorTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(TransactionErrorTest, DMLTableNotFoundDoesNotInvalidateTransaction) {
   Transaction txn{Transaction::ReadWriteOptions{}};
-  ZETASQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'abc')"));
+  GOOGLESQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'abc')"));
 
   // Try to read from a non-existent table.
   EXPECT_THAT(Query(txn, "SELECT ID, Name FROM FAKE_TABLE"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 
     // Try to commit the transaction, it should succeed.
-    ZETASQL_EXPECT_OK(Commit(txn, {
+    GOOGLESQL_EXPECT_OK(Commit(txn, {
                               MakeInsert("Users", {"ID"}, 2),
                               MakeInsert("Users", {"ID"}, 3),
                           }));
@@ -101,9 +95,9 @@ TEST_F(TransactionErrorTest, DMLTableNotFoundDoesNotInvalidateTransaction) {
                 IsOkAndHoldsUnorderedRows({{1}, {2}, {3}}));
 }
 
-TEST_F(TransactionErrorTest, DMLCommitTableNotFoundInvalidatesTransaction) {
+TEST_P(TransactionErrorTest, DMLCommitTableNotFoundInvalidatesTransaction) {
   Transaction txn{Transaction::ReadWriteOptions{}};
-  ZETASQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'abc')"));
+  GOOGLESQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'abc')"));
 
   // Try to commit the transaction, it should fail.
   EXPECT_THAT(Commit(txn,
@@ -120,12 +114,12 @@ TEST_F(TransactionErrorTest, DMLCommitTableNotFoundInvalidatesTransaction) {
   EXPECT_THAT(Query("SELECT ID FROM Users"), IsOkAndHoldsRows({}));
 }
 
-TEST_F(TransactionErrorTest, DMLInvalidUpdateDoesNotInvalidateTransaction) {
+TEST_P(TransactionErrorTest, DMLInvalidUpdateDoesNotInvalidateTransaction) {
   Transaction txn{Transaction::ReadWriteOptions{}};
-  ZETASQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'abc')"));
+  GOOGLESQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'abc')"));
 
   // Key does not exist
-  ZETASQL_EXPECT_OK(Query(txn, "UPDATE Users SET Name = 'Test' WHERE ID = 22"));
+  GOOGLESQL_EXPECT_OK(Query(txn, "UPDATE Users SET Name = 'Test' WHERE ID = 22"));
   // Column does not exist
   EXPECT_THAT(Query(txn, "UPDATE Users SET Fake = 'Test' WHERE ID = 1"),
               StatusIs(absl::StatusCode::kInvalidArgument));
@@ -133,16 +127,16 @@ TEST_F(TransactionErrorTest, DMLInvalidUpdateDoesNotInvalidateTransaction) {
   EXPECT_THAT(Query(txn, "UPDATE Fake_Table SET Name = 'Test' WHERE ID = 1"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 
-  ZETASQL_EXPECT_OK(Commit(txn, {MakeInsert("Users", {"ID"}, 3)}));
+  GOOGLESQL_EXPECT_OK(Commit(txn, {MakeInsert("Users", {"ID"}, 3)}));
 
   // Commit should have succeeded and populated table.
   EXPECT_THAT(Query("SELECT ID FROM Users"),
               IsOkAndHoldsUnorderedRows({{1}, {3}}));
 }
 
-TEST_F(TransactionErrorTest, DMLInvalidInsertInvalidatesTransaction) {
+TEST_P(TransactionErrorTest, DMLInvalidInsertInvalidatesTransaction) {
   Transaction txn{Transaction::ReadWriteOptions{}};
-  ZETASQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'abc')"));
+  GOOGLESQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'abc')"));
 
   // Insert a row that already exists which causes a constraint failure.
   EXPECT_THAT(Query(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'test')"),
@@ -169,20 +163,20 @@ TEST_F(TransactionErrorTest, DMLInvalidInsertInvalidatesTransaction) {
   EXPECT_THAT(Query("SELECT ID FROM Users"), IsOkAndHoldsRows({}));
 }
 
-TEST_F(TransactionErrorTest, DMLReadErrorDoesNotInvalidateTransaction) {
+TEST_P(TransactionErrorTest, DMLReadErrorDoesNotInvalidateTransaction) {
   Transaction txn{Transaction::ReadWriteOptions{}};
-  ZETASQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(2, 'value')"));
+  GOOGLESQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(2, 'value')"));
 
   EXPECT_THAT(Query(txn, "SELECT ID FROM Fake_Table"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 
-  ZETASQL_EXPECT_OK(Commit(txn, {MakeInsert("Users", {"ID", "Name"}, 1, "value")}));
+  GOOGLESQL_EXPECT_OK(Commit(txn, {MakeInsert("Users", {"ID", "Name"}, 1, "value")}));
 
   // Table should be empty
   EXPECT_THAT(Query("SELECT ID FROM Users"), IsOkAndHoldsUnorderedRows({1, 2}));
 }
 
-TEST_F(TransactionErrorTest, DeleteErrorInCommitInvalidatesTransaction) {
+TEST_P(TransactionErrorTest, DeleteErrorInCommitInvalidatesTransaction) {
   Transaction txn{Transaction::ReadWriteOptions{}};
   EXPECT_THAT(Commit(txn, {MakeInsert("Users", {"ID", "Name"}, 1, "abc"),
                            MakeDelete("NONE", KeySet::All())}),
@@ -196,7 +190,7 @@ TEST_F(TransactionErrorTest, DeleteErrorInCommitInvalidatesTransaction) {
   EXPECT_THAT(Query("SELECT ID FROM Users"), IsOkAndHoldsRows({}));
 }
 
-TEST_F(TransactionErrorTest,
+TEST_P(TransactionErrorTest,
        UpdateWithNonExistentKeyInCommitInvalidatesTransaction) {
   Transaction txn{Transaction::ReadWriteOptions{}};
   // This case checks that an update to a non-existent row causes commit to
@@ -213,7 +207,7 @@ TEST_F(TransactionErrorTest,
   EXPECT_THAT(Query("SELECT ID FROM Users"), IsOkAndHoldsRows({}));
 }
 
-TEST_F(TransactionErrorTest, InvalidUpdateInCommitInvalidatesTransaction) {
+TEST_P(TransactionErrorTest, InvalidUpdateInCommitInvalidatesTransaction) {
   Transaction txn{Transaction::ReadWriteOptions{}};
   // This case checks that an update with an invalid column causes the commit to
   // fail.
@@ -229,7 +223,7 @@ TEST_F(TransactionErrorTest, InvalidUpdateInCommitInvalidatesTransaction) {
   EXPECT_THAT(Query("SELECT ID FROM Users"), IsOkAndHoldsRows({}));
 }
 
-TEST_F(TransactionErrorTest, InsertInvalidColumnsInvalidatesTransaction) {
+TEST_P(TransactionErrorTest, InsertInvalidColumnsInvalidatesTransaction) {
   Transaction txn{Transaction::ReadWriteOptions{}};
   EXPECT_THAT(Commit(txn, {MakeInsert("Users", {"FakeID", "Data"}, 1, "test")}),
               StatusIs(absl::StatusCode::kNotFound));
@@ -242,9 +236,9 @@ TEST_F(TransactionErrorTest, InsertInvalidColumnsInvalidatesTransaction) {
   EXPECT_THAT(Query("SELECT ID FROM Users"), IsOkAndHoldsRows({}));
 }
 
-TEST_F(TransactionErrorTest, RollbackSucceedsAfterInsertInvalidColumns) {
+TEST_P(TransactionErrorTest, RollbackSucceedsAfterInsertInvalidColumns) {
   Transaction txn{Transaction::ReadWriteOptions{}};
-  ZETASQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'abc')"));
+  GOOGLESQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'abc')"));
 
   // Insert a row that already exists which causes a constraint failure.
   EXPECT_THAT(Query(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'test')"),
@@ -252,9 +246,9 @@ TEST_F(TransactionErrorTest, RollbackSucceedsAfterInsertInvalidColumns) {
 
   // A rollback against a transaction with a constraint failure should still
   // succeed.
-  ZETASQL_EXPECT_OK(Rollback(txn));
+  GOOGLESQL_EXPECT_OK(Rollback(txn));
 
-  // Cannot commit since it has been rolledback.
+  // Cannot commit since it has been rolled back.
   EXPECT_THAT(Commit(txn,
                      {
                          MakeInsert("Users", {"ID"}, 2),
@@ -266,14 +260,14 @@ TEST_F(TransactionErrorTest, RollbackSucceedsAfterInsertInvalidColumns) {
   EXPECT_THAT(Query("SELECT ID FROM Users"), IsOkAndHoldsRows({}));
 }
 
-TEST_F(TransactionErrorTest,
+TEST_P(TransactionErrorTest,
        RollbackOfReadOnlyTransactionFailsButDoesNotInvalidate) {
   Transaction txn{Transaction::ReadOnlyOptions{}};
 
   // Read all rows.
-  ZETASQL_EXPECT_OK(Read(txn, "Users", {"ID", "Name"}, KeySet::All()));
+  GOOGLESQL_EXPECT_OK(Read(txn, "Users", {"ID", "Name"}, KeySet::All()));
 
-  // A read only transaction cannot be rolledback.
+  // A read only transaction cannot be rolled back.
   EXPECT_THAT(Rollback(txn), StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Attempt to read again after the failed rollback.
@@ -282,11 +276,11 @@ TEST_F(TransactionErrorTest,
                             : StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
-TEST_F(TransactionErrorTest, ReadAfterInvalidatedCommitReturnsError) {
+TEST_P(TransactionErrorTest, ReadAfterInvalidatedCommitReturnsError) {
   Transaction txn{Transaction::ReadWriteOptions{}};
 
   // Insert a row.
-  ZETASQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'value')"));
+  GOOGLESQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'value')"));
 
   // Insert the same row that was previously added. This will return an error.
   EXPECT_THAT(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'value')"),
@@ -301,10 +295,10 @@ TEST_F(TransactionErrorTest, ReadAfterInvalidatedCommitReturnsError) {
                              : StatusIs(absl::StatusCode::kAlreadyExists)));
 }
 
-TEST_F(TransactionErrorTest, DISABLED_ReadAfterInvalidatedDmlSucceeds) {
+TEST_P(TransactionErrorTest, DISABLED_ReadAfterInvalidatedDmlSucceeds) {
   Transaction txn{Transaction::ReadWriteOptions{}};
   // Insert a row.
-  ZETASQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'value')"));
+  GOOGLESQL_ASSERT_OK(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'value')"));
 
   // Insert the same row that was previously added. This will return an error.
   EXPECT_THAT(ExecuteDml(txn, "INSERT INTO Users(ID, Name) VALUES(1, 'value')"),
@@ -312,7 +306,7 @@ TEST_F(TransactionErrorTest, DISABLED_ReadAfterInvalidatedDmlSucceeds) {
 
   // Attempt to read again after an error was encountered. The read should
   // succeed without replaying the error.
-  ZETASQL_EXPECT_OK(Read(txn, "Users", {"ID", "Name"}, KeySet::All()));
+  GOOGLESQL_EXPECT_OK(Read(txn, "Users", {"ID", "Name"}, KeySet::All()));
 }
 
 }  // namespace

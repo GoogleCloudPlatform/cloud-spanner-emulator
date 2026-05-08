@@ -21,7 +21,7 @@
 #include "google/spanner/v1/transaction.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "common/errors.h"
@@ -34,7 +34,7 @@ namespace frontend {
 
 namespace {
 
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 enum class SessionType {
   kRegularSession,
@@ -47,11 +47,11 @@ class PartitionApiTest : public test::ServerTest,
                          public testing::WithParamInterface<SessionType> {
  protected:
   void SetUp() override {
-    ZETASQL_ASSERT_OK(CreateTestInstance());
-    ZETASQL_ASSERT_OK(CreateTestDatabase());
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
+    GOOGLESQL_ASSERT_OK(CreateTestInstance());
+    GOOGLESQL_ASSERT_OK(CreateTestDatabase());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
                          CreateTestSession(/*multiplexed=*/false));
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_multiplexed_session_uri_,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(test_multiplexed_session_uri_,
                          CreateTestSession(/*multiplexed=*/true));
   }
 
@@ -122,7 +122,7 @@ TEST_P(PartitionApiTest, CannotReadUsingExistingReadWriteTransaction) {
       GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
 
   spanner_api::Transaction txn_response;
-  ZETASQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
+  GOOGLESQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
 
   // Perform read using the transaction that was started above.
   spanner_api::TransactionSelector selector;

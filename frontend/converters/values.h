@@ -18,8 +18,8 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_VALUES_H_
 
 #include "google/protobuf/struct.pb.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/status/status.h"
 
@@ -28,7 +28,7 @@ namespace spanner {
 namespace emulator {
 namespace frontend {
 
-// Parses a ZetaSQL value from a Cloud Spanner value proto.
+// Parses a GoogleSQL value from a Cloud Spanner value proto.
 //
 // Only handles the value types supported by Cloud Spanner. The proto encoding
 // does not fully specify types (e.g. int64s are encoded as strings, and null
@@ -37,15 +37,15 @@ namespace frontend {
 //
 // Unexpected types, and mismatches between expected type and proto type will
 // return errors.
-absl::StatusOr<zetasql::Value> ValueFromProto(
-    const google::protobuf::Value& value_pb, const zetasql::Type* type);
+absl::StatusOr<googlesql::Value> ValueFromProto(
+    const google::protobuf::Value& value_pb, const googlesql::Type* type);
 
-// Converts a ZetaSQL value to a Cloud Spanner value proto.
+// Converts a GoogleSQL value to a Cloud Spanner value proto.
 //
 // Only handles the value types supported by Cloud Spanner. Invalid values, and
 // value types not supported by Cloud Spanner will return errors.
 absl::StatusOr<google::protobuf::Value> ValueToProto(
-    const zetasql::Value& value);
+    const googlesql::Value& value);
 
 }  // namespace frontend
 }  // namespace emulator

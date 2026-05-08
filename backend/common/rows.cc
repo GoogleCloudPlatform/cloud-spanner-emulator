@@ -27,11 +27,11 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-zetasql::Value GetColumnValueOrNull(const Row& row,
+googlesql::Value GetColumnValueOrNull(const Row& row,
                                       const Column* const column) {
   const auto entry = row.find(column);
   return (entry != row.end()) ? entry->second
-                              : zetasql::Value::Null(column->GetType());
+                              : googlesql::Value::Null(column->GetType());
 }
 
 Row MakeRow(absl::Span<const Column* const> columns, const ValueList& values) {

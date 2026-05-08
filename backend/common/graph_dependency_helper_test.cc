@@ -20,7 +20,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 
 namespace google {
@@ -29,7 +29,7 @@ namespace emulator {
 namespace backend {
 
 namespace {
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 absl::string_view IdentityFunction(const absl::string_view& str) { return str; }
 
@@ -41,12 +41,12 @@ TEST(GraphDependencyHelperTest, SimpleNoCycle) {
   absl::string_view b = "B";
 
   GraphDependencyHelperString g("column");
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(a));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(b));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(a, b));
-  ZETASQL_EXPECT_OK(g.DetectCycle());
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(a));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(b));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(a, b));
+  GOOGLESQL_EXPECT_OK(g.DetectCycle());
   std::vector<absl::string_view> topological_order;
-  ZETASQL_EXPECT_OK(g.TopologicalOrder(&topological_order));
+  GOOGLESQL_EXPECT_OK(g.TopologicalOrder(&topological_order));
   EXPECT_THAT(topological_order, testing::ElementsAre(b, a));
 }
 
@@ -59,19 +59,19 @@ TEST(GraphDependencyHelperTest, ComplexNoCycle) {
   absl::string_view d = "D";
 
   GraphDependencyHelperString g("column");
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(d));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(c));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(b));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(a));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(d));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(c));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(b));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(a));
 
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(a, b));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(b, c));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(b, d));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(d, c));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(a, b));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(b, c));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(b, d));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(d, c));
 
-  ZETASQL_EXPECT_OK(g.DetectCycle());
+  GOOGLESQL_EXPECT_OK(g.DetectCycle());
   std::vector<absl::string_view> topological_order;
-  ZETASQL_EXPECT_OK(g.TopologicalOrder(&topological_order));
+  GOOGLESQL_EXPECT_OK(g.TopologicalOrder(&topological_order));
   EXPECT_THAT(topological_order, testing::ElementsAre(c, d, b, a));
 }
 
@@ -83,15 +83,15 @@ TEST(GraphDependencyHelperTest, StartingFromNonRoot) {
   absl::string_view c = "C";
 
   GraphDependencyHelperString g("column");
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(a));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(b));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(c));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(a));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(b));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(c));
 
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(a, b));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(c, a));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(a, b));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(c, a));
 
   std::vector<absl::string_view> topological_order;
-  ZETASQL_EXPECT_OK(g.TopologicalOrder(&topological_order));
+  GOOGLESQL_EXPECT_OK(g.TopologicalOrder(&topological_order));
   EXPECT_THAT(topological_order, testing::ElementsAre(b, a, c));
 }
 
@@ -109,20 +109,20 @@ TEST(GraphDependencyHelperTest, MultipleComponantsNoCycle) {
   GraphDependencyHelperString g("column");
   // Nodes are inserted in an odd looking order to test insert order
   // stability of the topological sort.
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(d));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(a));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(b));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(c));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(e));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(f));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(d));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(a));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(b));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(c));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(e));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(f));
 
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(a, b));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(b, c));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(d, e));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(a, b));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(b, c));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(d, e));
 
-  ZETASQL_EXPECT_OK(g.DetectCycle());
+  GOOGLESQL_EXPECT_OK(g.DetectCycle());
   std::vector<absl::string_view> topological_order;
-  ZETASQL_EXPECT_OK(g.TopologicalOrder(&topological_order));
+  GOOGLESQL_EXPECT_OK(g.TopologicalOrder(&topological_order));
   // "D" is inserted first. The topological order uses the node insertion order.
   EXPECT_THAT(topological_order, testing::ElementsAre(e, d, c, b, a, f));
 }
@@ -136,18 +136,18 @@ TEST(GraphDependencyHelperTest, MultipleRootNodesNoCycle) {
   absl::string_view d = "D";
 
   GraphDependencyHelperString g("column");
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(a));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(b));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(c));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(d));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(a));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(b));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(c));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(d));
 
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(b, d));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(c, d));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(a, d));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(b, d));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(c, d));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(a, d));
 
-  ZETASQL_EXPECT_OK(g.DetectCycle());
+  GOOGLESQL_EXPECT_OK(g.DetectCycle());
   std::vector<absl::string_view> topological_order;
-  ZETASQL_EXPECT_OK(g.TopologicalOrder(&topological_order));
+  GOOGLESQL_EXPECT_OK(g.TopologicalOrder(&topological_order));
   // "A" is inserted first. The topological order uses the node insertion order.
   EXPECT_THAT(topological_order, testing::ElementsAre(d, a, b, c));
 }
@@ -159,12 +159,12 @@ TEST(GraphDependencyHelperTest, SimpleCycle) {
   absl::string_view b = "B";
 
   GraphDependencyHelperString g("column");
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(a));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(a));  // OK to add twice
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(b));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(a, b));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(a, b));  // OK to add twice
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(b, a));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(a));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(a));  // OK to add twice
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(b));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(a, b));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(a, b));  // OK to add twice
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(b, a));
   EXPECT_THAT(g.DetectCycle(),
               StatusIs(absl::StatusCode::kFailedPrecondition,
                        "Cycle detected while analysing column, "
@@ -184,8 +184,8 @@ TEST(GraphDependencyHelperTest, SelfCycle) {
   absl::string_view a = "A";
 
   GraphDependencyHelperString g("column");
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(a));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(a, a));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(a));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(a, a));
   EXPECT_THAT(g.DetectCycle(),
               StatusIs(absl::StatusCode::kFailedPrecondition,
                        "Cycle detected while analysing column, "
@@ -205,15 +205,15 @@ TEST(GraphDependencyHelperTest, MultiComponantWithCycle) {
   absl::string_view e = "E";
 
   GraphDependencyHelperString g("column");
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(a));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(b));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(c));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(d));
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(e));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(a, b));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(c, d));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(d, e));
-  ZETASQL_EXPECT_OK(g.AddEdgeIfNotExists(e, c));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(a));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(b));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(c));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(d));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(e));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(a, b));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(c, d));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(d, e));
+  GOOGLESQL_EXPECT_OK(g.AddEdgeIfNotExists(e, c));
   EXPECT_THAT(g.DetectCycle(),
               StatusIs(absl::StatusCode::kFailedPrecondition,
                        "Cycle detected while analysing column, "
@@ -231,7 +231,7 @@ TEST(GraphDependencyHelperTest, AddEdgeIfNotExistsWithoutNodeFrom) {
   absl::string_view b = "B";
 
   GraphDependencyHelperString g("column");
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(b));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(b));
   EXPECT_FALSE(g.AddEdgeIfNotExists(a, b).ok());
 }
 
@@ -241,7 +241,7 @@ TEST(GraphDependencyHelperTest, AddEdgeIfNotExistsWithoutNodeTo) {
   absl::string_view b = "B";
 
   GraphDependencyHelperString g("column");
-  ZETASQL_EXPECT_OK(g.AddNodeIfNotExists(a));
+  GOOGLESQL_EXPECT_OK(g.AddNodeIfNotExists(a));
   EXPECT_FALSE(g.AddEdgeIfNotExists(a, b).ok());
 }
 

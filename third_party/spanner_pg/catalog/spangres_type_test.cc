@@ -31,12 +31,12 @@
 
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
@@ -118,25 +118,25 @@ Const* MakeOidConst(absl::string_view value, bool is_null = false) {
 TEST_F(SpangresTypeTest, PgNumericMapping) {
   const PostgresTypeMapping* pg_numeric_type = types::PgNumericMapping();
   const absl::string_view numeric_value = "-13.1357315957913513502000";
-  const absl::StatusOr<zetasql::Value> numeric_gsql_value =
+  const absl::StatusOr<googlesql::Value> numeric_gsql_value =
       pg_numeric_type->MakeGsqlValue(MakeNumericConst(numeric_value));
-  EXPECT_TRUE(pg_numeric_type->IsSupportedType(zetasql::LanguageOptions()));
-  EXPECT_EQ(pg_numeric_type->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_TRUE(pg_numeric_type->IsSupportedType(googlesql::LanguageOptions()));
+  EXPECT_EQ(pg_numeric_type->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg.numeric");
   EXPECT_EQ(pg_numeric_type->PostgresTypeOid(), NUMERICOID);
   EXPECT_TRUE(pg_numeric_type->Equals(types::PgNumericMapping()));
 
-  zetasql::Value val;
+  googlesql::Value val;
     EXPECT_EQ(numeric_gsql_value,
               spangres_datatypes::CreatePgNumericValue(numeric_value));
     EXPECT_THAT(pg_numeric_type->MakeGsqlValue(MakeNumericConst("0", true)),
-                zetasql_base::testing::IsOkAndHolds(zetasql::Value::Null(
+                googlesql_base::testing::IsOkAndHolds(googlesql::Value::Null(
                     spangres_datatypes::GetPgNumericType())));
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         val, spangres_datatypes::CreatePgNumericValue(numeric_value));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * built_const, pg_numeric_type->MakePgConst(val));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * built_const, pg_numeric_type->MakePgConst(val));
   EXPECT_NE(built_const, nullptr);
 
   absl::string_view const_value = DatumGetCString(
@@ -144,15 +144,15 @@ TEST_F(SpangresTypeTest, PgNumericMapping) {
   EXPECT_FALSE(built_const->constisnull);
   EXPECT_EQ(const_value, numeric_value);
 
-    val = zetasql::Value::Null(spangres_datatypes::GetPgNumericType());
+    val = googlesql::Value::Null(spangres_datatypes::GetPgNumericType());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(built_const, pg_numeric_type->MakePgConst(val));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(built_const, pg_numeric_type->MakePgConst(val));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
 
   EXPECT_THAT(
       pg_numeric_type->MakeGsqlValueFromStringConst(numeric_value),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kUnimplemented));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 TEST_F(SpangresTypeTest, PgNumericArrayMapping) {
@@ -163,11 +163,11 @@ TEST_F(SpangresTypeTest, PgNumericArrayMapping) {
                   ->AsArray()
                   ->element_type()
                   ->IsExtendedType());
-  EXPECT_EQ(pg_numeric_array_type->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_numeric_array_type->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg._numeric");
   EXPECT_EQ(pg_numeric_array_type->PostgresTypeOid(), NUMERICARRAYOID);
   EXPECT_TRUE(
-      pg_numeric_array_type->IsSupportedType(zetasql::LanguageOptions()));
+      pg_numeric_array_type->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_numeric_array_type->Equals(types::PgNumericArrayMapping()));
 }
 
@@ -176,51 +176,51 @@ TEST_F(SpangresTypeTest, PgJsonbMapping) {
   constexpr absl::string_view normalized_val = R"({"a": 1, "b": "str"})";
 
   const PostgresTypeMapping* pg_jsonb_type = types::PgJsonbMapping();
-  EXPECT_TRUE(pg_jsonb_type->IsSupportedType(zetasql::LanguageOptions()));
-  EXPECT_EQ(pg_jsonb_type->TypeName(zetasql::PRODUCT_EXTERNAL), "pg.jsonb");
+  EXPECT_TRUE(pg_jsonb_type->IsSupportedType(googlesql::LanguageOptions()));
+  EXPECT_EQ(pg_jsonb_type->TypeName(googlesql::PRODUCT_EXTERNAL), "pg.jsonb");
   EXPECT_EQ(pg_jsonb_type->PostgresTypeOid(), JSONBOID);
-  EXPECT_TRUE(pg_jsonb_type->IsSupportedType(zetasql::LanguageOptions()));
+  EXPECT_TRUE(pg_jsonb_type->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_jsonb_type->Equals(types::PgJsonbMapping()));
 
-  zetasql::Value val;
+  googlesql::Value val;
     EXPECT_EQ(pg_jsonb_type->MakeGsqlValue(MakeJsonbConst(json_val, false)),
               spangres_datatypes::CreatePgJsonbValue(json_val));
     EXPECT_THAT(pg_jsonb_type->MakeGsqlValue(MakeJsonbConst("", true)),
-                zetasql_base::testing::IsOkAndHolds(zetasql::Value::Null(
+                googlesql_base::testing::IsOkAndHolds(googlesql::Value::Null(
                     spangres_datatypes::GetPgJsonbType())));
-    ZETASQL_ASSERT_OK_AND_ASSIGN(val, spangres_datatypes::CreatePgJsonbValue(json_val));
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(val, spangres_datatypes::CreatePgJsonbValue(json_val));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * built_const, pg_jsonb_type->MakePgConst(val));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * built_const, pg_jsonb_type->MakePgConst(val));
   EXPECT_NE(built_const, nullptr);
   EXPECT_FALSE(built_const->constisnull);
   absl::string_view const_value =
       DatumGetCString(DirectFunctionCall1(jsonb_out, built_const->constvalue));
   EXPECT_EQ(const_value, normalized_val);
 
-    val = zetasql::Value::Null(spangres_datatypes::GetPgJsonbType());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(built_const, pg_jsonb_type->MakePgConst(val));
+    val = googlesql::Value::Null(spangres_datatypes::GetPgJsonbType());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(built_const, pg_jsonb_type->MakePgConst(val));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
 
-  absl::StatusOr<zetasql::Value> gsql_value;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  absl::StatusOr<googlesql::Value> gsql_value;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       gsql_value,
       pg_jsonb_type->MakeGsqlValueFromStringConst(
           absl::StrCat("'", json_val, "'")));
     EXPECT_EQ(gsql_value, spangres_datatypes::CreatePgJsonbValue(json_val));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       gsql_value,
       pg_jsonb_type->MakeGsqlValueFromStringConst("'{}'"));
     EXPECT_EQ(gsql_value, spangres_datatypes::CreatePgJsonbValue("{}"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       gsql_value,
       pg_jsonb_type->MakeGsqlValueFromStringConst("null"));
   EXPECT_TRUE(gsql_value->is_null());
 
   EXPECT_THAT(pg_jsonb_type->MakeGsqlValueFromStringConst("invalid"),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(SpangresTypeTest, PgJsonbArrayMapping) {
@@ -230,11 +230,11 @@ TEST_F(SpangresTypeTest, PgJsonbArrayMapping) {
                   ->AsArray()
                   ->element_type()
                   ->IsExtendedType());
-  EXPECT_EQ(pg_jsonb_array_type->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_jsonb_array_type->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg._jsonb");
   EXPECT_EQ(pg_jsonb_array_type->PostgresTypeOid(), JSONBARRAYOID);
   EXPECT_TRUE(
-      pg_jsonb_array_type->IsSupportedType(zetasql::LanguageOptions()));
+      pg_jsonb_array_type->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_jsonb_array_type->Equals(types::PgJsonbArrayMapping()));
 }
 
@@ -242,35 +242,35 @@ TEST_F(SpangresTypeTest, PgOidMapping) {
   const PostgresTypeMapping* pg_oid_type = types::PgOidMapping();
   const absl::string_view oid_string = "12345";
   const uint32_t oid_value = 12345;
-  EXPECT_TRUE(pg_oid_type->IsSupportedType(zetasql::LanguageOptions()));
-  EXPECT_EQ(pg_oid_type->TypeName(zetasql::PRODUCT_EXTERNAL), "pg.oid");
+  EXPECT_TRUE(pg_oid_type->IsSupportedType(googlesql::LanguageOptions()));
+  EXPECT_EQ(pg_oid_type->TypeName(googlesql::PRODUCT_EXTERNAL), "pg.oid");
   EXPECT_EQ(pg_oid_type->PostgresTypeOid(), OIDOID);
 
-  zetasql::Value val;
+  googlesql::Value val;
     EXPECT_EQ(
         pg_oid_type->MakeGsqlValue(MakeOidConst(oid_string, /*is_null=*/false)),
         spangres_datatypes::CreatePgOidValue(oid_value));
     EXPECT_THAT(pg_oid_type->MakeGsqlValue(MakeOidConst("", /*is_null=*/true)),
-                zetasql_base::testing::IsOkAndHolds(zetasql::Value::Null(
+                googlesql_base::testing::IsOkAndHolds(googlesql::Value::Null(
                     spangres_datatypes::GetPgOidType())));
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(val, spangres_datatypes::CreatePgOidValue(oid_value));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * built_const, pg_oid_type->MakePgConst(val));
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(val, spangres_datatypes::CreatePgOidValue(oid_value));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * built_const, pg_oid_type->MakePgConst(val));
   EXPECT_NE(built_const, nullptr);
   EXPECT_FALSE(built_const->constisnull);
   absl::string_view const_value =
       DatumGetCString(DirectFunctionCall1(oidout, built_const->constvalue));
   EXPECT_EQ(const_value, oid_string);
 
-    val = zetasql::Value::Null(spangres_datatypes::GetPgOidType());
+    val = googlesql::Value::Null(spangres_datatypes::GetPgOidType());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(built_const, pg_oid_type->MakePgConst(val));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(built_const, pg_oid_type->MakePgConst(val));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
 
   EXPECT_THAT(
       pg_oid_type->MakeGsqlValueFromStringConst(oid_string),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kUnimplemented));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 TEST_F(SpangresTypeTest, PgOidArrayMapping) {
@@ -280,10 +280,10 @@ TEST_F(SpangresTypeTest, PgOidArrayMapping) {
                   ->AsArray()
                   ->element_type()
                   ->IsExtendedType());
-  EXPECT_EQ(pg_oid_array_type->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_oid_array_type->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg._oid");
   EXPECT_EQ(pg_oid_array_type->PostgresTypeOid(), OIDARRAYOID);
-  EXPECT_TRUE(pg_oid_array_type->IsSupportedType(zetasql::LanguageOptions()));
+  EXPECT_TRUE(pg_oid_array_type->IsSupportedType(googlesql::LanguageOptions()));
 }
 
 }  // namespace

@@ -38,16 +38,16 @@ namespace backend {
 struct Mod {
   const absl::Span<const KeyColumn* const> key_columns;
   std::vector<std::string> non_key_columns;
-  const std::vector<zetasql::Value> keys;
-  const std::vector<zetasql::Value> new_values;
-  const std::vector<zetasql::Value> old_values;
+  const std::vector<googlesql::Value> keys;
+  const std::vector<googlesql::Value> new_values;
+  const std::vector<googlesql::Value> old_values;
 };
 
 // Each ColumnType stores the name, type, is_primary_key, and ordinal_position
 // information for a column.
 struct ColumnType {
   std::string name;
-  const zetasql::Type* type;
+  const googlesql::Type* type;
   bool is_primary_key;
   int64_t ordinal_position;
 };
@@ -55,8 +55,8 @@ struct ColumnType {
 // Each DataChangeRecord represents one row in change_stream_data_table and will
 // be converted to one WriteOp to be written into the change_stream_data_table.
 struct DataChangeRecord {
-  zetasql::Value partition_token;
-  zetasql::Value commit_timestamp;
+  googlesql::Value partition_token;
+  googlesql::Value commit_timestamp;
   std::string server_transaction_id;
   std::string record_sequence;
   bool is_last_record_in_transaction_in_partition;
@@ -83,14 +83,14 @@ struct ModGroup {
   // tracked non key columns
   std::vector<ColumnType> column_types;
   std::vector<Mod> mods;
-  zetasql::Value partition_token_str;
+  googlesql::Value partition_token_str;
 };
 
 // Group table mods belonging to the same DataChangeRecord into the same
 // ModGroup.
 absl::Status LogTableMod(
     WriteOp op, const ChangeStream* change_stream,
-    zetasql::Value partition_token,
+    googlesql::Value partition_token,
     absl::flat_hash_map<const ChangeStream*, std::vector<DataChangeRecord>>*
         data_change_records_in_transaction_by_change_stream,
     TransactionID transaction_id,
@@ -111,7 +111,8 @@ absl::StatusOr<std::vector<WriteOp>> BuildMutation(
 // Build change stream write_ops.
 absl::StatusOr<std::vector<WriteOp>> BuildChangeStreamWriteOps(
     const Schema* schema, std::vector<WriteOp> buffered_write_ops,
-    ReadOnlyStore* store, TransactionID transaction_id);
+    ReadOnlyStore* store, TransactionID transaction_id,
+    bool exclude_txn_from_change_streams);
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

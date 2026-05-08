@@ -35,7 +35,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
@@ -53,8 +53,8 @@ using ::testing::IsNull;
 using ::testing::Optional;
 using ::testing::Pointee;
 using ::testing::StrEq;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 class RegexpMatchTest : public PgEvaluatorTest {
  protected:
@@ -82,11 +82,11 @@ TEST_F(RegexpMatchTest, ReturnsMatchesSuccessfully) {
 // ReDOS -
 // https://owasp.org/www-community/attacks/Regular_expression_Denial_of_Service_-_ReDoS
 TEST_F(RegexpMatchTest, HandlesReDOSGracefully) {
-  ZETASQL_EXPECT_OK(RegexpMatch(std::string(10000, 'a'), "(a+)+"));
-  ZETASQL_EXPECT_OK(RegexpMatch(std::string(10000, 'a'), "([a-zA-Z]+)*"));
-  ZETASQL_EXPECT_OK(RegexpMatch(std::string(10000, 'a'), "(a|aa)+"));
-  ZETASQL_EXPECT_OK(RegexpMatch(std::string(10000, 'a'), "(a|a?)+"));
-  ZETASQL_EXPECT_OK(RegexpMatch(std::string(10000, 'a'), "(.*a){x} for x \\> 10"));
+  GOOGLESQL_EXPECT_OK(RegexpMatch(std::string(10000, 'a'), "(a+)+"));
+  GOOGLESQL_EXPECT_OK(RegexpMatch(std::string(10000, 'a'), "([a-zA-Z]+)*"));
+  GOOGLESQL_EXPECT_OK(RegexpMatch(std::string(10000, 'a'), "(a|aa)+"));
+  GOOGLESQL_EXPECT_OK(RegexpMatch(std::string(10000, 'a'), "(a|a?)+"));
+  GOOGLESQL_EXPECT_OK(RegexpMatch(std::string(10000, 'a'), "(.*a){x} for x \\> 10"));
 }
 
 TEST_F(RegexpMatchTest, RegressionTestSimpleCases) {

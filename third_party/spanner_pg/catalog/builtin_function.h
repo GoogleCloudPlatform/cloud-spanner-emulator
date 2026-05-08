@@ -35,8 +35,8 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/function_signature.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/function_signature.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 
@@ -45,7 +45,7 @@
 // PostgresFunctionSignature and PostgresFunctionSignatureArguments are used
 // to define a function in the EngineSystemCatalog.
 // AddX methods group the standard builtin functions in the same way as
-// ZetaSQL (see storage/googlesql/common/builtin_function_internal.h)
+// GoogleSQL (see storage/googlesql/common/builtin_function_internal.h)
 // Each EngineSystemCatalog should use the AddX methods to populate its
 // collection of supported functions, add any storage engine specific
 // functions to the collection, and then call
@@ -72,10 +72,10 @@ class PostgresFunctionSignatureArguments {
   // Only explicitly set postgres proc oid for signatures that cannot be
   // validated (variadic signatures).
   // Otherwise, allow the EngineSystemCatalog to validate that the provided
-  // signature is compatible with native PostgreSQL and ZetaSQL before
+  // signature is compatible with native PostgreSQL and GoogleSQL before
   // identifying the proc oid.
   PostgresFunctionSignatureArguments(
-      const zetasql::FunctionSignature& signature,
+      const googlesql::FunctionSignature& signature,
       bool has_mapped_function = true,
       const std::string& explicit_mapped_function_name = "",
       Oid postgres_proc_oid = InvalidOid,
@@ -86,7 +86,7 @@ class PostgresFunctionSignatureArguments {
         postgres_proc_oid_(postgres_proc_oid),
         query_features_names_(query_features_names) {}
 
-  const zetasql::FunctionSignature& signature() const { return signature_; }
+  const googlesql::FunctionSignature& signature() const { return signature_; }
   bool has_mapped_function() const { return has_mapped_function_; }
   const std::string& explicit_mapped_function_name() const {
     return explicit_mapped_function_name_;
@@ -100,7 +100,7 @@ class PostgresFunctionSignatureArguments {
   }
 
  private:
-  zetasql::FunctionSignature signature_;
+  googlesql::FunctionSignature signature_;
   bool has_mapped_function_;
   // If the mapped function name for this signature is different from the
   // general mapped function name in PostgresFunctionArguments.
@@ -126,7 +126,7 @@ class PostgresFunctionArguments {
       absl::string_view mapped_function_name,
       const std::vector<PostgresFunctionSignatureArguments>&
           signature_arguments,
-      zetasql::Function::Mode mode = zetasql::Function::SCALAR,
+      googlesql::Function::Mode mode = googlesql::Function::SCALAR,
       absl::string_view postgres_namespace = "pg_catalog",
       std::vector<std::string> query_features_names = {})
       : postgres_function_name_(postgres_function_name),
@@ -154,7 +154,7 @@ class PostgresFunctionArguments {
     signature_arguments_.push_back(signature);
   }
 
-  zetasql::Function::Mode mode() const { return mode_; }
+  googlesql::Function::Mode mode() const { return mode_; }
 
   const std::string& postgres_namespace() const { return postgres_namespace_; }
 
@@ -166,7 +166,7 @@ class PostgresFunctionArguments {
   std::string postgres_function_name_;
   std::string mapped_function_name_;
   std::vector<PostgresFunctionSignatureArguments> signature_arguments_;
-  zetasql::Function::Mode mode_;
+  googlesql::Function::Mode mode_;
   std::string postgres_namespace_;
   // The query feature names that must be enabled so that this function is
   // enabled.

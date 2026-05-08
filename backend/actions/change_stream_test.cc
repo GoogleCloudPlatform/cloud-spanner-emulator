@@ -23,14 +23,14 @@
 #include <vector>
 
 #include "google/protobuf/descriptor.pb.h"
-#include "zetasql/public/json_value.h"
-#include "zetasql/public/numeric_value.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/json_value.h"
+#include "googlesql/public/numeric_value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/log.h"
@@ -54,20 +54,20 @@ namespace emulator {
 namespace backend {
 namespace {
 using JSON = ::nlohmann::json;
-using zetasql::JSONValue;
-using zetasql::NumericValue;
-using zetasql::values::Bool;
-using zetasql::values::Double;
-using zetasql::values::DoubleArray;
-using zetasql::values::Float;
-using zetasql::values::FloatArray;
-using zetasql::values::Int64;
-using zetasql::values::Json;
-using zetasql::values::JsonArray;
-using zetasql::values::Numeric;
-using zetasql::values::NumericArray;
-using zetasql::values::Proto;
-using zetasql::values::String;
+using googlesql::JSONValue;
+using googlesql::NumericValue;
+using googlesql::values::Bool;
+using googlesql::values::Double;
+using googlesql::values::DoubleArray;
+using googlesql::values::Float;
+using googlesql::values::FloatArray;
+using googlesql::values::Int64;
+using googlesql::values::Json;
+using googlesql::values::JsonArray;
+using googlesql::values::Numeric;
+using googlesql::values::NumericArray;
+using googlesql::values::Proto;
+using googlesql::values::String;
 
 class ChangeStreamTest : public test::ActionsTest {
  public:
@@ -89,6 +89,13 @@ class ChangeStreamTest : public test::ActionsTest {
                             ) PRIMARY KEY (int64_col)
                           )",
                         R"(
+                            CREATE TABLE TestTable3 (
+                              int64_col INT64 NOT NULL,
+                              string_col STRING(MAX),
+                              another_string_col STRING(MAX)
+                            ) PRIMARY KEY (int64_col)
+                          )",
+                        R"(
                             CREATE CHANGE STREAM ChangeStream_All FOR ALL OPTIONS ( value_capture_type = 'NEW_VALUES' )
                         )",
                         R"(
@@ -99,6 +106,9 @@ class ChangeStreamTest : public test::ActionsTest {
                         )",
                         R"(
                             CREATE CHANGE STREAM ChangeStream_TestTable2 FOR TestTable2 OPTIONS ( value_capture_type = 'NEW_VALUES' )
+                        )",
+                        R"(
+                            CREATE CHANGE STREAM ChangeStream_ExcludeTxn FOR TestTable3 OPTIONS ( allow_txn_exclusion = true )
                         )"},
                     &type_factory_)
                     .value()),
@@ -137,6 +147,7 @@ class ChangeStreamTest : public test::ActionsTest {
                 .value()),
         table_(schema_->FindTable("TestTable")),
         table2_(schema_->FindTable("TestTable2")),
+        table3_(schema_->FindTable("TestTable3")),
         float_table_(float_schema_->FindTable("FloatTable")),
         pg_table_(pg_schema_->FindTable("entended_pg_datatypes")),
         base_columns_(table_->columns()),
@@ -149,13 +160,15 @@ class ChangeStreamTest : public test::ActionsTest {
         change_stream3_(
             schema_->FindChangeStream("ChangeStream_TestTable2KeyOnly")),
         change_stream4_(schema_->FindChangeStream("ChangeStream_TestTable2")),
+        change_stream_exclude_txn_(
+            schema_->FindChangeStream("ChangeStream_ExcludeTxn")),
         float_change_stream_(
             float_schema_->FindChangeStream("ChangeStream_FloatTable")),
         pg_change_stream_(pg_schema_->FindChangeStream("pg_stream")) {}
 
  protected:
   // Test components.
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_;
   std::unique_ptr<const Schema> float_schema_;
   std::unique_ptr<const Schema> pg_schema_;
@@ -163,6 +176,7 @@ class ChangeStreamTest : public test::ActionsTest {
   // Test variables.
   const Table* table_;
   const Table* table2_;
+  const Table* table3_;
   const Table* float_table_;
   const Table* pg_table_;
   absl::Span<const Column* const> base_columns_;
@@ -173,6 +187,7 @@ class ChangeStreamTest : public test::ActionsTest {
   const ChangeStream* change_stream2_;
   const ChangeStream* change_stream3_;
   const ChangeStream* change_stream4_;
+  const ChangeStream* change_stream_exclude_txn_;
   const ChangeStream* float_change_stream_;
   const ChangeStream* pg_change_stream_;
   std::vector<const Column*> key_and_another_string_col_table_1_ = {
@@ -196,10 +211,10 @@ void set_up_partition_token_for_change_stream_partition_table(
                         ->column());
   columns.push_back(
       change_stream->change_stream_partition_table()->FindColumn("end_time"));
-  const std::vector<zetasql::Value> values = {
-      zetasql::Value::String("11111"), zetasql::Value::NullTimestamp()};
+  const std::vector<googlesql::Value> values = {
+      googlesql::Value::String("11111"), googlesql::Value::NullTimestamp()};
   // Insert 1st partition to change_stream2_'s partition table
-  ZETASQL_EXPECT_OK(store->Insert(change_stream->change_stream_partition_table(),
+  GOOGLESQL_EXPECT_OK(store->Insert(change_stream->change_stream_partition_table(),
                           Key({String("11111")}), columns, values));
 }
 
@@ -211,9 +226,10 @@ TEST_F(ChangeStreamTest, AddOneInsertOpAndCheckResultWriteOpContent) {
   buffered_write_ops.push_back(
       Insert(table_, Key({Int64(1)}), base_columns_,
              {Int64(1), String("value"), String("value2")}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<WriteOp> change_stream_write_ops,
-      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1));
+      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1,
+                                /*exclude_txn_from_change_streams=*/false));
   // Verify change stream entry is added to the transaction buffer.
   ASSERT_EQ(change_stream_write_ops.size(), 1);
   WriteOp op = change_stream_write_ops[0];
@@ -230,20 +246,20 @@ TEST_F(ChangeStreamTest, AddOneInsertOpAndCheckResultWriteOpContent) {
   ASSERT_EQ(operation->values.size(), 19);
   // Verify values in the rebuilt InsertOp are correct
   // Verify partition_token
-  ASSERT_EQ(operation->values[0], zetasql::Value::String("11111"));
+  ASSERT_EQ(operation->values[0], googlesql::Value::String("11111"));
   // Verify record_sequence
-  ASSERT_EQ(operation->values[3], zetasql::Value(String("00000000")));
+  ASSERT_EQ(operation->values[3], googlesql::Value(String("00000000")));
   // Verify is_last_record_in_transaction_in_partition
-  ASSERT_EQ(operation->values[4], zetasql::Value(Bool(true)));
+  ASSERT_EQ(operation->values[4], googlesql::Value(Bool(true)));
   // Verify table_name
-  ASSERT_EQ(operation->values[5], zetasql::Value(String("TestTable")));
+  ASSERT_EQ(operation->values[5], googlesql::Value(String("TestTable")));
   // Verify column_types_name
   ASSERT_EQ(operation->values[6],
-            zetasql::values::Array(
-                zetasql::types::StringArrayType(),
-                {zetasql::Value(String("int64_col")),
-                 zetasql::Value(String("string_col")),
-                 zetasql::Value(String("another_string_col"))}));
+            googlesql::values::Array(
+                googlesql::types::StringArrayType(),
+                {googlesql::Value(String("int64_col")),
+                 googlesql::Value(String("string_col")),
+                 googlesql::Value(String("another_string_col"))}));
   // Verify column_types_type
   JSON col_1_type;
   col_1_type["code"] = "INT64";
@@ -253,45 +269,45 @@ TEST_F(ChangeStreamTest, AddOneInsertOpAndCheckResultWriteOpContent) {
   col_3_type["code"] = "STRING";
   ASSERT_EQ(
       operation->values[7],
-      zetasql::values::Array(zetasql::types::StringArrayType(),
-                               {zetasql::Value(String(col_1_type.dump())),
-                                zetasql::Value(String(col_2_type.dump())),
-                                zetasql::Value(String(col_3_type.dump()))}));
+      googlesql::values::Array(googlesql::types::StringArrayType(),
+                               {googlesql::Value(String(col_1_type.dump())),
+                                googlesql::Value(String(col_2_type.dump())),
+                                googlesql::Value(String(col_3_type.dump()))}));
   // Verify column_types_is_primary_key
   ASSERT_EQ(operation->values[8],
-            zetasql::values::Array(
-                zetasql::types::BoolArrayType(),
-                {zetasql::Value(Bool(true)), zetasql::Value(Bool(false)),
-                 zetasql::Value(Bool(false))}));
+            googlesql::values::Array(
+                googlesql::types::BoolArrayType(),
+                {googlesql::Value(Bool(true)), googlesql::Value(Bool(false)),
+                 googlesql::Value(Bool(false))}));
   // Verify column_types_ordinal_position
   ASSERT_EQ(operation->values[9],
-            zetasql::values::Array(
-                zetasql::types::Int64ArrayType(),
-                {zetasql::Value(Int64(1)), zetasql::Value(Int64(2)),
-                 zetasql::Value(Int64(3))}));
+            googlesql::values::Array(
+                googlesql::types::Int64ArrayType(),
+                {googlesql::Value(Int64(1)), googlesql::Value(Int64(2)),
+                 googlesql::Value(Int64(3))}));
   // Verify mods
-  zetasql::Value mod_keys = operation->values[10];
+  googlesql::Value mod_keys = operation->values[10];
   ASSERT_EQ(mod_keys.element(0),
-            zetasql::Value(String("{\"int64_col\":\"1\"}")));
-  zetasql::Value mod_new_values = operation->values[11];
+            googlesql::Value(String("{\"int64_col\":\"1\"}")));
+  googlesql::Value mod_new_values = operation->values[11];
   ASSERT_EQ(mod_new_values.element(0),
-            zetasql::Value(
+            googlesql::Value(
                 String("{\"another_string_col\":\"value2\",\"string_col\":"
                        "\"value\"}")));
-  zetasql::Value mod_old_values = operation->values[12];
-  ASSERT_EQ(mod_old_values.element(0), zetasql::Value(String("{}")));
+  googlesql::Value mod_old_values = operation->values[12];
+  ASSERT_EQ(mod_old_values.element(0), googlesql::Value(String("{}")));
   // Verify mod_type
-  ASSERT_EQ(operation->values[13], zetasql::Value(String("INSERT")));
+  ASSERT_EQ(operation->values[13], googlesql::Value(String("INSERT")));
   // Verify value_capture_type
-  ASSERT_EQ(operation->values[14], zetasql::Value(String("NEW_VALUES")));
+  ASSERT_EQ(operation->values[14], googlesql::Value(String("NEW_VALUES")));
   // Verify number_of_records_in_transaction
-  ASSERT_EQ(operation->values[15], zetasql::Value(Int64(1)));
+  ASSERT_EQ(operation->values[15], googlesql::Value(Int64(1)));
   // Verify number_of_partitions_in_transaction
-  ASSERT_EQ(operation->values[16], zetasql::Value(Int64(1)));
+  ASSERT_EQ(operation->values[16], googlesql::Value(Int64(1)));
   // Verify transaction_tag
-  ASSERT_EQ(operation->values[17], zetasql::Value(String("")));
+  ASSERT_EQ(operation->values[17], googlesql::Value(String("")));
   // Verify is_system_transaction
-  ASSERT_EQ(operation->values[18], zetasql::Value(Bool(false)));
+  ASSERT_EQ(operation->values[18], googlesql::Value(Bool(false)));
 }
 
 TEST_F(ChangeStreamTest, AddTwoInsertForDiffSetCols) {
@@ -310,9 +326,10 @@ TEST_F(ChangeStreamTest, AddTwoInsertForDiffSetCols) {
   buffered_write_ops.push_back(
       Insert(table_, Key({Int64(2)}), base_columns_,
              {Int64(2), String("value"), String("value2")}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<WriteOp> change_stream_write_ops,
-      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1));
+      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1,
+                                /*exclude_txn_from_change_streams=*/false));
   // Verify change stream entry is added to the transaction buffer.
   ASSERT_EQ(change_stream_write_ops.size(), 1);
 }
@@ -331,9 +348,10 @@ TEST_F(ChangeStreamTest, AddTwoInsertDiffSetsNonKeyTrackedCols) {
                                               table_->FindColumn("string_col")};
   buffered_write_ops.push_back(Insert(table_, Key({Int64(2)}), base_columns2,
                                       {Int64(2), String("value")}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<WriteOp> change_stream_write_ops,
-      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1));
+      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1,
+                                /*exclude_txn_from_change_streams=*/false));
   // Verify change stream entry is added to the transaction buffer.
   ASSERT_EQ(change_stream_write_ops.size(), 1);
 }
@@ -363,9 +381,10 @@ TEST_F(ChangeStreamTest, AddMultipleDataChangeRecordsToChangeStreamDataTable) {
              {Int64(3), String("value_row3"), String("value2_row3")}));
   buffered_write_ops.push_back(Delete(table_, Key({Int64(1)})));
   buffered_write_ops.push_back(Delete(table_, Key({Int64(2)})));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<WriteOp> change_stream_write_ops,
-      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1));
+      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1,
+                                /*exclude_txn_from_change_streams=*/false));
   // Verify the number of change stream entries is added to the transaction
   // buffer.
   // Insert, Insert, Update, Update, Insert, Delete, Delete -> 4 WriteOps
@@ -376,20 +395,20 @@ TEST_F(ChangeStreamTest, AddMultipleDataChangeRecordsToChangeStreamDataTable) {
   auto* operation = std::get_if<InsertOp>(&op);
   ASSERT_NE(operation, nullptr);
   // Verify mod_type
-  ASSERT_EQ(operation->values[13], zetasql::Value(String("INSERT")));
+  ASSERT_EQ(operation->values[13], googlesql::Value(String("INSERT")));
   // column_type_names
-  ASSERT_EQ(operation->values[3], zetasql::Value(String("00000000")));
+  ASSERT_EQ(operation->values[3], googlesql::Value(String("00000000")));
   // Verify is_last_record_in_transaction_in_partition
-  ASSERT_EQ(operation->values[4], zetasql::Value(Bool(false)));
+  ASSERT_EQ(operation->values[4], googlesql::Value(Bool(false)));
   // Verify number_of_records_in_transaction
-  ASSERT_EQ(operation->values[15], zetasql::Value(Int64(4)));
+  ASSERT_EQ(operation->values[15], googlesql::Value(Int64(4)));
   // Verify the column_types of the 1st WriteOp (INSERT mod_type)
   ASSERT_EQ(operation->values[6],
-            zetasql::values::Array(
-                zetasql::types::StringArrayType(),
-                {zetasql::Value(String("int64_col")),
-                 zetasql::Value(String("string_col")),
-                 zetasql::Value(String("another_string_col"))}));
+            googlesql::values::Array(
+                googlesql::types::StringArrayType(),
+                {googlesql::Value(String("int64_col")),
+                 googlesql::Value(String("string_col")),
+                 googlesql::Value(String("another_string_col"))}));
   // Verify column_types_type
   JSON col_1_type;
   col_1_type["code"] = "INT64";
@@ -399,153 +418,153 @@ TEST_F(ChangeStreamTest, AddMultipleDataChangeRecordsToChangeStreamDataTable) {
   col_3_type["code"] = "STRING";
   ASSERT_EQ(
       operation->values[7],
-      zetasql::values::Array(zetasql::types::StringArrayType(),
-                               {zetasql::Value(String(col_1_type.dump())),
-                                zetasql::Value(String(col_2_type.dump())),
-                                zetasql::Value(String(col_3_type.dump()))}));
+      googlesql::values::Array(googlesql::types::StringArrayType(),
+                               {googlesql::Value(String(col_1_type.dump())),
+                                googlesql::Value(String(col_2_type.dump())),
+                                googlesql::Value(String(col_3_type.dump()))}));
   ASSERT_EQ(operation->values[8],
-            zetasql::values::Array(
-                zetasql::types::BoolArrayType(),
-                {zetasql::Value(Bool(true)), zetasql::Value(Bool(false)),
-                 zetasql::Value(Bool(false))}));
+            googlesql::values::Array(
+                googlesql::types::BoolArrayType(),
+                {googlesql::Value(Bool(true)), googlesql::Value(Bool(false)),
+                 googlesql::Value(Bool(false))}));
   // Verify the mods of the 1st WriteOp (INSERT mod_type)
-  zetasql::Value mod_keys = operation->values[10];
+  googlesql::Value mod_keys = operation->values[10];
   ASSERT_EQ(mod_keys.num_elements(), 2);
   ASSERT_EQ(mod_keys.element(0),
-            zetasql::Value(String("{\"int64_col\":\"1\"}")));
+            googlesql::Value(String("{\"int64_col\":\"1\"}")));
   ASSERT_EQ(mod_keys.element(1),
-            zetasql::Value(String("{\"int64_col\":\"2\"}")));
-  zetasql::Value mod_new_values = operation->values[11];
+            googlesql::Value(String("{\"int64_col\":\"2\"}")));
+  googlesql::Value mod_new_values = operation->values[11];
   ASSERT_EQ(mod_new_values.element(0),
-            zetasql::Value(
+            googlesql::Value(
                 String("{\"another_string_col\":\"value2\",\"string_col\":"
                        "\"value\"}")));
   ASSERT_EQ(mod_new_values.element(1),
-            zetasql::Value(String("{\"another_string_col\":\"value2_row2\","
+            googlesql::Value(String("{\"another_string_col\":\"value2_row2\","
                                     "\"string_col\":\"value_row2\"}")));
-  zetasql::Value mod_old_values = operation->values[12];
-  ASSERT_EQ(mod_old_values.element(0), zetasql::Value(String("{}")));
-  ASSERT_EQ(mod_old_values.element(1), zetasql::Value(String("{}")));
+  googlesql::Value mod_old_values = operation->values[12];
+  ASSERT_EQ(mod_old_values.element(0), googlesql::Value(String("{}")));
+  ASSERT_EQ(mod_old_values.element(1), googlesql::Value(String("{}")));
 
   // Verify the 2nd received WriteOp (UPDATE mod_type)
   op = change_stream_write_ops[1];
   auto* operation2 = std::get_if<InsertOp>(&op);
   ASSERT_NE(operation2, nullptr);
-  ASSERT_EQ(operation2->values[3], zetasql::Value(String("00000001")));
+  ASSERT_EQ(operation2->values[3], googlesql::Value(String("00000001")));
   // Verify is_last_record_in_transaction_in_partition
-  ASSERT_EQ(operation2->values[4], zetasql::Value(Bool(false)));
+  ASSERT_EQ(operation2->values[4], googlesql::Value(Bool(false)));
   // Verify mod_type
-  ASSERT_EQ(operation2->values[13], zetasql::Value(String("UPDATE")));
+  ASSERT_EQ(operation2->values[13], googlesql::Value(String("UPDATE")));
   // Verify number_of_records_in_transaction
-  ASSERT_EQ(operation2->values[15], zetasql::Value(Int64(4)));
+  ASSERT_EQ(operation2->values[15], googlesql::Value(Int64(4)));
   // Verify the column_types_name of the 2nd WriteOp (UPDATE mod_type)
   ASSERT_EQ(operation2->values[6],
-            zetasql::values::Array(
-                zetasql::types::StringArrayType(),
-                {zetasql::Value(String("int64_col")),
-                 zetasql::Value(String("string_col")),
-                 zetasql::Value(String("another_string_col"))}));
+            googlesql::values::Array(
+                googlesql::types::StringArrayType(),
+                {googlesql::Value(String("int64_col")),
+                 googlesql::Value(String("string_col")),
+                 googlesql::Value(String("another_string_col"))}));
   // Verify column_types_type
   ASSERT_EQ(
       operation2->values[7],
-      zetasql::values::Array(zetasql::types::StringArrayType(),
-                               {zetasql::Value(String(col_1_type.dump())),
-                                zetasql::Value(String(col_2_type.dump())),
-                                zetasql::Value(String(col_3_type.dump()))}));
+      googlesql::values::Array(googlesql::types::StringArrayType(),
+                               {googlesql::Value(String(col_1_type.dump())),
+                                googlesql::Value(String(col_2_type.dump())),
+                                googlesql::Value(String(col_3_type.dump()))}));
   // Verify column_types_is_primary_key
   ASSERT_EQ(operation2->values[8],
-            zetasql::values::Array(
-                zetasql::types::BoolArrayType(),
-                {zetasql::Value(Bool(true)), zetasql::Value(Bool(false)),
-                 zetasql::Value(Bool(false))}));
+            googlesql::values::Array(
+                googlesql::types::BoolArrayType(),
+                {googlesql::Value(Bool(true)), googlesql::Value(Bool(false)),
+                 googlesql::Value(Bool(false))}));
   // Verify column_types_ordinal_position
   ASSERT_EQ(operation2->values[9],
-            zetasql::values::Array(
-                zetasql::types::Int64ArrayType(),
-                {zetasql::Value(Int64(1)), zetasql::Value(Int64(2)),
-                 zetasql::Value(Int64(3))}));
+            googlesql::values::Array(
+                googlesql::types::Int64ArrayType(),
+                {googlesql::Value(Int64(1)), googlesql::Value(Int64(2)),
+                 googlesql::Value(Int64(3))}));
   // Verify the mods of the 2nd WriteOp (UPDATE mod_type)
-  zetasql::Value mod_2_keys = operation->values[10];
+  googlesql::Value mod_2_keys = operation->values[10];
   ASSERT_EQ(mod_2_keys.num_elements(), 2);
   ASSERT_EQ(mod_2_keys.element(0),
-            zetasql::Value(String("{\"int64_col\":\"1\"}")));
+            googlesql::Value(String("{\"int64_col\":\"1\"}")));
   ASSERT_EQ(mod_2_keys.element(1),
-            zetasql::Value(String("{\"int64_col\":\"2\"}")));
-  zetasql::Value mod_2_new_values = operation->values[11];
+            googlesql::Value(String("{\"int64_col\":\"2\"}")));
+  googlesql::Value mod_2_new_values = operation->values[11];
   ASSERT_EQ(mod_2_new_values.element(0),
-            zetasql::Value(
+            googlesql::Value(
                 String("{\"another_string_col\":\"updated_value2\",\"string_"
                        "col\":\"updated_value\"}")));
   ASSERT_EQ(
       mod_2_new_values.element(1),
-      zetasql::Value(String("{\"another_string_col\":\"updated_value2_row2\","
+      googlesql::Value(String("{\"another_string_col\":\"updated_value2_row2\","
                               "\"string_col\":\"updated_value_row2\"}")));
-  zetasql::Value mod_2_old_values = operation->values[12];
-  ASSERT_EQ(mod_2_old_values.element(0), zetasql::Value(String("{}")));
-  ASSERT_EQ(mod_2_old_values.element(1), zetasql::Value(String("{}")));
+  googlesql::Value mod_2_old_values = operation->values[12];
+  ASSERT_EQ(mod_2_old_values.element(0), googlesql::Value(String("{}")));
+  ASSERT_EQ(mod_2_old_values.element(1), googlesql::Value(String("{}")));
 
   // Verify the 3rd received WriteOp (INSERT mod_type)
   op = change_stream_write_ops[2];
   auto* operation3 = std::get_if<InsertOp>(&op);
   ASSERT_NE(operation3, nullptr);
-  ASSERT_EQ(operation3->values[13], zetasql::Value(String("INSERT")));
-  ASSERT_EQ(operation->values[3], zetasql::Value(String("00000002")));
+  ASSERT_EQ(operation3->values[13], googlesql::Value(String("INSERT")));
+  ASSERT_EQ(operation->values[3], googlesql::Value(String("00000002")));
   // Verify is_last_record_in_transaction_in_partition
-  ASSERT_EQ(operation3->values[4], zetasql::Value(Bool(false)));
+  ASSERT_EQ(operation3->values[4], googlesql::Value(Bool(false)));
   // Verify number_of_records_in_transaction
-  ASSERT_EQ(operation3->values[15], zetasql::Value(Int64(4)));
+  ASSERT_EQ(operation3->values[15], googlesql::Value(Int64(4)));
 
   // Verify the 4th(last) received WriteOp is DeleteOp
   op = change_stream_write_ops[3];
   auto operation4 = std::get_if<InsertOp>(&op);
   ASSERT_NE(operation4, nullptr);
-  ASSERT_EQ(operation4->values[3], zetasql::Value(String("00000003")));
+  ASSERT_EQ(operation4->values[3], googlesql::Value(String("00000003")));
   // Verify is_last_record_in_transaction_in_partition
-  ASSERT_EQ(operation4->values[4], zetasql::Value(Bool(true)));
+  ASSERT_EQ(operation4->values[4], googlesql::Value(Bool(true)));
   // Verify mod_type
-  ASSERT_EQ(operation4->values[13], zetasql::Value(String("DELETE")));
+  ASSERT_EQ(operation4->values[13], googlesql::Value(String("DELETE")));
   // Verify number_of_records_in_transaction
-  ASSERT_EQ(operation4->values[15], zetasql::Value(Int64(4)));
+  ASSERT_EQ(operation4->values[15], googlesql::Value(Int64(4)));
 
   // Verify the column_types of the 4th WriteOp (DELETE mod_type)
   ASSERT_EQ(operation4->values[6],
-            zetasql::values::Array(
-                zetasql::types::StringArrayType(),
-                {zetasql::Value(String("int64_col")),
-                 zetasql::Value(String("string_col")),
-                 zetasql::Value(String("another_string_col"))}));
+            googlesql::values::Array(
+                googlesql::types::StringArrayType(),
+                {googlesql::Value(String("int64_col")),
+                 googlesql::Value(String("string_col")),
+                 googlesql::Value(String("another_string_col"))}));
   // Verify column_types_type
   ASSERT_EQ(
       operation4->values[7],
-      zetasql::values::Array(zetasql::types::StringArrayType(),
-                               {zetasql::Value(String(col_1_type.dump())),
-                                zetasql::Value(String(col_2_type.dump())),
-                                zetasql::Value(String(col_3_type.dump()))}));
+      googlesql::values::Array(googlesql::types::StringArrayType(),
+                               {googlesql::Value(String(col_1_type.dump())),
+                                googlesql::Value(String(col_2_type.dump())),
+                                googlesql::Value(String(col_3_type.dump()))}));
   // Verify column_types_is_primary_key
   ASSERT_EQ(operation4->values[8],
-            zetasql::values::Array(
-                zetasql::types::BoolArrayType(),
-                {zetasql::Value(Bool(true)), zetasql::Value(Bool(false)),
-                 zetasql::Value(Bool(false))}));
+            googlesql::values::Array(
+                googlesql::types::BoolArrayType(),
+                {googlesql::Value(Bool(true)), googlesql::Value(Bool(false)),
+                 googlesql::Value(Bool(false))}));
   // Verify column_types_ordinal_position
   ASSERT_EQ(operation4->values[9],
-            zetasql::values::Array(
-                zetasql::types::Int64ArrayType(),
-                {zetasql::Value(Int64(1)), zetasql::Value(Int64(2)),
-                 zetasql::Value(Int64(3))}));
+            googlesql::values::Array(
+                googlesql::types::Int64ArrayType(),
+                {googlesql::Value(Int64(1)), googlesql::Value(Int64(2)),
+                 googlesql::Value(Int64(3))}));
   // Verify the mods of the 4th WriteOp (DELETE mod_type)
-  zetasql::Value mod_4_keys = operation4->values[10];
+  googlesql::Value mod_4_keys = operation4->values[10];
   ASSERT_EQ(mod_4_keys.num_elements(), 2);
   ASSERT_EQ(mod_4_keys.element(0),
-            zetasql::Value(String("{\"int64_col\":\"1\"}")));
+            googlesql::Value(String("{\"int64_col\":\"1\"}")));
   ASSERT_EQ(mod_4_keys.element(1),
-            zetasql::Value(String("{\"int64_col\":\"2\"}")));
-  zetasql::Value mod_4_new_values = operation4->values[11];
-  ASSERT_EQ(mod_4_new_values.element(0), zetasql::Value(String("{}")));
-  ASSERT_EQ(mod_4_new_values.element(1), zetasql::Value(String("{}")));
-  zetasql::Value mod_4_old_values = operation4->values[12];
-  ASSERT_EQ(mod_4_old_values.element(0), zetasql::Value(String("{}")));
-  ASSERT_EQ(mod_4_old_values.element(1), zetasql::Value(String("{}")));
+            googlesql::Value(String("{\"int64_col\":\"2\"}")));
+  googlesql::Value mod_4_new_values = operation4->values[11];
+  ASSERT_EQ(mod_4_new_values.element(0), googlesql::Value(String("{}")));
+  ASSERT_EQ(mod_4_new_values.element(1), googlesql::Value(String("{}")));
+  googlesql::Value mod_4_old_values = operation4->values[12];
+  ASSERT_EQ(mod_4_old_values.element(0), googlesql::Value(String("{}")));
+  ASSERT_EQ(mod_4_old_values.element(1), googlesql::Value(String("{}")));
 }
 
 // Insert to table1, Insert to table2, Insert to table1 -> 3 DataChangeRecords
@@ -560,30 +579,30 @@ TEST_F(ChangeStreamTest, AddWriteOpForDiffUserTablesForSameChangeStream) {
   // Insert base table entry to TestTable.
   ASSERT_THAT(LogTableMod(Insert(table_, Key({Int64(1)}), base_columns_,
                                  {Int64(1), String("value"), String("value2")}),
-                          change_stream_, zetasql::Value::String("11111"),
+                          change_stream_, googlesql::Value::String("11111"),
                           &data_change_records_in_transaction_by_change_stream,
                           1, &last_mod_group_by_change_stream, store()),
-              ::zetasql_base::testing::IsOk());
+              ::googlesql_base::testing::IsOk());
   // Insert base table entry to TestTable2.
   ASSERT_THAT(LogTableMod(Insert(table2_, Key({Int64(1)}),
                                  base_columns_table_2_all_col_,
                                  {Int64(1), String("value"), String("value2")}),
-                          change_stream_, zetasql::Value::String("11111"),
+                          change_stream_, googlesql::Value::String("11111"),
                           &data_change_records_in_transaction_by_change_stream,
                           1, &last_mod_group_by_change_stream, store()),
-              ::zetasql_base::testing::IsOk());
+              ::googlesql_base::testing::IsOk());
   // Insert base table entry to TestTable.
   ASSERT_THAT(LogTableMod(Insert(table_, Key({Int64(2)}), base_columns_,
                                  {Int64(2), String("value_row2"),
                                   String("value2_row2")}),
-                          change_stream_, zetasql::Value::String("11111"),
+                          change_stream_, googlesql::Value::String("11111"),
                           &data_change_records_in_transaction_by_change_stream,
                           1, &last_mod_group_by_change_stream, store()),
-              ::zetasql_base::testing::IsOk());
+              ::googlesql_base::testing::IsOk());
 
   // Set number_of_records_in_transaction in each DataChangeRecord after
   // finishing processing all operations
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<WriteOp> write_ops,
       BuildMutation(&data_change_records_in_transaction_by_change_stream, 1,
                     &last_mod_group_by_change_stream));
@@ -593,15 +612,15 @@ TEST_F(ChangeStreamTest, AddWriteOpForDiffUserTablesForSameChangeStream) {
   WriteOp op = write_ops[0];
   InsertOp* insert_op = std::get_if<InsertOp>(&op);
   ASSERT_NE(insert_op, nullptr);
-  EXPECT_EQ(insert_op->values[5], zetasql::Value(String("TestTable")));
+  EXPECT_EQ(insert_op->values[5], googlesql::Value(String("TestTable")));
   op = write_ops[1];
   insert_op = std::get_if<InsertOp>(&op);
   ASSERT_NE(insert_op, nullptr);
-  EXPECT_EQ(insert_op->values[5], zetasql::Value(String("TestTable2")));
+  EXPECT_EQ(insert_op->values[5], googlesql::Value(String("TestTable2")));
   op = write_ops[2];
   insert_op = std::get_if<InsertOp>(&op);
   ASSERT_NE(insert_op, nullptr);
-  EXPECT_EQ(insert_op->values[5], zetasql::Value(String("TestTable")));
+  EXPECT_EQ(insert_op->values[5], googlesql::Value(String("TestTable")));
 }
 
 // Update table1(another_string_col), Update table1(string_col), Update
@@ -618,29 +637,29 @@ TEST_F(ChangeStreamTest, AddWriteOpForDiffNonKeyColsForSameChangeStream) {
   ASSERT_THAT(LogTableMod(Update(table_, Key({Int64(1)}),
                                  key_and_another_string_col_table_1_,
                                  {Int64(1), String("another_string_value1")}),
-                          change_stream_, zetasql::Value::String("11111"),
+                          change_stream_, googlesql::Value::String("11111"),
                           &data_change_records_in_transaction_by_change_stream,
                           1, &last_mod_group_by_change_stream, store()),
-              ::zetasql_base::testing::IsOk());
+              ::googlesql_base::testing::IsOk());
   // Insert base table entry to TestTable2.
   ASSERT_THAT(
       LogTableMod(Update(table_, Key({Int64(1)}), key_and_string_col_table_1_,
                          {Int64(1), String("string_value1")}),
-                  change_stream_, zetasql::Value::String("11111"),
+                  change_stream_, googlesql::Value::String("11111"),
                   &data_change_records_in_transaction_by_change_stream, 1,
                   &last_mod_group_by_change_stream, store()),
-      ::zetasql_base::testing::IsOk());
+      ::googlesql_base::testing::IsOk());
   // Insert base table entry to TestTable.
   ASSERT_THAT(LogTableMod(Update(table_, Key({Int64(2)}),
                                  key_and_another_string_col_table_1_,
                                  {Int64(2), String("another_string_value2")}),
-                          change_stream_, zetasql::Value::String("11111"),
+                          change_stream_, googlesql::Value::String("11111"),
                           &data_change_records_in_transaction_by_change_stream,
                           1, &last_mod_group_by_change_stream, store()),
-              ::zetasql_base::testing::IsOk());
+              ::googlesql_base::testing::IsOk());
   // Set number_of_records_in_transaction in each DataChangeRecord after
   // finishing processing all operations
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<WriteOp> write_ops,
       BuildMutation(&data_change_records_in_transaction_by_change_stream, 1,
                     &last_mod_group_by_change_stream));
@@ -666,34 +685,34 @@ TEST_F(ChangeStreamTest, AddWriteOpForDifferentChangeStreams) {
   ASSERT_THAT(
       LogTableMod(Insert(table2_, Key({Int64(1)}), key_and_string_col_table_2_,
                          {Int64(1), String("string_value1")}),
-                  change_stream_, zetasql::Value::String("11111"),
+                  change_stream_, googlesql::Value::String("11111"),
                   &data_change_records_in_transaction_by_change_stream, 1,
                   &last_mod_group_by_change_stream, store()),
-      ::zetasql_base::testing::IsOk());
+      ::googlesql_base::testing::IsOk());
   ASSERT_THAT(
       LogTableMod(Insert(table2_, Key({Int64(2)}), key_and_string_col_table_2_,
                          {Int64(2), String("string_value2")}),
-                  change_stream2_, zetasql::Value::String("11111"),
+                  change_stream2_, googlesql::Value::String("11111"),
                   &data_change_records_in_transaction_by_change_stream, 1,
                   &last_mod_group_by_change_stream, store()),
-      ::zetasql_base::testing::IsOk());
+      ::googlesql_base::testing::IsOk());
   ASSERT_THAT(
       LogTableMod(Insert(table2_, Key({Int64(1)}), key_and_string_col_table_2_,
                          {Int64(3), String("string_value3")}),
-                  change_stream_, zetasql::Value::String("11111"),
+                  change_stream_, googlesql::Value::String("11111"),
                   &data_change_records_in_transaction_by_change_stream, 1,
                   &last_mod_group_by_change_stream, store()),
-      ::zetasql_base::testing::IsOk());
+      ::googlesql_base::testing::IsOk());
   ASSERT_THAT(LogTableMod(Insert(table2_, Key({Int64(1)}),
                                  key_and_another_string_col_table_2_,
                                  {Int64(4), String("another_string_value4")}),
-                          change_stream_, zetasql::Value::String("11111"),
+                          change_stream_, googlesql::Value::String("11111"),
                           &data_change_records_in_transaction_by_change_stream,
                           1, &last_mod_group_by_change_stream, store()),
-              ::zetasql_base::testing::IsOk());
+              ::googlesql_base::testing::IsOk());
   // Set number_of_records_in_transaction in each DataChangeRecord after
   // finishing processing all operations
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<WriteOp> write_ops,
       BuildMutation(&data_change_records_in_transaction_by_change_stream, 1,
                     &last_mod_group_by_change_stream));
@@ -732,28 +751,28 @@ TEST_F(ChangeStreamTest,
   ASSERT_THAT(LogTableMod(Insert(table2_, Key({Int64(1)}),
                                  key_and_another_string_col_table_2_,
                                  {Int64(1), String("another_string_value1")}),
-                          change_stream3_, zetasql::Value::String("11111"),
+                          change_stream3_, googlesql::Value::String("11111"),
                           &data_change_records_in_transaction_by_change_stream,
                           1, &last_mod_group_by_change_stream, store()),
-              ::zetasql_base::testing::IsOk());
+              ::googlesql_base::testing::IsOk());
   // Update to an untracked column.
   ASSERT_THAT(
       LogTableMod(
           Update(table2_, Key({Int64(1)}), key_and_another_string_col_table_2_,
                  {Int64(1), String("another_string_value_update")}),
-          change_stream3_, zetasql::Value::String("11111"),
+          change_stream3_, googlesql::Value::String("11111"),
           &data_change_records_in_transaction_by_change_stream, 1,
           &last_mod_group_by_change_stream, store()),
-      ::zetasql_base::testing::IsOk());
+      ::googlesql_base::testing::IsOk());
   // Delete the row.
   ASSERT_THAT(LogTableMod(Delete(table2_, Key({Int64(1)})), change_stream3_,
-                          zetasql::Value::String("11111"),
+                          googlesql::Value::String("11111"),
                           &data_change_records_in_transaction_by_change_stream,
                           1, &last_mod_group_by_change_stream, store()),
-              ::zetasql_base::testing::IsOk());
+              ::googlesql_base::testing::IsOk());
   // Set number_of_records_in_transaction in each DataChangeRecord after
   // finishing processing all operations
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<WriteOp> write_ops,
       BuildMutation(&data_change_records_in_transaction_by_change_stream, 1,
                     &last_mod_group_by_change_stream));
@@ -764,70 +783,70 @@ TEST_F(ChangeStreamTest,
   WriteOp op = write_ops[0];
   auto* operation = std::get_if<InsertOp>(&op);
   ASSERT_NE(operation, nullptr);
-  ASSERT_EQ(operation->values[13], zetasql::Value(String("INSERT")));
+  ASSERT_EQ(operation->values[13], googlesql::Value(String("INSERT")));
   // Verify column_types_name
   ASSERT_EQ(operation->values[6],
-            zetasql::values::Array(zetasql::types::StringArrayType(),
-                                     {zetasql::Value(String("int64_col"))}));
+            googlesql::values::Array(googlesql::types::StringArrayType(),
+                                     {googlesql::Value(String("int64_col"))}));
   // Verify column_types_type
   JSON col_1_type;
   col_1_type["code"] = "INT64";
   ASSERT_EQ(
       operation->values[7],
-      zetasql::values::Array(zetasql::types::StringArrayType(),
-                               {zetasql::Value(String(col_1_type.dump()))}));
+      googlesql::values::Array(googlesql::types::StringArrayType(),
+                               {googlesql::Value(String(col_1_type.dump()))}));
   // Verify column_types_is_primary_key
   ASSERT_EQ(operation->values[8],
-            zetasql::values::Array(zetasql::types::BoolArrayType(),
-                                     {zetasql::Value(Bool(true))}));
+            googlesql::values::Array(googlesql::types::BoolArrayType(),
+                                     {googlesql::Value(Bool(true))}));
   // Verify column_types_ordinal_position
   ASSERT_EQ(operation->values[9],
-            zetasql::values::Array(zetasql::types::Int64ArrayType(),
-                                     {zetasql::Value(Int64(1))}));
+            googlesql::values::Array(googlesql::types::Int64ArrayType(),
+                                     {googlesql::Value(Int64(1))}));
 
   // Since new_values field in mods field only contains non_key_col values,
   // new_values should be empty.
-  zetasql::Value mod_keys = operation->values[10];
+  googlesql::Value mod_keys = operation->values[10];
   ASSERT_EQ(mod_keys.num_elements(), 1);
   ASSERT_EQ(mod_keys.element(0),
-            zetasql::Value(String("{\"int64_col\":\"1\"}")));
-  zetasql::Value mod_new_values = operation->values[11];
-  ASSERT_EQ(mod_new_values.element(0), zetasql::Value(String("{}")));
-  zetasql::Value mod_old_values = operation->values[12];
-  ASSERT_EQ(mod_old_values.element(0), zetasql::Value(String("{}")));
+            googlesql::Value(String("{\"int64_col\":\"1\"}")));
+  googlesql::Value mod_new_values = operation->values[11];
+  ASSERT_EQ(mod_new_values.element(0), googlesql::Value(String("{}")));
+  googlesql::Value mod_old_values = operation->values[12];
+  ASSERT_EQ(mod_old_values.element(0), googlesql::Value(String("{}")));
 
   // Verify the second received WriteOp is for DELETE mod_type
   op = write_ops[1];
   auto* operation2 = std::get_if<InsertOp>(&op);
   ASSERT_NE(operation, nullptr);
-  ASSERT_EQ(operation2->values[13], zetasql::Value(String("DELETE")));
+  ASSERT_EQ(operation2->values[13], googlesql::Value(String("DELETE")));
   // Verify column_types_name
   ASSERT_EQ(operation->values[6],
-            zetasql::values::Array(zetasql::types::StringArrayType(),
-                                     {zetasql::Value(String("int64_col"))}));
+            googlesql::values::Array(googlesql::types::StringArrayType(),
+                                     {googlesql::Value(String("int64_col"))}));
   // Verify column_types_type
   ASSERT_EQ(
       operation->values[7],
-      zetasql::values::Array(zetasql::types::StringArrayType(),
-                               {zetasql::Value(String(col_1_type.dump()))}));
-  // ASSERT_EQ(operation->values[7], zetasql::Value(String("int64_col")));
+      googlesql::values::Array(googlesql::types::StringArrayType(),
+                               {googlesql::Value(String(col_1_type.dump()))}));
+  // ASSERT_EQ(operation->values[7], googlesql::Value(String("int64_col")));
   // Verify column_types_is_primary_key
   ASSERT_EQ(operation->values[8],
-            zetasql::values::Array(zetasql::types::BoolArrayType(),
-                                     {zetasql::Value(Bool(true))}));
+            googlesql::values::Array(googlesql::types::BoolArrayType(),
+                                     {googlesql::Value(Bool(true))}));
   // Verify column_types_ordinal_position
   ASSERT_EQ(operation->values[9],
-            zetasql::values::Array(zetasql::types::Int64ArrayType(),
-                                     {zetasql::Value(Int64(1))}));
+            googlesql::values::Array(googlesql::types::Int64ArrayType(),
+                                     {googlesql::Value(Int64(1))}));
   // Verify mods to be empty
   mod_keys = operation->values[10];
   ASSERT_EQ(mod_keys.num_elements(), 1);
   ASSERT_EQ(mod_keys.element(0),
-            zetasql::Value(String("{\"int64_col\":\"1\"}")));
+            googlesql::Value(String("{\"int64_col\":\"1\"}")));
   mod_new_values = operation->values[11];
-  ASSERT_EQ(mod_new_values.element(0), zetasql::Value(String("{}")));
+  ASSERT_EQ(mod_new_values.element(0), googlesql::Value(String("{}")));
   mod_old_values = operation->values[12];
-  ASSERT_EQ(mod_old_values.element(0), zetasql::Value(String("{}")));
+  ASSERT_EQ(mod_old_values.element(0), googlesql::Value(String("{}")));
 }
 
 TEST_F(ChangeStreamTest, InsertUpdateDeleteUntrackedColumnsSameRow) {
@@ -843,28 +862,28 @@ TEST_F(ChangeStreamTest, InsertUpdateDeleteUntrackedColumnsSameRow) {
   ASSERT_THAT(LogTableMod(Insert(table2_, Key({Int64(1)}),
                                  key_and_another_string_col_table_2_,
                                  {Int64(1), String("another_string_value1")}),
-                          change_stream2_, zetasql::Value::String("11111"),
+                          change_stream2_, googlesql::Value::String("11111"),
                           &data_change_records_in_transaction_by_change_stream,
                           1, &last_mod_group_by_change_stream, store()),
-              ::zetasql_base::testing::IsOk());
+              ::googlesql_base::testing::IsOk());
   // Update to an untracked column.
   ASSERT_THAT(
       LogTableMod(
           Update(table2_, Key({Int64(1)}), key_and_another_string_col_table_2_,
                  {Int64(1), String("another_string_value_update")}),
-          change_stream2_, zetasql::Value::String("11111"),
+          change_stream2_, googlesql::Value::String("11111"),
           &data_change_records_in_transaction_by_change_stream, 1,
           &last_mod_group_by_change_stream, store()),
-      ::zetasql_base::testing::IsOk());
+      ::googlesql_base::testing::IsOk());
   // Delete the row.
   ASSERT_THAT(LogTableMod(Delete(table2_, Key({Int64(1)})), change_stream2_,
-                          zetasql::Value::String("11111"),
+                          googlesql::Value::String("11111"),
                           &data_change_records_in_transaction_by_change_stream,
                           1, &last_mod_group_by_change_stream, store()),
-              ::zetasql_base::testing::IsOk());
+              ::googlesql_base::testing::IsOk());
   // Set number_of_records_in_transaction in each DataChangeRecord after
   // finishing processing all operations
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<WriteOp> write_ops,
       BuildMutation(&data_change_records_in_transaction_by_change_stream, 1,
                     &last_mod_group_by_change_stream));
@@ -875,16 +894,16 @@ TEST_F(ChangeStreamTest, InsertUpdateDeleteUntrackedColumnsSameRow) {
   WriteOp op = write_ops[0];
   auto* operation = std::get_if<InsertOp>(&op);
   ASSERT_NE(operation, nullptr);
-  ASSERT_EQ(operation->values[13], zetasql::Value(String("INSERT")));
+  ASSERT_EQ(operation->values[13], googlesql::Value(String("INSERT")));
   // Verify is_last_record_in_transaction_in_partition
-  ASSERT_EQ(operation->values[4], zetasql::Value(Bool(false)));
+  ASSERT_EQ(operation->values[4], googlesql::Value(Bool(false)));
   // Verify number_of_records_in_transaction
-  ASSERT_EQ(operation->values[15], zetasql::Value(Int64(2)));
+  ASSERT_EQ(operation->values[15], googlesql::Value(Int64(2)));
   // Verify column_types_name
   ASSERT_EQ(operation->values[6],
-            zetasql::values::Array(zetasql::types::StringArrayType(),
-                                     {zetasql::Value(String("int64_col")),
-                                      zetasql::Value(String("string_col"))}));
+            googlesql::values::Array(googlesql::types::StringArrayType(),
+                                     {googlesql::Value(String("int64_col")),
+                                      googlesql::Value(String("string_col"))}));
   // Verify column_types_type
   JSON col_1_type;
   col_1_type["code"] = "INT64";
@@ -892,66 +911,66 @@ TEST_F(ChangeStreamTest, InsertUpdateDeleteUntrackedColumnsSameRow) {
   col_2_type["code"] = "STRING";
   ASSERT_EQ(
       operation->values[7],
-      zetasql::values::Array(zetasql::types::StringArrayType(),
-                               {zetasql::Value(String(col_1_type.dump())),
-                                zetasql::Value(String(col_2_type.dump()))}));
+      googlesql::values::Array(googlesql::types::StringArrayType(),
+                               {googlesql::Value(String(col_1_type.dump())),
+                                googlesql::Value(String(col_2_type.dump()))}));
   // Verify column_types_is_primary_key
   ASSERT_EQ(operation->values[8],
-            zetasql::values::Array(
-                zetasql::types::BoolArrayType(),
-                {zetasql::Value(Bool(true)), zetasql::Value(Bool(false))}));
+            googlesql::values::Array(
+                googlesql::types::BoolArrayType(),
+                {googlesql::Value(Bool(true)), googlesql::Value(Bool(false))}));
   // Verify column_types_ordinal_position
   ASSERT_EQ(operation->values[9],
-            zetasql::values::Array(
-                zetasql::types::Int64ArrayType(),
-                {zetasql::Value(Int64(1)), zetasql::Value(Int64(2))}));
+            googlesql::values::Array(
+                googlesql::types::Int64ArrayType(),
+                {googlesql::Value(Int64(1)), googlesql::Value(Int64(2))}));
   // Since new_values field in mods field only contains non_key_col values,
   // new_values should be empty.
-  zetasql::Value mod_keys = operation->values[10];
+  googlesql::Value mod_keys = operation->values[10];
   ASSERT_EQ(mod_keys.num_elements(), 1);
   ASSERT_EQ(mod_keys.element(0),
-            zetasql::Value(String("{\"int64_col\":\"1\"}")));
-  zetasql::Value mod_new_values = operation->values[11];
+            googlesql::Value(String("{\"int64_col\":\"1\"}")));
+  googlesql::Value mod_new_values = operation->values[11];
   ASSERT_EQ(mod_new_values.element(0),
-            zetasql::Value(String("{\"string_col\":null}")));
-  zetasql::Value mod_old_values = operation->values[12];
-  ASSERT_EQ(mod_old_values.element(0), zetasql::Value(String("{}")));
+            googlesql::Value(String("{\"string_col\":null}")));
+  googlesql::Value mod_old_values = operation->values[12];
+  ASSERT_EQ(mod_old_values.element(0), googlesql::Value(String("{}")));
 
   // Verify the second received WriteOp is for DELETE mod_type
   op = write_ops[1];
   auto* operation2 = std::get_if<InsertOp>(&op);
   ASSERT_NE(operation2, nullptr);
-  ASSERT_EQ(operation2->values[13], zetasql::Value(String("DELETE")));
+  ASSERT_EQ(operation2->values[13], googlesql::Value(String("DELETE")));
   // Verify column_types_name
   ASSERT_EQ(operation2->values[6],
-            zetasql::values::Array(zetasql::types::StringArrayType(),
-                                     {zetasql::Value(String("int64_col")),
-                                      zetasql::Value(String("string_col"))}));
+            googlesql::values::Array(googlesql::types::StringArrayType(),
+                                     {googlesql::Value(String("int64_col")),
+                                      googlesql::Value(String("string_col"))}));
   // Verify column_types_type
   ASSERT_EQ(
       operation2->values[7],
-      zetasql::values::Array(zetasql::types::StringArrayType(),
-                               {zetasql::Value(String(col_1_type.dump())),
-                                zetasql::Value(String(col_2_type.dump()))}));
+      googlesql::values::Array(googlesql::types::StringArrayType(),
+                               {googlesql::Value(String(col_1_type.dump())),
+                                googlesql::Value(String(col_2_type.dump()))}));
   // Verify column_types_is_primary_key
   ASSERT_EQ(operation2->values[8],
-            zetasql::values::Array(
-                zetasql::types::BoolArrayType(),
-                {zetasql::Value(Bool(true)), zetasql::Value(Bool(false))}));
+            googlesql::values::Array(
+                googlesql::types::BoolArrayType(),
+                {googlesql::Value(Bool(true)), googlesql::Value(Bool(false))}));
   // Verify column_types_ordinal_position
   ASSERT_EQ(operation2->values[9],
-            zetasql::values::Array(
-                zetasql::types::Int64ArrayType(),
-                {zetasql::Value(Int64(1)), zetasql::Value(Int64(2))}));
+            googlesql::values::Array(
+                googlesql::types::Int64ArrayType(),
+                {googlesql::Value(Int64(1)), googlesql::Value(Int64(2))}));
   // Verify mods to be empty
   mod_keys = operation->values[10];
   ASSERT_EQ(mod_keys.num_elements(), 1);
   ASSERT_EQ(mod_keys.element(0),
-            zetasql::Value(String("{\"int64_col\":\"1\"}")));
+            googlesql::Value(String("{\"int64_col\":\"1\"}")));
   mod_new_values = operation->values[11];
-  ASSERT_EQ(mod_new_values.element(0), zetasql::Value(String("{}")));
+  ASSERT_EQ(mod_new_values.element(0), googlesql::Value(String("{}")));
   mod_old_values = operation->values[12];
-  ASSERT_EQ(mod_old_values.element(0), zetasql::Value(String("{}")));
+  ASSERT_EQ(mod_old_values.element(0), googlesql::Value(String("{}")));
 }
 
 TEST_F(ChangeStreamTest, MultipleInsertToSeparateSubsetsColumnsSameTable) {
@@ -966,9 +985,10 @@ TEST_F(ChangeStreamTest, MultipleInsertToSeparateSubsetsColumnsSameTable) {
   buffered_write_ops.push_back(
       Insert(table_, Key({Int64(2)}), key_and_another_string_col_table_1_,
              {Int64(2), String("another_string_value2")}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<WriteOp> change_stream_write_ops,
-      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1));
+      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1,
+                                /*exclude_txn_from_change_streams=*/false));
   // Verify the number of rebuilt WriteOps added to the transaction
   // buffer.
   ASSERT_EQ(change_stream_write_ops.size(), 1);
@@ -982,11 +1002,11 @@ TEST_F(ChangeStreamTest, MultipleInsertToSeparateSubsetsColumnsSameTable) {
   // column and the tracked non_key column (string_col_) are included in
   // column_types.
   ASSERT_EQ(operation->values[6],
-            zetasql::values::Array(
-                zetasql::types::StringArrayType(),
-                {zetasql::Value(String("int64_col")),
-                 zetasql::Value(String("string_col")),
-                 zetasql::Value(String("another_string_col"))}));
+            googlesql::values::Array(
+                googlesql::types::StringArrayType(),
+                {googlesql::Value(String("int64_col")),
+                 googlesql::Value(String("string_col")),
+                 googlesql::Value(String("another_string_col"))}));
   JSON col_1_type;
   col_1_type["code"] = "INT64";
   JSON col_2_type;
@@ -995,37 +1015,69 @@ TEST_F(ChangeStreamTest, MultipleInsertToSeparateSubsetsColumnsSameTable) {
   col_3_type["code"] = "STRING";
   ASSERT_EQ(
       operation->values[7],
-      zetasql::values::Array(zetasql::types::StringArrayType(),
-                               {zetasql::Value(String(col_1_type.dump())),
-                                zetasql::Value(String(col_2_type.dump())),
-                                zetasql::Value(String(col_3_type.dump()))}));
+      googlesql::values::Array(googlesql::types::StringArrayType(),
+                               {googlesql::Value(String(col_1_type.dump())),
+                                googlesql::Value(String(col_2_type.dump())),
+                                googlesql::Value(String(col_3_type.dump()))}));
   ASSERT_EQ(operation->values[8],
-            zetasql::values::Array(
-                zetasql::types::BoolArrayType(),
-                {zetasql::Value(Bool(true)), zetasql::Value(Bool(false)),
-                 zetasql::Value(Bool(false))}));
+            googlesql::values::Array(
+                googlesql::types::BoolArrayType(),
+                {googlesql::Value(Bool(true)), googlesql::Value(Bool(false)),
+                 googlesql::Value(Bool(false))}));
   ASSERT_EQ(operation->values[9],
-            zetasql::values::Array(
-                zetasql::types::Int64ArrayType(),
-                {zetasql::Value(Int64(1)), zetasql::Value(Int64(2)),
-                 zetasql::Value(Int64(3))}));
+            googlesql::values::Array(
+                googlesql::types::Int64ArrayType(),
+                {googlesql::Value(Int64(1)), googlesql::Value(Int64(2)),
+                 googlesql::Value(Int64(3))}));
   // Verify mods
-  zetasql::Value mod_keys = operation->values[10];
+  googlesql::Value mod_keys = operation->values[10];
   ASSERT_EQ(mod_keys.num_elements(), 2);
   ASSERT_EQ(mod_keys.element(0),
-            zetasql::Value(String("{\"int64_col\":\"1\"}")));
+            googlesql::Value(String("{\"int64_col\":\"1\"}")));
   ASSERT_EQ(mod_keys.element(1),
-            zetasql::Value(String("{\"int64_col\":\"2\"}")));
-  zetasql::Value mod_new_values = operation->values[11];
+            googlesql::Value(String("{\"int64_col\":\"2\"}")));
+  googlesql::Value mod_new_values = operation->values[11];
   ASSERT_EQ(
       mod_new_values.element(0),
-      zetasql::Value(String(
+      googlesql::Value(String(
           "{\"another_string_col\":null,\"string_col\":\"string_value1\"}")));
   ASSERT_EQ(mod_new_values.element(1),
-            zetasql::Value(String("{\"another_string_col\":\"another_string_"
+            googlesql::Value(String("{\"another_string_col\":\"another_string_"
                                     "value2\",\"string_col\":null}")));
-  zetasql::Value mod_old_values = operation->values[12];
-  ASSERT_EQ(mod_old_values.element(0), zetasql::Value(String("{}")));
+  googlesql::Value mod_old_values = operation->values[12];
+  ASSERT_EQ(mod_old_values.element(0), googlesql::Value(String("{}")));
+}
+
+TEST_F(ChangeStreamTest, VerifyTxnExclusion) {
+  // Populate ChangeStream_All_partition_table and
+  // ChangeStream_ExcludeTxn_partition_table with the initial partition
+  // token
+  set_up_partition_token_for_change_stream_partition_table(change_stream_,
+                                                           store());
+  set_up_partition_token_for_change_stream_partition_table(
+      change_stream_exclude_txn_, store());
+  std::vector<WriteOp> buffered_write_ops;
+  buffered_write_ops.push_back(Insert(
+      table3_, Key({Int64(1)}),
+      {table3_->FindColumn("int64_col"), table3_->FindColumn("string_col")},
+      {Int64(1), String("string_value1")}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<WriteOp> change_stream_write_exclude_txn_ops,
+      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1,
+                                /*exclude_txn_from_change_streams=*/true));
+  // Verify the number of rebuilt WriteOps added to the transaction
+  // buffer. Only ChangeStream_All that does not exclude the
+  // transaction should have a WriteOp added to the transaction buffer.
+  ASSERT_EQ(change_stream_write_exclude_txn_ops.size(), 1);
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<WriteOp> change_stream_write_include_txn_ops,
+      BuildChangeStreamWriteOps(schema_.get(), buffered_write_ops, store(), 1,
+                                /*exclude_txn_from_change_streams=*/false));
+  // Verify the number of rebuilt WriteOps added to the transaction
+  // buffer. ChangeStream_ExcludeTxn and ChangeStream_All should both have a
+  // WriteOp added to the transaction buffer.
+  ASSERT_EQ(change_stream_write_include_txn_ops.size(), 2);
 }
 
 TEST_F(ChangeStreamTest, PgVerifyExtendedDatatypesValueAndType) {
@@ -1039,9 +1091,10 @@ TEST_F(ChangeStreamTest, PgVerifyExtendedDatatypesValueAndType) {
        JsonArray({JSONValue(static_cast<int64_t>(1)),
                   JSONValue(static_cast<int64_t>(2))}),
        Numeric(11), NumericArray({NumericValue(22), NumericValue(33)})}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<WriteOp> change_stream_write_ops,
-                       BuildChangeStreamWriteOps(
-                           pg_schema_.get(), buffered_write_ops, store(), 1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<WriteOp> change_stream_write_ops,
+      BuildChangeStreamWriteOps(pg_schema_.get(), buffered_write_ops, store(),
+                                1, /*exclude_txn_from_change_streams=*/false));
   // Verify change stream entry is added to the transaction buffer.
   ASSERT_EQ(change_stream_write_ops.size(), 1);
   WriteOp op = change_stream_write_ops[0];
@@ -1058,23 +1111,23 @@ TEST_F(ChangeStreamTest, PgVerifyExtendedDatatypesValueAndType) {
   ASSERT_EQ(operation->values.size(), 19);
   // Verify values in the rebuilt InsertOp are correct
   // Verify partition_token
-  ASSERT_EQ(operation->values[0], zetasql::Value::String("11111"));
+  ASSERT_EQ(operation->values[0], googlesql::Value::String("11111"));
   // Verify record_sequence
-  ASSERT_EQ(operation->values[3], zetasql::Value(String("00000000")));
+  ASSERT_EQ(operation->values[3], googlesql::Value(String("00000000")));
   // Verify is_last_record_in_transaction_in_partition
-  ASSERT_EQ(operation->values[4], zetasql::Value(Bool(true)));
+  ASSERT_EQ(operation->values[4], googlesql::Value(Bool(true)));
   // Verify table_name
   ASSERT_EQ(operation->values[5],
-            zetasql::Value(String("entended_pg_datatypes")));
+            googlesql::Value(String("entended_pg_datatypes")));
   // Verify column_types_name
   ASSERT_EQ(
       operation->values[6],
-      zetasql::values::Array(zetasql::types::StringArrayType(),
-                               {zetasql::Value(String("int_col")),
-                                zetasql::Value(String("jsonb_col")),
-                                zetasql::Value(String("jsonb_arr")),
-                                zetasql::Value(String("numeric_col")),
-                                zetasql::Value(String("numeric_arr"))}));
+      googlesql::values::Array(googlesql::types::StringArrayType(),
+                               {googlesql::Value(String("int_col")),
+                                googlesql::Value(String("jsonb_col")),
+                                googlesql::Value(String("jsonb_arr")),
+                                googlesql::Value(String("numeric_col")),
+                                googlesql::Value(String("numeric_arr"))}));
   // Verify column_types_type
   JSON int_type;
   int_type["code"] = "INT64";
@@ -1093,50 +1146,50 @@ TEST_F(ChangeStreamTest, PgVerifyExtendedDatatypesValueAndType) {
   numeric_arr_type["array_element_type"]["code"] = "NUMERIC";
   numeric_arr_type["array_element_type"]["type_annotation"] = "PG_NUMERIC";
   ASSERT_EQ(operation->values[7],
-            zetasql::values::Array(
-                zetasql::types::StringArrayType(),
-                {zetasql::Value(String(int_type.dump())),
-                 zetasql::Value(String(jsonb_type.dump())),
-                 zetasql::Value(String(json_arr_type.dump())),
-                 zetasql::Value(String(numeric_type.dump())),
-                 zetasql::Value(String(numeric_arr_type.dump()))}));
+            googlesql::values::Array(
+                googlesql::types::StringArrayType(),
+                {googlesql::Value(String(int_type.dump())),
+                 googlesql::Value(String(jsonb_type.dump())),
+                 googlesql::Value(String(json_arr_type.dump())),
+                 googlesql::Value(String(numeric_type.dump())),
+                 googlesql::Value(String(numeric_arr_type.dump()))}));
   // Verify column_types_is_primary_key
   ASSERT_EQ(operation->values[8],
-            zetasql::values::Array(
-                zetasql::types::BoolArrayType(),
-                {zetasql::Value(Bool(true)), zetasql::Value(Bool(false)),
-                 zetasql::Value(Bool(false)), zetasql::Value(Bool(false)),
-                 zetasql::Value(Bool(false))}));
+            googlesql::values::Array(
+                googlesql::types::BoolArrayType(),
+                {googlesql::Value(Bool(true)), googlesql::Value(Bool(false)),
+                 googlesql::Value(Bool(false)), googlesql::Value(Bool(false)),
+                 googlesql::Value(Bool(false))}));
   // Verify column_types_ordinal_position
   ASSERT_EQ(operation->values[9],
-            zetasql::values::Array(
-                zetasql::types::Int64ArrayType(),
-                {zetasql::Value(Int64(1)), zetasql::Value(Int64(2)),
-                 zetasql::Value(Int64(3)), zetasql::Value(Int64(4)),
-                 zetasql::Value(Int64(5))}));
+            googlesql::values::Array(
+                googlesql::types::Int64ArrayType(),
+                {googlesql::Value(Int64(1)), googlesql::Value(Int64(2)),
+                 googlesql::Value(Int64(3)), googlesql::Value(Int64(4)),
+                 googlesql::Value(Int64(5))}));
   // Verify mods
-  zetasql::Value mod_keys = operation->values[10];
+  googlesql::Value mod_keys = operation->values[10];
   ASSERT_EQ(mod_keys.element(0),
-            zetasql::Value(String("{\"int_col\":\"1\"}")));
-  zetasql::Value mod_new_values = operation->values[11];
+            googlesql::Value(String("{\"int_col\":\"1\"}")));
+  googlesql::Value mod_new_values = operation->values[11];
   ASSERT_EQ(
       mod_new_values.element(0),
-      zetasql::Value(String(
+      googlesql::Value(String(
           R"({"jsonb_arr":["1","2"],"jsonb_col":"2024","numeric_arr":["22","33"],"numeric_col":"11"})")));
-  zetasql::Value mod_old_values = operation->values[12];
-  ASSERT_EQ(mod_old_values.element(0), zetasql::Value(String("{}")));
+  googlesql::Value mod_old_values = operation->values[12];
+  ASSERT_EQ(mod_old_values.element(0), googlesql::Value(String("{}")));
   // Verify mod_type
-  ASSERT_EQ(operation->values[13], zetasql::Value(String("INSERT")));
+  ASSERT_EQ(operation->values[13], googlesql::Value(String("INSERT")));
   // Verify value_capture_type
-  ASSERT_EQ(operation->values[14], zetasql::Value(String("NEW_VALUES")));
+  ASSERT_EQ(operation->values[14], googlesql::Value(String("NEW_VALUES")));
   // Verify number_of_records_in_transaction
-  ASSERT_EQ(operation->values[15], zetasql::Value(Int64(1)));
+  ASSERT_EQ(operation->values[15], googlesql::Value(Int64(1)));
   // Verify number_of_partitions_in_transaction
-  ASSERT_EQ(operation->values[16], zetasql::Value(Int64(1)));
+  ASSERT_EQ(operation->values[16], googlesql::Value(Int64(1)));
   // Verify transaction_tag
-  ASSERT_EQ(operation->values[17], zetasql::Value(String("")));
+  ASSERT_EQ(operation->values[17], googlesql::Value(String("")));
   // Verify is_system_transaction
-  ASSERT_EQ(operation->values[18], zetasql::Value(Bool(false)));
+  ASSERT_EQ(operation->values[18], googlesql::Value(Bool(false)));
 }
 
 TEST_F(ChangeStreamTest, FloatValueAndTypes) {
@@ -1148,10 +1201,10 @@ TEST_F(ChangeStreamTest, FloatValueAndTypes) {
       Insert(float_table_, Key({Int64(1)}), float_columns_,
              {Int64(1), Float(1.1f), Double(2.2), FloatArray({1.1f, 3.14f}),
               DoubleArray({2.2, 2.71})}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::vector<WriteOp> change_stream_write_ops,
-      BuildChangeStreamWriteOps(float_schema_.get(), buffered_write_ops,
-                                store(), 1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<WriteOp> change_stream_write_ops,
+                       BuildChangeStreamWriteOps(
+                           float_schema_.get(), buffered_write_ops, store(), 1,
+                           /*exclude_txn_from_change_streams=*/false));
 
   // Verify change stream entry is added to the transaction buffer.
   ASSERT_EQ(change_stream_write_ops.size(), 1);
@@ -1168,21 +1221,21 @@ TEST_F(ChangeStreamTest, FloatValueAndTypes) {
 
   // Verify values in the rebuilt InsertOp are correct
   // Verify partition_token
-  ASSERT_EQ(operation->values[0], zetasql::Value::String("11111"));
+  ASSERT_EQ(operation->values[0], googlesql::Value::String("11111"));
   // Verify record_sequence
-  ASSERT_EQ(operation->values[3], zetasql::Value(String("00000000")));
+  ASSERT_EQ(operation->values[3], googlesql::Value(String("00000000")));
   // Verify is_last_record_in_transaction_in_partition
-  ASSERT_EQ(operation->values[4], zetasql::Value(Bool(true)));
+  ASSERT_EQ(operation->values[4], googlesql::Value(Bool(true)));
   // Verify table_name
-  ASSERT_EQ(operation->values[5], zetasql::Value(String("FloatTable")));
+  ASSERT_EQ(operation->values[5], googlesql::Value(String("FloatTable")));
   // Verify column_types_name
   ASSERT_EQ(operation->values[6],
-            zetasql::values::Array(zetasql::types::StringArrayType(),
-                                     {zetasql::Value(String("int64_col")),
-                                      zetasql::Value(String("float_col")),
-                                      zetasql::Value(String("double_col")),
-                                      zetasql::Value(String("float_arr")),
-                                      zetasql::Value(String("double_arr"))}));
+            googlesql::values::Array(googlesql::types::StringArrayType(),
+                                     {googlesql::Value(String("int64_col")),
+                                      googlesql::Value(String("float_col")),
+                                      googlesql::Value(String("double_col")),
+                                      googlesql::Value(String("float_arr")),
+                                      googlesql::Value(String("double_arr"))}));
   // Verify column_types_type
   JSON int_type;
   int_type["code"] = "INT64";
@@ -1197,50 +1250,50 @@ TEST_F(ChangeStreamTest, FloatValueAndTypes) {
   float64_arr_type["code"] = "ARRAY";
   float64_arr_type["array_element_type"]["code"] = "FLOAT64";
   ASSERT_EQ(operation->values[7],
-            zetasql::values::Array(
-                zetasql::types::StringArrayType(),
-                {zetasql::Value(String(int_type.dump())),
-                 zetasql::Value(String(float32_type.dump())),
-                 zetasql::Value(String(float64_type.dump())),
-                 zetasql::Value(String(float32_arr_type.dump())),
-                 zetasql::Value(String(float64_arr_type.dump()))}));
+            googlesql::values::Array(
+                googlesql::types::StringArrayType(),
+                {googlesql::Value(String(int_type.dump())),
+                 googlesql::Value(String(float32_type.dump())),
+                 googlesql::Value(String(float64_type.dump())),
+                 googlesql::Value(String(float32_arr_type.dump())),
+                 googlesql::Value(String(float64_arr_type.dump()))}));
   // Verify column_types_is_primary_key
   ASSERT_EQ(operation->values[8],
-            zetasql::values::Array(
-                zetasql::types::BoolArrayType(),
-                {zetasql::Value(Bool(true)), zetasql::Value(Bool(false)),
-                 zetasql::Value(Bool(false)), zetasql::Value(Bool(false)),
-                 zetasql::Value(Bool(false))}));
+            googlesql::values::Array(
+                googlesql::types::BoolArrayType(),
+                {googlesql::Value(Bool(true)), googlesql::Value(Bool(false)),
+                 googlesql::Value(Bool(false)), googlesql::Value(Bool(false)),
+                 googlesql::Value(Bool(false))}));
   // Verify column_types_ordinal_position
   ASSERT_EQ(operation->values[9],
-            zetasql::values::Array(
-                zetasql::types::Int64ArrayType(),
-                {zetasql::Value(Int64(1)), zetasql::Value(Int64(2)),
-                 zetasql::Value(Int64(3)), zetasql::Value(Int64(4)),
-                 zetasql::Value(Int64(5))}));
+            googlesql::values::Array(
+                googlesql::types::Int64ArrayType(),
+                {googlesql::Value(Int64(1)), googlesql::Value(Int64(2)),
+                 googlesql::Value(Int64(3)), googlesql::Value(Int64(4)),
+                 googlesql::Value(Int64(5))}));
   // Verify mods
-  zetasql::Value mod_keys = operation->values[10];
+  googlesql::Value mod_keys = operation->values[10];
   ASSERT_EQ(mod_keys.element(0),
-            zetasql::Value(String("{\"int64_col\":\"1\"}")));
-  zetasql::Value mod_new_values = operation->values[11];
+            googlesql::Value(String("{\"int64_col\":\"1\"}")));
+  googlesql::Value mod_new_values = operation->values[11];
   ASSERT_EQ(
       mod_new_values.element(0),
-      zetasql::Value(String(
+      googlesql::Value(String(
           R"({"double_arr":[2.2,2.71],"double_col":2.2,"float_arr":[1.100000023841858,3.140000104904175],"float_col":1.100000023841858})")));
-  zetasql::Value mod_old_values = operation->values[12];
-  ASSERT_EQ(mod_old_values.element(0), zetasql::Value(String("{}")));
+  googlesql::Value mod_old_values = operation->values[12];
+  ASSERT_EQ(mod_old_values.element(0), googlesql::Value(String("{}")));
   // Verify mod_type
-  ASSERT_EQ(operation->values[13], zetasql::Value(String("INSERT")));
+  ASSERT_EQ(operation->values[13], googlesql::Value(String("INSERT")));
   // Verify value_capture_type
-  ASSERT_EQ(operation->values[14], zetasql::Value(String("NEW_VALUES")));
+  ASSERT_EQ(operation->values[14], googlesql::Value(String("NEW_VALUES")));
   // Verify number_of_records_in_transaction
-  ASSERT_EQ(operation->values[15], zetasql::Value(Int64(1)));
+  ASSERT_EQ(operation->values[15], googlesql::Value(Int64(1)));
   // Verify number_of_partitions_in_transaction
-  ASSERT_EQ(operation->values[16], zetasql::Value(Int64(1)));
+  ASSERT_EQ(operation->values[16], googlesql::Value(Int64(1)));
   // Verify transaction_tag
-  ASSERT_EQ(operation->values[17], zetasql::Value(String("")));
+  ASSERT_EQ(operation->values[17], googlesql::Value(String("")));
   // Verify is_system_transaction
-  ASSERT_EQ(operation->values[18], zetasql::Value(Bool(false)));
+  ASSERT_EQ(operation->values[18], googlesql::Value(Bool(false)));
 }
 
 TEST_F(ChangeStreamTest, ProtoValueAndTypes) {
@@ -1250,7 +1303,7 @@ TEST_F(ChangeStreamTest, ProtoValueAndTypes) {
       file_descriptor_set.add_file());
   std::string proto_descriptors = file_descriptor_set.SerializeAsString();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_schema,
                        emulator::test::CreateSchemaFromDDL(
                            {
                                R"(
@@ -1278,7 +1331,7 @@ TEST_F(ChangeStreamTest, ProtoValueAndTypes) {
   set_up_partition_token_for_change_stream_partition_table(proto_stream,
                                                            store());
 
-  const zetasql::Type* proto_type =
+  const googlesql::Type* proto_type =
       proto_table->FindColumn("proto_col")->GetType();
 
   // Insert base table entry.
@@ -1287,19 +1340,20 @@ TEST_F(ChangeStreamTest, ProtoValueAndTypes) {
   std::string encoded_proto =
       absl::Base64Escape(simple_proto.SerializeAsString());
 
-  const zetasql::Type* proto_arr_type;
-  ZETASQL_ASSERT_OK(type_factory_.MakeArrayType(proto_type, &proto_arr_type));
+  const googlesql::Type* proto_arr_type;
+  GOOGLESQL_ASSERT_OK(type_factory_.MakeArrayType(proto_type, &proto_arr_type));
 
   std::vector<WriteOp> buffered_write_ops;
   buffered_write_ops.push_back(
       Insert(proto_table, Key({Int64(1)}), proto_table->columns(),
              {Int64(1), Proto(proto_type->AsProto(), simple_proto),
-              zetasql::values::Array(
+              googlesql::values::Array(
                   proto_arr_type->AsArray(),
                   {Proto(proto_type->AsProto(), simple_proto)})}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<WriteOp> change_stream_write_ops,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<WriteOp> change_stream_write_ops,
                        BuildChangeStreamWriteOps(
-                           proto_schema.get(), buffered_write_ops, store(), 1));
+                           proto_schema.get(), buffered_write_ops, store(), 1,
+                           /*exclude_txn_from_change_streams=*/false));
 
   // Verify change stream entry is added to the transaction buffer.
   ASSERT_EQ(change_stream_write_ops.size(), 1);
@@ -1316,16 +1370,16 @@ TEST_F(ChangeStreamTest, ProtoValueAndTypes) {
   proto_arr_json_type["code"] = "ARRAY";
   proto_arr_json_type["array_element_type"]["code"] = "PROTO";
   ASSERT_EQ(operation->values[7],
-            zetasql::values::Array(
-                zetasql::types::StringArrayType(),
-                {zetasql::Value(String(int_type.dump())),
-                 zetasql::Value(String(proto_json_type.dump())),
-                 zetasql::Value(String(proto_arr_json_type.dump()))}));
+            googlesql::values::Array(
+                googlesql::types::StringArrayType(),
+                {googlesql::Value(String(int_type.dump())),
+                 googlesql::Value(String(proto_json_type.dump())),
+                 googlesql::Value(String(proto_arr_json_type.dump()))}));
 
   // Verify mods includes Base64 representations
-  zetasql::Value mod_new_values = operation->values[11];
+  googlesql::Value mod_new_values = operation->values[11];
   ASSERT_EQ(mod_new_values.element(0),
-            zetasql::Value(String(
+            googlesql::Value(String(
                 absl::StrCat("{\"proto_arr\":[\"", encoded_proto,
                              "\"],\"proto_col\":\"", encoded_proto, "\"}"))));
 }

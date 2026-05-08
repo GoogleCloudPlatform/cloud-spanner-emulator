@@ -23,6 +23,7 @@ more details about the patches applied and why they are required, see comments
 in fix_grpc_gateway.go in this directory.
 """
 
+load("@com_google_protobuf//bazel/common:proto_info.bzl", "ProtoInfo")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 def _generate_grpc_gateway_file_impl(ctx):

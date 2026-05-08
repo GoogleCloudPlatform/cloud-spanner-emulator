@@ -34,6 +34,7 @@
 #include "nodes/extensible.h"
 #include "nodes/pathnodes.h"
 #include "nodes/plannodes.h"
+#include "third_party/spanner_pg/src/include/nodes/parsenodes.h"
 #include "utils/datum.h"
 #include "utils/rel.h"
 
@@ -4090,6 +4091,33 @@ static void _outCreateSchemaStmt(StringInfo str, const CreateSchemaStmt* node)
 	WRITE_BOOL_FIELD(if_not_exists);
 }
 
+static void _outCreateFunctionStmt(StringInfo str,
+																	 const CreateFunctionStmt* node)
+{
+	WRITE_NODE_TYPE("CREATEFUNCTIONSTMT");
+
+	WRITE_BOOL_FIELD(is_procedure);
+	WRITE_BOOL_FIELD(replace);
+	WRITE_NODE_FIELD(funcname);
+	WRITE_NODE_FIELD(parameters);
+	WRITE_NODE_FIELD(returnType);
+	WRITE_NODE_FIELD(options);
+	WRITE_NODE_FIELD(sql_body);
+	WRITE_STRING_FIELD(routine_body_string);
+}
+
+static void _outFunctionParameter(StringInfo str,
+																 const FunctionParameter* node)
+{
+	WRITE_NODE_TYPE("FUNCTIONPARAMETER");
+
+	WRITE_STRING_FIELD(name);
+	WRITE_NODE_FIELD(argType);
+	WRITE_ENUM_FIELD(mode, FunctionParameterMode);
+	WRITE_NODE_FIELD(defexpr);
+	WRITE_STRING_FIELD(def_expr_string);
+}
+
 static void _outViewStmt(StringInfo str, const ViewStmt* node)
 {
 	WRITE_NODE_TYPE("VIEWSTMT");
@@ -5148,6 +5176,12 @@ outNode(StringInfo str, const void *obj)
 				break;
 			case T_CreateSchemaStmt:
 				_outCreateSchemaStmt(str,obj);
+				break;
+			case T_CreateFunctionStmt:
+				_outCreateFunctionStmt(str, obj);
+				break;
+			case T_FunctionParameter:
+				_outFunctionParameter(str, obj);
 				break;
 			case T_ViewStmt:
 				_outViewStmt(str,obj);

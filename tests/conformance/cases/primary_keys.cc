@@ -18,7 +18,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "google/cloud/spanner/numeric.h"
@@ -32,7 +32,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class PrimaryKeysTest
     : public DatabaseTest,
@@ -61,7 +61,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(PrimaryKeysTest, CanInsertRowWithMultiPartKey) {
   // Insert a row with a fully-specified key.
-  ZETASQL_ASSERT_OK(Insert("tablewithnullablekey", {"key1", "key2", "col1"},
+  GOOGLESQL_ASSERT_OK(Insert("tablewithnullablekey", {"key1", "key2", "col1"},
                    {"key1_val", "key2_val", "col1_val"}));
 
   // Verify that it exists.
@@ -80,7 +80,7 @@ TEST_P(PrimaryKeysTest, CanInsertWithNullableKeyColumn) {
     GTEST_SKIP() << "PG does not support nullable primary key columns.";
   }
   // Insert a row without specifying key2, it should be seen as a NULL.
-  ZETASQL_ASSERT_OK(Insert("tablewithnullablekey", {"key1", "col1"},
+  GOOGLESQL_ASSERT_OK(Insert("tablewithnullablekey", {"key1", "col1"},
                    {"key1_val", "col1_val"}));
 
   // Verify that the row exists with NULL as the value for key2.
@@ -94,7 +94,7 @@ TEST_P(PrimaryKeysTest, CanInsertRowWithExplicitNullKeyColumn) {
     GTEST_SKIP() << "PG does not support nullable primary key columns.";
   }
   // Insert a row with key2 explicitly specified as NULL.
-  ZETASQL_ASSERT_OK(Insert("tablewithnullablekey", {"key1", "key2", "col1"},
+  GOOGLESQL_ASSERT_OK(Insert("tablewithnullablekey", {"key1", "key2", "col1"},
                    {"key1_val", Null<std::string>(), "col1_val"}));
 
   // Verify that the row exists with NULL as the value for key2.
@@ -126,11 +126,11 @@ TEST_P(PrimaryKeysTest, NumericKey) {
   Numeric key2 = cloud::spanner::MakeNumeric("123.456789").value();
   Numeric key3 = cloud::spanner::MakeNumeric("0").value();
 
-  ZETASQL_ASSERT_OK(Insert("TableWithNumericKey", {"key", "val"}, {key1, "val1"}));
+  GOOGLESQL_ASSERT_OK(Insert("TableWithNumericKey", {"key", "val"}, {key1, "val1"}));
 
-  ZETASQL_ASSERT_OK(Insert("TableWithNumericKey", {"key", "val"}, {key2, "val2"}));
+  GOOGLESQL_ASSERT_OK(Insert("TableWithNumericKey", {"key", "val"}, {key2, "val2"}));
 
-  ZETASQL_ASSERT_OK(Insert("TableWithNumericKey", {"key", "val"}, {key3, "val3"}));
+  GOOGLESQL_ASSERT_OK(Insert("TableWithNumericKey", {"key", "val"}, {key3, "val3"}));
 
   // Verify that it exists.
   EXPECT_THAT(

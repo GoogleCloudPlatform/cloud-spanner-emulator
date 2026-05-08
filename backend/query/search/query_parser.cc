@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/functions/string.h"
+#include "googlesql/public/functions/string.h"
 #include "absl/log/check.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -36,7 +36,7 @@
 #include "backend/query/search/Token.h"
 #include "backend/query/search/query_char_stream.h"
 #include "common/errors.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -126,7 +126,7 @@ absl::Status QueryParser::NormalizeParsedTree(SimpleNode* tree) {
     std::string normalized_str;
     absl::Status status;
 
-    zetasql::functions::LowerUtf8(tree->image(), &normalized_str, &status);
+    googlesql::functions::LowerUtf8(tree->image(), &normalized_str, &status);
     if (!status.ok()) {
       return error::FailToParseSearchQuery(
           search_query_, "Failed to normalize search query tree.");
@@ -137,7 +137,7 @@ absl::Status QueryParser::NormalizeParsedTree(SimpleNode* tree) {
 
   for (int i = 0; i < tree->jjtGetNumChildren(); i++) {
     SimpleNode* child = dynamic_cast<SimpleNode*>(tree->jjtGetChild(i));
-    ZETASQL_RETURN_IF_ERROR(NormalizeParsedTree(child));
+    GOOGLESQL_RETURN_IF_ERROR(NormalizeParsedTree(child));
   }
 
   return absl::OkStatus();
@@ -186,7 +186,7 @@ absl::Status QueryParser::ParseSearchQuery() {
     return error::FailToParseSearchQuery(search_query_, errors_string);
   }
 
-  ZETASQL_RETURN_IF_ERROR(NormalizeParsedTree(tree_.get()));
+  GOOGLESQL_RETURN_IF_ERROR(NormalizeParsedTree(tree_.get()));
 
   return absl::OkStatus();
 }

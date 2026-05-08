@@ -30,7 +30,7 @@
 #include "backend/common/ids.h"
 #include "common/config.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 
 namespace google {
 namespace spanner {
@@ -120,7 +120,7 @@ absl::Status LockManager::MarkCommitted(LockHandle* handle) {
   absl::MutexLock lock(&mu_);
 
   // This transaction should have been set as the active transaction.
-  ZETASQL_RET_CHECK_EQ(active_handle_->tid(), handle->tid())
+  GOOGLESQL_RET_CHECK_EQ(active_handle_->tid(), handle->tid())
       << absl::Substitute("Transaction $0 is not active.", handle->tid());
 
   last_commit_timestamp_ = pending_commit_timestamp_;

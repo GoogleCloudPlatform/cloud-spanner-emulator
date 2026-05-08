@@ -32,18 +32,18 @@
 #ifndef DATATYPES_EXTENDED_CONVERSION_FINDER_H_
 #define DATATYPES_EXTENDED_CONVERSION_FINDER_H_
 
-#include "zetasql/public/cast.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/cast.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type.h"
 #include "absl/status/statusor.h"
 
 namespace postgres_translator::spangres {
 namespace datatypes {
 
 // Looks up a Conversion between 'from' and 'to' with the given options.
-absl::StatusOr<zetasql::Conversion> FindExtendedTypeConversion(
-    const zetasql::Type* from, const zetasql::Type* to,
-    const zetasql::Catalog::FindConversionOptions& options);
+absl::StatusOr<googlesql::Conversion> FindExtendedTypeConversion(
+    const googlesql::Type* from, const googlesql::Type* to,
+    const googlesql::Catalog::FindConversionOptions& options);
 
 }  // namespace datatypes
 }  // namespace postgres_translator::spangres

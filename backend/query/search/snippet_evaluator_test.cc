@@ -21,10 +21,10 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/json_value.h"
+#include "googlesql/public/json_value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
@@ -41,11 +41,11 @@ namespace search {
 namespace {
 
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 TEST(SnippetEvaluatorTest, EvaluateWrongSnippetColumnType) {
-  std::vector<zetasql::Value> args{zetasql::Value::Bool(false),
-                                     zetasql::Value::String("test")};
+  std::vector<googlesql::Value> args{googlesql::Value::Bool(false),
+                                     googlesql::Value::String("test")};
 
   EXPECT_THAT(SnippetEvaluator::Evaluate(args),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -54,8 +54,8 @@ TEST(SnippetEvaluatorTest, EvaluateWrongSnippetColumnType) {
 }
 
 TEST(SnippetEvaluatorTest, EvaluateWrongSnippetQueryType) {
-  std::vector<zetasql::Value> args{zetasql::Value::String("foo bar baz"),
-                                     zetasql::Value::Bool(false)};
+  std::vector<googlesql::Value> args{googlesql::Value::String("foo bar baz"),
+                                     googlesql::Value::Bool(false)};
 
   EXPECT_THAT(SnippetEvaluator::Evaluate(args),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -63,23 +63,23 @@ TEST(SnippetEvaluatorTest, EvaluateWrongSnippetQueryType) {
 }
 
 TEST(SnippetEvaluatorTest, EvaluateNullSource) {
-  std::vector<zetasql::Value> args{zetasql::Value::NullString(),
-                                     zetasql::Value::String("foo")};
+  std::vector<googlesql::Value> args{googlesql::Value::NullString(),
+                                     googlesql::Value::String("foo")};
 
   absl::StatusOr<std::optional<std::string>> result =
       SnippetEvaluator::Evaluate(args);
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
   std::optional<std::string> snippets = result.value();
   EXPECT_FALSE(snippets.has_value());
 }
 
 TEST(SnippetEvaluatorTest, EvaluateNullQuery) {
-  std::vector<zetasql::Value> args{zetasql::Value::String("foo bar"),
-                                     zetasql::Value::NullString()};
+  std::vector<googlesql::Value> args{googlesql::Value::String("foo bar"),
+                                     googlesql::Value::NullString()};
 
   absl::StatusOr<std::optional<std::string>> result =
       SnippetEvaluator::Evaluate(args);
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
 
   std::optional<std::string> snippets = result.value();
   EXPECT_FALSE(snippets.has_value());
@@ -98,24 +98,24 @@ using SnippetEvaluatorTest = ::testing::TestWithParam<SnippetEvaluatorTestCase>;
 TEST_P(SnippetEvaluatorTest, TestEvaluation) {
   const SnippetEvaluatorTestCase& test_case = GetParam();
 
-  zetasql::Value max_snippet_length =
+  googlesql::Value max_snippet_length =
       test_case.max_snippet_length.has_value()
-          ? zetasql::Value::Int64(*test_case.max_snippet_length)
-          : zetasql::Value::NullInt64();
-  zetasql::Value max_snippets =
+          ? googlesql::Value::Int64(*test_case.max_snippet_length)
+          : googlesql::Value::NullInt64();
+  googlesql::Value max_snippets =
       test_case.max_snippets.has_value()
-          ? zetasql::Value::Int64(*test_case.max_snippets)
-          : zetasql::Value::NullInt64();
-  std::vector<zetasql::Value> args{zetasql::Value::String(test_case.target),
-                                     zetasql::Value::String(test_case.query),
-                                     zetasql::Value::Bool(false),
-                                     zetasql::Value::String("AUTO"),
+          ? googlesql::Value::Int64(*test_case.max_snippets)
+          : googlesql::Value::NullInt64();
+  std::vector<googlesql::Value> args{googlesql::Value::String(test_case.target),
+                                     googlesql::Value::String(test_case.query),
+                                     googlesql::Value::Bool(false),
+                                     googlesql::Value::String("AUTO"),
                                      max_snippet_length,
                                      max_snippets};
 
   absl::StatusOr<std::optional<std::string>> result =
       SnippetEvaluator::Evaluate(args);
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
 
   std::optional<std::string> snippets = result.value();
   EXPECT_TRUE(snippets.has_value());
@@ -181,18 +181,18 @@ using SnippetContentTypeTest =
 
 TEST_P(SnippetContentTypeTest, TestContentType) {
   const SnippetContentTypeTestCase& test_case = GetParam();
-  std::vector<zetasql::Value> args{
-      zetasql::Value::String("foo"),
-      zetasql::Value::String("foo"),
-      zetasql::Value::Bool(false),
-      zetasql::Value::String("AUTO"),
-      zetasql::Value::Int64(160),
-      zetasql::Value::Int64(3),
-      zetasql::Value::String(test_case.content_type)};
+  std::vector<googlesql::Value> args{
+      googlesql::Value::String("foo"),
+      googlesql::Value::String("foo"),
+      googlesql::Value::Bool(false),
+      googlesql::Value::String("AUTO"),
+      googlesql::Value::Int64(160),
+      googlesql::Value::Int64(3),
+      googlesql::Value::String(test_case.content_type)};
 
   absl::StatusOr<std::optional<std::string>> result =
       SnippetEvaluator::Evaluate(args);
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
   std::optional<std::string> snippets = result.value();
   EXPECT_TRUE(snippets.has_value());
   EXPECT_EQ(GetExpectedResult({{4, 1}}, "foo"), snippets.value());

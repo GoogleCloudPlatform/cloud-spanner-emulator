@@ -19,12 +19,12 @@
 #include "google/protobuf/timestamp.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/time/time.h"
 #include "frontend/converters/time.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/clock.h"
+#include "googlesql/base/clock.h"
 
 namespace google {
 namespace spanner {
@@ -37,8 +37,8 @@ using ::google::spanner::emulator::test::EqualsProto;
 using ::google::spanner::emulator::test::proto::Partially;
 
 TEST(InstanceTest, Basic) {
-  zetasql_base::SimulatedClock clock;
-  auto current_time = zetasql_base::Clock::RealClock()->TimeNow();
+  googlesql_base::SimulatedClock clock;
+  auto current_time = googlesql_base::Clock::RealClock()->TimeNow();
   clock.SetTime(current_time);
   Labels labels;
   labels["a"] = "b";

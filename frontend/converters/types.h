@@ -18,7 +18,7 @@
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_TYPES_H_
 
 #include "google/spanner/v1/type.pb.h"
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "absl/status/status.h"
 #include "backend/schema/catalog/proto_bundle.h"
 
@@ -27,25 +27,25 @@ namespace spanner {
 namespace emulator {
 namespace frontend {
 
-// Parses a ZetaSQL type from a Cloud Spanner type proto.
+// Parses a GoogleSQL type from a Cloud Spanner type proto.
 //
 // Only handles the types supported by Cloud Spanner. All types created by this
 // function will be owned by the supplied type factory. An unspecified type
 // or incorrect type specification will return an appropriate error and leave
 // type unchanged.
 absl::Status TypeFromProto(
-    const google::spanner::v1::Type& type_pb, zetasql::TypeFactory* factory,
-    const zetasql::Type** type
+    const google::spanner::v1::Type& type_pb, googlesql::TypeFactory* factory,
+    const googlesql::Type** type
     ,
     std::shared_ptr<const backend::ProtoBundle> proto_bundle = nullptr
 );
 
-// Converts a ZetaSQL type to a Cloud Spanner type proto.
+// Converts a GoogleSQL type to a Cloud Spanner type proto.
 //
 // Only handles the types supported by Cloud Spanner. The invalid type, and
 // types not supported by Cloud Spanner, will return errors and leave the
 // proto unchanged.
-absl::Status TypeToProto(const zetasql::Type* type,
+absl::Status TypeToProto(const googlesql::Type* type,
                          google::spanner::v1::Type* type_pb);
 
 }  // namespace frontend

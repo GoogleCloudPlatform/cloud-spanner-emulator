@@ -19,15 +19,15 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/functions/string.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/functions/string.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/query/search/tokenizer.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -40,8 +40,8 @@ absl::Status PlainFullTextTokenizer::TokenizeString(
     absl::string_view str, std::vector<std::string>& token_list) {
   std::string lower_str;
   absl::Status status;
-  zetasql::functions::LowerUtf8(str, &lower_str, &status);
-  ZETASQL_RETURN_IF_ERROR(status);
+  googlesql::functions::LowerUtf8(str, &lower_str, &status);
+  GOOGLESQL_RETURN_IF_ERROR(status);
 
   std::vector<std::string> tokens = absl::StrSplit(
       lower_str, absl::ByAnyChar(kDelimiter), absl::SkipWhitespace());
@@ -52,11 +52,11 @@ absl::Status PlainFullTextTokenizer::TokenizeString(
   return absl::OkStatus();
 }
 
-absl::StatusOr<zetasql::Value> PlainFullTextTokenizer::Tokenize(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> PlainFullTextTokenizer::Tokenize(
+    absl::Span<const googlesql::Value> args) {
   std::vector<std::string> token_list;
 
-  const zetasql::Value& text = args[0];
+  const googlesql::Value& text = args[0];
   // Add tokenization signature. The first part is the tokenization function
   // name. The second part shows if the source is null, which is used to
   // differentiate NULL and empty string cases.
@@ -67,13 +67,13 @@ absl::StatusOr<zetasql::Value> PlainFullTextTokenizer::Tokenize(
     if (text.type()->IsArray()) {
       for (auto& value : text.elements()) {
         // Tokenize each string in the array and append them to the token list.
-        ZETASQL_RETURN_IF_ERROR(TokenizeString(value.string_value(), token_list));
+        GOOGLESQL_RETURN_IF_ERROR(TokenizeString(value.string_value(), token_list));
         // Add array gap so evaluator will handle cross array phrase.
         // TODO: handle array gap in search evaluator.
         token_list.push_back(kGapString);
       }
     } else {
-      ZETASQL_RETURN_IF_ERROR(TokenizeString(text.string_value(), token_list));
+      GOOGLESQL_RETURN_IF_ERROR(TokenizeString(text.string_value(), token_list));
     }
   }
 

@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/types/type.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
 #include "absl/strings/string_view.h"
@@ -253,7 +253,8 @@ ddl::ForeignKey::Action FindForeignKeyOnDeleteAction(const ForeignKey* fk) {
              : ddl::ForeignKey::NO_ACTION;
 }
 
-void DumpIndex(const Index* index, ddl::CreateIndex& create_index) {
+void Schema::DumpIndex(const Index* index,
+                       ddl::CreateIndex& create_index) const {
   ABSL_CHECK_NE(index, nullptr);  // Crash OK
   create_index.set_index_name(index->Name());
   create_index.set_index_base_name(index->indexed_table()->Name());
@@ -279,6 +280,9 @@ void DumpIndex(const Index* index, ddl::CreateIndex& create_index) {
         create_index.add_stored_column_definition();
     stored_column_def->set_name(stored_column->Name());
   }
+  for (const Column* null_filtered_column : index->null_filtered_columns()) {
+    create_index.add_null_filtered_column(null_filtered_column->Name());
+  }
 }
 
 template <typename ColumnDef>
@@ -295,7 +299,7 @@ void SetColumnExpression(const Column* column, ColumnDef& column_def) {
 void DumpColumn(const Column* column, ddl::ColumnDefinition& column_def) {
   ABSL_CHECK_NE(column, nullptr);  // Crash OK
   column_def.set_column_name(column->Name());
-  const zetasql::Type* column_type = column->GetType();
+  const googlesql::Type* column_type = column->GetType();
   if (column_type != nullptr) {
     ddl::ColumnDefinition type_column_def =
         GoogleSqlTypeToDDLColumnType(column_type);

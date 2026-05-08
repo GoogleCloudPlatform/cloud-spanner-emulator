@@ -33,7 +33,7 @@
 #include <memory>
 #include <string>
 
-#include "zetasql/public/interval_value.h"
+#include "googlesql/public/interval_value.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
@@ -119,54 +119,54 @@ absl::StatusOr<absl::Cord> PgDateExtract(absl::string_view field,
 }
 
 absl::StatusOr<std::string> PgIntervalOut(
-    const zetasql::IntervalValue& interval) {
+    const googlesql::IntervalValue& interval) {
   return absl::UnimplementedError("invoked stub PgIntervalOut");
 }
 
-absl::StatusOr<zetasql::IntervalValue> PgIntervalIn(
+absl::StatusOr<googlesql::IntervalValue> PgIntervalIn(
     absl::string_view interval_string) {
   return absl::UnimplementedError("invoked stub PgIntervalIn");
 }
 
 absl::StatusOr<absl::Time> PgTimestamptzAdd(
-    absl::Time input_time, const zetasql::IntervalValue& interval) {
+    absl::Time input_time, const googlesql::IntervalValue& interval) {
   return absl::UnimplementedError("invoked stub PgTimestamptzAdd");
 }
 
 absl::StatusOr<absl::Time> PgTimestamptzSubtract(
-    absl::Time input_time, const zetasql::IntervalValue& interval) {
+    absl::Time input_time, const googlesql::IntervalValue& interval) {
   return absl::UnimplementedError("invoked stub PgTimestamptzSubtract");
 }
 
-absl::StatusOr<zetasql::IntervalValue> PgMakeInterval(
+absl::StatusOr<googlesql::IntervalValue> PgMakeInterval(
     int64_t years, int64_t months, int64_t weeks, int64_t days, int64_t hours,
     int64_t minutes, double seconds) {
   return absl::UnimplementedError("invoked stub PgMakeInterval");
 }
 
-absl::StatusOr<zetasql::IntervalValue> PgIntervalMultiply(
-    const zetasql::IntervalValue& interval, double multiplier) {
+absl::StatusOr<googlesql::IntervalValue> PgIntervalMultiply(
+    const googlesql::IntervalValue& interval, double multiplier) {
   return absl::UnimplementedError("invoked stub PgIntervalMultiply");
 }
 
-absl::StatusOr<zetasql::IntervalValue> PgIntervalDivide(
-    const zetasql::IntervalValue& interval, double divisor) {
+absl::StatusOr<googlesql::IntervalValue> PgIntervalDivide(
+    const googlesql::IntervalValue& interval, double divisor) {
   return absl::UnimplementedError("invoked stub PgIntervalDivide");
 }
 
 absl::StatusOr<absl::Cord> PgIntervalExtract(
     absl::string_view field,
-    const zetasql::IntervalValue& interval) {
+    const googlesql::IntervalValue& interval) {
   return absl::UnimplementedError("invoked stub PgIntervalExtract");
 }
 
 absl::StatusOr<std::unique_ptr<std::string>> PgIntervalToChar(
-    const zetasql::IntervalValue& interval, absl::string_view format) {
+    const googlesql::IntervalValue& interval, absl::string_view format) {
       return absl::UnimplementedError("invoked stub PgIntervalToChar");
 }
 
-absl::StatusOr<zetasql::IntervalValue> PgRoundIntervalPrecision(
-    const zetasql::IntervalValue& interval) {
+absl::StatusOr<googlesql::IntervalValue> PgRoundIntervalPrecision(
+    const googlesql::IntervalValue& interval) {
   return absl::UnimplementedError("invoked stub PgRoundIntervalPrecision");
 }
 

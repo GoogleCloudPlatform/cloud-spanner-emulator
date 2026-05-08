@@ -16,12 +16,15 @@
 
 #include "backend/access/write.h"
 
+#include <map>
 #include <ostream>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "googlesql/public/value.h"
+#include "backend/datamodel/key_set.h"
 #include "backend/datamodel/value.h"
 
 namespace google {
@@ -38,6 +41,13 @@ void Mutation::AddWriteOp(MutationOpType type, const std::string& table,
 
 void Mutation::AddDeleteOp(const std::string& table, const KeySet& key_set) {
   ops_.emplace_back(MutationOp(MutationOpType::kDelete, table, key_set));
+}
+
+void Mutation::SetLastOpFallbackDefaultValues(
+    std::map<std::string, googlesql::Value> fallback_default_values) {
+  if (!ops_.empty()) {
+    ops_.back().fallback_default_values = std::move(fallback_default_values);
+  }
 }
 
 std::string MutationOp::DebugString() const {

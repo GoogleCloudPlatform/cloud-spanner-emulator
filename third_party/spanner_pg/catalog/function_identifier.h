@@ -36,7 +36,7 @@
 
 #include <string>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "absl/container/flat_hash_map.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 

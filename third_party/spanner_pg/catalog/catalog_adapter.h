@@ -34,7 +34,7 @@
 
 #include <memory>
 
-#include "zetasql/public/analyzer_options.h"
+#include "googlesql/public/analyzer_options.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -71,7 +71,7 @@ class CatalogAdapter {
   static absl::StatusOr<std::unique_ptr<CatalogAdapter>> Create(
       std::unique_ptr<EngineUserCatalog> engine_user_catalog,
       EngineSystemCatalog* engine_system_catalog,
-      const zetasql::AnalyzerOptions& analyzer_options,
+      const googlesql::AnalyzerOptions& analyzer_options,
       absl::flat_hash_map<int, int> token_locations = {});
 
   // Retrieves table name from a given oid. Returns error if the oid is not
@@ -115,7 +115,7 @@ class CatalogAdapter {
   // function object will be stored for later retrieval by Oid. The pg_proc
   // struct will be generated and stored for later retrieval by Oid as well in
   // the call to GetProcsByOid override in catalog_wrappers.cc.
-  absl::StatusOr<Oid> GetOrGenerateUDFProcOid(const zetasql::Function* udf);
+  absl::StatusOr<Oid> GetOrGenerateUDFProcOid(const googlesql::Function* udf);
   // Generates a new oid for a pg_proc representing a TVF from the
   // EngineUserCatalog. The passed in pg_proc struct will have its oid filled in
   // with the new oid and will be stored for later retrieval by oid. The
@@ -126,7 +126,7 @@ class CatalogAdapter {
   // IMPORTANT: CatalogAdapter does not take ownership of the pg_proc struct.
   // The struct should be unowned and backed by MemoryContext memory.
   absl::StatusOr<Oid> GenerateAndStoreTVFProcOid(
-      FormData_pg_proc* pg_proc, const zetasql::TableValuedFunction* tvf);
+      FormData_pg_proc* pg_proc, const googlesql::TableValuedFunction* tvf);
 
   // Stores a pg_proc representing a UDF from the EngineUserCatalog. The passed
   // in pg_proc struct must have its oid filled in and will be stored for later
@@ -140,17 +140,17 @@ class CatalogAdapter {
   absl::StatusOr<const FormData_pg_proc*> GetUDFProcFromOid(Oid oid) const;
   // Looks up the googlesql Function object that we previously generated an Oid
   // for.
-  absl::StatusOr<const zetasql::Function*> GetUDFFromOid(Oid oid) const;
+  absl::StatusOr<const googlesql::Function*> GetUDFFromOid(Oid oid) const;
   // Looks up the googlesql TableValuedFunction object that we previously
   // generated an Oid for.
-  absl::StatusOr<const zetasql::TableValuedFunction*> GetTVFFromOid(
+  absl::StatusOr<const googlesql::TableValuedFunction*> GetTVFFromOid(
       Oid oid) const;
 
   EngineUserCatalog* GetEngineUserCatalog();
 
   EngineSystemCatalog* GetEngineSystemCatalog();
 
-  const zetasql::AnalyzerOptions& analyzer_options() const {
+  const googlesql::AnalyzerOptions& analyzer_options() const {
     return analyzer_options_;
   }
 
@@ -160,7 +160,7 @@ class CatalogAdapter {
 
   int max_column_id() const { return max_column_id_; }
 
-  // Returns a unique column id, used to build a ZetaSQL resolved AST.
+  // Returns a unique column id, used to build a GoogleSQL resolved AST.
   absl::StatusOr<int> AllocateColumnId();
 
  private:
@@ -171,7 +171,7 @@ class CatalogAdapter {
   explicit CatalogAdapter(
       std::unique_ptr<EngineUserCatalog> engine_user_catalog,
       EngineSystemCatalog* engine_system_catalog,
-      const zetasql::AnalyzerOptions& analyzer_options,
+      const googlesql::AnalyzerOptions& analyzer_options,
       absl::flat_hash_map<int, int> token_locations);
 
   // Looks up namespace name from Oid. Helper used when producing a TableName
@@ -214,8 +214,8 @@ class CatalogAdapter {
   // so a bidirectional map is not needed here.
   absl::flat_hash_map<std::string, Oid> udf_to_oid_map_;
   absl::flat_hash_map<Oid, const FormData_pg_proc*> oid_to_udf_proc_map_;
-  absl::flat_hash_map<Oid, const zetasql::Function*> oid_to_udf_map_;
-  absl::flat_hash_map<Oid, const zetasql::TableValuedFunction*>
+  absl::flat_hash_map<Oid, const googlesql::Function*> oid_to_udf_map_;
+  absl::flat_hash_map<Oid, const googlesql::TableValuedFunction*>
       oid_to_tvf_map_;
 
   // A counter to assign unique oids to RTEs.
@@ -232,11 +232,11 @@ class CatalogAdapter {
   std::unique_ptr<EngineUserCatalog> engine_user_catalog_;
   EngineSystemCatalog* engine_system_catalog_ = nullptr;  // Not owned.
 
-  // ZetaSQL AnalyzerOptions determines certain characteristics of the
+  // GoogleSQL AnalyzerOptions determines certain characteristics of the
   // returned Resolved AST and contains a memory arena for allocating IdStrings.
   // The AnalyzerOptions also include LanguageOptions which are used for
   // function matching and error message type names.
-  const zetasql::AnalyzerOptions& analyzer_options_;  // Not owned.
+  const googlesql::AnalyzerOptions& analyzer_options_;  // Not owned.
 
   // Maps from start to end positions of tokens in the SQL expression
   absl::flat_hash_map<int, int> token_locations_;

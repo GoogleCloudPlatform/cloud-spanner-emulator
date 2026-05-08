@@ -20,10 +20,10 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "frontend/common/status.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 #include "absl/status/status.h"
 
 namespace google {

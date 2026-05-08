@@ -67,7 +67,15 @@ struct RetryState {
 };
 
 // Options for creating a read write transaction.
-struct ReadWriteOptions {};
+struct ReadWriteOptions {
+  // When `exclude_txn_from_change_streams` is `true`, modifications made by
+  // this transaction are excluded from any change streams that have the
+  // `allow_txn_exclusion` option set to `true`.
+  // Modifications to tables tracked by change streams that do not have
+  // `allow_txn_exclusion` set to `true` will still be recorded, regardless of
+  // the value of `exclude_txn_from_change_streams`.
+  bool exclude_txn_from_change_streams = false;
+};
 
 }  // namespace backend
 }  // namespace emulator

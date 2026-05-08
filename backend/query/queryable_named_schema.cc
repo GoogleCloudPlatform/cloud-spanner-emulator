@@ -18,8 +18,8 @@
 
 #include <string>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "backend/schema/catalog/named_schema.h"
@@ -36,7 +36,7 @@ QueryableNamedSchema::QueryableNamedSchema(
 }
 
 absl::Status QueryableNamedSchema::GetTable(const std::string& name,
-                                            const zetasql::Table** table,
+                                            const googlesql::Table** table,
                                             const FindOptions& options) {
   *table = nullptr;
   if (auto it = views_.find(name); it != views_.end()) {
@@ -53,7 +53,7 @@ absl::Status QueryableNamedSchema::GetTable(const std::string& name,
 }
 
 absl::Status QueryableNamedSchema::GetModel(const std::string& name,
-                                            const zetasql::Model** model,
+                                            const googlesql::Model** model,
                                             const FindOptions& options) {
   *model = nullptr;
   if (auto it = models_.find(name); it != models_.end()) {
@@ -64,7 +64,7 @@ absl::Status QueryableNamedSchema::GetModel(const std::string& name,
 }
 
 absl::Status QueryableNamedSchema::GetSequence(
-    const std::string& name, const zetasql::Sequence** sequence,
+    const std::string& name, const googlesql::Sequence** sequence,
     const FindOptions& options) {
   *sequence = nullptr;
   if (auto it = sequences_.find(name); it != sequences_.end()) {
@@ -75,7 +75,7 @@ absl::Status QueryableNamedSchema::GetSequence(
 }
 
 absl::Status QueryableNamedSchema::GetFunction(
-    const std::string& name, const zetasql::Function** function,
+    const std::string& name, const googlesql::Function** function,
     const FindOptions& options) {
   *function = nullptr;
   if (auto it = udfs_.find(name); it != udfs_.end()) {
@@ -85,15 +85,15 @@ absl::Status QueryableNamedSchema::GetFunction(
   return error::FunctionNotFound(name);
 }
 
-// Should not be called but is required per the zetasql::Catalog interface.
+// Should not be called but is required per the googlesql::Catalog interface.
 absl::Status QueryableNamedSchema::GetType(const std::string& name,
-                                           const zetasql::Type** type,
+                                           const googlesql::Type** type,
                                            const FindOptions& options) {
   return error::TypeNotFound(name);
 }
 
 absl::Status QueryableNamedSchema::GetTables(
-    absl::flat_hash_set<const zetasql::Table*>* output) const {
+    absl::flat_hash_set<const googlesql::Table*>* output) const {
   for (auto iter = tables_.begin(); iter != tables_.end(); ++iter) {
     output->insert(iter->second.get());
   }
@@ -104,18 +104,18 @@ absl::Status QueryableNamedSchema::GetTables(
 }
 
 absl::Status QueryableNamedSchema::GetFunctions(
-    absl::flat_hash_set<const zetasql::Function*>* output) const {
+    absl::flat_hash_set<const googlesql::Function*>* output) const {
   function_catalog_->GetFunctions(output);
   return absl::OkStatus();
 }
 
 absl::Status QueryableNamedSchema::GetCatalogs(
-    absl::flat_hash_set<const zetasql::Catalog*>* output) const {
+    absl::flat_hash_set<const googlesql::Catalog*>* output) const {
   return absl::OkStatus();
 }
 
 absl::Status QueryableNamedSchema::GetTypes(
-    absl::flat_hash_set<const zetasql::Type*>* output) const {
+    absl::flat_hash_set<const googlesql::Type*>* output) const {
   return absl::OkStatus();
 }
 

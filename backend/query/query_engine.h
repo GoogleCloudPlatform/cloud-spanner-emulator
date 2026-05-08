@@ -23,10 +23,10 @@
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/value.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/value.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -49,10 +49,10 @@ struct Query {
 
   // The query parameters. Values in this map have already been deserialized as
   // their type was provided in the query.
-  std::map<std::string, zetasql::Value> declared_params;
+  std::map<std::string, googlesql::Value> declared_params;
 
   // Parameters that did not have a type supplied. They will be deserialized in
-  // the backend once the ZetaSQL analyzer provides types.
+  // the backend once the GoogleSQL analyzer provides types.
   std::map<std::string, google::protobuf::Value> undeclared_params;
 
   // If not empty,the current query is an internal query against a non public
@@ -64,8 +64,8 @@ struct Query {
 bool IsDMLQuery(const std::string& query);
 
 // Returns the returning clause of a DML statement.
-const zetasql::ResolvedReturningClause* GetReturningClause(
-    const zetasql::ResolvedStatement* resolved_statement);
+const googlesql::ResolvedReturningClause* GetReturningClause(
+    const googlesql::ResolvedStatement* resolved_statement);
 
 // QueryResult specifies the output of a query request.
 struct QueryResult {
@@ -74,7 +74,7 @@ struct QueryResult {
   std::unique_ptr<RowCursor> rows;
 
   // Map containing the types of all query parameters.
-  zetasql::QueryParametersMap parameter_types;
+  googlesql::QueryParametersMap parameter_types;
 
   // The number of modified rows.
   int64_t modified_row_count = 0;
@@ -89,7 +89,7 @@ struct QueryResult {
 // QueryEngine handles SQL-related requests.
 class QueryEngine {
  public:
-  explicit QueryEngine(zetasql::TypeFactory* type_factory,
+  explicit QueryEngine(googlesql::TypeFactory* type_factory,
                        const Schema* schema)
       : type_factory_(type_factory),
         function_catalog_(type_factory,
@@ -111,10 +111,10 @@ class QueryEngine {
 
   absl::StatusOr<QueryResult> ExecuteInsertOnConflictDml(
       const Query& query,
-      const zetasql::ResolvedStatement* resolved_statement,
-      const std::map<std::string, zetasql::Value>& params,
+      const googlesql::ResolvedStatement* resolved_statement,
+      const std::map<std::string, googlesql::Value>& params,
       google::spanner::emulator::backend::Catalog& catalog,
-      zetasql::AnalyzerOptions& analyzer_options,
+      googlesql::AnalyzerOptions& analyzer_options,
       const QueryContext& context) const;
 
   // Returns OK if query is partitionable.
@@ -135,7 +135,7 @@ class QueryEngine {
   TryGetChangeStreamMetadata(const Query& query, const Schema* schema,
                              bool in_read_write_txn = false);
 
-  zetasql::TypeFactory* type_factory() const { return type_factory_; }
+  googlesql::TypeFactory* type_factory() const { return type_factory_; }
 
   const FunctionCatalog* function_catalog() const { return &function_catalog_; }
 
@@ -146,7 +146,7 @@ class QueryEngine {
  private:
   static std::string GetTimeZone(const Schema* schema);
 
-  zetasql::TypeFactory* type_factory_;
+  googlesql::TypeFactory* type_factory_;
   FunctionCatalog function_catalog_;
 };
 

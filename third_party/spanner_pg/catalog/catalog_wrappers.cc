@@ -36,8 +36,8 @@
 #include <vector>
 
 #include "absl/log/absl_log.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/function_signature.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/function_signature.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -55,8 +55,8 @@
 #include "third_party/spanner_pg/transformer/transformer.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/src/backend/catalog/pg_type_d.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 
@@ -96,9 +96,9 @@ absl::StatusOr<RangeTblEntry*> AddRangeTableEntryCpp(ParseState* pstate,
     return absl::InternalError("No RangeVar specified for catalog lookup.");
   }
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
-  ZETASQL_RET_CHECK_NE(relation, nullptr);
-  ZETASQL_ASSIGN_OR_RETURN(TableName table_name, TableNameFromRangeVar(*relation));
+  GOOGLESQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_RET_CHECK_NE(relation, nullptr);
+  GOOGLESQL_ASSIGN_OR_RETURN(TableName table_name, TableNameFromRangeVar(*relation));
   // Round-tripping this through CatalogAdapter below will strip any catalogname
   // so check here and error if the user tried to supply one.
   if (relation->catalogname != nullptr) {
@@ -107,13 +107,13 @@ absl::StatusOr<RangeTblEntry*> AddRangeTableEntryCpp(ParseState* pstate,
                      table_name.ToString(), "\""));
   }
   RangeTblEntry* rte;
-  ZETASQL_ASSIGN_OR_RETURN(Oid oid,
+  GOOGLESQL_ASSIGN_OR_RETURN(Oid oid,
                    catalog_adapter->GetOrGenerateOidFromTableName(table_name));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       rte, Transformer::BuildPgRangeTblEntry(*catalog_adapter, oid, alias,
                                              inFromCl, ACL_SELECT));
   // The Transformer defaults to inh==true (allow implicit inheritence)
-  // because there's no ZetaSQL concept of inheritence to map on to it. If
+  // because there's no GoogleSQL concept of inheritence to map on to it. If
   // someone actually specified it in SQL, preserve that choice here.
   rte->inh = inh;
   // Add completed RTE to pstate's range table list, so that we know its
@@ -135,9 +135,9 @@ absl::StatusOr<RangeTblEntry*> AddRangeTableEntryByOidCpp(ParseState* pstate,
                                                           bool inh,
                                                           bool inFromCl) {
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
   RangeTblEntry* rte;
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       rte, Transformer::BuildPgRangeTblEntry(*catalog_adapter, relation_oid,
                                              alias, inFromCl, ACL_SELECT));
   // Additionally add the new RTE to ParseState's range table list.
@@ -147,49 +147,49 @@ absl::StatusOr<RangeTblEntry*> AddRangeTableEntryByOidCpp(ParseState* pstate,
 
 // Helper function for table lookup via catalog adapter and user catalog (both
 // accessed from thread-local storage).
-static absl::StatusOr<const zetasql::Table*> GetTableByOid(Oid table_oid) {
+static absl::StatusOr<const googlesql::Table*> GetTableByOid(Oid table_oid) {
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
-  ZETASQL_ASSIGN_OR_RETURN(TableName table_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSIGN_OR_RETURN(TableName table_name,
                    catalog_adapter->GetTableNameFromOid(table_oid));
-  const zetasql::Table* table;
-  ZETASQL_RET_CHECK_OK(catalog_adapter->GetEngineUserCatalog()->FindTable(
+  const googlesql::Table* table;
+  GOOGLESQL_RET_CHECK_OK(catalog_adapter->GetEngineUserCatalog()->FindTable(
       table_name.AsSpan(), &table));
   return table;
 }
 
 // C++ helper to GetAttributeNameC and other similar functions in this file.
 // Gets column->name from table and returns a pstrdup'd copy of the name.
-static absl::StatusOr<char*> GetAttributeNameCpp(const zetasql::Table& table,
+static absl::StatusOr<char*> GetAttributeNameCpp(const googlesql::Table& table,
                                                  AttrNumber attnum) {
   const int attribute_offset = attnum - 1;  // attnums are 1-indexed.
-  ZETASQL_RET_CHECK_GE(attribute_offset, 0);
-  ZETASQL_RET_CHECK_LE(attribute_offset, table.NumColumns());
-  const zetasql::Column* column = table.GetColumn(attribute_offset);
+  GOOGLESQL_RET_CHECK_GE(attribute_offset, 0);
+  GOOGLESQL_RET_CHECK_LE(attribute_offset, table.NumColumns());
+  const googlesql::Column* column = table.GetColumn(attribute_offset);
   return pstrdup(column->Name().c_str());
 }
 
 // Helper for `GetAttributeNameC` so that the two places an error can be
 // generated get handled once in GetAttributeNameC.
 absl::StatusOr<char*> GetAttnameHelper(Oid relid, AttrNumber attnum) {
-  ZETASQL_ASSIGN_OR_RETURN(const zetasql::Table* table, GetTableByOid(relid));
+  GOOGLESQL_ASSIGN_OR_RETURN(const googlesql::Table* table, GetTableByOid(relid));
   return GetAttributeNameCpp(*table, attnum);
 }
 
 // C++ helper to GetAttributeTypeC below. Gets column->type from table and
 // populates outargs with translated type information.
-static absl::Status GetAttributeTypeCpp(const zetasql::Table& table,
+static absl::Status GetAttributeTypeCpp(const googlesql::Table& table,
                                         AttrNumber attnum, Oid* vartype,
                                         int32_t* vartypmod, Oid* varcollid) {
   const int attribute_offset = attnum - 1;  // attnums are 1-indexed.
-  ZETASQL_RET_CHECK_GE(attribute_offset, 0);
-  ZETASQL_RET_CHECK_LT(attribute_offset, table.NumColumns());
-  const zetasql::Column* column = table.GetColumn(attribute_offset);
+  GOOGLESQL_RET_CHECK_GE(attribute_offset, 0);
+  GOOGLESQL_RET_CHECK_LT(attribute_offset, table.NumColumns());
+  const googlesql::Column* column = table.GetColumn(attribute_offset);
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
-  ZETASQL_ASSIGN_OR_RETURN(*vartype, Transformer::BuildPgTypeOid(*catalog_adapter,
+  GOOGLESQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSIGN_OR_RETURN(*vartype, Transformer::BuildPgTypeOid(*catalog_adapter,
                                                          column->GetType()));
-  ZETASQL_ASSIGN_OR_RETURN(const FormData_pg_type* pg_type,
+  GOOGLESQL_ASSIGN_OR_RETURN(const FormData_pg_type* pg_type,
                    PgBootstrapCatalog::Default()->GetType(*vartype));
   *vartypmod = pg_type->typtypmod;
   *varcollid = pg_type->typcollation;
@@ -200,10 +200,10 @@ static absl::Status GetAttributeTypeCpp(const zetasql::Table& table,
 // pseudo column.
 static absl::StatusOr<bool> IsAttributePseudoColumnCpp(Oid relid,
                                                        AttrNumber attnum) {
-  ZETASQL_ASSIGN_OR_RETURN(const zetasql::Table* table, GetTableByOid(relid));
+  GOOGLESQL_ASSIGN_OR_RETURN(const googlesql::Table* table, GetTableByOid(relid));
   const int attribute_offset = attnum - 1;  // attnums are 1-indexed.
-  ZETASQL_RET_CHECK_GE(attribute_offset, 0);
-  ZETASQL_RET_CHECK_LT(attribute_offset, table->NumColumns());
+  GOOGLESQL_RET_CHECK_GE(attribute_offset, 0);
+  GOOGLESQL_RET_CHECK_LT(attribute_offset, table->NumColumns());
   return table->GetColumn(attribute_offset)->IsPseudoColumn();
 }
 
@@ -212,8 +212,8 @@ static absl::StatusOr<bool> IsAttributePseudoColumnCpp(Oid relid,
 // TODO: This copies the name up to *3* times. We can do better.
 static absl::StatusOr<char*> GetTableNameCpp(Oid table_oid) {
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
-  ZETASQL_ASSIGN_OR_RETURN(TableName table_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSIGN_OR_RETURN(TableName table_name,
                    catalog_adapter->GetTableNameFromOid(table_oid));
   // Ensure we have a null terminator because pstrdup requires it.
   return pstrdup(std::string(table_name.UnqualifiedName()).c_str());
@@ -221,8 +221,8 @@ static absl::StatusOr<char*> GetTableNameCpp(Oid table_oid) {
 
 static absl::StatusOr<char*> GetNamespaceNameCpp(Oid table_oid) {
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
-  ZETASQL_ASSIGN_OR_RETURN(TableName table_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSIGN_OR_RETURN(TableName table_name,
                    catalog_adapter->GetTableNameFromOid(table_oid));
   const std::string* namespace_name = table_name.NamespaceName();
   if (namespace_name == nullptr) return nullptr;
@@ -244,8 +244,8 @@ static absl::Status GetColumnNamesCpp(Oid table_oid, char*** real_colnames,
   *ncolumns = 0;
   *real_colnames = nullptr;
 
-  ZETASQL_ASSIGN_OR_RETURN(const zetasql::Table* table, GetTableByOid(table_oid));
-  ZETASQL_RET_CHECK_NE(table, nullptr);
+  GOOGLESQL_ASSIGN_OR_RETURN(const googlesql::Table* table, GetTableByOid(table_oid));
+  GOOGLESQL_RET_CHECK_NE(table, nullptr);
   *ncolumns = table->NumColumns();
   *real_colnames = reinterpret_cast<char**>(palloc(*ncolumns * sizeof(char*)));
   for (int i = 0; i < table->NumColumns(); ++i) {
@@ -274,12 +274,12 @@ static absl::Status GetColumnTypesCpp(Oid table_oid, List** coltypes,
   *coltypmods = nullptr;
   *colcollations = nullptr;
 
-  ZETASQL_ASSIGN_OR_RETURN(const zetasql::Table* table, GetTableByOid(table_oid));
-  ZETASQL_RET_CHECK_NE(table, nullptr);
+  GOOGLESQL_ASSIGN_OR_RETURN(const googlesql::Table* table, GetTableByOid(table_oid));
+  GOOGLESQL_RET_CHECK_NE(table, nullptr);
   *ncolumns = table->NumColumns();
 
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
   for (int i = 0; i < table->NumColumns(); ++i) {
     absl::StatusOr<Oid> col_type_or = Transformer::BuildPgTypeOid(
         *catalog_adapter, table->GetColumn(i)->GetType());
@@ -287,7 +287,7 @@ static absl::Status GetColumnTypesCpp(Oid table_oid, List** coltypes,
     // types.
     if (col_type_or.ok()) {
       *coltypes = lappend_oid(*coltypes, *col_type_or);
-      ZETASQL_ASSIGN_OR_RETURN(const FormData_pg_type* pg_type,
+      GOOGLESQL_ASSIGN_OR_RETURN(const FormData_pg_type* pg_type,
                        PgBootstrapCatalog::Default()->GetType(*col_type_or));
       *coltypmods = lappend_oid(*coltypmods, pg_type->typtypmod);
       *colcollations = lappend_oid(*colcollations, pg_type->typcollation);
@@ -308,17 +308,17 @@ static absl::Status ExpandRelationCpp(Oid relid, Alias* eref, int rtindex,
                                       int sublevels_up, int location,
                                       List** colnames, List** colvars) {
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
   EngineUserCatalog* catalog = catalog_adapter->GetEngineUserCatalog();
   if (catalog == nullptr) {
     return absl::InternalError(
         "Googlesql catalog not initialized on this thread.");
   }
-  ZETASQL_ASSIGN_OR_RETURN(TableName table_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(TableName table_name,
                    catalog_adapter->GetTableNameFromOid(relid));
-  const zetasql::Table* user_table = nullptr;
-  ZETASQL_RETURN_IF_ERROR(catalog->FindTable(table_name.AsSpan(), &user_table));
-  ZETASQL_RET_CHECK_NE(user_table, nullptr)
+  const googlesql::Table* user_table = nullptr;
+  GOOGLESQL_RETURN_IF_ERROR(catalog->FindTable(table_name.AsSpan(), &user_table));
+  GOOGLESQL_RET_CHECK_NE(user_table, nullptr)
       << "User table " << table_name << " not found.";
 
   // Also iterate through eref if one is provided.
@@ -348,7 +348,7 @@ static absl::Status ExpandRelationCpp(Oid relid, Alias* eref, int rtindex,
         aliascell = lnext(eref->colnames, aliascell);
       } else {
         // If we run out of aliases, use the underlying name.
-        ZETASQL_ASSIGN_OR_RETURN(label, GetAttributeNameCpp(*user_table, varattno));
+        GOOGLESQL_ASSIGN_OR_RETURN(label, GetAttributeNameCpp(*user_table, varattno));
       }
       *colnames = lappend(*colnames, makeString(pstrdup(label)));
     }
@@ -357,7 +357,7 @@ static absl::Status ExpandRelationCpp(Oid relid, Alias* eref, int rtindex,
       Oid type_oid;
       int32_t typemod;
       Oid collation;
-      ZETASQL_RETURN_IF_ERROR(GetAttributeTypeCpp(*user_table, varattno, &type_oid,
+      GOOGLESQL_RETURN_IF_ERROR(GetAttributeTypeCpp(*user_table, varattno, &type_oid,
                                           &typemod, &collation));
       Var* varnode = makeVar(rtindex, varattno, type_oid, typemod, collation,
                              sublevels_up);
@@ -380,7 +380,7 @@ static absl::StatusOr<List*> ExpandNSItemVarsForJoinCpp(
     const List* rtable, ParseNamespaceItem* nsitem, int sublevels_up,
     int location, List** colnames) {
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
   EngineUserCatalog* catalog = catalog_adapter->GetEngineUserCatalog();
   if (catalog == nullptr) {
     return absl::InternalError(
@@ -389,7 +389,7 @@ static absl::StatusOr<List*> ExpandNSItemVarsForJoinCpp(
 
   // The columns in this join reference two real tables by varno. Store the
   // varno --> table  mapping so we don't look up the same table multiple times.
-  absl::flat_hash_map<int, const zetasql::Table*> varno_to_table_map;
+  absl::flat_hash_map<int, const googlesql::Table*> varno_to_table_map;
 
   List* result = NIL;
   int colindex = -1;
@@ -411,10 +411,10 @@ static absl::StatusOr<List*> ExpandNSItemVarsForJoinCpp(
 
     // Skip Pseudo Columns.
     // This only applies when the column is from a relation and the column on
-    // the ZetaSQL table corresponding to that relation is marked
+    // the GoogleSQL table corresponding to that relation is marked
     // IsPseudoColumn.
     ParseNamespaceColumn* nscol = nsitem->p_nscolumns + colindex;
-    const zetasql::Table* table = nullptr;
+    const googlesql::Table* table = nullptr;
     int varno = nscol->p_varno;
     int varattno = nscol->p_varattno;
     auto it = varno_to_table_map.find(varno);
@@ -423,7 +423,7 @@ static absl::StatusOr<List*> ExpandNSItemVarsForJoinCpp(
     } else {
       RangeTblEntry* rte = rt_fetch(varno, rtable);
       if (rte->rtekind == RTE_RELATION) {
-        ZETASQL_RETURN_IF_ERROR(catalog_adapter->GetEngineUserCatalog()->FindTable(
+        GOOGLESQL_RETURN_IF_ERROR(catalog_adapter->GetEngineUserCatalog()->FindTable(
             catalog_adapter->GetTableNameFromOid(rte->relid)->AsSpan(),
             &table));
       }
@@ -431,9 +431,9 @@ static absl::StatusOr<List*> ExpandNSItemVarsForJoinCpp(
       varno_to_table_map[varno] = table;
     }
     if (table) {
-      // ZetaSQL column indices start at 0, varattnos start at 1.
-      const zetasql::Column* gsql_column = table->GetColumn(varattno - 1);
-      ZETASQL_RET_CHECK_NE(gsql_column, nullptr);
+      // GoogleSQL column indices start at 0, varattnos start at 1.
+      const googlesql::Column* gsql_column = table->GetColumn(varattno - 1);
+      GOOGLESQL_RET_CHECK_NE(gsql_column, nullptr);
 
       if (gsql_column->IsPseudoColumn()) {
         // It's a pseudo column. Don't include in the expansion.
@@ -466,14 +466,14 @@ static absl::StatusOr<List*> ExpandNSItemVarsForJoinCpp(
 // Memory is allocated from and owned by CurrentMemoryContext, but
 // CatalogAdapter will retain a pointer to it for later retrieval.
 static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromUDF(
-    const zetasql::Function* udf, CatalogAdapter* adapter,
+    const googlesql::Function* udf, CatalogAdapter* adapter,
     Oid proc_oid = InvalidOid) {
   std::vector<const FormData_pg_proc*> result;
 
   // Each signature will be created as a separate pg_proc.
   // For now, we only need to support a single signature.
-  ZETASQL_RET_CHECK_EQ(udf->NumSignatures(), 1);
-  const zetasql::FunctionSignature* signature = udf->GetSignature(0);
+  GOOGLESQL_RET_CHECK_EQ(udf->NumSignatures(), 1);
+  const googlesql::FunctionSignature* signature = udf->GetSignature(0);
 
   // Build a corresponding FormData_pg_proc for this signature, including space
   // for the variable-length args list. This lives in, is owned by, and has
@@ -485,23 +485,23 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromUDF(
   // Get the OID for the proc. If it's already been generated, use that.
   // Otherwise, generate a new one.
   if (proc_oid == InvalidOid) {
-    ZETASQL_ASSIGN_OR_RETURN(proc_oid, adapter->GetOrGenerateUDFProcOid(udf));
+    GOOGLESQL_ASSIGN_OR_RETURN(proc_oid, adapter->GetOrGenerateUDFProcOid(udf));
   }
   proc->oid = proc_oid;
-  ZETASQL_RETURN_IF_ERROR(adapter->StoreUDFProc(proc));
+  GOOGLESQL_RETURN_IF_ERROR(adapter->StoreUDFProc(proc));
   const std::string udf_name = udf->FullName(/*include_group=*/false);
-  ZETASQL_RET_CHECK(udf_name.size() < NAMEDATALEN);
+  GOOGLESQL_RET_CHECK(udf_name.size() < NAMEDATALEN);
   memcpy(NameStr(proc->proname), udf_name.c_str(), udf_name.size() + 1);
 
   // Treat UDFs at the root namespace as being in the pg_catalog namespace.
   std::string udf_namespace;
-  ZETASQL_RET_CHECK(udf->FunctionNamePath().size() < 3);
+  GOOGLESQL_RET_CHECK(udf->FunctionNamePath().size() < 3);
   if (udf->FunctionNamePath().size() == 1) {
     udf_namespace = "pg_catalog";
   } else if (udf->FunctionNamePath().size() == 2) {
     udf_namespace = udf->FunctionNamePath()[0];
   }
-  ZETASQL_ASSIGN_OR_RETURN(proc->pronamespace,
+  GOOGLESQL_ASSIGN_OR_RETURN(proc->pronamespace,
                    adapter->GetOrGenerateOidFromNamespaceName(udf_namespace));
 
   // These fields are currently unused by the caller, but we might as well fill
@@ -515,21 +515,21 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromUDF(
   proc->prokind = PROKIND_FUNCTION;
   proc->prosecdef =
       udf->sql_security() ==
-      zetasql::ResolvedCreateStatementEnums::SQL_SECURITY_DEFINER;
+      googlesql::ResolvedCreateStatementEnums::SQL_SECURITY_DEFINER;
   proc->proretset = false;
   switch (udf->function_options().volatility) {
-    case zetasql::FunctionEnums::VOLATILE:
+    case googlesql::FunctionEnums::VOLATILE:
       proc->provolatile = PROVOLATILE_VOLATILE;
       break;
-    case zetasql::FunctionEnums::IMMUTABLE:
+    case googlesql::FunctionEnums::IMMUTABLE:
       proc->provolatile = PROVOLATILE_IMMUTABLE;
       break;
-    case zetasql::FunctionEnums::STABLE:
+    case googlesql::FunctionEnums::STABLE:
       proc->provolatile = PROVOLATILE_STABLE;
       break;
     default:
       return absl::InternalError(absl::StrCat(
-          "Unsupported volatility: ", zetasql::FunctionEnums::Volatility_Name(
+          "Unsupported volatility: ", googlesql::FunctionEnums::Volatility_Name(
                                           udf->function_options().volatility)));
   }
   proc->proparallel = PROPARALLEL_SAFE;
@@ -548,11 +548,11 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromUDF(
   proc->proargtypes.dim1 = signature->arguments().size();
   proc->proargtypes.lbound1 = 0;
   for (int i = 0; i < signature->arguments().size(); ++i) {
-    ZETASQL_ASSIGN_OR_RETURN(Oid oid, Transformer::BuildPgTypeOid(
+    GOOGLESQL_ASSIGN_OR_RETURN(Oid oid, Transformer::BuildPgTypeOid(
                                   *adapter, signature->argument(i).type()));
     proc->proargtypes.values[i] = oid;
   }
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       proc->prorettype,
       Transformer::BuildPgTypeOid(*adapter, signature->result_type().type()));
 
@@ -570,13 +570,13 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromUDF(
 // Memory is allocated from and owned by CurrentMemoryContext, but
 // CatalogAdapter will retain a pointer to it for later retrieval.
 static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromTVF(
-    const zetasql::TableValuedFunction* tvf, CatalogAdapter* adapter) {
+    const googlesql::TableValuedFunction* tvf, CatalogAdapter* adapter) {
   std::vector<const FormData_pg_proc*> result;
 
   // Each signature will be created as a separate pg_proc.
   // For now, we only need to support a single signature.
-  ZETASQL_RET_CHECK_EQ(tvf->NumSignatures(), 1);
-  const zetasql::FunctionSignature* signature = tvf->GetSignature(0);
+  GOOGLESQL_RET_CHECK_EQ(tvf->NumSignatures(), 1);
+  const googlesql::FunctionSignature* signature = tvf->GetSignature(0);
 
   // Build a corresponding FormData_pg_proc for this signature, including space
   // for the variable-length args list. This lives in, is owned by, and has
@@ -588,21 +588,21 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromTVF(
   // This oid will be assigned by CatalogAdapter later. It checks for InvalidOid
   // as a sanity check that we aren't assigning a duplicate.
   proc->oid = InvalidOid;
-  ZETASQL_ASSIGN_OR_RETURN(proc->oid, adapter->GenerateAndStoreTVFProcOid(proc, tvf));
-  ZETASQL_RET_CHECK(tvf->Name().size() < NAMEDATALEN);
+  GOOGLESQL_ASSIGN_OR_RETURN(proc->oid, adapter->GenerateAndStoreTVFProcOid(proc, tvf));
+  GOOGLESQL_RET_CHECK(tvf->Name().size() < NAMEDATALEN);
   memcpy(NameStr(proc->proname), tvf->Name().c_str(), tvf->Name().size() + 1);
 
   // Treat this function as being in the "spanner" namespace (because it's
   // spanner-specific) similar to pending_commit_timestamp. In Spanner's view,
   // the function will be in the top-level namespace.
   std::string tvf_namespace;
-  ZETASQL_RET_CHECK(tvf->function_name_path().size() < 3);
+  GOOGLESQL_RET_CHECK(tvf->function_name_path().size() < 3);
   if (tvf->function_name_path().size() == 1) {
     tvf_namespace = "spanner";
   } else if (tvf->function_name_path().size() == 2) {
     tvf_namespace = tvf->function_name_path()[0];
   }
-  ZETASQL_ASSIGN_OR_RETURN(proc->pronamespace,
+  GOOGLESQL_ASSIGN_OR_RETURN(proc->pronamespace,
                    adapter->GetOidFromNamespaceName(tvf_namespace));
 
   // These fields are currently unused by the caller, but we might as well fill
@@ -634,7 +634,7 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromTVF(
   proc->proargtypes.dim1 = signature->arguments().size();
   proc->proargtypes.lbound1 = 0;
   for (int i = 0; i < signature->arguments().size(); ++i) {
-    ZETASQL_ASSIGN_OR_RETURN(Oid oid, Transformer::BuildPgTypeOid(
+    GOOGLESQL_ASSIGN_OR_RETURN(Oid oid, Transformer::BuildPgTypeOid(
                                   *adapter, signature->argument(i).type()));
     proc->proargtypes.values[i] = oid;
   }
@@ -645,12 +645,12 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromTVF(
   // We're unwrapping this TVFRelation return type to peek at the columns inside
   // by labeling this whole function as set-returning, which is the closest PG
   // equivalent.
-  ZETASQL_RET_CHECK(signature->result_type().IsFixedRelation());
-  const zetasql::TVFRelation& output_schema =
+  GOOGLESQL_RET_CHECK(signature->result_type().IsFixedRelation());
+  const googlesql::TVFRelation& output_schema =
       signature->result_type().options().relation_input_schema();
 
   if (output_schema.num_columns() == 1) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         proc->prorettype,
         Transformer::BuildPgTypeOid(*adapter, output_schema.column(0).type));
   } else {
@@ -689,33 +689,33 @@ static absl::Status GetProcsByNameFromUserCatalog(
   std::vector<const FormData_pg_proc*> found_procs;
 
   CatalogAdapter* adapter;
-  ZETASQL_ASSIGN_OR_RETURN(adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSIGN_OR_RETURN(adapter, GetCatalogAdapter());
   EngineUserCatalog* catalog = adapter->GetEngineUserCatalog();
 
   // Get each matching function and add it to our output.
   // For now, only look in the top-level catalog and only for TVFs.
   // TODO: Add support for nested catalogs.
-  const zetasql::TableValuedFunction* tvf;
+  const googlesql::TableValuedFunction* tvf;
   absl::Status status = catalog->FindTableValuedFunction({func_name}, &tvf);
   // NotFound is fine, just swallow it. Any other error is unexpected.
   if (!absl::IsNotFound(status)) {
     if (!status.ok()) {
       return status;
     }
-    ZETASQL_RET_CHECK(tvf->function_name_path().size() > 0);
-    ZETASQL_RET_CHECK(tvf->function_name_path().size() < 3);
+    GOOGLESQL_RET_CHECK(tvf->function_name_path().size() > 0);
+    GOOGLESQL_RET_CHECK(tvf->function_name_path().size() < 3);
     bool tvf_is_spanner_namespace = tvf->function_name_path().size() == 1 ||
                                     tvf->function_name_path()[0] == "spanner";
     bool is_schema_spanner =
         schema_name != nullptr && strcmp(schema_name, "spanner") == 0;
     if (tvf->Name() == func_name &&
         (is_schema_spanner == tvf_is_spanner_namespace)) {
-      ZETASQL_ASSIGN_OR_RETURN(std::vector<const FormData_pg_proc*> new_procs,
+      GOOGLESQL_ASSIGN_OR_RETURN(std::vector<const FormData_pg_proc*> new_procs,
                        BuildPgProcsFromTVF(tvf, adapter));
       found_procs.insert(found_procs.end(), new_procs.begin(), new_procs.end());
     }
   } else {
-    const zetasql::Function* udf;
+    const googlesql::Function* udf;
     status = catalog->FindFunction(name_path, &udf);
     // NotFound is fine, just swallow it. Any other error is unexpected.
     if (absl::IsNotFound(status) || !udf->IsScalar()) {
@@ -727,7 +727,7 @@ static absl::Status GetProcsByNameFromUserCatalog(
         !adapter->GetOrGenerateOidFromNamespaceName(schema_name).ok()) {
       return status;
     }
-    ZETASQL_ASSIGN_OR_RETURN(std::vector<const FormData_pg_proc*> new_procs,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::vector<const FormData_pg_proc*> new_procs,
                      BuildPgProcsFromUDF(udf, adapter));
     found_procs.insert(found_procs.end(), new_procs.begin(), new_procs.end());
   }
@@ -759,7 +759,7 @@ static bool GetArgInfoForTVF(Oid tvf_oid, std::vector<Oid>& argument_types,
           "TVF with multiple signatures is not supported");
       return false;  // Unreachable.
     }
-    const zetasql::FunctionSignature* signature =
+    const googlesql::FunctionSignature* signature =
         tvf.value()->GetSignature(0);
     for (const auto& arg : signature->arguments()) {
       auto pg_type =
@@ -773,11 +773,11 @@ static bool GetArgInfoForTVF(Oid tvf_oid, std::vector<Oid>& argument_types,
       }
       argument_modes.push_back('i');
     }
-    const zetasql::TVFRelation& output_schema =
+    const googlesql::TVFRelation& output_schema =
         signature->result_type().options().relation_input_schema();
     if (output_schema.num_columns() > 1) {
       for (int i = 0; i < output_schema.num_columns(); i++) {
-        const zetasql::TVFRelation::Column& col = output_schema.column(i);
+        const googlesql::TVFRelation::Column& col = output_schema.column(i);
         auto pg_type = adapter.value()
                            ->GetEngineSystemCatalog()
                            ->GetTypeFromReverseMapping(col.type);
@@ -822,7 +822,7 @@ static bool GetArgInfoForUDF(Oid udf_oid, std::vector<Oid>& argument_types,
         "UDF with multiple signatures is not supported");
     return false;  // Unreachable.
   }
-  const zetasql::FunctionSignature* signature =
+  const googlesql::FunctionSignature* signature =
       udf.value()->GetSignature(0);
   for (const auto& arg : signature->arguments()) {
     auto pg_type =
@@ -850,7 +850,7 @@ absl::StatusOr<TableName> TableNameFromRangeVar(RangeVar& relation) {
   }
 
   if (relation.relname == nullptr) {
-    // We need at least a relation name to do lookup in the ZetaSQL catalog.
+    // We need at least a relation name to do lookup in the GoogleSQL catalog.
     return absl::InternalError(
         "'relname' is required. Make sure to provide a relation name.");
   } else {
@@ -869,7 +869,7 @@ extern "C" RangeTblEntry* AddRangeTableEntryC(ParseState* pstate,
                                                    inFromCl);
   if (!rte.ok()) {
     if (rte.status().code() == absl::StatusCode::kNotFound) {
-      // ZetaSQL uses this status code to report table not found (replacing
+      // GoogleSQL uses this status code to report table not found (replacing
       // the catalog's error with a different one). Replace this with the
       // equivalent PG error message:
       //   relation "[schema_name.]table_name" does not exist
@@ -939,7 +939,7 @@ extern "C" char* GetAttributeNameC(Oid relid, AttrNumber attnum,
 
 extern "C" void GetAttributeTypeC(Oid relid, AttrNumber attnum, Oid* vartype,
                                   int32_t* vartypmod, Oid* varcollid) {
-  absl::StatusOr<const zetasql::Table*> table =
+  absl::StatusOr<const googlesql::Table*> table =
       postgres_translator::GetTableByOid(relid);
   if (!table.ok()) {
     ABSL_LOG(ERROR) << table.status();
@@ -1196,7 +1196,7 @@ extern "C" void GetAmprocsByFamilyFromBootstrapCatalog(
 // Combining the shim means we don't have support building a TupleDesc for user
 // tables.
 // We're using a C++ wrapper here so that catalog shim can utilize
-// ZetaSQL's Table class and transformer catalog functions for type
+// GoogleSQL's Table class and transformer catalog functions for type
 // conversion.
 extern "C" void ExpandRelationC(Oid relid, Alias* eref, int rtindex,
                                 int sublevels_up, int location, List** colnames,
@@ -1251,7 +1251,7 @@ List* ExpandNSItemVarsForJoinC(const List* rtable, ParseNamespaceItem* nsitem,
 extern "C" Oid GetOrGenerateOidFromTableNameC(
     const char* unqualified_table_name) {
   postgres_translator::CatalogAdapter* adapter;
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       adapter, postgres_translator::GetCatalogAdapter(),
       _.LogError().With([](const absl::Status& unused) { return InvalidOid; }));
 
@@ -1263,7 +1263,7 @@ extern "C" Oid GetOrGenerateOidFromTableNameC(
 extern "C" Oid GetOidFromNamespaceNameC(
     const char* unqualified_namespace_name) {
   postgres_translator::CatalogAdapter* adapter;
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       adapter, postgres_translator::GetCatalogAdapter(),
       _.LogError().With([](const absl::Status& unused) { return InvalidOid; }));
 
@@ -1274,7 +1274,7 @@ extern "C" Oid GetOidFromNamespaceNameC(
 extern "C" Oid GetOrGenerateOidFromNamespaceNameC(
     const char* unqualified_namespace_name) {
   postgres_translator::CatalogAdapter* adapter;
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       adapter, postgres_translator::GetCatalogAdapter(),
       _.LogError().With([](const absl::Status& unused) { return InvalidOid; }));
 
@@ -1285,7 +1285,7 @@ extern "C" Oid GetOrGenerateOidFromNamespaceNameC(
 extern "C" Oid GetOrGenerateOidFromNamespaceOidAndRelationNameC(
     Oid namespace_oid, const char* unqualified_table_name) {
   postgres_translator::CatalogAdapter* adapter;
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       adapter, postgres_translator::GetCatalogAdapter(),
       _.LogError().With([](const absl::Status& unused) { return InvalidOid; }));
 
@@ -1318,7 +1318,7 @@ extern "C" void GetProcsBySchemaAndFuncNames(const char* schema_name,
   std::string schema_debug_substring =
       schema_name ? absl::StrCat(" in schema '", schema_name, "' ") : "";
   if (!OidIsValid(namespace_oid)) {
-    ZETASQL_VLOG(4) << "Function '" << func_name << "'" << schema_debug_substring
+    GOOGLESQL_VLOG(4) << "Function '" << func_name << "'" << schema_debug_substring
             << " not found in user catalog and specifies schema unknown "
                "to bootstrap catalog";
     return;
@@ -1345,7 +1345,7 @@ extern "C" void GetProcsBySchemaAndFuncNames(const char* schema_name,
     memcpy(*outlist, matched_procs.data(), outsize);
     return;
   }
-  ZETASQL_VLOG(4) << "Function '" << func_name << "'" << schema_debug_substring
+  GOOGLESQL_VLOG(4) << "Function '" << func_name << "'" << schema_debug_substring
           << " not found in user or bootstrap catalog";
 }
 
@@ -1368,7 +1368,7 @@ extern "C" const FormData_pg_proc* GetProcByOid(Oid oid) {
   // the CatalogAdapter until the deparser runs.
   // This function is used by both the analyzer and deparser so we
   // need to handle both cases.
-  absl::StatusOr<const zetasql::Function*> udf =
+  absl::StatusOr<const googlesql::Function*> udf =
       adapter_ptr->GetUDFFromOid(oid);
   bool is_udf = udf.ok();
   if (is_udf && !adapter_ptr->IsUDFProcStored(oid)) {

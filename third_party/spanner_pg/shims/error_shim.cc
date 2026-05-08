@@ -36,7 +36,7 @@
 #include <csetjmp>
 #include <utility>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
@@ -47,8 +47,8 @@
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/postgres_includes/deparser.h"
 #include "third_party/spanner_pg/src/spangres/parser.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 // Defined in elog.c
 extern "C" __thread jmp_buf* error_jump_buffer;
@@ -140,9 +140,9 @@ absl::StatusOr<interfaces::ParserOutput> CheckedPgRawParserFullOutput(
   }
   // Set the stack base here so PostgreSQL stack depth is being checked properly
   // to avoid overflow.
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
   SpangresTokenLocations locations;
-  ZETASQL_ASSIGN_OR_RETURN(List * parse_tree,
+  GOOGLESQL_ASSIGN_OR_RETURN(List * parse_tree,
                    ErrorCheckedPgCall(raw_parser_spangres, sql,
                                       RAW_PARSE_DEFAULT, &locations));
   return interfaces::ParserOutput(
@@ -151,7 +151,7 @@ absl::StatusOr<interfaces::ParserOutput> CheckedPgRawParserFullOutput(
 }
 
 absl::StatusOr<List*> CheckedPgRawParser(const char* sql) {
-  ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserOutput output,
+  GOOGLESQL_ASSIGN_OR_RETURN(interfaces::ParserOutput output,
                    CheckedPgRawParserFullOutput(sql));
   return output.parse_tree();
 }
@@ -162,7 +162,7 @@ absl::StatusOr<Query*> CheckedPgParseAnalyze(RawStmt* raw_stmt, const char* sql,
                                              QueryEnvironment* query_env) {
   // Set the stack base here so PostgreSQL stack depth is being checked properly
   // to avoid overflow.
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
 
   return ErrorCheckedPgCall(parse_analyze_fixedparams, raw_stmt, sql,
                             param_types, num_params, query_env);
@@ -173,7 +173,7 @@ absl::StatusOr<Query*> CheckedPgParseAnalyzeVarparams(
     QueryEnvironment* query_env) {
   // Set the stack base here so PostgreSQL stack depth is being checked properly
   // to avoid overflow.
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
 
   return ErrorCheckedPgCall(parse_analyze_varparams, raw_stmt, sql, param_types,
                             num_params, query_env);
@@ -194,7 +194,7 @@ absl::StatusOr<void*> CheckedPgStringToNode(const char* data) {
   }
   // Set the stack base here so PostgreSQL stack depth is being checked properly
   // to avoid overflow.
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
   return ErrorCheckedPgCall(stringToNode, data);
 }
 
@@ -207,7 +207,7 @@ absl::StatusOr<char*> CheckedPgNodeToString(const void* obj) {
   }
   // Set the stack base here so PostgreSQL stack depth is being checked properly
   // to avoid overflow.
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
   return ErrorCheckedPgCall(nodeToString, obj);
 }
 
@@ -220,7 +220,7 @@ absl::StatusOr<char*> CheckedPgPrettyFormatNodeDump(const char* dump) {
   }
   // Set the stack base here so PostgreSQL stack depth is being checked properly
   // to avoid overflow.
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
   return ErrorCheckedPgCall(pretty_format_node_dump, dump);
 }
 
@@ -232,7 +232,7 @@ absl::StatusOr<char*> CheckedPgDeparseQuery(Query* query, bool prettyPrint) {
   }
   // Set the stack base here so PostgreSQL stack depth is being checked properly
   // to avoid overflow.
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
 
   return ErrorCheckedPgCall(deparse_query, query, prettyPrint);
 }
@@ -248,7 +248,7 @@ absl::StatusOr<char*> CheckedPgDeparseFunctionBody(Query* query,
   }
   // Set the stack base here so PostgreSQL stack depth is being checked properly
   // to avoid overflow.
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
 
   return ErrorCheckedPgCall(deparse_function_body, query, argNames, numArgs,
                             funcName, prettyPrint);
@@ -262,7 +262,7 @@ absl::StatusOr<char*> CheckedPgDeparseExprInQuery(Node* expr, Query* query) {
   }
   // Set the stack base here so PostgreSQL stack depth is being checked properly
   // to avoid overflow.
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
   return ErrorCheckedPgCall(deparse_expression_in_query, expr, query);
 }
 
@@ -285,7 +285,7 @@ absl::StatusOr<Datum> CheckedPgStringToDatum(const char* str, Oid datatype) {
                               /*collation=*/DEFAULT_COLLATION,
                               /*arg1=*/CStringGetDatum(str));
   } else {
-    ZETASQL_ASSIGN_OR_RETURN(text * text_string,
+    GOOGLESQL_ASSIGN_OR_RETURN(text * text_string,
                      ErrorCheckedPgCall(cstring_to_text, str));
     return PointerGetDatum(text_string);
   }
@@ -392,35 +392,35 @@ absl::StatusOr<Datum> CheckedDirectFunctionCall1(PGFunction func, Datum arg1) {
 }
 
 absl::StatusOr<Datum> CheckedOidFunctionCall1(Oid functionId, Datum arg1) {
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
   return ErrorCheckedPgCall(OidFunctionCall1Coll, functionId,
                             /*collation=*/DEFAULT_COLLATION, arg1);
 }
 
 absl::StatusOr<Datum> CheckedNullableOidFunctionCall1(Oid functionId,
                                                       Datum arg1) {
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
   return ErrorCheckedPgCall(NullableOidFunctionCall1Coll, functionId,
                             /*collation=*/DEFAULT_COLLATION, arg1);
 }
 
 absl::StatusOr<Datum> CheckedOidFunctionCall2(Oid functionId, Datum arg1,
                                               Datum arg2) {
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
   return ErrorCheckedPgCall(OidFunctionCall2Coll, functionId,
                             /*collation=*/DEFAULT_COLLATION, arg1, arg2);
 }
 
 absl::StatusOr<Datum> CheckedNullableOidFunctionCall2(Oid functionId,
                                                       Datum arg1, Datum arg2) {
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
   return ErrorCheckedPgCall(NullableOidFunctionCall2Coll, functionId,
                             /*collation=*/DEFAULT_COLLATION, arg1, arg2);
 }
 
 absl::StatusOr<Datum> CheckedOidFunctionCall3(Oid functionId, Datum arg1,
                                               Datum arg2, Datum arg3) {
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
   return ErrorCheckedPgCall(OidFunctionCall3Coll, functionId,
                             /*collation=*/DEFAULT_COLLATION, arg1, arg2, arg3);
 }
@@ -428,7 +428,7 @@ absl::StatusOr<Datum> CheckedOidFunctionCall3(Oid functionId, Datum arg1,
 absl::StatusOr<Datum> CheckedNullableOidFunctionCall3(Oid functionId,
                                                       Datum arg1, Datum arg2,
                                                       Datum arg3) {
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
   return ErrorCheckedPgCall(NullableOidFunctionCall3Coll, functionId,
                             /*collation=*/DEFAULT_COLLATION, arg1, arg2, arg3);
 }
@@ -436,7 +436,7 @@ absl::StatusOr<Datum> CheckedNullableOidFunctionCall3(Oid functionId,
 absl::StatusOr<Datum> CheckedOidFunctionCall4(Oid functionId, Datum arg1,
                                               Datum arg2, Datum arg3,
                                               Datum arg4) {
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
   return ErrorCheckedPgCall(OidFunctionCall4Coll, functionId,
                             /*collation=*/DEFAULT_COLLATION, arg1, arg2, arg3,
                             arg4);
@@ -446,7 +446,7 @@ absl::StatusOr<Datum> CheckedOidFunctionCall7(Oid functionId, Datum arg1,
                                               Datum arg2, Datum arg3,
                                               Datum arg4, Datum arg5,
                                               Datum arg6, Datum arg7) {
-  ZETASQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
+  GOOGLESQL_RET_CHECK(ErrorCheckedPgCall(set_stack_base).ok());
   return ErrorCheckedPgCall(OidFunctionCall7Coll, functionId,
                             /*collation=*/DEFAULT_COLLATION, arg1, arg2, arg3,
                             arg4, arg5, arg6, arg7);
@@ -613,7 +613,7 @@ absl::StatusOr<ArrayType*> CheckedPgDatumGetArrayTypeP(Datum datum) {
   // casts and the real function call.
   struct varlena* datum_as_varlena =
       reinterpret_cast<struct varlena*>(DatumGetPointer(datum));
-  ZETASQL_ASSIGN_OR_RETURN(void* p,
+  GOOGLESQL_ASSIGN_OR_RETURN(void* p,
                    ErrorCheckedPgCall(pg_detoast_datum, datum_as_varlena));
   return reinterpret_cast<ArrayType*>(p);
 }

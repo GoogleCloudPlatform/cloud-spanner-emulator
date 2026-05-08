@@ -105,6 +105,7 @@ columns,identity_skip_range_min,YES,character varying
 columns,identity_skip_range_max,YES,character varying
 columns,is_generated,YES,character varying
 columns,generation_expression,YES,character varying
+columns,on_update_expression,YES,character varying
 columns,is_updatable,YES,character varying
 columns,spanner_type,YES,character varying
 columns,is_stored,YES,character varying

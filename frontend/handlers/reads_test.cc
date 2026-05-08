@@ -24,7 +24,7 @@
 #include "google/spanner/v1/transaction.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
@@ -34,7 +34,7 @@
 #include "tests/common/test_env.h"
 #include "grpcpp/server_context.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -42,18 +42,18 @@ namespace emulator {
 namespace frontend {
 namespace {
 
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 namespace spanner_api = ::google::spanner::v1;
 
 class ReadApiTest : public test::ServerTest {
  protected:
   void SetUp() override {
-    ZETASQL_ASSERT_OK(CreateTestInstance());
-    ZETASQL_ASSERT_OK(CreateTestDatabase());
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
+    GOOGLESQL_ASSERT_OK(CreateTestInstance());
+    GOOGLESQL_ASSERT_OK(CreateTestDatabase());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
                          CreateTestSession(/*multiplexed=*/true));
-    ZETASQL_ASSERT_OK(PopulateTestDatabase());
+    GOOGLESQL_ASSERT_OK(PopulateTestDatabase());
   }
 
   absl::Status PopulateTestDatabase() {
@@ -114,7 +114,7 @@ TEST_F(ReadApiTest, CanReadUsingAnAlreadyStartedTransaction) {
   txn_request.set_session(test_session_uri_);
 
   spanner_api::Transaction txn_response;
-  ZETASQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
+  GOOGLESQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
 
   // Perform read using the transaction that was started above.
   spanner_api::TransactionSelector selector;
@@ -134,7 +134,7 @@ TEST_F(ReadApiTest, CanReadUsingAnAlreadyStartedTransaction) {
 
   // Read.
   spanner_api::ResultSet read_response;
-  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  GOOGLESQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_THAT(read_response, test::EqualsProto(
                                  R"pb(metadata {
                                         row_type {
@@ -160,7 +160,7 @@ TEST_F(ReadApiTest, CanReadUsingAnAlreadyStartedTransaction) {
 
   // StreamingRead
   std::vector<spanner_api::PartialResultSet> streaming_read_response;
-  ZETASQL_EXPECT_OK(StreamingRead(read_request, &streaming_read_response));
+  GOOGLESQL_EXPECT_OK(StreamingRead(read_request, &streaming_read_response));
   EXPECT_THAT(streaming_read_response,
               testing::ElementsAre(test::EqualsProto(
                   R"pb(metadata {
@@ -192,7 +192,7 @@ TEST_F(ReadApiTest, ReadWriteTransactionReturnsPrecommitToken) {
   txn_request.set_session(test_session_uri_);
 
   spanner_api::Transaction txn_response;
-  ZETASQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
+  GOOGLESQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
 
   // Perform read using the transaction that was started above.
   spanner_api::TransactionSelector selector;
@@ -212,7 +212,7 @@ TEST_F(ReadApiTest, ReadWriteTransactionReturnsPrecommitToken) {
 
   // Read.
   spanner_api::ResultSet read_response;
-  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  GOOGLESQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_THAT(read_response, test::EqualsProto(
                                  R"pb(metadata {
                                         row_type {
@@ -239,7 +239,7 @@ TEST_F(ReadApiTest, ReadWriteTransactionReturnsPrecommitToken) {
 
   // StreamingRead
   std::vector<spanner_api::PartialResultSet> streaming_read_response;
-  ZETASQL_EXPECT_OK(StreamingRead(read_request, &streaming_read_response));
+  GOOGLESQL_EXPECT_OK(StreamingRead(read_request, &streaming_read_response));
   EXPECT_THAT(streaming_read_response,
               testing::ElementsAre(test::EqualsProto(
                   R"pb(metadata {
@@ -283,7 +283,7 @@ TEST_F(ReadApiTest, CanPerformStrongReadUsingSingleUseTransaction) {
   read_request.set_session(test_session_uri_);
 
   spanner_api::ResultSet read_response;
-  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  GOOGLESQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_THAT(read_response, test::EqualsProto(
                                  R"pb(metadata {
                                         row_type {
@@ -326,7 +326,7 @@ TEST_F(ReadApiTest, CanPerformDefaultStrongReadUsingTemporaryTransaction) {
   read_request.set_session(test_session_uri_);
 
   spanner_api::ResultSet read_response;
-  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  GOOGLESQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_THAT(read_response, test::EqualsProto(
                                  R"pb(metadata {
                                         row_type {
@@ -367,13 +367,13 @@ TEST_F(ReadApiTest, DirectedReadsWithROTxnSucceeds) {
   // Directed Reads accepted in non-streaming case.
   {
     spanner_api::ResultSet unused_read_response;
-    ZETASQL_EXPECT_OK(Read(read_request, &unused_read_response));
+    GOOGLESQL_EXPECT_OK(Read(read_request, &unused_read_response));
   }
 
   // Directed Reads accepted in streaming case.
   {
     std::vector<spanner_api::PartialResultSet> unused_read_response;
-    ZETASQL_EXPECT_OK(StreamingRead(read_request, &unused_read_response));
+    GOOGLESQL_EXPECT_OK(StreamingRead(read_request, &unused_read_response));
   }
 }
 
@@ -434,7 +434,7 @@ TEST_F(ReadApiTest, CanBeginNewReadWriteTransactionAndPerformRead) {
   read_request.set_session(test_session_uri_);
 
   spanner_api::ResultSet read_response;
-  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  GOOGLESQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_THAT(read_response, test::EqualsProto(absl::Substitute(
                                  R"pb(metadata {
                                         row_type {
@@ -480,7 +480,7 @@ TEST_F(ReadApiTest, CannotReadUsingInvalidTransaction) {
   txn_request.set_session(test_session_uri_);
 
   spanner_api::Transaction txn_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(txn_request, &txn_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(txn_request, &txn_response));
 
   backend::TransactionID id = TransactionIDFromProto(txn_response.id());
   spanner_api::TransactionSelector selector;

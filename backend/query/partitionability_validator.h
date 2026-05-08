@@ -17,8 +17,8 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_PARTITIONABILITY_VALIDATOR_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_PARTITIONABILITY_VALIDATOR_H_
 
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_ast_visitor.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_visitor.h"
 #include "absl/status/status.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/errors.h"
@@ -31,26 +31,26 @@ namespace backend {
 
 // Implements a ResolvedASTVisitor to validate partitionability for
 // partition query.
-class PartitionabilityValidator : public zetasql::ResolvedASTVisitor {
+class PartitionabilityValidator : public googlesql::ResolvedASTVisitor {
  public:
   explicit PartitionabilityValidator(const Schema* schema) : schema_(schema) {}
 
-  absl::Status DefaultVisit(const zetasql::ResolvedNode* node) override {
-    if (node->node_kind() == zetasql::RESOLVED_QUERY_STMT) {
-      ZETASQL_RETURN_IF_ERROR(ValidatePartitionability(node));
+  absl::Status DefaultVisit(const googlesql::ResolvedNode* node) override {
+    if (node->node_kind() == googlesql::RESOLVED_QUERY_STMT) {
+      GOOGLESQL_RETURN_IF_ERROR(ValidatePartitionability(node));
     }
-    return zetasql::ResolvedASTVisitor::DefaultVisit(node);
+    return googlesql::ResolvedASTVisitor::DefaultVisit(node);
   }
 
  private:
   // Returns OK if query is partitionable.
-  absl::Status ValidatePartitionability(const zetasql::ResolvedNode* node);
+  absl::Status ValidatePartitionability(const googlesql::ResolvedNode* node);
 
   // Returns OK if query is a simple scan on one table.
-  absl::Status ValidateSimpleScan(const zetasql::ResolvedNode* node);
+  absl::Status ValidateSimpleScan(const googlesql::ResolvedNode* node);
 
   // Returns true if node itself or one of its descendants is a subquery expr.
-  bool HasSubquery(const zetasql::ResolvedNode* node);
+  bool HasSubquery(const googlesql::ResolvedNode* node);
 
   const Schema* schema_;
 };

@@ -33,15 +33,15 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 
 namespace postgres_translator::spangres {
 namespace {
 
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 TEST(TranslationUtilsTest, ObjectTypeToString) {
   EXPECT_THAT(internal::ObjectTypeToString(OBJECT_TABLE),

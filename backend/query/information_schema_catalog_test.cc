@@ -19,7 +19,7 @@
 #include <string>
 
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
 #include "backend/query/spanner_sys_catalog.h"
 
@@ -32,7 +32,7 @@ TEST(InformationSchemaCatalogTest, ColumnsMetadataCount) {
   SpannerSysCatalog spanner_sys_catalog;
   InformationSchemaCatalog catalog(InformationSchemaCatalog::kName, &schema,
                                    &spanner_sys_catalog);
-  EXPECT_EQ(ColumnsMetadata().size(), 262);
+  EXPECT_EQ(ColumnsMetadata().size(), 264);
 }
 
 TEST(InformationSchemaCatalogTest, IndexColumnsMetadataCount) {
@@ -56,7 +56,7 @@ TEST(InformationSchemaCatalogTest, PGColumnsMetadataCount) {
   SpannerSysCatalog spanner_sys_catalog;
   InformationSchemaCatalog catalog(InformationSchemaCatalog::kPGName, &schema,
                                    &spanner_sys_catalog);
-  EXPECT_EQ(PGColumnsMetadata().size(), 412);
+  EXPECT_EQ(PGColumnsMetadata().size(), 413);
 }
 
 TEST(InformationSchemaCatalogTest, PGIndexColumnsMetadataCount) {

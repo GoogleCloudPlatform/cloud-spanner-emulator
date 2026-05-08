@@ -36,9 +36,9 @@
 #include <string_view>
 #include <vector>
 
-#include "zetasql/public/function.pb.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/function.pb.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/types/type.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_join.h"
@@ -48,20 +48,20 @@
 #include "third_party/spanner_pg/src/backend/catalog/pg_type_d.h"
 #include "third_party/spanner_pg/src/include/postgres_ext.h"
 #include "google/protobuf/repeated_ptr_field.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 
 namespace {
 
 absl::Status CheckTypeAndKindMapping(
-    uint32_t oid, const zetasql::Type* type,
-    const zetasql::SignatureArgumentKind kind) {
-  if (kind == zetasql::SignatureArgumentKind::ARG_TYPE_FIXED) {
-    ZETASQL_RET_CHECK(type != nullptr) << "Type with OID " << oid
+    uint32_t oid, const googlesql::Type* type,
+    const googlesql::SignatureArgumentKind kind) {
+  if (kind == googlesql::SignatureArgumentKind::ARG_TYPE_FIXED) {
+    GOOGLESQL_RET_CHECK(type != nullptr) << "Type with OID " << oid
                                << " not found in the catalog (ARG_TYPE_FIXED "
-                                  "and zetasql::Type* mapping is NULL)";
+                                  "and googlesql::Type* mapping is NULL)";
   }
   return absl::OkStatus();
 }
@@ -72,29 +72,29 @@ std::string_view PostgresNamespaceFrom(std::string_view nspace) {
   return nspace == "pg" ? "pg_catalog" : nspace;
 }
 
-zetasql::SignatureArgumentKind SignatureArgumentKindFrom(uint32_t oid) {
+googlesql::SignatureArgumentKind SignatureArgumentKindFrom(uint32_t oid) {
   switch (oid) {
     case ANYOID:
-      return zetasql::SignatureArgumentKind::ARG_TYPE_ARBITRARY;
+      return googlesql::SignatureArgumentKind::ARG_TYPE_ARBITRARY;
     case ANYARRAYOID:
-      return zetasql::SignatureArgumentKind::ARG_ARRAY_TYPE_ANY_1;
+      return googlesql::SignatureArgumentKind::ARG_ARRAY_TYPE_ANY_1;
     case ANYELEMENTOID:
-      return zetasql::SignatureArgumentKind::ARG_TYPE_ANY_1;
+      return googlesql::SignatureArgumentKind::ARG_TYPE_ANY_1;
     default:
-      return zetasql::SignatureArgumentKind::ARG_TYPE_FIXED;
+      return googlesql::SignatureArgumentKind::ARG_TYPE_FIXED;
   }
 }
 
-zetasql::FunctionSignature FunctionSignatureFrom(
-    zetasql::FunctionArgumentType gsql_return_type,
-    zetasql::FunctionArgumentTypeList gsql_arguments, bool is_deprecated) {
+googlesql::FunctionSignature FunctionSignatureFrom(
+    googlesql::FunctionArgumentType gsql_return_type,
+    googlesql::FunctionArgumentTypeList gsql_arguments, bool is_deprecated) {
   if (is_deprecated) {
-    zetasql::FunctionSignatureOptions options;
+    googlesql::FunctionSignatureOptions options;
     options.set_is_deprecated(true);
-    return zetasql::FunctionSignature(gsql_return_type, gsql_arguments,
+    return googlesql::FunctionSignature(gsql_return_type, gsql_arguments,
                                         /*context_id=*/0, options);
   } else {
-    return zetasql::FunctionSignature(gsql_return_type, gsql_arguments,
+    return googlesql::FunctionSignature(gsql_return_type, gsql_arguments,
                                         /*context_ptr=*/nullptr);
   }
 }
@@ -106,34 +106,34 @@ std::vector<std::string> FromProto(FunctionNamePathProto proto) {
 
 }  // namespace
 
-const zetasql::Type* SpangresFunctionMapper::FindTypeByOid(
+const googlesql::Type* SpangresFunctionMapper::FindTypeByOid(
     uint32_t oid) const {
   const PostgresTypeMapping* type_mapping = catalog_->GetType(oid);
 
   return type_mapping != nullptr ? type_mapping->mapped_type() : nullptr;
 }
 
-absl::StatusOr<zetasql::FunctionArgumentType>
+absl::StatusOr<googlesql::FunctionArgumentType>
 SpangresFunctionMapper::FunctionArgumentTypeFrom(
     ArgumentTypeProto arg_type) const {
-  const zetasql::Type* type = FindTypeByOid(arg_type.oid());
-  ZETASQL_RET_CHECK(type != nullptr)
+  const googlesql::Type* type = FindTypeByOid(arg_type.oid());
+  GOOGLESQL_RET_CHECK(type != nullptr)
       << "Type with OID " << arg_type.oid() << " not found in the catalog";
 
-  return zetasql::FunctionArgumentType(type);
+  return googlesql::FunctionArgumentType(type);
 }
 
-absl::StatusOr<zetasql::FunctionArgumentType>
+absl::StatusOr<googlesql::FunctionArgumentType>
 SpangresFunctionMapper::FunctionArgumentTypeFrom(
     FunctionArgumentProto arg) const {
   uint32_t oid = arg.type().oid();
-  const zetasql::Type* type = FindTypeByOid(oid);
-  zetasql::SignatureArgumentKind kind = SignatureArgumentKindFrom(oid);
-  ZETASQL_RETURN_IF_ERROR(CheckTypeAndKindMapping(oid, type, kind));
+  const googlesql::Type* type = FindTypeByOid(oid);
+  googlesql::SignatureArgumentKind kind = SignatureArgumentKindFrom(oid);
+  GOOGLESQL_RETURN_IF_ERROR(CheckTypeAndKindMapping(oid, type, kind));
 
-  zetasql::FunctionArgumentTypeOptions options;
+  googlesql::FunctionArgumentTypeOptions options;
 
-  zetasql::FunctionEnums::NamedArgumentKind named_kind =
+  googlesql::FunctionEnums::NamedArgumentKind named_kind =
       arg.named_argument_kind();
   options.set_cardinality(arg.cardinality());
 
@@ -143,9 +143,9 @@ SpangresFunctionMapper::FunctionArgumentTypeFrom(
   }
 
   if (type != nullptr) {
-    return zetasql::FunctionArgumentType(type, options);
+    return googlesql::FunctionArgumentType(type, options);
   } else {
-    return zetasql::FunctionArgumentType(kind, options);
+    return googlesql::FunctionArgumentType(kind, options);
   }
 }
 
@@ -156,10 +156,10 @@ SpangresFunctionMapper::ToPostgresFunctionArguments(
 
   // Assumes function has been formatted to a single postgresql name path in all
   // signatures and it is the same as the function's postgresql name path
-  ZETASQL_RET_CHECK(function.postgresql_name_paths_size() == 1);
+  GOOGLESQL_RET_CHECK(function.postgresql_name_paths_size() == 1);
   for (const auto& signature : function.signatures()) {
-    ZETASQL_RET_CHECK(signature.postgresql_name_paths_size() == 1);
-    ZETASQL_RET_CHECK(FromProto(signature.postgresql_name_paths()[0]) ==
+    GOOGLESQL_RET_CHECK(signature.postgresql_name_paths_size() == 1);
+    GOOGLESQL_RET_CHECK(FromProto(signature.postgresql_name_paths()[0]) ==
               FromProto(function.postgresql_name_paths()[0]));
   }
 
@@ -171,18 +171,18 @@ SpangresFunctionMapper::ToPostgresFunctionArguments(
 
   std::vector<PostgresFunctionSignatureArguments> pg_signatures;
   for (const auto& signature : function.signatures()) {
-    ZETASQL_ASSIGN_OR_RETURN(zetasql::FunctionArgumentType gsql_return_type,
+    GOOGLESQL_ASSIGN_OR_RETURN(googlesql::FunctionArgumentType gsql_return_type,
                      FunctionArgumentTypeFrom(signature.return_type()));
 
-    zetasql::FunctionArgumentTypeList gsql_arguments;
+    googlesql::FunctionArgumentTypeList gsql_arguments;
     for (const auto& argument : signature.arguments()) {
-      ZETASQL_ASSIGN_OR_RETURN(zetasql::FunctionArgumentType gsql_arg_type,
+      GOOGLESQL_ASSIGN_OR_RETURN(googlesql::FunctionArgumentType gsql_arg_type,
                        FunctionArgumentTypeFrom(argument));
       gsql_arguments.push_back(gsql_arg_type);
     }
     std::vector<std::string> query_features;
 
-    zetasql::FunctionSignature gsql_signature = FunctionSignatureFrom(
+    googlesql::FunctionSignature gsql_signature = FunctionSignatureFrom(
         gsql_return_type, gsql_arguments, signature.deprecated());
 
     Oid signature_oid =
@@ -195,7 +195,7 @@ SpangresFunctionMapper::ToPostgresFunctionArguments(
 
   std::string_view postgres_function_name = postgresql_name_path[1];
   std::string mapped_function_name = absl::StrJoin(mapped_name_path, ".");
-  zetasql::FunctionEnums::Mode mode = function.mode();
+  googlesql::FunctionEnums::Mode mode = function.mode();
   std::string_view postgres_function_namespace =
       PostgresNamespaceFrom(postgresql_name_path[0]);
   std::vector<std::string> query_features;

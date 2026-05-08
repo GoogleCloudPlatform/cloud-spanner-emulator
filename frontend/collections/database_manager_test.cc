@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/strings/match.h"
 #include "frontend/entities/database.h"
@@ -46,7 +46,7 @@ class DatabaseManagerTest : public testing::Test {
 };
 
 TEST_F(DatabaseManagerTest, CreateNewDatabase) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Database> database,
       database_manager_.CreateDatabase(database_uri_, empty_schema_operation_));
   EXPECT_EQ(database->database_uri(), database_uri_);
@@ -55,7 +55,7 @@ TEST_F(DatabaseManagerTest, CreateNewDatabase) {
 }
 
 TEST_F(DatabaseManagerTest, CreateNewPGDatabase) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Database> database,
       database_manager_.CreateDatabase(
           database_uri_,
@@ -68,35 +68,35 @@ TEST_F(DatabaseManagerTest, CreateNewPGDatabase) {
 }
 
 TEST_F(DatabaseManagerTest, CreateExistingDatabaseUriFailsWithAlreadyExists) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Database> database,
       database_manager_.CreateDatabase(database_uri_, empty_schema_operation_));
   EXPECT_THAT(
       database_manager_.CreateDatabase(database_uri_, empty_schema_operation_),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kAlreadyExists));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(DatabaseManagerTest, GetExistingDatabase) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Database> database,
       database_manager_.CreateDatabase(database_uri_, empty_schema_operation_));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Database> actual_database,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Database> actual_database,
                        database_manager_.GetDatabase(database_uri_));
   EXPECT_EQ(actual_database->database_uri(), database_uri_);
 }
 
 TEST_F(DatabaseManagerTest, GetNonExistingDatabaseReturnsNotFound) {
   EXPECT_THAT(database_manager_.GetDatabase("not-exists"),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(DatabaseManagerTest, DeleteExistingDatabase) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Database> database,
       database_manager_.CreateDatabase(database_uri_, empty_schema_operation_));
-  ZETASQL_EXPECT_OK(database_manager_.DeleteDatabase(database_uri_));
+  GOOGLESQL_EXPECT_OK(database_manager_.DeleteDatabase(database_uri_));
   EXPECT_THAT(database_manager_.GetDatabase(database_uri_),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(DatabaseManagerTest, ListDatabase) {
@@ -106,11 +106,11 @@ TEST_F(DatabaseManagerTest, ListDatabase) {
   for (int i = 0; i < num_databases; i++) {
     std::string database_uri =
         absl::StrCat(instance_uri, "/databases/database-", i);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Database> database,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Database> database,
                          database_manager_.CreateDatabase(
                              database_uri, empty_schema_operation_));
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<std::shared_ptr<Database>> databases,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<std::shared_ptr<Database>> databases,
                        database_manager_.ListDatabases(instance_uri));
   EXPECT_EQ(databases.size(), num_databases);
   for (int i = 0; i < num_databases; i++) {
@@ -123,13 +123,13 @@ TEST_F(DatabaseManagerTest, ListDatabaseWithSimilarInstanceUri) {
   std::string similar_database_uri = absl::StrCat(
       "projects/test-p/instances/test-instances/databases/database");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Database> database,
       database_manager_.CreateDatabase(database_uri_, empty_schema_operation_));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       database, database_manager_.CreateDatabase(similar_database_uri,
                                                  empty_schema_operation_));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<std::shared_ptr<Database>> databases,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<std::shared_ptr<Database>> databases,
                        database_manager_.ListDatabases(
                            "projects/test-p/instances/test-instance"));
   EXPECT_EQ(databases.size(), 1);
@@ -143,7 +143,7 @@ TEST_F(DatabaseManagerTest, DatabaseQuotaIsEnforced) {
   // Create 100 databases.
   for (int i = 1; i <= 100; ++i) {
     std::string database_uri = absl::StrCat(database_uri_prefix, i);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Database> database,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Database> database,
                          database_manager_.CreateDatabase(
                              database_uri, empty_schema_operation_));
   }
@@ -152,19 +152,19 @@ TEST_F(DatabaseManagerTest, DatabaseQuotaIsEnforced) {
   EXPECT_THAT(
       database_manager_.CreateDatabase(absl::StrCat(database_uri_prefix, 101),
                                        empty_schema_operation_),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kResourceExhausted));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kResourceExhausted));
 
   // But creating a database in another instance should not fail.
-  ZETASQL_EXPECT_OK(database_manager_.CreateDatabase(
+  GOOGLESQL_EXPECT_OK(database_manager_.CreateDatabase(
       absl::StrCat("projects/test-project/instances/test-instance-2/databases/"
                    "test-database-",
                    101),
       empty_schema_operation_));
 
   // If we clear some quota, we can create a database again.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       database_manager_.DeleteDatabase(absl::StrCat(database_uri_prefix, 100)));
-  ZETASQL_EXPECT_OK(database_manager_.CreateDatabase(
+  GOOGLESQL_EXPECT_OK(database_manager_.CreateDatabase(
       absl::StrCat(database_uri_prefix, 101), empty_schema_operation_));
 }
 

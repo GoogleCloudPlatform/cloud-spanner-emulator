@@ -22,12 +22,12 @@
 #include <string>
 #include <string_view>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/function.h"
-#include "zetasql/public/property_graph.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/property_graph.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
@@ -55,17 +55,17 @@ namespace backend {
 class NetCatalog;
 class PGFunctionCatalog;
 
-// Implementation of zetasql::Catalog for the root catalog in the catalog
-// hierarchy. For more details, see code of zetasql::Catalog.
-class Catalog : public zetasql::EnumerableCatalog {
+// Implementation of googlesql::Catalog for the root catalog in the catalog
+// hierarchy. For more details, see code of googlesql::Catalog.
+class Catalog : public googlesql::EnumerableCatalog {
  public:
   // 'reader' can be nullptr unless CreateEvaluatorTableIterator is called
   // on tables in the catalog.
   Catalog(
       const Schema* schema, const FunctionCatalog* function_catalog,
-      zetasql::TypeFactory* type_factory,
+      googlesql::TypeFactory* type_factory,
       // TODO: Remove the default value for `options`.
-      const zetasql::AnalyzerOptions& options =
+      const googlesql::AnalyzerOptions& options =
           MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone),
       RowReader* reader = nullptr, QueryEvaluator* query_evaluator = nullptr,
       std::optional<std::string> change_stream_internal_lookup = std::nullopt);
@@ -85,58 +85,58 @@ class Catalog : public zetasql::EnumerableCatalog {
   FRIEND_TEST(ChangeStreamQueryValidatorTest,
               ValidateNoneChangeStreamTvfWithDifferentPrefixIsFiltered);
 
-  // Implementation of the zetasql::Catalog interface.
-  absl::Status GetCatalog(const std::string& name, zetasql::Catalog** catalog,
+  // Implementation of the googlesql::Catalog interface.
+  absl::Status GetCatalog(const std::string& name, googlesql::Catalog** catalog,
                           const FindOptions& options) override;
-  absl::Status GetTable(const std::string& name, const zetasql::Table** table,
+  absl::Status GetTable(const std::string& name, const googlesql::Table** table,
                         const FindOptions& options) override;
-  absl::Status GetModel(const std::string& name, const zetasql::Model** model,
+  absl::Status GetModel(const std::string& name, const googlesql::Model** model,
                         const FindOptions& options = FindOptions()) override;
   absl::Status GetFunction(const std::string& name,
-                           const zetasql::Function** function,
+                           const googlesql::Function** function,
                            const FindOptions& options) override;
   absl::Status GetProcedure(const std::string& full_name,
-                            const zetasql::Procedure** procedure,
+                            const googlesql::Procedure** procedure,
                             const FindOptions& options) final;
   absl::Status FindTableValuedFunction(
       const absl::Span<const std::string>& path,
-      const zetasql::TableValuedFunction** function,
+      const googlesql::TableValuedFunction** function,
       const FindOptions& options = FindOptions()) final;
   absl::Status GetSequence(const std::string& name,
-                           const zetasql::Sequence** sequence,
+                           const googlesql::Sequence** sequence,
                            const FindOptions& options) override;
   absl::Status FindConversion(
-      const zetasql::Type* from_type, const zetasql::Type* to_type,
-      const zetasql::Catalog::FindConversionOptions& options,
-      zetasql::Conversion* conversion) override;
+      const googlesql::Type* from_type, const googlesql::Type* to_type,
+      const googlesql::Catalog::FindConversionOptions& options,
+      googlesql::Conversion* conversion) override;
   absl::Status GetPropertyGraph(
-      std::string_view name, const zetasql::PropertyGraph*& graph,
+      std::string_view name, const googlesql::PropertyGraph*& graph,
       const FindOptions& options = FindOptions()) override;
 
-  // Implementation of the zetasql::EnumerableCatalog interface.
+  // Implementation of the googlesql::EnumerableCatalog interface.
   absl::Status GetCatalogs(
-      absl::flat_hash_set<const zetasql::Catalog*>* output) const final;
+      absl::flat_hash_set<const googlesql::Catalog*>* output) const final;
   absl::Status GetTables(
-      absl::flat_hash_set<const zetasql::Table*>* output) const final;
+      absl::flat_hash_set<const googlesql::Table*>* output) const final;
   absl::Status GetTypes(
-      absl::flat_hash_set<const zetasql::Type*>* output) const final;
+      absl::flat_hash_set<const googlesql::Type*>* output) const final;
   absl::Status GetFunctions(
-      absl::flat_hash_set<const zetasql::Function*>* output) const final;
+      absl::flat_hash_set<const googlesql::Function*>* output) const final;
   absl::Status GetTableValuedFunctions(
-      absl::flat_hash_set<const zetasql::TableValuedFunction*>* output)
+      absl::flat_hash_set<const googlesql::TableValuedFunction*>* output)
       const final;
 
-  absl::Status GetType(const std::string& name, const zetasql::Type** type,
+  absl::Status GetType(const std::string& name, const googlesql::Type** type,
                        const FindOptions& options) final;
 
   absl::Status PopulateSystemProcedureMap();
 
   // Returns the information schema catalog (creating one if needed).
-  zetasql::Catalog* GetInformationSchemaCatalog() const
+  googlesql::Catalog* GetInformationSchemaCatalog() const
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Returns the PG information schema catalog (creating one if needed).
-  zetasql::Catalog* GetPGInformationSchemaCatalog() const
+  googlesql::Catalog* GetPGInformationSchemaCatalog() const
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Returns the spanner sys catalog (creating one if needed).
@@ -146,19 +146,19 @@ class Catalog : public zetasql::EnumerableCatalog {
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // Returns the NET catalog.
-  zetasql::Catalog* GetNetFunctionsCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
+  googlesql::Catalog* GetNetFunctionsCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
 
   // Returns the PG functions catalog.
-  zetasql::Catalog* GetPGFunctionsCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
+  googlesql::Catalog* GetPGFunctionsCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
 
   // Returns the PG catalog (similar to information_schema).
-  zetasql::Catalog* GetPGCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
+  googlesql::Catalog* GetPGCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
 
   QueryableNamedSchema* GetNamedSchema(const std::string& name);
 
   // Returns all named schemas
   absl::Status GetNamedSchemas(
-      absl::flat_hash_set<const zetasql::Catalog*>* output) const;
+      absl::flat_hash_set<const googlesql::Catalog*>* output) const;
 
   // Adds a schema object to the named schema.
   template <typename T>
@@ -178,11 +178,11 @@ class Catalog : public zetasql::EnumerableCatalog {
       property_graphs_;
 
   // Types available in the default schema.
-  CaseInsensitiveStringMap<const zetasql::Type*> types_;
+  CaseInsensitiveStringMap<const googlesql::Type*> types_;
 
   // Change Stream TVFs available in the default schema.
   CaseInsensitiveStringMap<
-      std::unique_ptr<const zetasql::TableValuedFunction>>
+      std::unique_ptr<const googlesql::TableValuedFunction>>
       tvfs_;
 
   // Sequences available in the default schema.
@@ -194,7 +194,7 @@ class Catalog : public zetasql::EnumerableCatalog {
 
   // Functions available in the default schema.
   const FunctionCatalog* function_catalog_ = nullptr;
-  zetasql::TypeFactory* type_factory_ = nullptr;
+  googlesql::TypeFactory* type_factory_ = nullptr;
 
   // Callback used to evaluate queries. May be unset for queries that
   // do not involve views.
@@ -204,11 +204,11 @@ class Catalog : public zetasql::EnumerableCatalog {
   mutable absl::Mutex mu_;
 
   // Information schema catalog (created only if accessed).
-  mutable std::unique_ptr<zetasql::Catalog> information_schema_catalog_
+  mutable std::unique_ptr<googlesql::Catalog> information_schema_catalog_
       ABSL_GUARDED_BY(mu_);
 
   // PG information schema catalog (created only if accessed).
-  mutable std::unique_ptr<zetasql::Catalog> pg_information_schema_catalog_
+  mutable std::unique_ptr<googlesql::Catalog> pg_information_schema_catalog_
       ABSL_GUARDED_BY(mu_);
 
   // Spanner sys catalog (created only if accessed).
@@ -216,20 +216,20 @@ class Catalog : public zetasql::EnumerableCatalog {
       ABSL_GUARDED_BY(mu_);
 
   // Sub-catalog for resolving NET function lookup.
-  mutable std::unique_ptr<zetasql::Catalog> net_catalog_ ABSL_GUARDED_BY(mu_);
+  mutable std::unique_ptr<googlesql::Catalog> net_catalog_ ABSL_GUARDED_BY(mu_);
 
   // Sub-catalog for resolving PG function lookup.
-  mutable std::unique_ptr<zetasql::Catalog> pg_function_catalog_
+  mutable std::unique_ptr<googlesql::Catalog> pg_function_catalog_
       ABSL_GUARDED_BY(mu_);
 
   // Sub-catalog for resolving pg_catalog lookup.
-  mutable std::unique_ptr<zetasql::Catalog> pg_catalog_ ABSL_GUARDED_BY(mu_);
+  mutable std::unique_ptr<googlesql::Catalog> pg_catalog_ ABSL_GUARDED_BY(mu_);
 
   // System Procedures available.
-  CaseInsensitiveStringMap<std::unique_ptr<zetasql::Procedure>> procedures_;
+  CaseInsensitiveStringMap<std::unique_ptr<googlesql::Procedure>> procedures_;
 
   // User defined functions available.
-  CaseInsensitiveStringMap<std::unique_ptr<zetasql::Function>> udfs_;
+  CaseInsensitiveStringMap<std::unique_ptr<googlesql::Function>> udfs_;
 };
 
 }  // namespace backend

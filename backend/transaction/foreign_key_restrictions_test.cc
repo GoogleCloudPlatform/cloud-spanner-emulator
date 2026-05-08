@@ -20,11 +20,11 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "backend/actions/ops.h"
@@ -42,12 +42,12 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 class ForeignKeyRestrictionsTest : public testing::Test {
  public:
   ForeignKeyRestrictionsTest()
-      : type_factory_(std::make_unique<zetasql::TypeFactory>()),
+      : type_factory_(std::make_unique<googlesql::TypeFactory>()),
         feature_flags_({.enable_fk_delete_cascade_action = true}) {
     schema_ = test::CreateSchemaFromDDL(
                   {
@@ -72,7 +72,7 @@ class ForeignKeyRestrictionsTest : public testing::Test {
   }
 
  protected:
-  std::unique_ptr<zetasql::TypeFactory> type_factory_;
+  std::unique_ptr<googlesql::TypeFactory> type_factory_;
   std::unique_ptr<const Schema> schema_;
   const Table* referenced_table_;
   std::vector<const Column*> referenced_columns_;
@@ -81,8 +81,8 @@ class ForeignKeyRestrictionsTest : public testing::Test {
 };
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateDeleteConflict) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
   std::vector<WriteOp> write_ops = {
       DeleteOp{.table = referenced_table_, .key = Key(v1)},
       InsertOp{.table = referenced_table_,
@@ -96,9 +96,9 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateDeleteConflict) {
 }
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateDeleteNoConflict) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
-  std::vector<zetasql::Value> v3 = {zetasql::Value::Int64(3)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
+  std::vector<googlesql::Value> v3 = {googlesql::Value::Int64(3)};
   std::vector<WriteOp> write_ops = {
       DeleteOp{.table = referenced_table_, .key = Key(v1)},
       InsertOp{.table = referenced_table_,
@@ -106,14 +106,14 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateDeleteNoConflict) {
                .columns = referenced_columns_},
       DeleteOp{.table = referenced_table_, .key = Key(v3)}};
   const std::string table_name = referenced_table_->Name();
-  ZETASQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
+  GOOGLESQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
                                                     schema_.get()));
 }
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateDeleteTwiceNoConflict) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
-  std::vector<zetasql::Value> v3 = {zetasql::Value::Int64(3)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
+  std::vector<googlesql::Value> v3 = {googlesql::Value::Int64(3)};
   std::vector<WriteOp> write_ops = {
       DeleteOp{.table = referenced_table_, .key = Key(v1)},
       InsertOp{.table = referenced_table_,
@@ -122,13 +122,13 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateDeleteTwiceNoConflict) {
       DeleteOp{.table = referenced_table_, .key = Key(v3)},
       DeleteOp{.table = referenced_table_, .key = Key(v3)}};
   const std::string table_name = referenced_table_->Name();
-  ZETASQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
+  GOOGLESQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
                                                     schema_.get()));
 }
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateInsertConflict) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
   std::vector<WriteOp> write_ops = {
       InsertOp{.table = referenced_table_,
                .key = Key(v1),
@@ -144,9 +144,9 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateInsertConflict) {
 }
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateInsertNoConflict) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
-  std::vector<zetasql::Value> v3 = {zetasql::Value::Int64(3)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
+  std::vector<googlesql::Value> v3 = {googlesql::Value::Int64(3)};
   std::vector<WriteOp> write_ops = {
       InsertOp{.table = referenced_table_,
                .key = Key(v1),
@@ -156,14 +156,14 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateInsertNoConflict) {
                .key = Key(v3),
                .columns = referenced_columns_}};
   const std::string table_name = referenced_table_->Name();
-  ZETASQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
+  GOOGLESQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
                                                     schema_.get()));
 }
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateWhenReferencedColumnNotInserted) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
-  std::vector<zetasql::Value> v3 = {zetasql::Value::Int64(3)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
+  std::vector<googlesql::Value> v3 = {googlesql::Value::Int64(3)};
   std::vector<WriteOp> write_ops = {
       InsertOp{.table = referenced_table_,
                .key = Key(v1),
@@ -171,14 +171,14 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateWhenReferencedColumnNotInserted) {
       DeleteOp{.table = referenced_table_, .key = Key(v2)},
       InsertOp{.table = referenced_table_, .key = Key(v2)}};
   const std::string table_name = referenced_table_->Name();
-  ZETASQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
+  GOOGLESQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
                                                     schema_.get()));
 }
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateInsertTwiceNoConflict) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
-  std::vector<zetasql::Value> v3 = {zetasql::Value::Int64(3)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
+  std::vector<googlesql::Value> v3 = {googlesql::Value::Int64(3)};
   std::vector<WriteOp> write_ops = {
       InsertOp{.table = referenced_table_,
                .key = Key(v1),
@@ -191,13 +191,13 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateInsertTwiceNoConflict) {
                .key = Key(v3),
                .columns = referenced_columns_}};
   const std::string table_name = referenced_table_->Name();
-  ZETASQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
+  GOOGLESQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
                                                     schema_.get()));
 }
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateUpdateConflict) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
   std::vector<WriteOp> write_ops = {
       UpdateOp{.table = referenced_table_,
                .key = Key(v1),
@@ -213,9 +213,9 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateUpdateConflict) {
 }
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateUpdateNoConflict) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
-  std::vector<zetasql::Value> v3 = {zetasql::Value::Int64(3)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
+  std::vector<googlesql::Value> v3 = {googlesql::Value::Int64(3)};
   std::vector<WriteOp> write_ops = {
       UpdateOp{.table = referenced_table_,
                .key = Key(v1),
@@ -225,14 +225,14 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateUpdateNoConflict) {
                .key = Key(v3),
                .columns = referenced_columns_}};
   const std::string table_name = referenced_table_->Name();
-  ZETASQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
+  GOOGLESQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
                                                     schema_.get()));
 }
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateWhenReferencedColumnNotUpdated) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
-  std::vector<zetasql::Value> v3 = {zetasql::Value::Int64(3)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
+  std::vector<googlesql::Value> v3 = {googlesql::Value::Int64(3)};
   std::vector<WriteOp> write_ops = {
       UpdateOp{.table = referenced_table_,
                .key = Key(v1),
@@ -240,14 +240,14 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateWhenReferencedColumnNotUpdated) {
       DeleteOp{.table = referenced_table_, .key = Key(v2)},
       UpdateOp{.table = referenced_table_, .key = Key(v2)}};
   const std::string table_name = referenced_table_->Name();
-  ZETASQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
+  GOOGLESQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
                                                     schema_.get()));
 }
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateInsertUpdateNoConflict) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
-  std::vector<zetasql::Value> v3 = {zetasql::Value::Int64(3)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
+  std::vector<googlesql::Value> v3 = {googlesql::Value::Int64(3)};
   std::vector<WriteOp> write_ops = {
       UpdateOp{.table = referenced_table_,
                .key = Key(v1),
@@ -260,13 +260,13 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateInsertUpdateNoConflict) {
                .key = Key(v3),
                .columns = referenced_columns_}};
   const std::string table_name = referenced_table_->Name();
-  ZETASQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
+  GOOGLESQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
                                                     schema_.get()));
 }
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateRangeDeleteConflict) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
   std::vector<WriteOp> write_ops = {InsertOp{.table = referenced_table_,
                                              .key = Key(v1),
                                              .columns = referenced_columns_},
@@ -274,7 +274,7 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateRangeDeleteConflict) {
                                              .key = Key(v2),
                                              .columns = referenced_columns_}};
   const std::string table_name = referenced_table_->Name();
-  ZETASQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
+  GOOGLESQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
                                                     schema_.get()));
   std::vector<KeyRange> delete_ranges = {
       KeyRange::ClosedOpen(Key(v1), Key(v2))};
@@ -284,9 +284,9 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateRangeDeleteConflict) {
 }
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateRangeDeleteNoConflict) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
-  std::vector<zetasql::Value> v3 = {zetasql::Value::Int64(3)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
+  std::vector<googlesql::Value> v3 = {googlesql::Value::Int64(3)};
   std::vector<WriteOp> write_ops = {InsertOp{.table = referenced_table_,
                                              .key = Key(v2),
                                              .columns = referenced_columns_},
@@ -294,22 +294,22 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateRangeDeleteNoConflict) {
                                              .key = Key(v3),
                                              .columns = referenced_columns_}};
   const std::string table_name = referenced_table_->Name();
-  ZETASQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
+  GOOGLESQL_EXPECT_OK(fk_restrictions_.ValidateReferencedMods(write_ops, table_name,
                                                     schema_.get()));
   std::vector<KeyRange> delete_ranges = {
       KeyRange::ClosedOpen(Key(v1), Key(v2))};
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       fk_restrictions_.ValidateReferencedDeleteMods(table_name, delete_ranges));
 }
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateInsertConflictWithRangeDelete) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
   const std::string table_name = referenced_table_->Name();
   std::vector<KeyRange> delete_ranges = {
       KeyRange::ClosedOpen(Key(v1), Key(v2))};
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       fk_restrictions_.ValidateReferencedDeleteMods(table_name, delete_ranges));
 
   std::vector<WriteOp> write_ops = {InsertOp{.table = referenced_table_,
@@ -324,13 +324,13 @@ TEST_F(ForeignKeyRestrictionsTest, ValidateInsertConflictWithRangeDelete) {
 }
 
 TEST_F(ForeignKeyRestrictionsTest, ValidateUpdateConflictWithRangeDelete) {
-  std::vector<zetasql::Value> v1 = {zetasql::Value::Int64(1)};
-  std::vector<zetasql::Value> v2 = {zetasql::Value::Int64(2)};
+  std::vector<googlesql::Value> v1 = {googlesql::Value::Int64(1)};
+  std::vector<googlesql::Value> v2 = {googlesql::Value::Int64(2)};
   const std::string table_name = referenced_table_->Name();
   std::vector<KeyRange> delete_ranges = {
       KeyRange::ClosedOpen(Key(v1), Key(v2))};
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       fk_restrictions_.ValidateReferencedDeleteMods(table_name, delete_ranges));
 
   std::vector<WriteOp> write_ops = {UpdateOp{.table = referenced_table_,

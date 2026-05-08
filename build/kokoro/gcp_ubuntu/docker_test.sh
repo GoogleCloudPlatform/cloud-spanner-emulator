@@ -15,7 +15,7 @@
 #
 
 #!/bin/bash
-base_SHA=a8d48f66704638a6af2798fb81a5a6690fe05137039b8315b29d738d1cbde032
+base_SHA=831539c8fb46acf3dbd952f80e596f2d89a068c9d208dd850d2b39c7ad7f19bc
 cpp_SHA=904b562ea6c1a75892a34fbabed2ae25f130a375826e5aebedc226e1315697b8
 csharp_SHA=3f9108c182b5d67b9ed0f40ff69a367ad0cbacf1b66aad47914206574fb2ef1f
 go_SHA=1b445f62611768ddee91891fed36b630461a7145643616e1145dcb6ff8e8be74
@@ -147,6 +147,7 @@ for client in $CLIENT_INTEGRATION_TESTS
       --env KOKORO_ARTIFACTS_DIR="${KOKORO_ARTIFACTS_DIR}" \
       --env CLIENT_INTEGRATION_TESTS="${client}" \
       --env EMULATOR_SRC_DIR="/src" \
+      --env LD_LIBRARY_PATH="/src" \
       --volume "${GCLOUD_CONFIG_DIR}:/root/.config/gcloud" \
       --volume "${SRC_DIR}:/src" \
       --volume "${LOG_DIR}:/logs" \

@@ -33,8 +33,8 @@
 
 #include <memory>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/function.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/function.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -44,15 +44,15 @@
 #include "third_party/spanner_pg/catalog/table_name.h"
 #include "third_party/spanner_pg/errors/error_catalog.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 
 absl::StatusOr<std::unique_ptr<CatalogAdapter>> CatalogAdapter::Create(
     std::unique_ptr<EngineUserCatalog> engine_user_catalog,
     EngineSystemCatalog* engine_system_catalog,
-    const zetasql::AnalyzerOptions& analyzer_options,
+    const googlesql::AnalyzerOptions& analyzer_options,
     absl::flat_hash_map<int, int> token_locations) {
   if (engine_user_catalog == nullptr) {
     return spangres::internal_error::EmptyEngineCatalogForCatalogAdapter(
@@ -74,7 +74,7 @@ absl::StatusOr<std::unique_ptr<CatalogAdapter>> CatalogAdapter::Create(
 CatalogAdapter::CatalogAdapter(
     std::unique_ptr<EngineUserCatalog> engine_user_catalog,
     EngineSystemCatalog* engine_system_catalog,
-    const zetasql::AnalyzerOptions& analyzer_options,
+    const googlesql::AnalyzerOptions& analyzer_options,
     absl::flat_hash_map<int, int> token_locations)
     : engine_user_catalog_(std::move(engine_user_catalog)),
       engine_system_catalog_(engine_system_catalog),
@@ -82,7 +82,7 @@ CatalogAdapter::CatalogAdapter(
       token_locations_(std::move(token_locations)) {}
 
 // Allocates a new column id using a counter. This method is the same as the
-// ZetaSQL version, except that it throws an InternalError in error cases.
+// GoogleSQL version, except that it throws an InternalError in error cases.
 absl::StatusOr<int> CatalogAdapter::AllocateColumnId() {
   if (max_column_id_ == std::numeric_limits<int32_t>::max()) {
     return absl::InternalError(
@@ -105,7 +105,7 @@ absl::StatusOr<TableName> CatalogAdapter::GetTableNameFromOid(Oid oid) const {
     return absl::InternalError(absl::StrCat(
         "No table with oid ", oid, " is tracked by the catalog adapter"));
   std::pair<Oid, std::string> table_identifier = iter->second;
-  ZETASQL_ASSIGN_OR_RETURN(std::string namespace_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string namespace_name,
                    GetNamespaceNameFromOid(table_identifier.first));
   return TableName({namespace_name, table_identifier.second});
 }
@@ -124,10 +124,10 @@ absl::StatusOr<Oid> CatalogAdapter::GetOrGenerateOidFromTableName(
     // method we really are dealing with a table in "public". Without proper
     // search path behavior, we behave as if "public" is the sole search path,
     // and pretend all unqualified names are within that namespace.
-    ZETASQL_ASSIGN_OR_RETURN(schema_oid, PgBootstrapCatalog::Default()->GetNamespaceOid(
+    GOOGLESQL_ASSIGN_OR_RETURN(schema_oid, PgBootstrapCatalog::Default()->GetNamespaceOid(
                                      EngineUserCatalog::kPublicSchema));
   } else {
-    ZETASQL_ASSIGN_OR_RETURN(schema_oid,
+    GOOGLESQL_ASSIGN_OR_RETURN(schema_oid,
                      GetOrGenerateOidFromNamespaceName(*namespace_name_ptr));
   }
   return GetOrGenerateOidFromNamespaceOidAndRelationName(
@@ -141,8 +141,8 @@ CatalogAdapter::GetOrGenerateOidFromNamespaceOidAndRelationName(
   if (iter != table_to_oid_map_.end()) {
     return iter->second;
   } else {
-    ZETASQL_ASSIGN_OR_RETURN(Oid new_table_oid, GenerateOid());
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_ASSIGN_OR_RETURN(Oid new_table_oid, GenerateOid());
+    GOOGLESQL_RETURN_IF_ERROR(
         AddOidAndTableNameToMaps(namespace_oid, new_table_oid, relation_name));
     return new_table_oid;
   }
@@ -156,8 +156,8 @@ absl::StatusOr<Oid> CatalogAdapter::GetOrGenerateOidFromNamespaceName(
     return *oid_or;
   } else if (absl::IsNotFound(oid_or.status())) {
     // Previously unknown: generate a new oid.
-    ZETASQL_ASSIGN_OR_RETURN(Oid new_oid, GenerateOid());
-    ZETASQL_RETURN_IF_ERROR(AddOidAndNamespaceNameToMaps(new_oid, namespace_name));
+    GOOGLESQL_ASSIGN_OR_RETURN(Oid new_oid, GenerateOid());
+    GOOGLESQL_RETURN_IF_ERROR(AddOidAndNamespaceNameToMaps(new_oid, namespace_name));
     return new_oid;
   } else {
     // Something went wrong.
@@ -190,39 +190,39 @@ bool CatalogAdapter::IsUDFProcStored(Oid oid) {
 }
 
 absl::StatusOr<Oid> CatalogAdapter::GetOrGenerateUDFProcOid(
-    const zetasql::Function* udf) {
+    const googlesql::Function* udf) {
   std::string name = udf->FullName(/*include_group=*/false);
   if (udf_to_oid_map_.contains(name)) {
     return udf_to_oid_map_[name];
   }
-  ZETASQL_ASSIGN_OR_RETURN(Oid new_oid, GenerateOid());
+  GOOGLESQL_ASSIGN_OR_RETURN(Oid new_oid, GenerateOid());
   udf_to_oid_map_[name] = new_oid;
   oid_to_udf_map_[new_oid] = udf;
   return new_oid;
 }
 
 absl::Status CatalogAdapter::StoreUDFProc(FormData_pg_proc* pg_proc) {
-  ZETASQL_RET_CHECK_NE(pg_proc, nullptr);
+  GOOGLESQL_RET_CHECK_NE(pg_proc, nullptr);
   if (pg_proc->oid == InvalidOid) {
     return absl::InternalError(absl::StrCat("pg_proc \"", pg_proc->proname.data,
                                             "\" is not assigned an oid"));
   }
-  ZETASQL_RET_CHECK(oid_to_udf_map_.contains(pg_proc->oid));
-  ZETASQL_RET_CHECK(udf_to_oid_map_.contains(
+  GOOGLESQL_RET_CHECK(oid_to_udf_map_.contains(pg_proc->oid));
+  GOOGLESQL_RET_CHECK(udf_to_oid_map_.contains(
       oid_to_udf_map_[pg_proc->oid]->FullName(/*include_group=*/false)));
   oid_to_udf_proc_map_[pg_proc->oid] = pg_proc;
   return absl::OkStatus();
 }
 
 absl::StatusOr<Oid> CatalogAdapter::GenerateAndStoreTVFProcOid(
-    FormData_pg_proc* pg_proc, const zetasql::TableValuedFunction* tvf) {
-  ZETASQL_RET_CHECK_NE(pg_proc, nullptr);
-  ZETASQL_RET_CHECK_NE(tvf, nullptr);
+    FormData_pg_proc* pg_proc, const googlesql::TableValuedFunction* tvf) {
+  GOOGLESQL_RET_CHECK_NE(pg_proc, nullptr);
+  GOOGLESQL_RET_CHECK_NE(tvf, nullptr);
   // We're about to generate a new oid. Make sure there isn't one already.
   if (pg_proc->oid != InvalidOid) {
     return absl::InternalError("pg_proc already has an oid assigned");
   }
-  ZETASQL_ASSIGN_OR_RETURN(pg_proc->oid, GenerateOid());
+  GOOGLESQL_ASSIGN_OR_RETURN(pg_proc->oid, GenerateOid());
   oid_to_udf_proc_map_[pg_proc->oid] = pg_proc;
   oid_to_tvf_map_[pg_proc->oid] = tvf;
   return pg_proc->oid;
@@ -238,7 +238,7 @@ absl::StatusOr<const FormData_pg_proc*> CatalogAdapter::GetUDFProcFromOid(
   return iter->second;
 }
 
-absl::StatusOr<const zetasql::Function*> CatalogAdapter::GetUDFFromOid(
+absl::StatusOr<const googlesql::Function*> CatalogAdapter::GetUDFFromOid(
     Oid oid) const {
   auto iter = oid_to_udf_map_.find(oid);
   if (iter != oid_to_udf_map_.end()) {
@@ -249,7 +249,7 @@ absl::StatusOr<const zetasql::Function*> CatalogAdapter::GetUDFFromOid(
       absl::StrCat("UDF with oid ", oid, " is not supported"));
 }
 
-absl::StatusOr<const zetasql::TableValuedFunction*>
+absl::StatusOr<const googlesql::TableValuedFunction*>
 CatalogAdapter::GetTVFFromOid(Oid oid) const {
   // TVFs can be user defined and assigned a temporary Oid in the CatalogAdapter
   // or they can be builtin and found in the EngineSystemCatalog.

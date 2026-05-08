@@ -33,7 +33,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
@@ -49,8 +49,8 @@ using ::postgres_translator::CleanupTimezone;
 using ::postgres_translator::InitTimezone;
 using ::testing::Eq;
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 inline constexpr char kDefaultTimezone[] = "UTC";
 
@@ -74,7 +74,7 @@ class RegressionTest : public PgEvaluatorTestWithParam<RegressionTestCase> {
  protected:
   void SetUp() override {
     PgEvaluatorTestWithParam<RegressionTestCase>::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {

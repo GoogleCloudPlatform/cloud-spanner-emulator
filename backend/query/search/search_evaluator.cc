@@ -20,7 +20,7 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/numbers.h"
@@ -28,8 +28,8 @@
 #include "backend/query/search/SearchQueryParserTreeConstants.h"
 #include "backend/query/search/search_evaluator_helpers.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -64,10 +64,10 @@ absl::StatusOr<std::vector<MatchResult>> SearchEvaluator::MatchChildren(
   ret.reserve(root->jjtGetNumChildren());
   for (int i = 0; i < root->jjtGetNumChildren(); i++) {
     SimpleNode* child = dynamic_cast<SimpleNode*>(root->jjtGetChild(i));
-    ZETASQL_RET_CHECK(child != nullptr);
+    GOOGLESQL_RET_CHECK(child != nullptr);
 
     if (child->getId() != JJTNUMBER) {
-      ZETASQL_ASSIGN_OR_RETURN(auto result, MatchQueryNode(child, tokenmap, in_phrase));
+      GOOGLESQL_ASSIGN_OR_RETURN(auto result, MatchQueryNode(child, tokenmap, in_phrase));
       ret.emplace_back(result);
     }
   }
@@ -85,7 +85,7 @@ absl::StatusOr<MatchResult> SearchEvaluator::MatchQueryNode(
     case JJTTERM:
       return MatchQueryTerm(root, tokenmap, in_phrase);
     case JJTOR: {
-      ZETASQL_ASSIGN_OR_RETURN(std::vector<MatchResult> child_results,
+      GOOGLESQL_ASSIGN_OR_RETURN(std::vector<MatchResult> child_results,
                        MatchChildren(root, tokenmap, in_phrase));
       bool did_match = false;
       std::vector<Hit> hits;
@@ -101,19 +101,19 @@ absl::StatusOr<MatchResult> SearchEvaluator::MatchQueryNode(
     }
     case JJTNOT: {
       // NOT cannot appear in a phrase, so we never need to report hit position.
-      ZETASQL_RET_CHECK(!in_phrase) << "NOT nodes cannot appear in phrases";
-      ZETASQL_RET_CHECK_EQ(1, root->jjtGetNumChildren());
+      GOOGLESQL_RET_CHECK(!in_phrase) << "NOT nodes cannot appear in phrases";
+      GOOGLESQL_RET_CHECK_EQ(1, root->jjtGetNumChildren());
       SimpleNode* child = dynamic_cast<SimpleNode*>(root->jjtGetChild(0));
-      ZETASQL_RET_CHECK(child != nullptr);
+      GOOGLESQL_RET_CHECK(child != nullptr);
 
-      ZETASQL_ASSIGN_OR_RETURN(auto child_matches, MatchQueryNode(child, tokenmap));
+      GOOGLESQL_ASSIGN_OR_RETURN(auto child_matches, MatchQueryNode(child, tokenmap));
       if (child_matches.is_match()) return MatchResult::NoMatch();
       return MatchResult::Match();
     }
     case JJTAND: {
       // AND cannot appear in a phrase.
-      ZETASQL_RET_CHECK(!in_phrase) << "AND nodes cannot appear in phrases";
-      ZETASQL_ASSIGN_OR_RETURN(std::vector<MatchResult> child_results,
+      GOOGLESQL_RET_CHECK(!in_phrase) << "AND nodes cannot appear in phrases";
+      GOOGLESQL_ASSIGN_OR_RETURN(std::vector<MatchResult> child_results,
                        MatchChildren(root, tokenmap, in_phrase));
       for (const auto& result : child_results) {
         if (!result.is_match()) return result;
@@ -123,7 +123,7 @@ absl::StatusOr<MatchResult> SearchEvaluator::MatchQueryNode(
       return MatchResult::Match();
     }
     case JJTAROUND: {
-      ZETASQL_ASSIGN_OR_RETURN(std::vector<MatchResult> child_results,
+      GOOGLESQL_ASSIGN_OR_RETURN(std::vector<MatchResult> child_results,
                        MatchChildren(root, tokenmap, /*in_phrase=*/true));
 
       int max_allowed_gap = -1;
@@ -132,7 +132,7 @@ absl::StatusOr<MatchResult> SearchEvaluator::MatchQueryNode(
       int cur_child_result = 0;
       for (int i = 0; i < root->jjtGetNumChildren(); ++i) {
         SimpleNode* child = dynamic_cast<SimpleNode*>(root->jjtGetChild(i));
-        ZETASQL_RET_CHECK(child != nullptr);
+        GOOGLESQL_RET_CHECK(child != nullptr);
 
         if (child->getId() == JJTNUMBER) {
           int gap;
@@ -171,7 +171,7 @@ absl::StatusOr<MatchResult> SearchEvaluator::MatchQueryNode(
                             : MatchResult::Match(std::move(result));
     }
     case JJTPHRASE: {
-      ZETASQL_ASSIGN_OR_RETURN(std::vector<MatchResult> child_results,
+      GOOGLESQL_ASSIGN_OR_RETURN(std::vector<MatchResult> child_results,
                        MatchChildren(root, tokenmap, /*in_phrase=*/true));
 
       int current_offset = 0;
@@ -185,7 +185,7 @@ absl::StatusOr<MatchResult> SearchEvaluator::MatchQueryNode(
       std::pair<int, int> exterior_gaps = {0, 0};
       for (int i = 0; i < root->jjtGetNumChildren(); ++i) {
         SimpleNode* child = dynamic_cast<SimpleNode*>(root->jjtGetChild(i));
-        ZETASQL_RET_CHECK(child != nullptr);
+        GOOGLESQL_RET_CHECK(child != nullptr);
 
         // In phrases, wildcards increments the next offset, rather than
         // being matched directly. Offsets before the first non-wildcard
@@ -217,17 +217,17 @@ absl::StatusOr<MatchResult> SearchEvaluator::MatchQueryNode(
                             : MatchResult::Match(std::move(result));
     }
     default:
-      ZETASQL_RET_CHECK_FAIL() << "Bad query: unsupported search query node type "
+      GOOGLESQL_RET_CHECK_FAIL() << "Bad query: unsupported search query node type "
                        << node_id;
   }
 
-  ZETASQL_RET_CHECK_FAIL() << "Bad query: unable to get match result from the query ";
+  GOOGLESQL_RET_CHECK_FAIL() << "Bad query: unable to get match result from the query ";
 }
 
-absl::StatusOr<zetasql::Value> SearchEvaluator::Evaluate(
-    absl::Span<const zetasql::Value> args) {
-  const zetasql::Value tokenlist = args[0];
-  const zetasql::Value query_string = args[1];
+absl::StatusOr<googlesql::Value> SearchEvaluator::Evaluate(
+    absl::Span<const googlesql::Value> args) {
+  const googlesql::Value tokenlist = args[0];
+  const googlesql::Value query_string = args[1];
 
   if (!tokenlist.type()->IsTokenList()) {
     return error::ColumnNotSearchable(tokenlist.type()->DebugString());
@@ -240,28 +240,28 @@ absl::StatusOr<zetasql::Value> SearchEvaluator::Evaluate(
   TokenMap token_map;
   bool source_is_null = false;
   if (!tokenlist.is_null()) {
-    ZETASQL_ASSIGN_OR_RETURN(token_map, SearchHelper::BuildTokenMap(tokenlist, "SEARCH",
+    GOOGLESQL_ASSIGN_OR_RETURN(token_map, SearchHelper::BuildTokenMap(tokenlist, "SEARCH",
                                                             source_is_null));
   }
 
   if (source_is_null || query_string.is_null()) {
     // Return FALSE if query is null.
-    return zetasql::Value::NullBool();
+    return googlesql::Value::NullBool();
   }
 
   if (query_string.string_value().empty()) {
     // Return TRUE if query is empty string.
-    return zetasql::Value::Bool(false);
+    return googlesql::Value::Bool(false);
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(SimpleNode * search_query,
+  GOOGLESQL_ASSIGN_OR_RETURN(SimpleNode * search_query,
                    SearchQueryCache::GetInstance()->GetParsedQuery(
                        query_string.string_value()));
 
-  ZETASQL_ASSIGN_OR_RETURN(MatchResult match_result,
+  GOOGLESQL_ASSIGN_OR_RETURN(MatchResult match_result,
                    MatchQueryNode(search_query, token_map));
 
-  return zetasql::Value::Bool(match_result.is_match());
+  return googlesql::Value::Bool(match_result.is_match());
 }
 
 }  // namespace search

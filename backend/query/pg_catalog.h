@@ -20,7 +20,7 @@
 #include <memory>
 #include <string>
 
-#include "zetasql/public/simple_catalog.h"
+#include "googlesql/public/simple_catalog.h"
 #include "absl/container/flat_hash_map.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
 #include "backend/schema/catalog/schema.h"
@@ -30,7 +30,7 @@ namespace postgres_translator {
 
 // A sub-catalog used for serving queries to the PG catalog by the Cloud Spanner
 // Emulator.
-class PGCatalog : public zetasql::SimpleCatalog {
+class PGCatalog : public googlesql::SimpleCatalog {
  public:
   static constexpr char kName[] = "pg_catalog";
 
@@ -47,7 +47,7 @@ class PGCatalog : public zetasql::SimpleCatalog {
 
   // Explicitly storing the tables because we are using SimpleCatalog::AddTable
   // which expects that the caller maintains the ownership of the added objects.
-  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
+  absl::flat_hash_map<std::string, std::unique_ptr<googlesql::SimpleTable>>
       tables_by_name_;
 
   std::map<std::string,

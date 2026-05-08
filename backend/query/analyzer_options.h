@@ -20,9 +20,9 @@
 #include <string>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/builtin_function_options.h"
-#include "zetasql/public/language_options.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/builtin_function_options.h"
+#include "googlesql/public/language_options.h"
 #include "common/constants.h"
 
 namespace google {
@@ -32,18 +32,18 @@ namespace backend {
 
 using admin::database::v1::DatabaseDialect;
 
-zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptions(
+googlesql::AnalyzerOptions MakeGoogleSqlAnalyzerOptions(
     std::string time_zone = kDefaultTimeZone);
 
-zetasql::LanguageOptions MakeGoogleSqlLanguageOptions();
+googlesql::LanguageOptions MakeGoogleSqlLanguageOptions();
 
-zetasql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance();
+googlesql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance();
 
-zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
+googlesql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
     std::string time_zone,
     DatabaseDialect dialect = DatabaseDialect::GOOGLE_STANDARD_SQL);
 
-zetasql::BuiltinFunctionOptions MakeGoogleSqlBuiltinFunctionOptions();
+googlesql::BuiltinFunctionOptions MakeGoogleSqlBuiltinFunctionOptions();
 
 }  // namespace backend
 }  // namespace emulator

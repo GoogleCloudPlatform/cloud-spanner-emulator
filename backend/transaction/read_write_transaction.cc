@@ -17,6 +17,7 @@
 #include "backend/transaction/read_write_transaction.h"
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <queue>
@@ -24,7 +25,8 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
+#include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -71,8 +73,8 @@
 #include "common/errors.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -88,13 +90,27 @@ absl::StatusOr<std::vector<WriteOp>> FlattenDeleteOp(
   std::vector<WriteOp> write_ops;
   for (const KeyRange& key_range : key_ranges) {
     std::unique_ptr<StorageIterator> itr;
-    ZETASQL_RETURN_IF_ERROR(transaction_store->Read(table, key_range,
+    GOOGLESQL_RETURN_IF_ERROR(transaction_store->Read(table, key_range,
                                             /*columns= */ {}, &itr));
     while (itr->Next()) {
       write_ops.push_back(DeleteOp{table, itr->Key()});
     }
   }
   return std::move(write_ops);
+}
+
+InsertOp ConstructInsertOpWithDefaultValues(
+    const Table* table, const Key& key,
+    const std::map<std::string, googlesql::Value>& fallback_defaults,
+    bool origin_is_dml, std::vector<const Column*>* columns, ValueList* row) {
+  for (const auto& [col_name, val] : fallback_defaults) {
+    const Column* col = table->FindColumn(col_name);
+    if (col && absl::c_find(*columns, col) == columns->end()) {
+      columns->push_back(col);
+      row->push_back(val);
+    }
+  }
+  return InsertOp{table, key, *columns, *row, origin_is_dml};
 }
 
 // Converts each MutationOp row to a WriteOp based on the MutationOpType:
@@ -107,11 +123,16 @@ absl::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
     MutationOpType type, const Table* table,
     const std::vector<const Column*>& columns, const Key& key,
     const ValueList& row, bool origin_is_dml,
-    const TransactionStore* transaction_store) {
+    const TransactionStore* transaction_store,
+    const std::map<std::string, googlesql::Value>& fallback_defaults) {
   std::vector<WriteOp> write_ops;
   switch (type) {
     case MutationOpType::kInsert: {
-      write_ops.push_back(InsertOp{table, key, columns, row, origin_is_dml});
+      auto new_cols = columns;
+      auto new_row = row;
+      InsertOp insert_op = ConstructInsertOpWithDefaultValues(
+          table, key, fallback_defaults, origin_is_dml, &new_cols, &new_row);
+      write_ops.push_back(insert_op);
       break;
     }
     case MutationOpType::kUpdate: {
@@ -126,7 +147,11 @@ absl::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
         // Row exists and therefore we should only update.
         write_ops.push_back(UpdateOp{table, key, columns, row, origin_is_dml});
       } else if (maybe_row.status().code() == absl::StatusCode::kNotFound) {
-        write_ops.push_back(InsertOp{table, key, columns, row, origin_is_dml});
+        auto new_cols = columns;
+        auto new_row = row;
+        InsertOp insert_op = ConstructInsertOpWithDefaultValues(
+            table, key, fallback_defaults, origin_is_dml, &new_cols, &new_row);
+        write_ops.push_back(insert_op);
       } else {
         return maybe_row.status();
       }
@@ -192,7 +217,7 @@ absl::StatusOr<bool> IsMutationInvolvingForeignKeyAction(
     const MutationOp& mutation_op, const Schema* schema) {
   const Table* table = schema->FindTable(mutation_op.table);
   if (IsChangeStreamPartitionTable(mutation_op.table)) {
-    ZETASQL_ASSIGN_OR_RETURN(table,
+    GOOGLESQL_ASSIGN_OR_RETURN(table,
                      FindChangeStreamPartitionTable(schema, mutation_op.table));
   }
   if (table == nullptr) {
@@ -247,13 +272,13 @@ absl::Status ReadWriteTransaction::Read(const ReadArg& read_arg,
   return GuardedCall(OpType::kRead, [&]() -> absl::Status {
     mu_.AssertHeld();
 
-    ZETASQL_ASSIGN_OR_RETURN(const ResolvedReadArg& resolved_read_arg,
+    GOOGLESQL_ASSIGN_OR_RETURN(const ResolvedReadArg& resolved_read_arg,
                      ResolveReadArg(read_arg, schema_));
 
     std::vector<std::unique_ptr<StorageIterator>> iterators;
     for (const auto& key_range : resolved_read_arg.key_ranges) {
       std::unique_ptr<StorageIterator> itr;
-      ZETASQL_RETURN_IF_ERROR(transaction_store_->Read(
+      GOOGLESQL_RETURN_IF_ERROR(transaction_store_->Read(
           resolved_read_arg.table, key_range, resolved_read_arg.columns, &itr,
           read_arg.allow_pending_commit_timestamps));
       iterators.push_back(std::move(itr));
@@ -275,7 +300,7 @@ absl::Status ReadWriteTransaction::ApplyEffectors(const WriteOp& op) {
 absl::Status ReadWriteTransaction::ApplyStatementVerifiers() {
   for (const auto& write_op :
        transaction_store_->GetDeduplicatedCurrentStatementOps()) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         action_registry_->ExecuteVerifiers(action_context_.get(), write_op));
   }
   return absl::OkStatus();
@@ -382,11 +407,11 @@ absl::Status ReadWriteTransaction::ProcessWriteOps(
     write_ops_queue_.pop();
 
     // Process the operation.
-    ZETASQL_RETURN_IF_ERROR(ApplyValidators(write_op));
-    ZETASQL_RETURN_IF_ERROR(ApplyEffectors(write_op));
+    GOOGLESQL_RETURN_IF_ERROR(ApplyValidators(write_op));
+    GOOGLESQL_RETURN_IF_ERROR(ApplyEffectors(write_op));
 
     // Apply to transaction store.
-    ZETASQL_RETURN_IF_ERROR(transaction_store_->BufferWriteOp(write_op));
+    GOOGLESQL_RETURN_IF_ERROR(transaction_store_->BufferWriteOp(write_op));
   }
 
   return absl::OkStatus();
@@ -394,12 +419,13 @@ absl::Status ReadWriteTransaction::ProcessWriteOps(
 
 absl::Status ReadWriteTransaction::ProcessChangeStreamWriteOps() {
   mu_.AssertHeld();
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto write_ops,
       BuildChangeStreamWriteOps(schema_, transaction_store_->GetBufferedOps(),
-                                action_context_->store(), id_));
+                                action_context_->store(), id_,
+                                options_.exclude_txn_from_change_streams));
   for (const WriteOp& writeop : write_ops) {
-    ZETASQL_RETURN_IF_ERROR(transaction_store_->BufferWriteOp(writeop));
+    GOOGLESQL_RETURN_IF_ERROR(transaction_store_->BufferWriteOp(writeop));
   }
   return absl::OkStatus();
 }
@@ -407,12 +433,12 @@ absl::Status ReadWriteTransaction::ProcessChangeStreamWriteOps() {
 absl::StatusOr<ResolvedMutationOp>
 ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
                                                  const Schema* schema) {
-  ZETASQL_RET_CHECK(mutation_op.type != MutationOpType::kDelete);
+  GOOGLESQL_RET_CHECK(mutation_op.type != MutationOpType::kDelete);
 
   const Table* table = schema->FindTable(mutation_op.table);
 
   if (IsChangeStreamPartitionTable(mutation_op.table)) {
-    ZETASQL_ASSIGN_OR_RETURN(table,
+    GOOGLESQL_ASSIGN_OR_RETURN(table,
                      FindChangeStreamPartitionTable(schema, mutation_op.table));
   }
 
@@ -426,15 +452,15 @@ ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
   resolved_mutation_op.origin_is_dml = mutation_op.origin_is_dml;
 
   // Vector of evaluated values for each row of operation.
-  std::vector<std::vector<zetasql::Value>> evaluated_values(
-      mutation_op.rows.size(), std::vector<zetasql::Value>());
+  std::vector<std::vector<googlesql::Value>> evaluated_values(
+      mutation_op.rows.size(), std::vector<googlesql::Value>());
   std::vector<const Column*> columns_with_evaluated_values;
   // Compute values for default primary keys that don't appear in this
   // mutation op:
-  ZETASQL_RETURN_IF_ERROR(action_registry_->ExecuteEvaluatedKeyEffectors(
+  GOOGLESQL_RETURN_IF_ERROR(action_registry_->ExecuteEvaluatedKeyEffectors(
       mutation_op, &evaluated_values, &columns_with_evaluated_values));
 
-  ZETASQL_ASSIGN_OR_RETURN(std::vector<const Column*> columns,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::vector<const Column*> columns,
                    GetColumnsByName(table, mutation_op.columns));
   // If we have key columns with evaluated values, append them here:
   if (!columns_with_evaluated_values.empty()) {
@@ -442,7 +468,7 @@ ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
                    columns_with_evaluated_values.end());
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(std::vector<std::optional<int>> key_indices,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::vector<std::optional<int>> key_indices,
                    ExtractPrimaryKeyIndices(columns, table->primary_key()));
 
   for (int i = 0; i < mutation_op.rows.size(); i++) {
@@ -452,12 +478,12 @@ ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
     new_row.insert(new_row.end(), evaluated_values[i].begin(),
                    evaluated_values[i].end());
 
-    ZETASQL_RET_CHECK_EQ(new_row.size(), columns.size())
+    GOOGLESQL_RET_CHECK_EQ(new_row.size(), columns.size())
         << "MutationOp has difference in size of column and value vectors, "
            "mutation op: "
         << mutation_op.DebugString();
 
-    ZETASQL_ASSIGN_OR_RETURN(resolved_mutation_op.rows.emplace_back(),
+    GOOGLESQL_ASSIGN_OR_RETURN(resolved_mutation_op.rows.emplace_back(),
                      MaybeSetCommitTimestampSentinel(columns, new_row));
 
     resolved_mutation_op.keys.push_back(ComputeKey(
@@ -478,24 +504,24 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
     // PG.NUMERIC calls PG to get comparison result (see function
     // ValueContentLess in datatypes/extended/pg_numeric_type.cc) and therefore
     // requires a PG arena.
-    ZETASQL_VLOG(1) << "Creating memory context and Processing Write mutations";
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_VLOG(1) << "Creating memory context and Processing Write mutations";
+    GOOGLESQL_ASSIGN_OR_RETURN(
         std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
         postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
 
     for (const MutationOp& mutation_op : mutation.ops()) {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           bool has_delete_cascade_foreign_key,
           IsMutationInvolvingForeignKeyAction(mutation_op, schema_));
       if (mutation_op.type == MutationOpType::kDelete) {
         // Process Delete.
-        ZETASQL_ASSIGN_OR_RETURN(
+        GOOGLESQL_ASSIGN_OR_RETURN(
             ResolvedMutationOp resolved_mutation_op,
             ResolveDeleteMutationOp(mutation_op, schema_, clock_->Now()));
         const std::string& table_name = resolved_mutation_op.table->Name();
 
         if (has_delete_cascade_foreign_key) {
-          ZETASQL_RETURN_IF_ERROR(fk_restrictions.ValidateReferencedDeleteMods(
+          GOOGLESQL_RETURN_IF_ERROR(fk_restrictions.ValidateReferencedDeleteMods(
               table_name, resolved_mutation_op.key_ranges));
         }
 
@@ -504,15 +530,15 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
         key_ranges.insert(key_ranges.end(),
                           resolved_mutation_op.key_ranges.begin(),
                           resolved_mutation_op.key_ranges.end());
-        ZETASQL_ASSIGN_OR_RETURN(std::vector<WriteOp> write_ops,
+        GOOGLESQL_ASSIGN_OR_RETURN(std::vector<WriteOp> write_ops,
                          FlattenDeleteOp(resolved_mutation_op.table,
                                          resolved_mutation_op.key_ranges,
                                          transaction_store_.get()));
-        ZETASQL_RETURN_IF_ERROR(ProcessWriteOps(write_ops));
+        GOOGLESQL_RETURN_IF_ERROR(ProcessWriteOps(write_ops));
       } else {
         // Process non-delete Mutation ops.
-        ZETASQL_RETURN_IF_ERROR(ValidateNonDeleteMutationOp(mutation_op, schema_));
-        ZETASQL_ASSIGN_OR_RETURN(ResolvedMutationOp resolved_mutation_op,
+        GOOGLESQL_RETURN_IF_ERROR(ValidateNonDeleteMutationOp(mutation_op, schema_));
+        GOOGLESQL_ASSIGN_OR_RETURN(ResolvedMutationOp resolved_mutation_op,
                          ResolveNonDeleteMutationOp(mutation_op, schema_));
         const std::string& table_name = resolved_mutation_op.table->Name();
 
@@ -548,25 +574,25 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
               }
             }
           }
-          ZETASQL_ASSIGN_OR_RETURN(
+          GOOGLESQL_ASSIGN_OR_RETURN(
               std::vector<WriteOp> write_ops,
               FlattenNonDeleteOpRow(
                   resolved_mutation_op.type, resolved_mutation_op.table,
                   resolved_mutation_op.columns, resolved_mutation_op.keys[i],
                   resolved_mutation_op.rows[i],
-                  resolved_mutation_op.origin_is_dml,
-                  transaction_store_.get()));
+                  resolved_mutation_op.origin_is_dml, transaction_store_.get(),
+                  mutation_op.fallback_default_values));
 
           if (has_delete_cascade_foreign_key) {
-            ZETASQL_RETURN_IF_ERROR(fk_restrictions.ValidateReferencedMods(
+            GOOGLESQL_RETURN_IF_ERROR(fk_restrictions.ValidateReferencedMods(
                 write_ops, table_name, schema_));
           }
 
-          ZETASQL_RETURN_IF_ERROR(ProcessWriteOps(write_ops));
+          GOOGLESQL_RETURN_IF_ERROR(ProcessWriteOps(write_ops));
         }
       }
     }
-    ZETASQL_RETURN_IF_ERROR(ApplyStatementVerifiers());
+    GOOGLESQL_RETURN_IF_ERROR(ApplyStatementVerifiers());
     // We defer all commit timestamp tracking to the end of the write to avoid
     // effector reads being rejected because of a previously written op in the
     // same call to ReadWriteTransaction::Write (e.g. updates to two rows in the
@@ -585,24 +611,24 @@ absl::Status ReadWriteTransaction::Commit() {
     if (retry_state_.abort_retry_count == 0 && ShouldAbortOnFirstCommit()) {
       return error::AbortReadWriteTransactionOnFirstCommit(id_);
     }
-    ZETASQL_RETURN_IF_ERROR(ProcessChangeStreamWriteOps());
+    GOOGLESQL_RETURN_IF_ERROR(ProcessChangeStreamWriteOps());
 
     // When committing, comparison may be required in the process. Comparison of
     // PG.NUMERIC calls PG to get comparison result (see function
     // ValueContentLess in datatypes/extended/pg_numeric_type.cc) and therefore
     // requires a PG arena.
-    ZETASQL_VLOG(1) << "Creating memory context and Committing transaction";
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_VLOG(1) << "Creating memory context and Committing transaction";
+    GOOGLESQL_ASSIGN_OR_RETURN(
         std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
         postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
 
     // Pick a commit timestamp.
-    ZETASQL_ASSIGN_OR_RETURN(commit_timestamp_, lock_handle_->ReserveCommitTimestamp());
+    GOOGLESQL_ASSIGN_OR_RETURN(commit_timestamp_, lock_handle_->ReserveCommitTimestamp());
 
     // Write the mutations to the base storage.
     absl::Status flush_status = FlushWriteOpsToStorage(
         transaction_store_->GetBufferedOps(), base_storage_, commit_timestamp_);
-    ZETASQL_RETURN_IF_ERROR(lock_handle_->MarkCommitted());
+    GOOGLESQL_RETURN_IF_ERROR(lock_handle_->MarkCommitted());
     if (!flush_status.ok()) {
       return flush_status;
     }

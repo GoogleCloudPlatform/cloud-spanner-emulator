@@ -35,7 +35,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/base/no_destructor.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "third_party/spanner_pg/codegen/default_values_reader.h"
@@ -108,8 +108,8 @@ absl::flat_hash_map<Oid, std::vector<std::string>> proc_arg_names_to_update = {
 // function registry.
 const absl::flat_hash_map<Oid, std::vector<std::string>>&
 GetProcsDefaultArguments() {
-  static zetasql_base::NoDestructor<absl::flat_hash_map<Oid, std::vector<std::string>>>
-      procs_default_args = zetasql_base::NoDestructor(GetProcsDefaultValuesOrDie());
+  static googlesql_base::NoDestructor<absl::flat_hash_map<Oid, std::vector<std::string>>>
+      procs_default_args = googlesql_base::NoDestructor(GetProcsDefaultValuesOrDie());
 
   return *procs_default_args;
 }

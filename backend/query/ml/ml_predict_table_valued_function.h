@@ -20,19 +20,19 @@
 #include <memory>
 #include <vector>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/evaluator_table_iterator.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/table_valued_function.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/evaluator_table_iterator.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/table_valued_function.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 
 namespace google::spanner::emulator::backend {
 
 // Implementation of ML.PREDICT function.
-class MlPredictTableValuedFunction : public zetasql::TableValuedFunction {
+class MlPredictTableValuedFunction : public googlesql::TableValuedFunction {
  public:
   explicit MlPredictTableValuedFunction(bool safe);
 
@@ -40,18 +40,18 @@ class MlPredictTableValuedFunction : public zetasql::TableValuedFunction {
 
   // Resolves output schema by combining model output and pass-through columns.
   absl::Status Resolve(
-      const zetasql::AnalyzerOptions* analyzer_options,
-      const std::vector<zetasql::TVFInputArgumentType>& actual_arguments,
-      const zetasql::FunctionSignature& concrete_signature,
-      zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
-      std::shared_ptr<zetasql::TVFSignature>* output_tvf_signature)
+      const googlesql::AnalyzerOptions* analyzer_options,
+      const std::vector<googlesql::TVFInputArgumentType>& actual_arguments,
+      const googlesql::FunctionSignature& concrete_signature,
+      googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
+      std::shared_ptr<googlesql::TVFSignature>* output_tvf_signature)
       const override;
 
   // Creates evaluator for this function.
-  absl::StatusOr<std::unique_ptr<zetasql::EvaluatorTableIterator>>
+  absl::StatusOr<std::unique_ptr<googlesql::EvaluatorTableIterator>>
   CreateEvaluator(std::vector<TvfEvaluatorArg> input_arguments,
-                  const std::vector<zetasql::TVFSchemaColumn>& output_columns,
-                  const zetasql::FunctionSignature* function_call_signature)
+                  const std::vector<googlesql::TVFSchemaColumn>& output_columns,
+                  const googlesql::FunctionSignature* function_call_signature)
       const override;
 
  private:

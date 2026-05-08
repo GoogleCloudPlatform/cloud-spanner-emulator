@@ -40,18 +40,18 @@
 #include "google/protobuf/text_format.h"
 
 #include "absl/strings/str_format.h"
-#include "zetasql/public/builtin_function.h"
-#include "zetasql/public/builtin_function_options.h"
-#include "zetasql/analyzer/function_signature_matcher.h"
-#include "zetasql/public/function.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/input_argument_type.h"
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/public/builtin_function.h"
+#include "googlesql/public/builtin_function_options.h"
+#include "googlesql/analyzer/function_signature_matcher.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/input_argument_type.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/base/no_destructor.h"
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
@@ -83,8 +83,8 @@
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include <map>
 #include <set>
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 namespace spangres {
@@ -105,13 +105,13 @@ namespace spangres_types = ::postgres_translator::spangres::types;
 
 static bool FunctionNameSupportedInSpanner(
     const std::string& function_name,
-    const zetasql::LanguageOptions& language_options,
-    zetasql::TypeFactory* type_factory) {
-  zetasql::BuiltinFunctionOptions function_options(language_options);
-  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::Function>>
+    const googlesql::LanguageOptions& language_options,
+    googlesql::TypeFactory* type_factory) {
+  googlesql::BuiltinFunctionOptions function_options(language_options);
+  absl::flat_hash_map<std::string, std::unique_ptr<googlesql::Function>>
       spanner_function_map;
-  absl::flat_hash_map<std::string, const zetasql::Type*> types;
-  zetasql::GetBuiltinFunctionsAndTypes(function_options, *type_factory,
+  absl::flat_hash_map<std::string, const googlesql::Type*> types;
+  googlesql::GetBuiltinFunctionsAndTypes(function_options, *type_factory,
                                spanner_function_map, types);
   if (spanner_function_map.find(function_name) !=
       spanner_function_map.end()) {
@@ -134,7 +134,7 @@ static bool FunctionNameSupportedInSpanner(
 
 absl::StatusOr<bool> SpangresSystemCatalog::TryInitializeEngineSystemCatalog(
     std::unique_ptr<EngineBuiltinFunctionCatalog> builtin_function_catalog,
-    const zetasql::LanguageOptions& language_options) {
+    const googlesql::LanguageOptions& language_options) {
   absl::WriterMutexLock l(&spangres_system_catalog_mutex);
   SpangresSystemCatalog** spangres_system_catalog =
       GetSpangresSystemCatalogPtr();
@@ -179,7 +179,7 @@ void SpangresSystemCatalog::ResetEngineSystemCatalog() {
 const PostgresTypeMapping* SpangresSystemCatalog::GetType(
     const std::string& name) const {
   const PostgresTypeMapping* type = EngineSystemCatalog::GetType(name);
-  const zetasql::Type* gsql_pg_numeric =
+  const googlesql::Type* gsql_pg_numeric =
       types::PgNumericMapping()->mapped_type();
 
   return type;
@@ -190,9 +190,9 @@ absl::Status SpangresSystemCatalog::GetCustomErrorForProc(Oid proc_oid) const {
 }
 
 static absl::StatusOr<std::string> GetPgNumericCastFunctionName(
-    const zetasql::Type* source_type, const zetasql::Type* target_type,
-    const zetasql::ProductMode product_mode, bool& is_fixed_precision_cast) {
-  const zetasql::Type* gsql_pg_numeric =
+    const googlesql::Type* source_type, const googlesql::Type* target_type,
+    const googlesql::ProductMode product_mode, bool& is_fixed_precision_cast) {
+  const googlesql::Type* gsql_pg_numeric =
       types::PgNumericMapping()->mapped_type();
 
   if (source_type->Equals(gsql_pg_numeric) &&
@@ -205,13 +205,13 @@ static absl::StatusOr<std::string> GetPgNumericCastFunctionName(
   std::string function_name;
   if (source_type->Equals(gsql_pg_numeric)) {
     switch (target_type->kind()) {
-      case zetasql::TypeKind::TYPE_INT64:
+      case googlesql::TypeKind::TYPE_INT64:
         return "pg.cast_to_int64";
-      case zetasql::TypeKind::TYPE_DOUBLE:
+      case googlesql::TypeKind::TYPE_DOUBLE:
         return "pg.cast_to_double";
-      case zetasql::TypeKind::TYPE_FLOAT:
+      case googlesql::TypeKind::TYPE_FLOAT:
         return "pg.cast_to_float";
-      case zetasql::TypeKind::TYPE_STRING:
+      case googlesql::TypeKind::TYPE_STRING:
         return "pg.cast_to_string";
       default:
         break;
@@ -220,10 +220,10 @@ static absl::StatusOr<std::string> GetPgNumericCastFunctionName(
 
   if (target_type->Equals(gsql_pg_numeric)) {
     switch (source_type->kind()) {
-      case zetasql::TypeKind::TYPE_INT64:
-      case zetasql::TypeKind::TYPE_DOUBLE:
-      case zetasql::TypeKind::TYPE_FLOAT:
-      case zetasql::TypeKind::TYPE_STRING:
+      case googlesql::TypeKind::TYPE_INT64:
+      case googlesql::TypeKind::TYPE_DOUBLE:
+      case googlesql::TypeKind::TYPE_FLOAT:
+      case googlesql::TypeKind::TYPE_STRING:
         return "pg.cast_to_numeric";
       default:
         break;
@@ -237,38 +237,38 @@ static absl::StatusOr<std::string> GetPgNumericCastFunctionName(
 
 absl::StatusOr<FunctionAndSignature>
 SpangresSystemCatalog::GetPgNumericCastFunction(
-    const zetasql::Type* source_type, const zetasql::Type* target_type,
-    const zetasql::LanguageOptions& language_options) {
+    const googlesql::Type* source_type, const googlesql::Type* target_type,
+    const googlesql::LanguageOptions& language_options) {
   bool is_fixed_precision_cast;
-  ZETASQL_ASSIGN_OR_RETURN(std::string function_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string function_name,
                    GetPgNumericCastFunctionName(source_type, target_type,
                                                 language_options.product_mode(),
                                                 is_fixed_precision_cast));
-  ZETASQL_ASSIGN_OR_RETURN(const zetasql::Function* builtin_function,
+  GOOGLESQL_ASSIGN_OR_RETURN(const googlesql::Function* builtin_function,
                    GetBuiltinFunction(function_name));
 
-  // Try find the matching signature. Run the ZetaSQL Function Signature
+  // Try find the matching signature. Run the GoogleSQL Function Signature
   // Matcher to determine if the input arguments exactly match the signature
   bool found_signature = false;
-  std::vector<zetasql::InputArgumentType> input_argument_types;
-  input_argument_types.push_back(zetasql::InputArgumentType(source_type));
+  std::vector<googlesql::InputArgumentType> input_argument_types;
+  input_argument_types.push_back(googlesql::InputArgumentType(source_type));
   if (is_fixed_precision_cast) {
     input_argument_types.push_back(
-        zetasql::InputArgumentType(zetasql::types::Int64Type()));
+        googlesql::InputArgumentType(googlesql::types::Int64Type()));
     input_argument_types.push_back(
-        zetasql::InputArgumentType(zetasql::types::Int64Type()));
+        googlesql::InputArgumentType(googlesql::types::Int64Type()));
   }
 
-  zetasql::Coercer coercer(type_factory(), &language_options);
-  const std::vector<const zetasql::ASTNode*> arg_ast_nodes = {};
-  std::unique_ptr<zetasql::FunctionSignature> result_signature;
+  googlesql::Coercer coercer(type_factory(), &language_options);
+  const std::vector<const googlesql::ASTNode*> arg_ast_nodes = {};
+  std::unique_ptr<googlesql::FunctionSignature> result_signature;
 
-  for (const zetasql::FunctionSignature& signature :
+  for (const googlesql::FunctionSignature& signature :
        builtin_function->signatures()) {
-    zetasql::SignatureMatchResult signature_match_result;
-    ZETASQL_ASSIGN_OR_RETURN(
+    googlesql::SignatureMatchResult signature_match_result;
+    GOOGLESQL_ASSIGN_OR_RETURN(
         bool function_signature_matches,
-        zetasql::FunctionSignatureMatchesWithStatus(
+        googlesql::FunctionSignatureMatchesWithStatus(
             language_options, coercer, arg_ast_nodes, input_argument_types,
             signature, /*allow_argument_coercion=*/false, type_factory(),
             /*resolve_lambda_callback=*/nullptr, &result_signature,
@@ -295,7 +295,7 @@ SpangresSystemCatalog::GetPgNumericCastFunction(
 }
 
 bool SpangresSystemCatalog::IsTransformationRequiredForComparison(
-    const zetasql::ResolvedExpr& gsql_expr) {
+    const googlesql::ResolvedExpr& gsql_expr) {
   // Transformation is required for expressions of type double and float as
   // Postgres' comparison semantics for double and float differ from Spanner
   // native double comparison semantics.
@@ -308,10 +308,10 @@ bool SpangresSystemCatalog::IsTransformationRequiredForComparison(
 
 // Wraps the input `gsql_expr` with required transformations to preserve
 // Postgres' comparison/order semantics.
-absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
 SpangresSystemCatalog::GetResolvedExprForComparison(
-    std::unique_ptr<zetasql::ResolvedExpr> gsql_expr,
-    const zetasql::LanguageOptions& language_options) {
+    std::unique_ptr<googlesql::ResolvedExpr> gsql_expr,
+    const googlesql::LanguageOptions& language_options) {
   if (gsql_expr == nullptr ||
       !IsTransformationRequiredForComparison(*gsql_expr)) {
     return gsql_expr;
@@ -321,50 +321,50 @@ SpangresSystemCatalog::GetResolvedExprForComparison(
                                                    language_options);
 }
 
-absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
 SpangresSystemCatalog::GetResolvedExprForFloatingPointComparison(
-    std::unique_ptr<zetasql::ResolvedExpr> gsql_expr,
-    const zetasql::LanguageOptions& language_options) {
-  const zetasql::Type* expr_type = gsql_expr->type();
+    std::unique_ptr<googlesql::ResolvedExpr> gsql_expr,
+    const googlesql::LanguageOptions& language_options) {
+  const googlesql::Type* expr_type = gsql_expr->type();
 
   if (!(expr_type->IsDouble() || expr_type->IsFloat())) {
     return gsql_expr;
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       FunctionAndSignature function_and_signature,
       GetMapFloatingPointToIntFunction(expr_type, language_options));
 
-  std::vector<std::unique_ptr<zetasql::ResolvedExpr>> argument_list;
+  std::vector<std::unique_ptr<googlesql::ResolvedExpr>> argument_list;
   argument_list.emplace_back(std::move(gsql_expr));
 
-  return zetasql::MakeResolvedFunctionCall(
-      zetasql::types::Int64Type(), function_and_signature.function(),
+  return googlesql::MakeResolvedFunctionCall(
+      googlesql::types::Int64Type(), function_and_signature.function(),
       function_and_signature.signature(), std::move(argument_list),
-      zetasql::ResolvedFunctionCallBase::DEFAULT_ERROR_MODE);
+      googlesql::ResolvedFunctionCallBase::DEFAULT_ERROR_MODE);
 }
 
 bool SpangresSystemCatalog::IsResolvedExprForComparison(
-    const zetasql::ResolvedExpr& gsql_expr) const {
-  if (!gsql_expr.Is<zetasql::ResolvedFunctionCall>()) {
+    const googlesql::ResolvedExpr& gsql_expr) const {
+  if (!gsql_expr.Is<googlesql::ResolvedFunctionCall>()) {
     return false;
   }
 
-  auto func = gsql_expr.GetAs<zetasql::ResolvedFunctionCall>();
+  auto func = gsql_expr.GetAs<googlesql::ResolvedFunctionCall>();
   auto func_name = func->function()->FullName(/*include_group=*/false);
   return func_name == "pg.map_double_to_int" ||
          func_name == "pg.map_float_to_int";
 }
 
-absl::StatusOr<const zetasql::ResolvedExpr*>
+absl::StatusOr<const googlesql::ResolvedExpr*>
 SpangresSystemCatalog::GetOriginalExprFromComparisonExpr(
-    const zetasql::ResolvedExpr& mapped_gsql_expr) const {
-  ZETASQL_RET_CHECK(IsResolvedExprForComparison(mapped_gsql_expr));
-  const zetasql::ResolvedFunctionCall* func =
-      mapped_gsql_expr.GetAs<zetasql::ResolvedFunctionCall>();
-  const std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>& args =
+    const googlesql::ResolvedExpr& mapped_gsql_expr) const {
+  GOOGLESQL_RET_CHECK(IsResolvedExprForComparison(mapped_gsql_expr));
+  const googlesql::ResolvedFunctionCall* func =
+      mapped_gsql_expr.GetAs<googlesql::ResolvedFunctionCall>();
+  const std::vector<std::unique_ptr<const googlesql::ResolvedExpr>>& args =
       func->argument_list();
-  ZETASQL_RET_CHECK_EQ(func->argument_list_size(), 1);
+  GOOGLESQL_RET_CHECK_EQ(func->argument_list_size(), 1);
   return args[0].get();
 }
 
@@ -379,37 +379,37 @@ std::optional<Oid> SpangresSystemCatalog::GetMappedOidForComparisonFuncid(
 
 absl::StatusOr<FunctionAndSignature>
 SpangresSystemCatalog::GetMapFloatingPointToIntFunction(
-    const zetasql::Type* source_type,
-    const zetasql::LanguageOptions& language_options) {
-  ZETASQL_RET_CHECK(source_type->IsDouble() || source_type->IsFloat())
+    const googlesql::Type* source_type,
+    const googlesql::LanguageOptions& language_options) {
+  GOOGLESQL_RET_CHECK(source_type->IsDouble() || source_type->IsFloat())
       << "source_type is not double or float";
 
   // TOD(b/228246295): Lookup this FunctionAndSignature only once.
   const std::string function_name =
       source_type->IsDouble() ? "pg.map_double_to_int" : "pg.map_float_to_int";
 
-  ZETASQL_ASSIGN_OR_RETURN(const zetasql::Function* builtin_function,
+  GOOGLESQL_ASSIGN_OR_RETURN(const googlesql::Function* builtin_function,
                    GetBuiltinFunction(function_name));
 
-  ZETASQL_RET_CHECK(builtin_function)
+  GOOGLESQL_RET_CHECK(builtin_function)
       << "Cannot find " << function_name
       << " in the list of builtin function of SpangresSystemCatalog";
 
-  // Try find the matching signature. Run the ZetaSQL Function Signature
+  // Try find the matching signature. Run the GoogleSQL Function Signature
   // Matcher to determine if the input arguments exactly match the signature
   bool found_signature = false;
-  const std::vector<zetasql::InputArgumentType> input_argument_types{
-      zetasql::InputArgumentType(source_type)};
+  const std::vector<googlesql::InputArgumentType> input_argument_types{
+      googlesql::InputArgumentType(source_type)};
 
-  zetasql::Coercer coercer(type_factory(), &language_options, this);
-  const std::vector<const zetasql::ASTNode*> arg_ast_nodes;
-  std::unique_ptr<zetasql::FunctionSignature> result_signature;
+  googlesql::Coercer coercer(type_factory(), &language_options, this);
+  const std::vector<const googlesql::ASTNode*> arg_ast_nodes;
+  std::unique_ptr<googlesql::FunctionSignature> result_signature;
 
-  for (const zetasql::FunctionSignature& signature :
+  for (const googlesql::FunctionSignature& signature :
        builtin_function->signatures()) {
-    zetasql::SignatureMatchResult signature_match_result;
+    googlesql::SignatureMatchResult signature_match_result;
     absl::StatusOr<bool> function_signature_matches_or =
-        zetasql::FunctionSignatureMatchesWithStatus(
+        googlesql::FunctionSignatureMatchesWithStatus(
             language_options, coercer, arg_ast_nodes, input_argument_types,
             signature, /*allow_argument_coercion=*/false, type_factory(),
             /*resolve_lambda_callback=*/nullptr, &result_signature,
@@ -426,23 +426,23 @@ SpangresSystemCatalog::GetMapFloatingPointToIntFunction(
     }
   }
 
-  ZETASQL_RET_CHECK(found_signature)
+  GOOGLESQL_RET_CHECK(found_signature)
       << "Could not find a matching signature for " << function_name
       << " function." << " source_type: " << source_type->DebugString();
 
   return FunctionAndSignature(builtin_function, *result_signature);
 }
 
-absl::StatusOr<zetasql::TypeListView>
-SpangresSystemCatalog::GetExtendedTypeSuperTypes(const zetasql::Type* type) {
+absl::StatusOr<googlesql::TypeListView>
+SpangresSystemCatalog::GetExtendedTypeSuperTypes(const googlesql::Type* type) {
   // None of existing Spanner extended types currently support supertyping.
-  return zetasql::TypeListView{};
+  return googlesql::TypeListView{};
 }
 
 absl::Status SpangresSystemCatalog::FindConversion(
-    const zetasql::Type* from_type, const zetasql::Type* to_type,
-    const FindConversionOptions& options, zetasql::Conversion* conversion) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    const googlesql::Type* from_type, const googlesql::Type* to_type,
+    const FindConversionOptions& options, googlesql::Conversion* conversion) {
+    GOOGLESQL_ASSIGN_OR_RETURN(
         *conversion,
         ::postgres_translator::spangres::datatypes::FindExtendedTypeConversion(
             from_type, to_type, options));
@@ -453,67 +453,67 @@ absl::Status SpangresSystemCatalog::FindConversion(
 // that is is used to check query compatibility between spangres and postgres.
 // (spanner/tests/spangres/pg_worker_proxy.cc)
 absl::Status SpangresSystemCatalog::AddTypes(
-    const zetasql::LanguageOptions& language_options) {
+    const googlesql::LanguageOptions& language_options) {
   // Scalar Types.
-  ZETASQL_RETURN_IF_ERROR(AddType(builtin_types::PgBoolMapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(AddType(builtin_types::PgInt8Mapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(AddType(builtin_types::PgFloat8Mapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(AddType(builtin_types::PgVarcharMapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(AddType(builtin_types::PgTextMapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(AddType(builtin_types::PgByteaMapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(AddType(builtin_types::PgBoolMapping(), language_options));
+  GOOGLESQL_RETURN_IF_ERROR(AddType(builtin_types::PgInt8Mapping(), language_options));
+  GOOGLESQL_RETURN_IF_ERROR(AddType(builtin_types::PgFloat8Mapping(), language_options));
+  GOOGLESQL_RETURN_IF_ERROR(AddType(builtin_types::PgVarcharMapping(), language_options));
+  GOOGLESQL_RETURN_IF_ERROR(AddType(builtin_types::PgTextMapping(), language_options));
+  GOOGLESQL_RETURN_IF_ERROR(AddType(builtin_types::PgByteaMapping(), language_options));
+  GOOGLESQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgTimestamptzMapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(AddType(builtin_types::PgDateMapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(AddType(spangres_types::PgOidMapping(), language_options));
+  GOOGLESQL_RETURN_IF_ERROR(AddType(builtin_types::PgDateMapping(), language_options));
+  GOOGLESQL_RETURN_IF_ERROR(AddType(spangres_types::PgOidMapping(), language_options));
 
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         AddType(builtin_types::PgIntervalMapping(), language_options));
 
   // Array Types.
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgBoolArrayMapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgInt8ArrayMapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgFloat8ArrayMapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgVarcharArrayMapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgTextArrayMapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgByteaArrayMapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgTimestamptzArrayMapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgDateArrayMapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       AddType(spangres_types::PgOidArrayMapping(), language_options));
 
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         AddType(builtin_types::PgIntervalArrayMapping(), language_options));
 
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         AddType(spangres_types::PgNumericMapping(), language_options));
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         AddType(spangres_types::PgNumericArrayMapping(), language_options));
 
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         AddType(spangres_types::PgJsonbMapping(), language_options));
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         AddType(spangres_types::PgJsonbArrayMapping(), language_options));
 
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgFloat4Mapping(), language_options));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       AddType(builtin_types::PgFloat4ArrayMapping(), language_options));
 
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         AddType(builtin_types::PgTokenlistMapping(), language_options));
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         AddType(builtin_types::PgTokenlistArrayMapping(), language_options));
 
-    ZETASQL_RETURN_IF_ERROR(AddType(builtin_types::PgUuidMapping(), language_options));
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(AddType(builtin_types::PgUuidMapping(), language_options));
+    GOOGLESQL_RETURN_IF_ERROR(
         AddType(builtin_types::PgUuidArrayMapping(), language_options));
   return absl::OkStatus();
 }
@@ -531,17 +531,17 @@ bool IsSpangresSqlRewriteFunction(const PostgresFunctionArguments& function) {
 absl::Status SpangresSystemCatalog::AddFunctionRegistryFunctions(
     std::vector<PostgresFunctionArguments>& functions) {
   SpangresFunctionMapper mapper(this);
-  ZETASQL_ASSIGN_OR_RETURN(const CatalogProto catalog_proto, GetCatalogProto());
+  GOOGLESQL_ASSIGN_OR_RETURN(const CatalogProto catalog_proto, GetCatalogProto());
   std::vector<FunctionProto> catalog_functions(
       catalog_proto.functions().begin(), catalog_proto.functions().end());
 
-  ZETASQL_RETURN_IF_ERROR(ValidateCatalogFunctions(catalog_functions));
-  ZETASQL_ASSIGN_OR_RETURN(const std::vector<FunctionProto>& enabled_functions,
+  GOOGLESQL_RETURN_IF_ERROR(ValidateCatalogFunctions(catalog_functions));
+  GOOGLESQL_ASSIGN_OR_RETURN(const std::vector<FunctionProto>& enabled_functions,
                    FilterEnabledFunctionsAndSignatures(catalog_functions));
   const absl::btree_map<NamePathKey, FunctionProto>& grouped_functions =
       GroupFunctionsByNamePaths(enabled_functions);
   for (const auto& [key, function] : grouped_functions) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const std::vector<PostgresFunctionArguments>& mapped_functions,
         mapper.ToPostgresFunctionArguments(function));
 
@@ -554,35 +554,35 @@ absl::Status SpangresSystemCatalog::AddFunctionRegistryFunctions(
 }
 
 absl::Status SpangresSystemCatalog::AddFunctions(
-    const zetasql::LanguageOptions& language_options) {
+    const googlesql::LanguageOptions& language_options) {
 
-  // Populate the set of ZetaSQL functions supported in Spangres.
+  // Populate the set of GoogleSQL functions supported in Spangres.
   std::vector<PostgresFunctionArguments> functions;
 
-  ZETASQL_RETURN_IF_ERROR(AddFunctionRegistryFunctions(functions));
+  GOOGLESQL_RETURN_IF_ERROR(AddFunctionRegistryFunctions(functions));
   AddAggregateFunctions(functions);
   AddScalarFunctions(functions);
 
-      ZETASQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_numeric"));
-      ZETASQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_int64"));
-      ZETASQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_double"));
-      ZETASQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_string"));
+      GOOGLESQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_numeric"));
+      GOOGLESQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_int64"));
+      GOOGLESQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_double"));
+      GOOGLESQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_string"));
 
-        ZETASQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_float"));
+        GOOGLESQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_float"));
 
   // Add casting override functions for STRING->DATE and STRING->TIMESTAMP.
-  ZETASQL_RETURN_IF_ERROR(AddCastOverrideFunction(
-      zetasql::types::StringType(), zetasql::types::DateType(),
+  GOOGLESQL_RETURN_IF_ERROR(AddCastOverrideFunction(
+      googlesql::types::StringType(), googlesql::types::DateType(),
       "pg.cast_to_date", language_options));
-  ZETASQL_RETURN_IF_ERROR(AddCastOverrideFunction(
-      zetasql::types::StringType(), zetasql::types::TimestampType(),
+  GOOGLESQL_RETURN_IF_ERROR(AddCastOverrideFunction(
+      googlesql::types::StringType(), googlesql::types::TimestampType(),
       "pg.cast_to_timestamp", language_options));
 
-    ZETASQL_RETURN_IF_ERROR(AddCastOverrideFunction(
-        zetasql::types::StringType(), zetasql::types::IntervalType(),
+    GOOGLESQL_RETURN_IF_ERROR(AddCastOverrideFunction(
+        googlesql::types::StringType(), googlesql::types::IntervalType(),
         "pg.cast_to_interval", language_options));
-    ZETASQL_RETURN_IF_ERROR(AddCastOverrideFunction(
-        zetasql::types::IntervalType(), zetasql::types::StringType(),
+    GOOGLESQL_RETURN_IF_ERROR(AddCastOverrideFunction(
+        googlesql::types::IntervalType(), googlesql::types::StringType(),
         "pg.cast_to_string", language_options));
 
   // Add each function to the catalog if it is supported in Spanner.
@@ -595,12 +595,12 @@ absl::Status SpangresSystemCatalog::AddFunctions(
                                        language_options, type_factory()) ||
         IsSpangresSqlRewriteFunction(function) ||
         is_builtin_sql_rewrite_function) {
-      ZETASQL_RETURN_IF_ERROR(AddFunction(function, language_options));
+      GOOGLESQL_RETURN_IF_ERROR(AddFunction(function, language_options));
     } else if (GetBuiltinFunction(function.mapped_function_name()).ok()) {
       // Checked that the function is registered directly in the emulator
-      // function catalog since the function wasn't available in the ZetaSQL
+      // function catalog since the function wasn't available in the GoogleSQL
       // catalog.
-      ZETASQL_RETURN_IF_ERROR(AddFunction(function, language_options));
+      GOOGLESQL_RETURN_IF_ERROR(AddFunction(function, language_options));
     }
   }
 
@@ -612,17 +612,17 @@ absl::Status SpangresSystemCatalog::AddFunctions(
   for (const auto& [expr_id, builtin_function_name] : expr_functions) {
     if (FunctionNameSupportedInSpanner(builtin_function_name, language_options,
                                        type_factory())) {
-      ZETASQL_RETURN_IF_ERROR(AddExprFunction(expr_id, builtin_function_name));
+      GOOGLESQL_RETURN_IF_ERROR(AddExprFunction(expr_id, builtin_function_name));
     } else if (GetBuiltinFunction(builtin_function_name).ok()) {
       // Checked that the function is registered directly in the emulator
-      // function catalog since the function wasn't available in the ZetaSQL
+      // function catalog since the function wasn't available in the GoogleSQL
       // catalog.
-      ZETASQL_RETURN_IF_ERROR(AddExprFunction(expr_id, builtin_function_name));
+      GOOGLESQL_RETURN_IF_ERROR(AddExprFunction(expr_id, builtin_function_name));
     }
   }
 
     // Add builtin TVFs.
-    ZETASQL_RETURN_IF_ERROR(AddTVF(F_JSONB_ARRAY_ELEMENTS, "pg.jsonb_array_elements"));
+    GOOGLESQL_RETURN_IF_ERROR(AddTVF(F_JSONB_ARRAY_ELEMENTS, "pg.jsonb_array_elements"));
 
   return absl::OkStatus();
 }
@@ -630,8 +630,8 @@ absl::Status SpangresSystemCatalog::AddFunctions(
 absl::StatusOr<FunctionAndSignature>
 SpangresSystemCatalog::GetFunctionAndSignature(
     Oid proc_oid,
-    const std::vector<zetasql::InputArgumentType>& input_argument_types,
-    const zetasql::LanguageOptions& language_options) {
+    const std::vector<googlesql::InputArgumentType>& input_argument_types,
+    const googlesql::LanguageOptions& language_options) {
   return EngineSystemCatalog::GetFunctionAndSignature(
       proc_oid, input_argument_types, language_options);
 }
@@ -639,8 +639,8 @@ SpangresSystemCatalog::GetFunctionAndSignature(
 absl::StatusOr<FunctionAndSignature>
 SpangresSystemCatalog::GetFunctionAndSignature(
     const PostgresExprIdentifier& expr_id,
-    const std::vector<zetasql::InputArgumentType>& input_argument_types,
-    const zetasql::LanguageOptions& language_options) {
+    const std::vector<googlesql::InputArgumentType>& input_argument_types,
+    const googlesql::LanguageOptions& language_options) {
   return EngineSystemCatalog::GetFunctionAndSignature(
       expr_id, input_argument_types, language_options);
 }

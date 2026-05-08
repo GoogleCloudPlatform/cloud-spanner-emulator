@@ -18,11 +18,11 @@
 
 #include <vector>
 
-#include "zetasql/public/json_value.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/json_value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/statusor.h"
 #include "backend/query/search/tokenizer.h"
 
@@ -33,27 +33,27 @@ namespace backend {
 namespace query {
 namespace search {
 
-void CheckResult(absl::StatusOr<zetasql::Value>& result) {
-  ZETASQL_EXPECT_OK(result.status());
-  zetasql::Value token_list = result.value();
+void CheckResult(absl::StatusOr<googlesql::Value>& result) {
+  GOOGLESQL_EXPECT_OK(result.status());
+  googlesql::Value token_list = result.value();
   EXPECT_TRUE(token_list.type()->IsTokenList());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
   ASSERT_EQ(tokens.size(), 1);
   EXPECT_EQ(tokens[0], "json");
 }
 
 TEST(JsonTokenizerTest, TestTokenize) {
-  zetasql::Value json_value =
-      zetasql::Value::Json(zetasql::JSONValue(1.23));
+  googlesql::Value json_value =
+      googlesql::Value::Json(googlesql::JSONValue(1.23));
 
-  absl::StatusOr<zetasql::Value> result =
+  absl::StatusOr<googlesql::Value> result =
       JsonTokenizer::Tokenize({json_value});
   CheckResult(result);
 }
 
 TEST(JsonTokenizerTest, TestTokenizeNull) {
-  absl::StatusOr<zetasql::Value> result =
-      JsonTokenizer::Tokenize({zetasql::Value::NullJson()});
+  absl::StatusOr<googlesql::Value> result =
+      JsonTokenizer::Tokenize({googlesql::Value::NullJson()});
   CheckResult(result);
 }
 

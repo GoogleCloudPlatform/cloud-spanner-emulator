@@ -18,10 +18,10 @@
 
 #include <ctime>
 
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/time/clock.h"
@@ -109,8 +109,8 @@ TEST_F(ReadOnlyTransactionTest, ExactTimestampSnapshotReadTimestamp) {
 
 TEST_F(ReadOnlyTransactionTest, GetSchema) {
   VersionedCatalog catalog;
-  zetasql::TypeFactory type_factory{};
-  ZETASQL_EXPECT_OK(
+  googlesql::TypeFactory type_factory{};
+  GOOGLESQL_EXPECT_OK(
       catalog.AddSchema(t0_, test::CreateSchemaWithOneTable(&type_factory)));
 
   // A strong read finds the schema created at t0_.
@@ -135,8 +135,8 @@ TEST_F(ReadOnlyTransactionTest, GetSchema) {
 
 TEST_F(ReadOnlyTransactionTest, WaitsForFutureReadTime) {
   VersionedCatalog catalog;
-  zetasql::TypeFactory type_factory{};
-  ZETASQL_EXPECT_OK(
+  googlesql::TypeFactory type_factory{};
+  GOOGLESQL_EXPECT_OK(
       catalog.AddSchema(t0_, test::CreateSchemaWithOneTable(&type_factory)));
 
   ReadOnlyOptions opts;

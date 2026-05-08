@@ -35,7 +35,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/interface/parser_output.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
@@ -47,7 +47,7 @@ namespace spangres {
 
 namespace {
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class ParserWithoutSerializationTest : public ::testing::Test {
  protected:
@@ -55,14 +55,14 @@ class ParserWithoutSerializationTest : public ::testing::Test {
 };
 
 TEST_F(ParserWithoutSerializationTest, ExistingMemoryContext) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<interfaces::PGArena> extra_arena,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<interfaces::PGArena> extra_arena,
                        MemoryContextPGArena::Init(
                            std::make_unique<StubMemoryReservationManager>()));
   interfaces::ParserSingleOutput output(parser_.Parse("select 1234567890123"));
   // We should get an internal error from attempting to overwrite an active
   // MemoryContext.
   EXPECT_THAT(output.output().status(),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(ParserWithoutSerializationTest,

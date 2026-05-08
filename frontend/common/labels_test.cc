@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "common/limits.h"
 
@@ -40,12 +40,12 @@ TEST(ValidationTest, ValidateLabels) {
   labels["a_"] = "_";    // key has underscore, value starts with underscore
   labels["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] =
       "";  // key is 63 characters, value is empty
-  ZETASQL_EXPECT_OK(ValidateLabels(labels));
+  GOOGLESQL_EXPECT_OK(ValidateLabels(labels));
 }
 
 TEST(ValidationTest, ValidateZeroLabels) {
   google::protobuf::Map<std::string, std::string> labels;
-  ZETASQL_EXPECT_OK(ValidateLabels(labels));
+  GOOGLESQL_EXPECT_OK(ValidateLabels(labels));
 }
 
 TEST(ValidationTest, ValidateTooManyLabelsReturnsError) {
@@ -54,7 +54,7 @@ TEST(ValidationTest, ValidateTooManyLabelsReturnsError) {
     labels[absl::StrCat("key-", i)] = absl::StrCat("value-", i);
   }
   EXPECT_THAT(ValidateLabels(labels),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(ValidationTest, ValidateLabelInvalidKeyReturnsError) {
@@ -73,7 +73,7 @@ TEST(ValidationTest, ValidateLabelInvalidKeyReturnsError) {
     labels.clear();
     labels[key] = "value";
     EXPECT_THAT(ValidateLabels(labels),
-                zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+                googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   }
 }
 
@@ -89,7 +89,7 @@ TEST(ValidationTest, ValidateLabelInvalidValueReturnsError) {
     labels.clear();
     labels["key"] = value;
     EXPECT_THAT(ValidateLabels(labels),
-                zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+                googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   }
 }
 

@@ -34,7 +34,7 @@
 
 #include <string>
 
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/catalog.h"
 #include "absl/container/flat_hash_set.h"
 #include "third_party/spanner_pg/catalog/engine_user_catalog.h"
 
@@ -49,23 +49,23 @@ namespace spangres {
 // logic for EngineUserCatalog.
 class SpangresUserCatalog : public EngineUserCatalog {
  public:
-  SpangresUserCatalog(zetasql::EnumerableCatalog* engine_provided_catalog)
+  SpangresUserCatalog(googlesql::EnumerableCatalog* engine_provided_catalog)
       : EngineUserCatalog(engine_provided_catalog, kPgToSpannerSchemaMapping,
                           kUpperCaseSystemSchemaList) {}
 
   const std::vector<std::string> GetCatalogPathForTable(
-      const zetasql::Table* table) const override;
+      const googlesql::Table* table) const override;
 
-  bool IsUserDefinedFunction(const zetasql::Function* udf) const override;
+  bool IsUserDefinedFunction(const googlesql::Function* udf) const override;
 
   absl::StatusOr<std::vector<absl::string_view>> GetPrimaryKeyColumns(
-      const zetasql::Table& table) const override;
+      const googlesql::Table& table) const override;
 
  protected:
   // Protected constructor is for the test-only subclass version,
   // spangres_test_user_catalog.
   SpangresUserCatalog(
-      zetasql::EnumerableCatalog* engine_provided_catalog,
+      googlesql::EnumerableCatalog* engine_provided_catalog,
       const absl::flat_hash_map<std::string, std::string>& test_schema_map,
       const std::vector<std::string>& test_upper_case_schema_list)
       : EngineUserCatalog(engine_provided_catalog, test_schema_map,

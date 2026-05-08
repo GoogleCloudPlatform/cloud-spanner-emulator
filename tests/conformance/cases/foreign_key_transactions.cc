@@ -23,7 +23,7 @@ namespace emulator {
 namespace test {
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 class ForeignKeyTransactionsTest : public DatabaseTest {
  protected:
   absl::Status SetUpDatabase() override {
@@ -93,7 +93,7 @@ TEST_F(ForeignKeyTransactionsTest, InsertReferencingRowWithReferencedRow) {
   // Insert the referenced row second to ensure a constraint violation isn't
   // trigger prematurely. The referencing key is [1,2] since the foreign key
   // defines the referencing key as (Y, X).
-  ZETASQL_EXPECT_OK(Commit(
+  GOOGLESQL_EXPECT_OK(Commit(
       {MakeInsert("U", {"X", "Y"}, 2, 1), MakeInsert("T", {"A", "B"}, 1, 2)}));
 }
 
@@ -108,7 +108,7 @@ TEST_F(ForeignKeyTransactionsTest,
        InsertAndUpdateReferencingRowWithReferencedRow) {
   // Insert an initially invalid referencing key [2,2], but later update it to
   // the valid [1,2].
-  ZETASQL_EXPECT_OK(Commit({MakeInsert("U", {"X", "Y"}, 2, 2),
+  GOOGLESQL_EXPECT_OK(Commit({MakeInsert("U", {"X", "Y"}, 2, 2),
                     MakeInsert("T", {"A", "B"}, 1, 2),
                     MakeUpdate("U", {"X", "Y"}, 2, 1)}));
 }
@@ -125,25 +125,25 @@ TEST_F(ForeignKeyTransactionsTest,
 
 TEST_F(ForeignKeyTransactionsTest, InsertAndDeleteReferencingRow) {
   // Insert an invalid referencing key [2,1], but delete it before the write.
-  ZETASQL_EXPECT_OK(Commit(
+  GOOGLESQL_EXPECT_OK(Commit(
       {MakeInsert("U", {"X", "Y"}, 1, 2), MakeDelete("U", Singleton(1))}));
 }
 
 TEST_F(ForeignKeyTransactionsTest, UpdateReferencingRowWithReferencedRow) {
   // Referenced keys: [1,2], [3,2].
   // Referencing keys: [1,2].
-  ZETASQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("T", {"A", "B"}, {3, 2}));
-  ZETASQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"A", "B"}, {3, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
   // Updated referencing keys: [3,2].
-  ZETASQL_EXPECT_OK(Commit({MakeUpdate("U", {"X", "Y"}, 2, 3)}));
+  GOOGLESQL_EXPECT_OK(Commit({MakeUpdate("U", {"X", "Y"}, 2, 3)}));
 }
 
 TEST_F(ForeignKeyTransactionsTest, UpdateReferencingRowWithoutReferencedRow) {
   // Referenced keys: [1,2].
   // Referencing keys: [1,2].
-  ZETASQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
   // Updated referencing keys: [3,2].
   EXPECT_THAT(Commit({MakeUpdate("U", {"X", "Y"}, 2, 3)}),
               StatusIs(absl::StatusCode::kFailedPrecondition));
@@ -152,82 +152,82 @@ TEST_F(ForeignKeyTransactionsTest, UpdateReferencingRowWithoutReferencedRow) {
 TEST_F(ForeignKeyTransactionsTest, UpdateAndDeleteReferencingRow) {
   // Referenced keys: [1,2].
   // Referencing keys: [1,2].
-  ZETASQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
   // Updated referencing keys: [3,2].
   // Final referencing keys: <empty>.
-  ZETASQL_EXPECT_OK(Commit(
+  GOOGLESQL_EXPECT_OK(Commit(
       {MakeUpdate("U", {"X", "Y"}, 2, 3), MakeDelete("U", Singleton(2))}));
 }
 
 TEST_F(ForeignKeyTransactionsTest, DeleteReferencedRowWithReferencingRow) {
   // Referenced keys: [1,2].
   // Referencing keys: [1,2].
-  ZETASQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
   // Attempt to delete the referenced key.
   EXPECT_THAT(Commit({MakeDelete("T", Singleton(1))}),
-              StatusIs(absl::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(ForeignKeyTransactionsTest, DeleteReferencedRowWithoutReferencingRow) {
   // Referenced keys: [1,2].
   // Referencing keys: [1,2].
-  ZETASQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
   // Delete the referencing and referenced pair of rows.
-  ZETASQL_EXPECT_OK(Commit(
+  GOOGLESQL_EXPECT_OK(Commit(
       {MakeDelete("T", Singleton(1, 2)), MakeDelete("U", Singleton(2))}));
 }
 
 TEST_F(ForeignKeyTransactionsTest, DeleteMissingReferencedRow) {
   // Deletion of a nonexistent referenced row should succeed.
-  ZETASQL_EXPECT_OK(Commit({MakeDelete("T", Singleton(-1, -1))}));
+  GOOGLESQL_EXPECT_OK(Commit({MakeDelete("T", Singleton(-1, -1))}));
 }
 
 TEST_F(ForeignKeyTransactionsTest, InsertReferencingRowWithNulls) {
   // Insertion of referencing rows with null values is always allowed.
-  ZETASQL_EXPECT_OK(Commit({MakeInsert("U", {"X", "Y"}, 2, Null<std::int64_t>())}));
+  GOOGLESQL_EXPECT_OK(Commit({MakeInsert("U", {"X", "Y"}, 2, Null<std::int64_t>())}));
 }
 
 TEST_F(ForeignKeyTransactionsTest, UpdateReferencingRowWithNull) {
   // Updating a referencing row with a null value is always allowed.
-  ZETASQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
-  ZETASQL_EXPECT_OK(Commit({MakeUpdate("U", {"X", "Y"}, 2, Null<std::int64_t>())}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
+  GOOGLESQL_EXPECT_OK(Commit({MakeUpdate("U", {"X", "Y"}, 2, Null<std::int64_t>())}));
 }
 
 TEST_F(ForeignKeyTransactionsTest,
        UpdateReferencingRowWithNonNullWithReferencedRow) {
   // Updating a referencing row with a non-null value succeeds if there is a
   // matching referenced row.
-  ZETASQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, Null<std::int64_t>()}));
-  ZETASQL_EXPECT_OK(Commit({MakeUpdate("U", {"X", "Y"}, 2, 1)}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, Null<std::int64_t>()}));
+  GOOGLESQL_EXPECT_OK(Commit({MakeUpdate("U", {"X", "Y"}, 2, 1)}));
 }
 
 TEST_F(ForeignKeyTransactionsTest,
        UpdateReferencingRowWithNonNullWithoutReferencedRow) {
   // Updating a referencing row with a non-null value must have a matching
   // referenced row.
-  ZETASQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, Null<std::int64_t>()}));
+  GOOGLESQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, Null<std::int64_t>()}));
   EXPECT_THAT(Commit({MakeUpdate("U", {"X", "Y"}, 2, 1)}),
               StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_F(ForeignKeyTransactionsTest, DeleteReferencedRowWithNulls) {
   // Deletion of referenced rows with null values is always allowed.
-  ZETASQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, Null<std::int64_t>()}));
-  ZETASQL_ASSERT_OK(Insert("U", {"X", "Y"}, {Null<std::int64_t>(), 1}));
-  ZETASQL_EXPECT_OK(Commit({MakeDelete("T", Singleton(1, Null<std::int64_t>()))}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, Null<std::int64_t>()}));
+  GOOGLESQL_ASSERT_OK(Insert("U", {"X", "Y"}, {Null<std::int64_t>(), 1}));
+  GOOGLESQL_EXPECT_OK(Commit({MakeDelete("T", Singleton(1, Null<std::int64_t>()))}));
 }
 
 TEST_F(ForeignKeyTransactionsTest, DeleteParentRowWithReferencingRow) {
   // Referenced keys: [2].
   // Referencing keys: [2].
-  ZETASQL_ASSERT_OK(Insert("Parent", {"A"}, {1}));
-  ZETASQL_ASSERT_OK(Insert("Child", {"A", "B"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("Referencing", {"X"}, {2}));
+  GOOGLESQL_ASSERT_OK(Insert("Parent", {"A"}, {1}));
+  GOOGLESQL_ASSERT_OK(Insert("Child", {"A", "B"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("Referencing", {"X"}, {2}));
   // Attempt to delete the referenced key. In this case the referenced row is
   // deleted indirectly by deleting its parent row.
   EXPECT_THAT(Commit({MakeDelete("Parent", Singleton(1))}),
@@ -237,19 +237,19 @@ TEST_F(ForeignKeyTransactionsTest, DeleteParentRowWithReferencingRow) {
 TEST_F(ForeignKeyTransactionsTest, DeleteParentRowWithoutReferencingRow) {
   // Referenced keys: [2].
   // Referencing keys: [2].
-  ZETASQL_ASSERT_OK(Insert("Parent", {"A"}, {1}));
-  ZETASQL_ASSERT_OK(Insert("Child", {"A", "B"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("Referencing", {"X"}, {2}));
+  GOOGLESQL_ASSERT_OK(Insert("Parent", {"A"}, {1}));
+  GOOGLESQL_ASSERT_OK(Insert("Child", {"A", "B"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("Referencing", {"X"}, {2}));
   // Delete the referencing and the referenced pair of rows. In this case the
   // referenced row is deleted indirectly by deleting its parent row.
-  ZETASQL_EXPECT_OK(Commit({MakeDelete("Parent", Singleton(1)),
+  GOOGLESQL_EXPECT_OK(Commit({MakeDelete("Parent", Singleton(1)),
                     MakeDelete("Referencing", Singleton(2))}));
 }
 
 TEST_F(ForeignKeyTransactionsTest, DmlInsertReferencingRowWithReferencedRow) {
   // Referenced keys: [1,2].
   // Referencing keys: [1,2].
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement("INSERT T(A, B) Values (1, 2)"),
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement("INSERT T(A, B) Values (1, 2)"),
                        SqlStatement("INSERT U(X, Y) Values (2, 1)")}));
 }
 
@@ -265,19 +265,19 @@ TEST_F(ForeignKeyTransactionsTest,
 TEST_F(ForeignKeyTransactionsTest, DmlUpdateReferencingRowWithReferencedRow) {
   // Referenced keys: [1,2], [3,2].
   // Referencing keys: [1,2].
-  ZETASQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("T", {"A", "B"}, {3, 2}));
-  ZETASQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"A", "B"}, {3, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
   // Updated referencing keys: [3,2].
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement("UPDATE U SET Y = 3 WHERE X = 2")}));
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement("UPDATE U SET Y = 3 WHERE X = 2")}));
 }
 
 TEST_F(ForeignKeyTransactionsTest,
        DmlUpdateReferencingRowWithoutReferencedRow) {
   // Referenced keys: [1,2].
   // Referencing keys: [1,2].
-  ZETASQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
   // Updated referencing keys: [3,2].
   EXPECT_THAT(CommitDml({SqlStatement("UPDATE U SET Y = 3 WHERE X = 2")}),
               StatusIs(absl::StatusCode::kFailedPrecondition));
@@ -286,8 +286,8 @@ TEST_F(ForeignKeyTransactionsTest,
 TEST_F(ForeignKeyTransactionsTest, DmlDeleteReferencedRowWithReferencingRow) {
   // Referenced keys: [1,2].
   // Referencing keys: [1,2].
-  ZETASQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
   // Attempt to delete the referenced key.
   EXPECT_THAT(CommitDml({SqlStatement("DELETE T WHERE A = 1")}),
               StatusIs(absl::StatusCode::kFailedPrecondition));
@@ -297,23 +297,23 @@ TEST_F(ForeignKeyTransactionsTest,
        DmlDeleteReferencedRowWithoutReferencingRow) {
   // Referenced keys: [1,2].
   // Referencing keys: [1,2].
-  ZETASQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"A", "B"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("U", {"X", "Y"}, {2, 1}));
   // Delete the referencing and referenced pair of rows.
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement("DELETE U WHERE X = 2"),
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement("DELETE U WHERE X = 2"),
                        SqlStatement("DELETE T WHERE A = 1")}));
 }
 
 TEST_F(ForeignKeyTransactionsTest, SwapReferencedKey) {
   // Referenced keys: [2].
   // Referencing keys: [2].
-  ZETASQL_ASSERT_OK(Insert("Parent", {"A"}, {1}));
-  ZETASQL_ASSERT_OK(Insert("Parent", {"A"}, {2}));
-  ZETASQL_ASSERT_OK(Insert("Child", {"A", "B"}, {1, 2}));
-  ZETASQL_ASSERT_OK(Insert("Referencing", {"X"}, {2}));
+  GOOGLESQL_ASSERT_OK(Insert("Parent", {"A"}, {1}));
+  GOOGLESQL_ASSERT_OK(Insert("Parent", {"A"}, {2}));
+  GOOGLESQL_ASSERT_OK(Insert("Child", {"A", "B"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("Referencing", {"X"}, {2}));
   // Delete the referenced row and insert a new row with the same referenced
   // values.
-  ZETASQL_EXPECT_OK(Commit({MakeDelete("Child", Singleton(1, 2)),
+  GOOGLESQL_EXPECT_OK(Commit({MakeDelete("Child", Singleton(1, 2)),
                     MakeInsert("Child", {"A", "B"}, 2, 2)}));
 }
 
@@ -321,7 +321,7 @@ TEST_F(ForeignKeyTransactionsTest,
        NumericInsertReferencingRowWithReferencedRow) {
   Numeric v1 = cloud::spanner::MakeNumeric("-999999999.456789").value();
   Numeric v2 = cloud::spanner::MakeNumeric("123.456789").value();
-  ZETASQL_EXPECT_OK(Commit({MakeInsert("NumericT2", {"X", "Y"}, v2, v1),
+  GOOGLESQL_EXPECT_OK(Commit({MakeInsert("NumericT2", {"X", "Y"}, v2, v1),
                     MakeInsert("NumericT1", {"A", "B"}, v1, v2)}));
 }
 
@@ -338,7 +338,7 @@ TEST_F(ForeignKeyTransactionsTest,
 TEST_F(ForeignKeyTransactionsTest, NumericInsertNotUniqueReferencedRow) {
   Numeric v1 = cloud::spanner::MakeNumeric("-999999999.456789").value();
   Numeric v2 = cloud::spanner::MakeNumeric("123.456789").value();
-  ZETASQL_ASSERT_OK(Insert("NumericT1", {"A", "B"}, {v1, v2}));
+  GOOGLESQL_ASSERT_OK(Insert("NumericT1", {"A", "B"}, {v1, v2}));
   EXPECT_THAT(Commit({MakeInsert("NumericT1", {"A", "B"}, v1, v2)}),
               StatusIs(absl::StatusCode::kAlreadyExists));
 }

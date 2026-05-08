@@ -39,7 +39,7 @@
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 
@@ -49,7 +49,7 @@ const PgBootstrapCatalog* GetPgBootstrapCatalog() {
 
 absl::StatusOr<PgTypeData> GetPgTypeDataFromBootstrap(
     const PgBootstrapCatalog* catalog, absl::string_view type_name) {
-  ZETASQL_ASSIGN_OR_RETURN(auto types, catalog->GetTypesByName(type_name));
+  GOOGLESQL_ASSIGN_OR_RETURN(auto types, catalog->GetTypesByName(type_name));
   if (types.empty()) {
     return absl::NotFoundError(
         absl::StrCat("Type not found: ", type_name));
@@ -73,7 +73,7 @@ absl::StatusOr<PgTypeData> GetPgTypeDataFromBootstrap(
 
 absl::StatusOr<PgTypeData> GetPgTypeDataFromBootstrap(
     const PgBootstrapCatalog* catalog, int64_t type_oid) {
-  ZETASQL_ASSIGN_OR_RETURN(auto type, catalog->GetType(type_oid));
+  GOOGLESQL_ASSIGN_OR_RETURN(auto type, catalog->GetType(type_oid));
   PgTypeData type_data;
   type_data.set_oid(type->oid);
   type_data.set_typname(type->typname.data);
@@ -92,7 +92,7 @@ absl::StatusOr<PgTypeData> GetPgTypeDataFromBootstrap(
 
 absl::StatusOr<PgCollationData> GetPgCollationDataFromBootstrap(
     const PgBootstrapCatalog* catalog, absl::string_view collation_name) {
-  ZETASQL_ASSIGN_OR_RETURN(auto collation, catalog->GetCollationByName(collation_name));
+  GOOGLESQL_ASSIGN_OR_RETURN(auto collation, catalog->GetCollationByName(collation_name));
   PgCollationData collation_data;
   collation_data.set_oid(collation->oid);
   collation_data.set_collname(collation->collname.data);
@@ -105,7 +105,7 @@ absl::StatusOr<PgCollationData> GetPgCollationDataFromBootstrap(
 
 absl::StatusOr<PgNamespaceData> GetPgNamespaceDataFromBootstrap(
     const PgBootstrapCatalog* catalog, absl::string_view namespace_name) {
-  ZETASQL_ASSIGN_OR_RETURN(auto nsp_oid, catalog->GetNamespaceOid(namespace_name));
+  GOOGLESQL_ASSIGN_OR_RETURN(auto nsp_oid, catalog->GetNamespaceOid(namespace_name));
   PgNamespaceData namespace_data;
   namespace_data.set_oid(nsp_oid);
   namespace_data.set_nspname(namespace_name);
@@ -114,7 +114,7 @@ absl::StatusOr<PgNamespaceData> GetPgNamespaceDataFromBootstrap(
 
 absl::StatusOr<PgProcData> GetPgProcDataFromBootstrap(
     const PgBootstrapCatalog* catalog, int64_t proc_oid) {
-  ZETASQL_ASSIGN_OR_RETURN(auto proc, catalog->GetProcProto(proc_oid));
+  GOOGLESQL_ASSIGN_OR_RETURN(auto proc, catalog->GetProcProto(proc_oid));
   PgProcData proc_data;
   proc_data.CopyFrom(*proc);
   proc_data.clear_proowner();
@@ -128,10 +128,10 @@ absl::StatusOr<PgProcData> GetPgProcDataFromBootstrap(
 
 absl::StatusOr<std::vector<PgProcData>> GetPgProcDataFromBootstrap(
     const PgBootstrapCatalog* catalog, absl::string_view proc_name) {
-  ZETASQL_ASSIGN_OR_RETURN(auto procs, catalog->GetProcsByName(proc_name));
+  GOOGLESQL_ASSIGN_OR_RETURN(auto procs, catalog->GetProcsByName(proc_name));
   std::vector<PgProcData> procs_data;
   for (const auto& proc : procs) {
-    ZETASQL_ASSIGN_OR_RETURN(auto proc_data,
+    GOOGLESQL_ASSIGN_OR_RETURN(auto proc_data,
                      GetPgProcDataFromBootstrap(catalog, proc->oid));
     procs_data.push_back(proc_data);
   }

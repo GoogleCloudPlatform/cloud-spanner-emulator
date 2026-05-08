@@ -98,7 +98,7 @@ def spangres_error_catalog(
             # This list should only include libraries required by the boilerplate
             # the error generator emits. It should not include libraries required
             # for the parameter types, which should come in through "deps".
-            "@com_google_zetasql//zetasql/base",
+            "@com_google_googlesql//googlesql/base",
             "@com_google_googleapis//google/rpc:code_cc_proto",
             "@com_google_googleapis//google/rpc:error_details_cc_proto",
             "@com_google_googleapis//google/rpc:status_cc_proto",
@@ -111,6 +111,6 @@ def spangres_error_catalog(
             "//third_party/spanner_pg/postgres_includes",
             "//third_party/spanner_pg/errors:errors",
             "//third_party/spanner_pg/errors:errors_cc_proto",
-            "@com_google_zetasql//zetasql/base:no_destructor",
+            "@com_google_googlesql//googlesql/base:no_destructor",
         ],
     )

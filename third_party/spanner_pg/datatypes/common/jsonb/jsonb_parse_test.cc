@@ -39,8 +39,8 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/base/testing/status_matchers.h"
+#include "googlesql/base/no_destructor.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/strings/cord.h"
@@ -52,7 +52,7 @@
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
-#include "zetasql/common/utf_util.h"
+#include "googlesql/common/utf_util.h"
 
 namespace postgres_translator::spangres::datatypes::common::jsonb {
 namespace {
@@ -68,7 +68,7 @@ using ::postgres_translator::test::ValidMemoryContextParameterized;
 constexpr char kUTF8ContinuationByteMinVal = 0b10000000;
 constexpr char kUTF8ContinuationByteMaxVal = 0b10111111;
 
-const zetasql_base::NoDestructor<std::string> kMaxValuePGJSONBString(
+const googlesql_base::NoDestructor<std::string> kMaxValuePGJSONBString(
     StrCat(std::string(kMaxPGJSONBNumericWholeDigits, '9'), ".",
            std::string(kMaxPGJSONBNumericFractionalDigits, '9')));
 
@@ -93,7 +93,30 @@ struct ArrayTestCase {
   std::vector<std::string> array;
 };
 
-class SimpleArrayTest : public testing::TestWithParam<ArrayTestCase> {};
+class SimpleArrayTest : public testing::TestWithParam<ArrayTestCase> {
+ protected:
+  // 1 ascii char = 1 byte
+  // 2^18 bytes = 262 KB < 10 MB (JSONB parser supported max json size)
+  // Here are some example of json array strings with depth
+  // depth(1): [] | depth(2): [[]] | depth(3): [[[]]]
+  // So a nested array with depth n will have 2n ascii chars aka bytes
+  // Hence max depth = (2 ^ 19) / 2 = 2 ^ 18
+  static constexpr uint32_t kMaxDepth = 1 << 18;
+
+  static const std::string& GetPrefix() {
+    static const std::string* prefix = [] {
+      return new std::string(kMaxDepth, '[');
+    }();
+    return *prefix;
+  }
+
+  static const std::string& GetSuffix() {
+    static const std::string* suffix = [] {
+      return new std::string(kMaxDepth, ']');
+    }();
+    return *suffix;
+  }
+};
 
 INSTANTIATE_TEST_SUITE_P(
     ArrayTestValues, SimpleArrayTest,
@@ -109,13 +132,13 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(SimpleArrayTest, ArrayTest) {
   const ArrayTestCase& test_case = GetParam();
   const std::string& input = test_case.input;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(input));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(input));
   EXPECT_EQ(jsonb, input);
 
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_value,
                        PgJsonbValue::Parse(input, &tree_nodes));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<absl::Cord> jsonb_array,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<absl::Cord> jsonb_array,
                        jsonb_value.GetSerializedArrayElements());
   ASSERT_EQ(jsonb_array.size(), test_case.array.size());
   for (int i = 0; i < jsonb_array.size(); ++i) {
@@ -125,25 +148,28 @@ TEST_P(SimpleArrayTest, ArrayTest) {
 
 // Ensure that parsing nested json arrays does not result in out of memory error
 TEST_P(SimpleArrayTest, NestedArrayTest) {
-  // 1 ascii char = 1 byte
-  // 2^22 bytes = 4 MB < 10 MB (JSONB parser supported max json size)
-  // Here are some example of json array strings with depth
-  // depth(1): [] | depth(2): [[]] | depth(3): [[[]]]
-  // So a nested array with depth n will have 2n ascii chars aka bytes
-  // Hence max depth = (2 ^ 22) / 2 = 2 ^ 21
-  constexpr uint32_t max_depth = 1 << 21;
-  const std::string json_input =
-      StrCat(std::string(max_depth, '['), GetParam().input,
-             std::string(max_depth, ']'));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(json_input));
-  EXPECT_EQ(jsonb, json_input);
+  // Use a static buffer to reuse between tests and avoid heap thrashing.
+  // reserve() it once to hold the total size of prefix + suffix + param.
+  static std::string* json_input = [] {
+    auto* s = new std::string();
+    s->reserve(kMaxDepth * 2 + 100);  // Prefix + Suffix + headroom for param
+    return s;
+  }();
+
+  json_input->clear();
+  absl::StrAppend(json_input, GetPrefix(), GetParam().input, GetSuffix());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(*json_input));
+  EXPECT_EQ(jsonb, *json_input);
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_value,
-                       PgJsonbValue::Parse(json_input, &tree_nodes));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<absl::Cord> jsonb_inner_array,
+  tree_nodes.reserve(kMaxDepth + 1);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_value,
+                       PgJsonbValue::Parse(*json_input, &tree_nodes));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<absl::Cord> jsonb_inner_array,
                        jsonb_value.GetSerializedArrayElements());
   ASSERT_EQ(jsonb_inner_array.size(), 1);
-  EXPECT_EQ(jsonb_inner_array[0], json_input.substr(1, json_input.size() - 2));
+  std::string_view expected_output(json_input->data() + 1,
+                                   json_input->size() - 2);
+  EXPECT_EQ(jsonb_inner_array[0], expected_output);
 }
 
 // Test that parsing a single huge array does not result in out of memory error
@@ -157,9 +183,9 @@ TEST(JSONBParseTest, LargeArrayTest) {
   StrAppend(&json_input, "1]");
 
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgJsonbValue jsonb_value,
                        PgJsonbValue::Parse(json_input, &tree_nodes));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<absl::Cord> jsonb_inner_array,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<absl::Cord> jsonb_inner_array,
                        jsonb_value.GetSerializedArrayElements());
   ASSERT_EQ(jsonb_inner_array.size(), max_elements + 1);
   EXPECT_EQ(jsonb_inner_array[0], "1");
@@ -175,7 +201,7 @@ INSTANTIATE_TEST_SUITE_P(
                     "\"String with \\\"quotes\\\"('', \\\").\""));
 
 TEST_P(SimpleStringTest, StringTest) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(GetParam()));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(GetParam()));
   EXPECT_EQ(jsonb, GetParam());
 }
 
@@ -208,7 +234,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(NumberTest, NumberTest) {
   TestCase test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(test_case.input));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(test_case.input));
   EXPECT_EQ(jsonb, test_case.expected_output);
 }
 
@@ -218,12 +244,45 @@ INSTANTIATE_TEST_SUITE_P(BooleanTestValues, BooleanTest,
                          testing::Values("true", "false"));
 
 TEST_P(BooleanTest, BooleanTest) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(GetParam()));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(GetParam()));
   EXPECT_EQ(jsonb, GetParam());
 }
 
 // Test simple objects that can roundtrip back to their original representation.
-using RoundtripObjectTest = ValidMemoryContextParameterized<std::string>;
+class RoundtripObjectTest
+    : public ValidMemoryContextParameterized<std::string> {
+  // Define static methods to generate large prefix and suffix strings for
+  // testing deeply nested objects.
+ protected:
+  static constexpr uint32_t kMaxDepth = 1 << 18;
+  // 1 ascii char = 1 byte
+  // 7 * 2^18 bytes = 1.8 MB < 10 MB (JSONB parser supported max json size)
+  // Here are some example of json object strings with depth
+  // depth(1): {"a": 1}
+  // depth(2): {"a": {"a": 1}}
+  // depth(3): {"a": {"a": {"a": 1}}}
+  // So a nested array with depth n will have 7n ascii chars aka bytes
+  // Hence max depth = 7 * (2 ^ 18) / 7 = 2 ^ 18
+  // `{"a": ` 6 characters at each level hence 6 times the depth
+  static const std::string& GetPrefix() {
+    static const std::string* prefix = [] {
+      auto* s = new std::string();
+      s->reserve(kMaxDepth * 6);
+      for (int i = 0; i < kMaxDepth; ++i) {
+        s->append("{\"a\": ");
+      }
+      return s;
+    }();
+    return *prefix;
+  }
+
+  static const std::string& GetSuffix() {
+    static const std::string* suffix = [] {
+      return new std::string(kMaxDepth, '}');
+    }();
+    return *suffix;
+  }
+};
 
 INSTANTIATE_TEST_SUITE_P(
     ObjectTestValues, RoundtripObjectTest,
@@ -231,33 +290,29 @@ INSTANTIATE_TEST_SUITE_P(
                     "{\"array_with_array_with_object\": [[1, {}], null]}"));
 
 TEST_P(RoundtripObjectTest, ObjectTest) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(GetParam()));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(GetParam()));
   EXPECT_EQ(jsonb, GetParam());
 }
 
 // Ensure that parsing nested json object does not result in out of memory error
 TEST_P(RoundtripObjectTest, NestedObjectTest) {
-  // 1 ascii char = 1 byte
-  // 7 * 2^20 bytes = 7 MB < 10 MB (JSONB parser supported max json size)
-  // Here are some example of json object strings with depth
-  // depth(1): {"a": 1}
-  // depth(2): {"a": {"a": 1}}
-  // depth(3): {"a": {"a": {"a": 1}}}
-  // So a nested array with depth n will have 7n ascii chars aka bytes
-  // Hence max depth = 7 * (2 ^ 20) / 7 = 2 ^ 20
-  constexpr uint32_t max_depth = 1 << 20;
-  std::string prefix;
+  const std::string& prefix = GetPrefix();
+  const std::string& suffix = GetSuffix();
+  const std::string& param = GetParam();
 
-  // `{"a": ` 6 characters at each level hence 6 times the depth
-  prefix.reserve(6 * max_depth);
-  for (int i = 0; i < max_depth; ++i) {
-    StrAppend(&prefix, "{\"a\": ");
-  }
+  // Use a static buffer to reuse between tests and avoid heap thrashing.
+  // reserve() it once to hold the total size of prefix + suffix + param.
+  static std::string* json = [] {
+    auto* s = new std::string();
+    s->reserve(kMaxDepth * 7 + 100);  // Prefix + Suffix + headroom for param
+    return s;
+  }();
 
-  const std::string json =
-      StrCat(prefix, GetParam(), std::string(max_depth, '}'));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(json));
-  EXPECT_EQ(jsonb, json);
+  // Construct the string in the pre-allocated buffer
+  json->clear();
+  absl::StrAppend(json, prefix, param, suffix);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(*json));
+  EXPECT_EQ(jsonb, *json);
 }
 
 // Test objects. Capture the semantics of ordering done first by length of the
@@ -284,19 +339,19 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(ObjectStorageTest, ObjectStorageTest) {
   TestCase test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(test_case.input));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(test_case.input));
   EXPECT_EQ(jsonb, test_case.expected_output);
 }
 
 TEST(JSONBParseTest, NullJSON) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb("null"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb("null"));
   EXPECT_EQ(jsonb, "null");
 }
 
 TEST(JSONBParseTest, EmptyTextToJSONReturnsError) {
   EXPECT_THAT(
       ParseJsonb(""),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
           testing::ContainsRegex("Error parsing user input JSON "
                                  ".*\\[json.exception.parse_error.101\\]")));
@@ -326,7 +381,7 @@ using JsonbParseTest = ValidMemoryContext;
 // digits after the decimal point.
 TEST_F(JsonbParseTest, FullScaleTest) {
   auto input_str = "0." + std::string(16383, '9');
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(input_str));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord jsonb, ParseJsonb(input_str));
   EXPECT_EQ(jsonb, input_str);
 }
 
@@ -351,7 +406,7 @@ class PostgresComparisonTest : public ValidMemoryContext {
     // From testing, Postgres parser accepts all byte-sequences, even if they
     // are not valid UTF-8, while nlohmann will not accept some invalid UTF-8
     // values.
-    if (!zetasql::IsWellFormedUTF8(input)) {
+    if (!googlesql::IsWellFormedUTF8(input)) {
       EXPECT_FALSE(ParseJsonb(input).ok());
       return;
     }
@@ -363,7 +418,7 @@ class PostgresComparisonTest : public ValidMemoryContext {
     EXPECT_EQ(pg_normalized.ok(), jsonb_normalized.ok());
 
     if (pg_normalized.ok() && jsonb_normalized.ok()) {
-      ZETASQL_ASSERT_OK_AND_ASSIGN(Datum psql_output,
+      GOOGLESQL_ASSERT_OK_AND_ASSIGN(Datum psql_output,
                            postgres_translator::CheckedDirectFunctionCall1(
                                jsonb_out, pg_normalized.value()));
       std::string expected = DatumGetCString(psql_output);
@@ -389,7 +444,7 @@ TEST_F(PostgresComparisonTest, ValidJsonbValues) {
 }
 
 TEST_F(PostgresComparisonTest, TwitterJsonValue) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::string jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::string jsonb,
                        ReadJsonFile("com_google_cloud_spanner_emulator/third_party/spanner_pg/ddl/"
                                     "types/testdata/twitter.json"));
 
@@ -417,7 +472,7 @@ TEST_F(PostgresComparisonTest, RandomJSONTest) {
       StrCat("Random JSON with seed ", random_json_creator.GetSeed(), ")"));
   for (int i = 0; i < 1000; ++i) {
     std::string random_json = random_json_creator.GetRandomJson();
-    EXPECT_THAT(zetasql::IsWellFormedUTF8(random_json), true);
+    EXPECT_THAT(googlesql::IsWellFormedUTF8(random_json), true);
     PGComplianceTestHelper(random_json);
   }
 }

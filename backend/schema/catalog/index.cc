@@ -17,6 +17,7 @@
 #include "backend/schema/catalog/index.h"
 
 #include <string>
+#include <vector>
 
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -29,7 +30,7 @@
 #include "backend/schema/catalog/table.h"
 #include "common/errors.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -53,6 +54,15 @@ std::string Index::FullDebugString() const {
   absl::StrAppend(&result,
                   "Null Filtering: ", (is_null_filtered_ ? "true" : "false"),
                   "\n");
+  if (!null_filtered_columns_.empty() && !is_null_filtered_) {
+    std::vector<std::string> column_names;
+    column_names.reserve(null_filtered_columns_.size());
+    for (const Column* col : null_filtered_columns_) {
+      column_names.push_back(absl::StrCat(col->Name(), " IS NOT NULL"));
+    }
+    absl::StrAppend(&result, "Index Filter: WHERE ",
+                    absl::StrJoin(column_names, " AND "), "\n");
+  }
   absl::StrAppend(&result, "Managed: ", (is_managed() ? "true" : "false"),
                   "\n");
   absl::StrAppend(&result, "Column :: Source Column :\n");
@@ -83,20 +93,20 @@ absl::Status Index::ValidateUpdate(const SchemaNode* old,
 
 absl::Status Index::DeepClone(SchemaGraphEditor* editor,
                               const SchemaNode* orig) {
-  ZETASQL_ASSIGN_OR_RETURN(const auto* indexed_table, editor->Clone(indexed_table_));
+  GOOGLESQL_ASSIGN_OR_RETURN(const auto* indexed_table, editor->Clone(indexed_table_));
   indexed_table_ = indexed_table->As<const Table>();
 
-  ZETASQL_ASSIGN_OR_RETURN(const auto* index_data_table,
+  GOOGLESQL_ASSIGN_OR_RETURN(const auto* index_data_table,
                    editor->Clone(index_data_table_));
   index_data_table_ = index_data_table->As<const Table>();
 
   for (const KeyColumn*& key_column : key_columns_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(key_column));
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(key_column));
     key_column = schema_node->As<const KeyColumn>();
   }
 
   for (auto it = stored_columns_.begin(); it != stored_columns_.end();) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
     // After CanonicalizeDeletion, the cloned node will be marked as deleted.
     if (schema_node->is_deleted()) {
       it = stored_columns_.erase(it);
@@ -108,7 +118,7 @@ absl::Status Index::DeepClone(SchemaGraphEditor* editor,
 
   for (auto it = null_filtered_columns_.begin();
        it != null_filtered_columns_.end();) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
     // After CanonicalizeDeletion, the cloned node will be marked as deleted.
     if (schema_node->is_deleted()) {
       it = null_filtered_columns_.erase(it);
@@ -119,7 +129,7 @@ absl::Status Index::DeepClone(SchemaGraphEditor* editor,
   }
 
   for (auto it = partition_by_.begin(); it != partition_by_.end();) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
     // After CanonicalizeDeletion, the cloned node will be marked as deleted.
     if (schema_node->is_deleted()) {
       it = partition_by_.erase(it);
@@ -130,7 +140,7 @@ absl::Status Index::DeepClone(SchemaGraphEditor* editor,
   }
 
   for (auto it = order_by_.begin(); it != order_by_.end();) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
     // After CanonicalizeDeletion, the cloned node will be marked as deleted.
     if (schema_node->is_deleted()) {
       it = order_by_.erase(it);
@@ -141,14 +151,14 @@ absl::Status Index::DeepClone(SchemaGraphEditor* editor,
   }
 
   if (!managing_nodes_.empty()) {
-    ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&managing_nodes_));
+    GOOGLESQL_RETURN_IF_ERROR(editor->CloneVector(&managing_nodes_));
     if (managing_nodes_.empty()) {
       MarkDeleted();
     }
   }
 
   if (locality_group_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* locality_group,
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* locality_group,
                      editor->Clone(locality_group_));
     locality_group_ = locality_group->As<const LocalityGroup>();
   }

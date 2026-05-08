@@ -19,7 +19,7 @@
 #include "absl/status/status.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -38,12 +38,12 @@ absl::Status Udf::ValidateUpdate(const SchemaNode* orig,
 absl::Status Udf::DeepClone(SchemaGraphEditor* editor, const SchemaNode* orig) {
   // We just need to propagate the clone event to dependencies and dependents.
   for (const SchemaNode*& dep : dependencies_) {
-    ZETASQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dep));
+    GOOGLESQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dep));
     dep = cloned_dep;
   }
 
   for (const SchemaNode*& dependent : dependents_) {
-    ZETASQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dependent,
+    GOOGLESQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dependent,
                      editor->Clone(dependent));
     dependent = cloned_dependent;
   }

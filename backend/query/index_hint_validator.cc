@@ -21,10 +21,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_node.h"
-#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "googlesql/public/value.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
@@ -35,8 +35,8 @@
 #include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
 #include "re2/re2.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -83,26 +83,26 @@ bool HasGeneratedEmulatorName(const Index* index) {
 }  // namespace
 
 absl::Status IndexHintValidator::VisitResolvedTableScan(
-    const zetasql::ResolvedTableScan* table_scan) {
+    const googlesql::ResolvedTableScan* table_scan) {
   // Visit child nodes first.
-  ZETASQL_RETURN_IF_ERROR(zetasql::ResolvedASTVisitor::DefaultVisit(table_scan));
+  GOOGLESQL_RETURN_IF_ERROR(googlesql::ResolvedASTVisitor::DefaultVisit(table_scan));
 
-  std::vector<const zetasql::ResolvedNode*> child_nodes;
+  std::vector<const googlesql::ResolvedNode*> child_nodes;
   table_scan->GetChildNodes(&child_nodes);
 
-  for (const zetasql::ResolvedNode* child_node : child_nodes) {
-    if (child_node->node_kind() == zetasql::RESOLVED_OPTION) {
-      const zetasql::ResolvedOption* hint =
-          child_node->GetAs<zetasql::ResolvedOption>();
+  for (const googlesql::ResolvedNode* child_node : child_nodes) {
+    if (child_node->node_kind() == googlesql::RESOLVED_OPTION) {
+      const googlesql::ResolvedOption* hint =
+          child_node->GetAs<googlesql::ResolvedOption>();
       if ((absl::EqualsIgnoreCase(hint->qualifier(), "spanner") ||
            hint->qualifier().empty()) &&
           absl::EqualsIgnoreCase(hint->name(), "force_index")) {
         // We should expect only one hint per table scan as multiple hints per
         // node is not allowed and would've been rejected by the HintValidator.
-        ZETASQL_RET_CHECK_EQ(hint->value()->node_kind(), zetasql::RESOLVED_LITERAL);
-        const zetasql::Value& value =
-            hint->value()->GetAs<zetasql::ResolvedLiteral>()->value();
-        ZETASQL_RET_CHECK(value.type()->IsString());
+        GOOGLESQL_RET_CHECK_EQ(hint->value()->node_kind(), googlesql::RESOLVED_LITERAL);
+        const googlesql::Value& value =
+            hint->value()->GetAs<googlesql::ResolvedLiteral>()->value();
+        GOOGLESQL_RET_CHECK(value.type()->IsString());
         index_hints_map_[table_scan] = value.string_value();
         break;
       }
@@ -171,33 +171,33 @@ absl::Status IndexHintValidator::ValidateIndexesForTables() {
 }
 
 absl::Status IndexHintValidator::VisitResolvedQueryStmt(
-    const zetasql::ResolvedQueryStmt* stmt) {
+    const googlesql::ResolvedQueryStmt* stmt) {
   // Visit children first to collect all hints.
-  ZETASQL_RETURN_IF_ERROR(zetasql::ResolvedASTVisitor::DefaultVisit(stmt));
+  GOOGLESQL_RETURN_IF_ERROR(googlesql::ResolvedASTVisitor::DefaultVisit(stmt));
   // Validate all index hints.
   return ValidateIndexesForTables();
 }
 
 absl::Status IndexHintValidator::VisitResolvedInsertStmt(
-    const zetasql::ResolvedInsertStmt* stmt) {
+    const googlesql::ResolvedInsertStmt* stmt) {
   // Visit children first to collect all hints.
-  ZETASQL_RETURN_IF_ERROR(zetasql::ResolvedASTVisitor::DefaultVisit(stmt));
-  // The target table should not have any hints (not allowed by ZetaSQL).
-  ZETASQL_RET_CHECK(!index_hints_map_.contains(stmt->table_scan()));
+  GOOGLESQL_RETURN_IF_ERROR(googlesql::ResolvedASTVisitor::DefaultVisit(stmt));
+  // The target table should not have any hints (not allowed by GoogleSQL).
+  GOOGLESQL_RET_CHECK(!index_hints_map_.contains(stmt->table_scan()));
   return ValidateIndexesForTables();
 }
 
 absl::Status IndexHintValidator::VisitResolvedUpdateStmt(
-    const zetasql::ResolvedUpdateStmt* stmt) {
+    const googlesql::ResolvedUpdateStmt* stmt) {
   // Visit children first to collect all hints.
-  ZETASQL_RETURN_IF_ERROR(zetasql::ResolvedASTVisitor::DefaultVisit(stmt));
+  GOOGLESQL_RETURN_IF_ERROR(googlesql::ResolvedASTVisitor::DefaultVisit(stmt));
   return ValidateIndexesForTables();
 }
 
 absl::Status IndexHintValidator::VisitResolvedDeleteStmt(
-    const zetasql::ResolvedDeleteStmt* stmt) {
+    const googlesql::ResolvedDeleteStmt* stmt) {
   // Visit children first to collect all hints.
-  ZETASQL_RETURN_IF_ERROR(zetasql::ResolvedASTVisitor::DefaultVisit(stmt));
+  GOOGLESQL_RETURN_IF_ERROR(googlesql::ResolvedASTVisitor::DefaultVisit(stmt));
   return ValidateIndexesForTables();
 }
 

@@ -20,7 +20,7 @@
 #include <string>
 #include <utility>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "google/iam/v1/iam_policy.pb.h"
 #include "google/iam/v1/policy.pb.h"
 #include "google/longrunning/operations.grpc.pb.h"

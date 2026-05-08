@@ -19,12 +19,12 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "common/errors.h"
 #include "tests/conformance/common/database_test_base.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -34,67 +34,18 @@ namespace test {
 namespace {
 
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class ANNTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchema({
-        R"sql(
-          CREATE TABLE Base (
-            MyKey INT64 NOT NULL,
-            MyData STRING(MAX),
-            Embedding ARRAY<FLOAT32>(vector_length=>2),
-            Embedding2 ARRAY<FLOAT32>(vector_length=>2),
-            Embedding3 ARRAY<FLOAT64>(vector_length=>2),
-          ) PRIMARY KEY(MyKey)
-        )sql"}));
-    ZETASQL_RETURN_IF_ERROR(SetSchema({
-        R"sql(
-        CREATE VECTOR INDEX vec_index ON Base(Embedding)
-        WHERE Embedding IS NOT NULL
-        OPTIONS(distance_type = 'COSINE', tree_depth = 2)
-        )sql",
-    }));
-    ZETASQL_EXPECT_OK(SetSchema({
-        R"sql(
-        CREATE VECTOR INDEX vec_index_dot_product ON Base(Embedding)
-        WHERE Embedding IS NOT NULL
-        OPTIONS(distance_type = 'DOT_PRODUCT', tree_depth = 3)
-        )sql",
-    }));
-    ZETASQL_EXPECT_OK(SetSchema({
-        R"sql(
-      CREATE VECTOR INDEX vec_index_euclidean ON Base(Embedding2)
-      WHERE Embedding2 IS NOT NULL
-      OPTIONS(distance_type = 'EUCLIDEAN', tree_depth = 2)
-      )sql",
-    }));
-    ZETASQL_EXPECT_OK(SetSchema({
-        R"sql(
-        CREATE VECTOR INDEX vec_index_store ON Base(Embedding)
-        STORING (MyData)
-        WHERE Embedding IS NOT NULL
-        OPTIONS(distance_type = 'COSINE', tree_depth = 2)
-        )sql",
-    }));
-    ZETASQL_EXPECT_OK(SetSchema({
-        R"sql(
-        CREATE VECTOR INDEX vec_index_double ON Base(Embedding3)
-        WHERE Embedding3 IS NOT NULL
-        OPTIONS(distance_type = 'COSINE', tree_depth = 2)
-        )sql",
-    }));
-    ZETASQL_EXPECT_OK(SetSchema({
-        R"sql(
-          CREATE INDEX index2 ON Base(MyData)
-        )sql"}));
+    GOOGLESQL_RETURN_IF_ERROR(SetSchemaFromFile("ann.test"));
     return PopulateDatabase();
   }
 
  protected:
   absl::Status PopulateDatabase() {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         MultiInsert(
             "Base",
             {"MyKey", "MyData", "Embedding", "Embedding2", "Embedding3"},
@@ -325,7 +276,7 @@ TEST_F(ANNTest, ANNQueryMustUnderOrderBy) {
 }
 
 TEST_F(ANNTest, ANNQueryNoJoin) {
-  ZETASQL_EXPECT_OK(SetSchema({
+  GOOGLESQL_EXPECT_OK(SetSchema({
       R"sql(
           CREATE TABLE Base2 (
             MyKey INT64 NOT NULL,
@@ -333,7 +284,7 @@ TEST_F(ANNTest, ANNQueryNoJoin) {
             Embedding ARRAY<FLOAT32>(vector_length=>2),
           ) PRIMARY KEY(MyKey)
         )sql"}));
-  ZETASQL_EXPECT_OK(MultiInsert("Base2", {"MyKey", "MyData", "Embedding"},
+  GOOGLESQL_EXPECT_OK(MultiInsert("Base2", {"MyKey", "MyData", "Embedding"},
                         {{1, "datastr2", std::vector<float>{1.0, 0.8}},
                          {2, "datastr2", std::vector<float>{0.0, 1.0}}})
                 .status());
@@ -592,12 +543,12 @@ TEST_F(ANNTest, ANNQueryNoLimit) {
 }
 
 TEST_F(ANNTest, AlterVectorIndex) {
-  ZETASQL_EXPECT_OK(SetSchema({
+  GOOGLESQL_EXPECT_OK(SetSchema({
       R"sql(
       CREATE VECTOR INDEX VI_alter ON Base(Embedding) WHERE Embedding IS NOT NULL
         OPTIONS(distance_type = 'EUCLIDEAN')
     )sql"}));
-  ZETASQL_EXPECT_OK(SetSchema({
+  GOOGLESQL_EXPECT_OK(SetSchema({
       R"sql(
       ALTER VECTOR INDEX VI_alter ADD STORED COLUMN MyData
     )sql"}));
@@ -650,7 +601,7 @@ TEST_F(ANNTest, AlterVectorIndex) {
                        HasSubstr(error::VectorIndexNotStoredColumn("VI_alter",
                                                                    "Embedding")
                                      .message())));
-  ZETASQL_EXPECT_OK(SetSchema({
+  GOOGLESQL_EXPECT_OK(SetSchema({
       R"sql(
       ALTER VECTOR INDEX VI_alter DROP STORED COLUMN MyData
     )sql"}));
@@ -669,12 +620,12 @@ TEST_F(ANNTest, DropVectorIndex) {
     )sql"}),
               StatusIs(absl::StatusCode::kNotFound,
                        HasSubstr(error::IndexNotFound("index2").message())));
-  ZETASQL_EXPECT_OK(SetSchema({
+  GOOGLESQL_EXPECT_OK(SetSchema({
       R"sql(
       CREATE VECTOR INDEX VI_drop ON Base(Embedding) WHERE Embedding IS NOT NULL
         OPTIONS(distance_type = 'EUCLIDEAN')
     )sql"}));
-  ZETASQL_EXPECT_OK(SetSchema({
+  GOOGLESQL_EXPECT_OK(SetSchema({
       R"sql(
       DROP VECTOR INDEX VI_drop
     )sql"}));

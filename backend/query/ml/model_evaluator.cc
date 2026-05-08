@@ -19,62 +19,62 @@
 #include <cstdint>
 #include <vector>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/json_value.h"
-#include "zetasql/public/types/struct_type.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/json_value.h"
+#include "googlesql/public/types/struct_type.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/common/case.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 #include "farmhash.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google::spanner::emulator::backend {
 
-absl::StatusOr<uint64_t> Fingerprint(const zetasql::Value& value) {
+absl::StatusOr<uint64_t> Fingerprint(const googlesql::Value& value) {
   if (value.is_null()) {
     return 0;
   }
 
   switch (value.type_kind()) {
-    case zetasql::TYPE_INT32:
+    case googlesql::TYPE_INT32:
       // Integers are encoded as strings on the wire.
       return farmhash::Fingerprint64(absl::StrCat(value.int32_value()));
-    case zetasql::TYPE_INT64:
+    case googlesql::TYPE_INT64:
       // Integers are encoded as strings on the wire.
       return farmhash::Fingerprint64(absl::StrCat(value.int64_value()));
-    case zetasql::TYPE_UINT32:
+    case googlesql::TYPE_UINT32:
       // Integers are encoded as strings on the wire.
       return farmhash::Fingerprint64(absl::StrCat(value.uint32_value()));
-    case zetasql::TYPE_UINT64:
+    case googlesql::TYPE_UINT64:
       // Integers are encoded as strings on the wire.
       return farmhash::Fingerprint64(absl::StrCat(value.uint64_value()));
-    case zetasql::TYPE_BOOL:
+    case googlesql::TYPE_BOOL:
       return farmhash::Fingerprint(value.bool_value());
-    case zetasql::TYPE_FLOAT:
+    case googlesql::TYPE_FLOAT:
       return farmhash::Fingerprint(value.float_value());
-    case zetasql::TYPE_DOUBLE:
+    case googlesql::TYPE_DOUBLE:
       return farmhash::Fingerprint(value.double_value());
-    case zetasql::TYPE_STRING:
+    case googlesql::TYPE_STRING:
       return farmhash::Fingerprint64(value.string_value());
-    case zetasql::TYPE_BYTES:
+    case googlesql::TYPE_BYTES:
       return farmhash::Fingerprint64(value.bytes_value());
-    case zetasql::TYPE_ARRAY: {
+    case googlesql::TYPE_ARRAY: {
       uint64_t result = 0;
-      for (const zetasql::Value& element : value.elements()) {
-        ZETASQL_ASSIGN_OR_RETURN(uint64_t element_hash, Fingerprint(element));
+      for (const googlesql::Value& element : value.elements()) {
+        GOOGLESQL_ASSIGN_OR_RETURN(uint64_t element_hash, Fingerprint(element));
         result += element_hash;
       }
       return result;
     }
-    case zetasql::TYPE_STRUCT: {
+    case googlesql::TYPE_STRUCT: {
       uint64_t result = 0;
-      for (const zetasql::Value& field : value.fields()) {
-        ZETASQL_ASSIGN_OR_RETURN(uint64_t field_hash, Fingerprint(field));
+      for (const googlesql::Value& field : value.fields()) {
+        GOOGLESQL_ASSIGN_OR_RETURN(uint64_t field_hash, Fingerprint(field));
         result += field_hash;
       }
       return result;
@@ -83,12 +83,12 @@ absl::StatusOr<uint64_t> Fingerprint(const zetasql::Value& value) {
     default:
       return absl::UnimplementedError(
           absl::StrCat("ML.PREDICT function does not support inputs of type: ",
-                       value.type()->TypeName(zetasql::PRODUCT_EXTERNAL,
+                       value.type()->TypeName(googlesql::PRODUCT_EXTERNAL,
                                               /*use_external_float32=*/true)));
   }
 }
 
-absl::StatusOr<uint64_t> Fingerprint(const zetasql::JSONValueConstRef& json) {
+absl::StatusOr<uint64_t> Fingerprint(const googlesql::JSONValueConstRef& json) {
   if (json.IsNumber()) {
     return farmhash::Fingerprint(json.GetDouble());
   } else if (json.IsString()) {
@@ -100,7 +100,7 @@ absl::StatusOr<uint64_t> Fingerprint(const zetasql::JSONValueConstRef& json) {
   } else if (json.IsArray()) {
     uint64_t result = 0;
     for (uint64_t i = 0; i < json.GetArraySize(); ++i) {
-      ZETASQL_ASSIGN_OR_RETURN(uint64_t element_hash,
+      GOOGLESQL_ASSIGN_OR_RETURN(uint64_t element_hash,
                        Fingerprint(json.GetArrayElement(i)));
       result += element_hash;
     }
@@ -108,50 +108,50 @@ absl::StatusOr<uint64_t> Fingerprint(const zetasql::JSONValueConstRef& json) {
   } else if (json.IsObject()) {
     uint64_t result = 0;
     for (const auto& [key, value] : json.GetMembers()) {
-      ZETASQL_ASSIGN_OR_RETURN(uint64_t field_hash, Fingerprint(value));
+      GOOGLESQL_ASSIGN_OR_RETURN(uint64_t field_hash, Fingerprint(value));
       result += field_hash;
     }
     return result;
   } else {
-    ZETASQL_RET_CHECK_FAIL() << "Unexpected JSON value type";
+    GOOGLESQL_RET_CHECK_FAIL() << "Unexpected JSON value type";
   }
 }
 
-absl::StatusOr<zetasql::Value> ToValue(uint64_t fingerprint,
-                                         const zetasql::Type* type) {
+absl::StatusOr<googlesql::Value> ToValue(uint64_t fingerprint,
+                                         const googlesql::Type* type) {
   switch (type->kind()) {
-    case zetasql::TYPE_INT32:
-      return zetasql::Value::Int32(fingerprint);
-    case zetasql::TYPE_INT64:
-      return zetasql::Value::Int64(fingerprint);
-    case zetasql::TYPE_BOOL:
-      return zetasql::Value::Bool(fingerprint % 2 == 0);
-    case zetasql::TYPE_FLOAT:
-      return zetasql::Value::Float(fingerprint);
-    case zetasql::TYPE_DOUBLE:
-      return zetasql::Value::Double(fingerprint);
-    case zetasql::TYPE_STRING:
-      return zetasql::Value::String(absl::StrCat(fingerprint));
-    case zetasql::TYPE_BYTES:
-      return zetasql::Value::Bytes(absl::StrCat(fingerprint));
-    case zetasql::TYPE_ARRAY: {
-      ZETASQL_ASSIGN_OR_RETURN(zetasql::Value element_value,
+    case googlesql::TYPE_INT32:
+      return googlesql::Value::Int32(fingerprint);
+    case googlesql::TYPE_INT64:
+      return googlesql::Value::Int64(fingerprint);
+    case googlesql::TYPE_BOOL:
+      return googlesql::Value::Bool(fingerprint % 2 == 0);
+    case googlesql::TYPE_FLOAT:
+      return googlesql::Value::Float(fingerprint);
+    case googlesql::TYPE_DOUBLE:
+      return googlesql::Value::Double(fingerprint);
+    case googlesql::TYPE_STRING:
+      return googlesql::Value::String(absl::StrCat(fingerprint));
+    case googlesql::TYPE_BYTES:
+      return googlesql::Value::Bytes(absl::StrCat(fingerprint));
+    case googlesql::TYPE_ARRAY: {
+      GOOGLESQL_ASSIGN_OR_RETURN(googlesql::Value element_value,
                        ToValue(fingerprint, type->AsArray()->element_type()));
-      return zetasql::Value::MakeArray(type->AsArray(), {element_value});
+      return googlesql::Value::MakeArray(type->AsArray(), {element_value});
     }
-    case zetasql::TYPE_STRUCT: {
-      std::vector<zetasql::Value> field_values;
-      for (const zetasql::StructField& field : type->AsStruct()->fields()) {
-        ZETASQL_ASSIGN_OR_RETURN(zetasql::Value field_value,
+    case googlesql::TYPE_STRUCT: {
+      std::vector<googlesql::Value> field_values;
+      for (const googlesql::StructField& field : type->AsStruct()->fields()) {
+        GOOGLESQL_ASSIGN_OR_RETURN(googlesql::Value field_value,
                          ToValue(fingerprint, field.type));
         field_values.push_back(field_value);
       }
-      return zetasql::Value::MakeStruct(type->AsStruct(), field_values);
+      return googlesql::Value::MakeStruct(type->AsStruct(), field_values);
     }
     default:
       return absl::UnimplementedError(
           absl::StrCat("ML.PREDICT function does not support outputs of type: ",
-                       type->TypeName(zetasql::PRODUCT_EXTERNAL,
+                       type->TypeName(googlesql::PRODUCT_EXTERNAL,
                                       /*use_external_float32=*/true)));
   }
 }
@@ -160,18 +160,18 @@ absl::StatusOr<zetasql::Value> ToValue(uint64_t fingerprint,
 // values, then fills out model output columns by casting the hash value to
 // output column type.
 absl::Status ModelEvaluator::DefaultPredict(
-    const zetasql::Model* model,
+    const googlesql::Model* model,
     const CaseInsensitiveStringMap<const ModelColumn>& model_inputs,
     CaseInsensitiveStringMap<ModelColumn>& model_outputs) {
   uint64_t input_hash = 0;
   for (const auto& model_input : model_inputs) {
-    ZETASQL_ASSIGN_OR_RETURN(uint64_t column_hash,
+    GOOGLESQL_ASSIGN_OR_RETURN(uint64_t column_hash,
                      Fingerprint(*model_input.second.value));
     input_hash += column_hash;
   }
 
   for (const auto& model_output : model_outputs) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         *model_output.second.value,
         ToValue(input_hash, model_output.second.model_column->GetType()));
   }
@@ -180,7 +180,7 @@ absl::Status ModelEvaluator::DefaultPredict(
 }
 
 absl::Status ModelEvaluator::Predict(
-    const zetasql::Model* model,
+    const googlesql::Model* model,
     const CaseInsensitiveStringMap<const ModelColumn>& model_inputs,
     CaseInsensitiveStringMap<ModelColumn>& model_outputs) {
   // Custom model prediction logic can be added here.
@@ -190,19 +190,19 @@ absl::Status ModelEvaluator::Predict(
 // Default prediction implementation for PG. Takes a fingerprint of all model
 // input and produces a single "Outcome" boolean field.
 absl::Status DefaultPgPredict(absl::string_view endpoint,
-                              const zetasql::JSONValueConstRef& instance,
-                              const zetasql::JSONValueConstRef& parameters,
-                              zetasql::JSONValueRef prediction) {
-  ZETASQL_ASSIGN_OR_RETURN(uint64_t input_hash, Fingerprint(instance));
+                              const googlesql::JSONValueConstRef& instance,
+                              const googlesql::JSONValueConstRef& parameters,
+                              googlesql::JSONValueRef prediction) {
+  GOOGLESQL_ASSIGN_OR_RETURN(uint64_t input_hash, Fingerprint(instance));
   prediction.SetToEmptyObject();
   prediction.GetMember("Outcome").SetBoolean(input_hash % 2 == 0);
   return absl::OkStatus();
 }
 
 absl::Status ModelEvaluator::PgPredict(
-    absl::string_view endpoint, const zetasql::JSONValueConstRef& instance,
-    const zetasql::JSONValueConstRef& parameters,
-    zetasql::JSONValueRef prediction) {
+    absl::string_view endpoint, const googlesql::JSONValueConstRef& instance,
+    const googlesql::JSONValueConstRef& parameters,
+    googlesql::JSONValueRef prediction) {
   // Custom model prediction logic can be added here.
   return DefaultPgPredict(endpoint, instance, parameters, prediction);
 }

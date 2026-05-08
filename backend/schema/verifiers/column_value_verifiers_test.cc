@@ -20,11 +20,11 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/types/span.h"
 #include "backend/database/database.h"
@@ -38,15 +38,15 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::values::BytesArray;
-using zetasql::values::Int64;
-using zetasql::values::NullString;
-using zetasql::values::String;
-using zetasql::values::StringArray;
-using zetasql::values::Timestamp;
-using zetasql::values::Array;
-using zetasql::values::Bytes;
-using zetasql::values::Proto;
+using googlesql::values::BytesArray;
+using googlesql::values::Int64;
+using googlesql::values::NullString;
+using googlesql::values::String;
+using googlesql::values::StringArray;
+using googlesql::values::Timestamp;
+using googlesql::values::Array;
+using googlesql::values::Bytes;
+using googlesql::values::Proto;
 
 constexpr char kDatabaseId[] = "test-db";
 
@@ -58,7 +58,7 @@ class ColumnValueVerifiersTest : public ::testing::Test {
     int num_succesful;
     absl::Status backfill_status;
     absl::Time update_time;
-    ZETASQL_RETURN_IF_ERROR(database_->UpdateSchema(
+    GOOGLESQL_RETURN_IF_ERROR(database_->UpdateSchema(
         SchemaChangeOperation{.statements = update_statements}, &num_succesful,
         &update_time, &backfill_status));
     return backfill_status;
@@ -74,12 +74,12 @@ class ColumnValueVerifiersTest : public ::testing::Test {
                               timestamp_col TIMESTAMP
                             ) PRIMARY KEY (int64_col)
                           )"};
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         database_,
         Database::Create(&clock_, kDatabaseId,
                          SchemaChangeOperation{.statements = statements}));
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(
                              ReadWriteOptions(), RetryState()));
 
@@ -99,8 +99,8 @@ class ColumnValueVerifiersTest : public ::testing::Test {
     m.AddWriteOp(MutationOpType::kInsert, "TestTable",
                  {"int64_col", "bytes_array_col"},
                  {{Int64(5), BytesArray({"1234567890!@#$%^&*()"})}});
-    ZETASQL_ASSERT_OK(txn->Write(m));
-    ZETASQL_ASSERT_OK(txn->Commit());
+    GOOGLESQL_ASSERT_OK(txn->Write(m));
+    GOOGLESQL_ASSERT_OK(txn->Commit());
   }
 
  protected:
@@ -207,14 +207,14 @@ class ProtoColumnValueVerifierTest : public ColumnValueVerifiersTest {
                               bytes_array_col ARRAY<BYTES(11)>,
                             ) PRIMARY KEY (int64_col)
                           )sql"};
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         database_,
         Database::Create(&clock_, kDatabaseId,
                          SchemaChangeOperation{
                              .statements = statements,
                              .proto_descriptor_bytes = read_descriptors()}));
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(
                              ReadWriteOptions(), RetryState()));
     const auto* test_table = txn->schema()->FindTable("TestTable");
@@ -234,11 +234,11 @@ class ProtoColumnValueVerifierTest : public ColumnValueVerifiersTest {
                    Array(array_proto_type_, {Proto(proto_type_, simple_proto)}),
                    Bytes(simple_proto.SerializeAsString()),
                    BytesArray({simple_proto.SerializeAsString()})}});
-    ZETASQL_ASSERT_OK(txn->Write(m));
-    ZETASQL_ASSERT_OK(txn->Commit());
+    GOOGLESQL_ASSERT_OK(txn->Write(m));
+    GOOGLESQL_ASSERT_OK(txn->Commit());
   }
-  const zetasql::ProtoType* proto_type_ = nullptr;
-  const zetasql::ArrayType* array_proto_type_ = nullptr;
+  const googlesql::ProtoType* proto_type_ = nullptr;
+  const googlesql::ArrayType* array_proto_type_ = nullptr;
 };
 
 TEST_F(ProtoColumnValueVerifierTest, VerifyProtoToBytesArrayChange) {
@@ -250,26 +250,26 @@ TEST_F(ProtoColumnValueVerifierTest, VerifyProtoToBytesArrayChange) {
 }
 
 TEST_F(ProtoColumnValueVerifierTest, VerifyBytesToProtoChange) {
-  ZETASQL_EXPECT_OK(UpdateSchema({R"sql(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN bytes_col emulator.tests.common.Simple
   )sql"}));
 }
 
 TEST_F(ProtoColumnValueVerifierTest, VerifyBytesArrayToProtoChange) {
-  ZETASQL_EXPECT_OK(UpdateSchema({R"sql(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN bytes_array_col ARRAY<emulator.tests.common.Simple>
   )sql"}));
 }
 
 TEST_F(ProtoColumnValueVerifierTest, VerifyOutOfEnumRangeIntValue) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<ReadWriteTransaction> txn,
       database_->CreateReadWriteTransaction(ReadWriteOptions(), RetryState()));
   Mutation m;
   m.AddWriteOp(MutationOpType::kInsert, "TestTable", {"int64_col"},
                {{Int64(8)}});
-  ZETASQL_ASSERT_OK(txn->Write(m));
-  ZETASQL_ASSERT_OK(txn->Commit());
+  GOOGLESQL_ASSERT_OK(txn->Write(m));
+  GOOGLESQL_ASSERT_OK(txn->Commit());
   EXPECT_EQ(
       UpdateSchema({R"sql(
           ALTER TABLE TestTable ALTER COLUMN int64_col emulator.tests.common.TestEnum

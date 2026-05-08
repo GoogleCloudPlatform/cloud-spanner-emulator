@@ -2534,7 +2534,7 @@ transformUpdateTargetList(ParseState *pstate, List *origTlist)
 
 	// SPANGRES BEGIN
 	/*
-	 * Get the number of columns and the column data from the ZetaSQL catalog.
+	 * Get the number of columns and the column data from the GoogleSQL catalog.
 	 */
 	int ncolumns = 0;
 	char** real_colnames = NULL;
@@ -2573,7 +2573,7 @@ transformUpdateTargetList(ParseState *pstate, List *origTlist)
 		origTarget = lfirst_node(ResTarget, orig_tl);
 
 		// SPANGRES BEGIN
-		/* Lookup the column id in the ZetaSQL catalog */
+		/* Lookup the column id in the GoogleSQL catalog */
 		attrno = GetColumnAttrNumber(pstate->p_target_relation_oid,
 									 origTarget->name);
 		if (attrno == InvalidAttrNumber) {

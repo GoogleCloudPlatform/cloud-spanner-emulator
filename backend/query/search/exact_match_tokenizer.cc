@@ -20,7 +20,7 @@
 
 #include "absl/strings/string_view.h"
 #include "backend/query/search/tokenizer.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 
 namespace google {
 namespace spanner {
@@ -29,15 +29,15 @@ namespace backend {
 namespace query {
 namespace search {
 
-absl::StatusOr<zetasql::Value> ExactMatchTokenizer::Tokenize(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> ExactMatchTokenizer::Tokenize(
+    absl::Span<const googlesql::Value> args) {
   bool isValidType = args[0].type()->IsString() || args[0].type()->IsBytes();
   if (!isValidType && args[0].type()->IsArray()) {
-    const zetasql::Type* element_type =
+    const googlesql::Type* element_type =
         args[0].type()->AsArray()->element_type();
     isValidType = element_type->IsString() || element_type->IsBytes();
   }
-  ZETASQL_RET_CHECK(isValidType);
+  GOOGLESQL_RET_CHECK(isValidType);
 
   return TokenListFromStrings({std::string(kExactMatchTokenizer)});
 }

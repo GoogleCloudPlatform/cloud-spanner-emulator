@@ -20,7 +20,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/common/scoped_feature_flags_setter.h"
@@ -51,17 +51,17 @@ class PGSynonymsTest : public DatabaseTest {
 };
 
 TEST_F(PGSynonymsTest, CreateTableWithSynonym) {
-  ZETASQL_ASSERT_OK(UpdateSchema(
+  GOOGLESQL_ASSERT_OK(UpdateSchema(
       {R"(CREATE TABLE t (col1 BIGINT PRIMARY KEY, col2 BIGINT, SYNONYM (syn)))"}));
-  ZETASQL_ASSERT_OK(Insert("t", {"col1", "col2"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"col1", "col2"}, {1, 2}));
   EXPECT_THAT(Query("SELECT * FROM syn"), IsOkAndHoldsUnorderedRows({{1, 2}}));
 }
 
 TEST_F(PGSynonymsTest, AddSynonym) {
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       UpdateSchema({R"(CREATE TABLE t (col1 BIGINT PRIMARY KEY, col2 BIGINT))",
                     R"(ALTER TABLE t ADD SYNONYM syn)"}));
-  ZETASQL_ASSERT_OK(Insert("t", {"col1", "col2"}, {1, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"col1", "col2"}, {1, 2}));
   EXPECT_THAT(Query("SELECT * FROM syn"), IsOkAndHoldsUnorderedRows({{1, 2}}));
 }
 

@@ -1,0 +1,14 @@
+{{ GENERATED_CODE_HEADER }}
+# This file contains the Spanner counterpart of PostgreSQL pg_aggregate.dat.
+# It defines aggregate functions that are implemented internally in Spanner
+# so that the PostgreSQL parser correctly recognizes them as aggregates without
+# failing the bootstrap catalog lookup. The transition functions specified here
+# are dummies because Spanner executes them natively.
+
+[
+{%- for entry in pg_aggregate_entries %}
+{ aggfnoid => '{{ entry.aggfnoid }}',
+  aggtransfn => '{{ entry.aggtransfn }}',
+  aggtranstype => '{{ entry.aggtranstype }}' },
+{%- endfor %}
+]

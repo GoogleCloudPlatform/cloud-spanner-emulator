@@ -30,10 +30,10 @@
 //------------------------------------------------------------------------------
 
 #include "spanner/public/type.h"
-#include "zetasql/public/interval_value.h"
+#include "googlesql/public/interval_value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/cord.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
@@ -42,7 +42,7 @@
 #include "third_party/spanner_pg/numeric_arithmetic/round.h"
 #include "third_party/spanner_pg/shims/timezone_helper.h"
 #include "util/math/mathutil.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::function_evaluators {
 namespace {
@@ -52,7 +52,7 @@ constexpr char kDefaultTimezone[] = "America/Los_Angeles";
 using ::spangres::numeric_arithmetic::RoundToInteger;
 using ::spanner::datatypes::common::DecodeNumericValueToDecimalString;
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 struct TimestamptzPartTestCase {
   TimestamptzPartTestCase(
@@ -73,7 +73,7 @@ class TimestamptzPartTest
  protected:
   void SetUp() override {
     PgEvaluatorTestWithParam<TimestamptzPartTestCase>::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {
@@ -85,17 +85,17 @@ class TimestamptzPartTest
 
 TEST_P(TimestamptzPartTest, TimestamptzPart) {
   const TimestamptzPartTestCase& test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time source_input,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time source_input,
                        PgTimestamptzIn(test_case.source));
 
   for (const auto& test_pair : test_case.expected_values) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(double computed_result,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(double computed_result,
                          PgTimestamptzPart(test_pair.first, source_input));
     EXPECT_EQ(test_pair.second, computed_result);
   }
 
   // Round for julian.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(double computed_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(double computed_result,
                        PgTimestamptzPart("julian", source_input));
   EXPECT_EQ(test_case.julian, MathUtil::Round<int>(computed_result));
 }
@@ -196,7 +196,7 @@ class TimestamptzExtractTest
  protected:
   void SetUp() override {
     PgEvaluatorTestWithParam<TimestamptzExtractTestCase>::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {
@@ -208,10 +208,10 @@ class TimestamptzExtractTest
 
 TEST_P(TimestamptzExtractTest, TimestamptzExtract) {
   const TimestamptzExtractTestCase& test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time source_input,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time source_input,
                        PgTimestamptzIn(test_case.source));
   for (const auto& test_pair : test_case.expected_values) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord computed_result,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord computed_result,
                          PgTimestamptzExtract(test_pair.first, source_input));
     std::string readable_numeric;
 
@@ -221,10 +221,10 @@ TEST_P(TimestamptzExtractTest, TimestamptzExtract) {
   }
 
   // Round for julian.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord computed_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord computed_result,
                        PgTimestamptzExtract("julian", source_input));
   int32_t computed_julian;
-  ZETASQL_ASSERT_OK(RoundToInteger(computed_result.Flatten(), &computed_julian));
+  GOOGLESQL_ASSERT_OK(RoundToInteger(computed_result.Flatten(), &computed_julian));
   EXPECT_EQ(computed_julian, test_case.julian);
 }
 
@@ -256,7 +256,7 @@ class DateExtractTest : public PgEvaluatorTestWithParam<DateExtractTestCase> {
  protected:
   void SetUp() override {
     PgEvaluatorTestWithParam<DateExtractTestCase>::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {
@@ -268,9 +268,9 @@ class DateExtractTest : public PgEvaluatorTestWithParam<DateExtractTestCase> {
 
 TEST_P(DateExtractTest, DateExtract) {
   const DateExtractTestCase& test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int32_t source_input, PgDateIn(test_case.source));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int32_t source_input, PgDateIn(test_case.source));
   for (const auto& test_pair : test_case.expected_values) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord computed_result,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord computed_result,
                          PgDateExtract(test_pair.first, source_input));
     std::string readable_numeric;
 
@@ -322,7 +322,7 @@ class DateExtractErrorTest
  protected:
   void SetUp() override {
     PgEvaluatorTestWithParam<DateExtractErrorTestCase>::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {
@@ -334,7 +334,7 @@ class DateExtractErrorTest
 
 TEST_P(DateExtractErrorTest, DateExtractError) {
   const DateExtractErrorTestCase& test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int32_t source_input, PgDateIn(test_case.source));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int32_t source_input, PgDateIn(test_case.source));
   for (const auto& unsupported_field : test_case.unsupported_fields) {
     EXPECT_THAT(PgDateExtract(unsupported_field, source_input),
                 StatusIs(absl::StatusCode::kUnimplemented,
@@ -367,7 +367,7 @@ class IntervalExtractTest
  protected:
   void SetUp() override {
     PgEvaluatorTestWithParam<IntervalExtractTestCase>::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {
@@ -379,14 +379,14 @@ class IntervalExtractTest
 
 TEST_P(IntervalExtractTest, IntervalExtract) {
   const IntervalExtractTestCase& test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::IntervalValue source_input,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::IntervalValue source_input,
                        PgIntervalIn(test_case.source));
 
   for (const auto& test_pair : test_case.expected_values) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord computed_result,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord computed_result,
                          PgIntervalExtract(test_pair.first, source_input));
     std::string readable_numeric;
-    ZETASQL_EXPECT_OK(DecodeNumericValueToDecimalString(
+    GOOGLESQL_EXPECT_OK(DecodeNumericValueToDecimalString(
         spanner::TypeCode::PG_NUMERIC, computed_result, &readable_numeric));
     EXPECT_EQ(readable_numeric, test_pair.second);
   }

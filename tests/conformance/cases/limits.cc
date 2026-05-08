@@ -23,7 +23,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -39,7 +39,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class LimitsTest : public DatabaseTest {
  public:
@@ -115,7 +115,7 @@ TEST_F(LimitsTest, DISABLED_MaxTablesPerDatabase) {
   }
   // Add an index to verify that it is not counted towards table limit.
   statements.emplace_back("CREATE INDEX test_index ON table_0 (string_col)");
-  ZETASQL_EXPECT_OK(UpdateSchema(statements));
+  GOOGLESQL_EXPECT_OK(UpdateSchema(statements));
 
   EXPECT_THAT(
       UpdateSchema({absl::StrFormat(
@@ -134,8 +134,8 @@ TEST_F(LimitsTest, MaxChangeStreamsPerDatabase) {
     statements.emplace_back(absl::StrFormat(
         "CREATE CHANGE STREAM change_stream_%d FOR table_%d", i, i));
   }
-  ZETASQL_EXPECT_OK(UpdateSchema(statements));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(statements));
+  GOOGLESQL_ASSERT_OK(
       UpdateSchema({absl::StrFormat("CREATE TABLE table_%d (ID INT64 NOT NULL, "
                                     "string_col STRING(MAX),) PRIMARY KEY (ID)",
                                     i)}));
@@ -158,7 +158,7 @@ TEST_F(LimitsTest, DISABLED_MaxIndexesPerDatabase) {
           "CREATE INDEX test_%d_index_%d ON table_%d(string_col)", i, j, i));
     }
   }
-  ZETASQL_EXPECT_OK(UpdateSchema(statements));
+  GOOGLESQL_EXPECT_OK(UpdateSchema(statements));
 
   // Adding one additional index to the database.
   EXPECT_THAT(
@@ -179,7 +179,7 @@ TEST_F(LimitsTest, MaxIndexPerTable) {
     statements.emplace_back(
         absl::StrFormat("CREATE INDEX index_%d ON test_table(string_col)", i));
   }
-  ZETASQL_EXPECT_OK(UpdateSchema(statements));
+  GOOGLESQL_EXPECT_OK(UpdateSchema(statements));
 
   EXPECT_THAT(
       UpdateSchema({"CREATE INDEX index_too_many ON test_table(string_col)"}),
@@ -197,7 +197,7 @@ TEST_F(LimitsTest, MaxChangeStreamsPerTable) {
     statements.emplace_back(absl::StrFormat(
         "CREATE CHANGE STREAM change_stream_%d FOR test_table", i));
   }
-  ZETASQL_EXPECT_OK(UpdateSchema(statements));
+  GOOGLESQL_EXPECT_OK(UpdateSchema(statements));
 
   EXPECT_THAT(
       UpdateSchema({"CREATE CHANGE STREAM change_stream_too_many FOR ALL"}),
@@ -218,16 +218,16 @@ TEST_F(LimitsTest,
     statements.emplace_back(absl::StrFormat(
         "CREATE CHANGE STREAM change_stream_%d FOR test_table()", i));
   }
-  ZETASQL_EXPECT_OK(UpdateSchema(statements));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(statements));
+  GOOGLESQL_EXPECT_OK(
       UpdateSchema({"CREATE CHANGE STREAM change_stream_3 FOR test_table()"}));
-  ZETASQL_EXPECT_OK(UpdateSchema({"CREATE CHANGE STREAM change_stream_all FOR ALL"}));
-  ZETASQL_EXPECT_OK(UpdateSchema(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({"CREATE CHANGE STREAM change_stream_all FOR ALL"}));
+  GOOGLESQL_EXPECT_OK(UpdateSchema(
       {"CREATE CHANGE STREAM change_stream_test_table FOR test_table"}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       UpdateSchema({"CREATE CHANGE STREAM change_stream_test_table_string_col1 "
                     "FOR test_table(string_col1)"}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       UpdateSchema({"CREATE CHANGE STREAM change_stream_test_table_string_col2 "
                     "FOR test_table(string_col2)"}));
   EXPECT_THAT(
@@ -250,13 +250,13 @@ TEST_F(LimitsTest,
     statements.emplace_back(absl::StrFormat(
         "CREATE CHANGE STREAM change_stream_%d FOR test_table", i));
   }
-  ZETASQL_EXPECT_OK(UpdateSchema(statements));
+  GOOGLESQL_EXPECT_OK(UpdateSchema(statements));
   EXPECT_THAT(
       UpdateSchema({"CREATE CHANGE STREAM change_stream_too_many FOR ALL"}),
       StatusIs(absl::StatusCode::kFailedPrecondition));
-  ZETASQL_EXPECT_OK(UpdateSchema(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(
       {"ALTER CHANGE STREAM change_stream_0 SET FOR test_table()"}));
-  ZETASQL_EXPECT_OK(UpdateSchema({"CREATE CHANGE STREAM change_stream_all FOR ALL"}));
+  GOOGLESQL_EXPECT_OK(UpdateSchema({"CREATE CHANGE STREAM change_stream_all FOR ALL"}));
 }
 
 TEST_F(LimitsTest,
@@ -271,7 +271,7 @@ TEST_F(LimitsTest,
     statements.emplace_back(absl::StrFormat(
         "CREATE CHANGE STREAM change_stream_%d FOR test_table()", i));
   }
-  ZETASQL_EXPECT_OK(UpdateSchema(statements));
+  GOOGLESQL_EXPECT_OK(UpdateSchema(statements));
 
   EXPECT_THAT(
       UpdateSchema({"CREATE CHANGE STREAM change_stream_too_many FOR ALL"}),
@@ -292,11 +292,11 @@ TEST_F(LimitsTest, AllowFourChangeStreamsTrackingDiffNonKeyColOfSameTable) {
       R"(CREATE CHANGE STREAM cs1 FOR test_table(string_col1))",
       R"(CREATE CHANGE STREAM cs2 FOR test_table(string_col2))",
       R"(CREATE CHANGE STREAM cs3 FOR test_table(string_col3))"};
-  ZETASQL_EXPECT_OK(UpdateSchema(statements));
-  ZETASQL_EXPECT_OK(UpdateSchema(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(statements));
+  GOOGLESQL_EXPECT_OK(UpdateSchema(
       {R"(CREATE CHANGE STREAM cs4 FOR test_table(string_col4))"}));
-  ZETASQL_EXPECT_OK(UpdateSchema({R"(CREATE CHANGE STREAM cs_all FOR ALL)"}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"(CREATE CHANGE STREAM cs_all FOR ALL)"}));
+  GOOGLESQL_EXPECT_OK(
       UpdateSchema({R"(CREATE CHANGE STREAM cs_test_table FOR test_table)"}));
 }
 
@@ -365,7 +365,7 @@ TEST_F(LimitsTest, DISABLED_MaxColumnSize) {
        string_col_1 STRING(MAX),
      ) PRIMARY KEY(string_col_0)
   )"};
-  ZETASQL_EXPECT_OK(UpdateSchema({statements}));
+  GOOGLESQL_EXPECT_OK(UpdateSchema({statements}));
 
   // Fail primary key column exceeding max size.
   EXPECT_THAT(
@@ -385,7 +385,7 @@ TEST_F(LimitsTest, MaxPrimaryKeySizeOfTable) {
        string_col_1 STRING(MAX),
      ) PRIMARY KEY(string_col_0, string_col_1)
   )"};
-  ZETASQL_EXPECT_OK(UpdateSchema({statements}));
+  GOOGLESQL_EXPECT_OK(UpdateSchema({statements}));
 
   // Fail single column exceeding primary key size.
   EXPECT_THAT(Insert("test_table", {"string_col_0", "string_col_1"},
@@ -410,7 +410,7 @@ TEST_F(LimitsTest, MaxPrimaryKeySizeOfIndex) {
      CREATE INDEX test_index
      ON test_table(string_col_1, string_col_2)
   )"};
-  ZETASQL_EXPECT_OK(UpdateSchema({statements}));
+  GOOGLESQL_EXPECT_OK(UpdateSchema({statements}));
 
   // Fail single column exceeding primary key size.
   EXPECT_THAT(
@@ -446,7 +446,7 @@ TEST_F(LimitsTest, MaxTableInterleavingDepth) {
     }
     statements.emplace_back(create_table_statement);
   }
-  ZETASQL_EXPECT_OK(UpdateSchema(statements));
+  GOOGLESQL_EXPECT_OK(UpdateSchema(statements));
 
   if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
     EXPECT_THAT(UpdateSchema({absl::StrFormat(
@@ -470,14 +470,14 @@ TEST_F(LimitsTest, MaxValueSize) {
        bytes_col BYTES(MAX),
      ) PRIMARY KEY(int64_col)
   )"};
-  ZETASQL_EXPECT_OK(UpdateSchema({statements}));
+  GOOGLESQL_EXPECT_OK(UpdateSchema({statements}));
 
   auto bytes_col_value = google::spanner::emulator::test::ToUtilStatusOr(
       cloud::spanner_internal::BytesFromBase64(
           std::string(limits::kMaxBytesColumnLength, 'a')));
-  ZETASQL_ASSERT_OK(bytes_col_value);
+  GOOGLESQL_ASSERT_OK(bytes_col_value);
 
-  ZETASQL_EXPECT_OK(Insert("max_value_size_test_table", {"int64_col", "bytes_col"},
+  GOOGLESQL_EXPECT_OK(Insert("max_value_size_test_table", {"int64_col", "bytes_col"},
                    {1, *bytes_col_value}));
 
   // Construct a struct object with a field value of 10MB.
@@ -485,13 +485,13 @@ TEST_F(LimitsTest, MaxValueSize) {
   auto result = Query(
       absl::StrFormat("SELECT ARRAY(SELECT AS STRUCT bytes_col as bytes_col "
                       "FROM max_value_size_test_table);"));
-  ZETASQL_ASSERT_OK(result);
+  GOOGLESQL_ASSERT_OK(result);
   ASSERT_EQ(result->size(), 1);
   ASSERT_EQ(result->at(0).values().size(), 1);
   Value array_value = result->at(0).values()[0];
   auto struct_array = google::spanner::emulator::test::ToUtilStatusOr(
       array_value.get<std::vector<std::tuple<Bytes>>>());
-  ZETASQL_ASSERT_OK(struct_array);
+  GOOGLESQL_ASSERT_OK(struct_array);
   ASSERT_EQ(struct_array->size(), 1);
   auto struct_value = struct_array->at(0);
   ASSERT_EQ(std::get<0>(struct_value), *bytes_col_value);

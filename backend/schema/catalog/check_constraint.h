@@ -114,7 +114,7 @@ class CheckConstraint : public SchemaNode {
 
   std::string expression_;
 
-  // For ZetaSQL, original_expression_ will be null and it is only for other
+  // For GoogleSQL, original_expression_ will be null and it is only for other
   // dialects.
   std::optional<std::string> original_expression_;
 

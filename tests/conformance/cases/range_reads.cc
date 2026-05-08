@@ -20,7 +20,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "google/cloud/spanner/numeric.h"
@@ -57,13 +57,13 @@ class RangeReadsTest
     // Write fixure data to use in reads.
     if (dialect_ == database_api::POSTGRESQL) {
       // PostgreSQL does not support NULL primary keys.
-      ZETASQL_EXPECT_OK(MultiInsert("Users", {"ID", "Name", "Age"},
+      GOOGLESQL_EXPECT_OK(MultiInsert("Users", {"ID", "Name", "Age"},
                             {{1, "John", 22},
                              {2, "Peter", 41},
                              {4, "Matthew", 33},
                              {5, Null<std::string>(), 18}}));
     } else {
-      ZETASQL_EXPECT_OK(MultiInsert("Users", {"ID", "Name", "Age"},
+      GOOGLESQL_EXPECT_OK(MultiInsert("Users", {"ID", "Name", "Age"},
                             {{Null<std::int64_t>(), "Adam", 20},
                              {1, "John", 22},
                              {2, "Peter", 41},
@@ -73,7 +73,7 @@ class RangeReadsTest
   }
 
   void PopulateNumericTable() {
-    ZETASQL_EXPECT_OK(MultiInsert("NumericTable", {"key", "val"},
+    GOOGLESQL_EXPECT_OK(MultiInsert("NumericTable", {"key", "val"},
                           {
                               {Null<Numeric>(), "null"},
                               {minNumeric(), "min"},

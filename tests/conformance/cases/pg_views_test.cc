@@ -19,7 +19,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/common/scoped_feature_flags_setter.h"
@@ -50,7 +50,7 @@ class PGViewsTest : public DatabaseTest {
 };
 
 TEST_F(PGViewsTest, PGOrderBy) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"(
         CREATE TABLE T (
           K bigint primary key,
@@ -58,16 +58,16 @@ TEST_F(PGViewsTest, PGOrderBy) {
         )
       )",
   }));
-  ZETASQL_ASSERT_OK(Insert("T", {"K"}, {1}));
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V"}, {3, 4}));
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V"}, {5, 6}));
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V"}, {7, 8}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"K"}, {1}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"K", "V"}, {3, 4}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"K", "V"}, {5, 6}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"K", "V"}, {7, 8}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       "CREATE VIEW v_asc SQL SECURITY INVOKER AS SELECT T.K FROM T ORDER BY "
       "T.V",
   }));
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       "CREATE VIEW v_desc SQL SECURITY INVOKER AS SELECT T.K FROM T ORDER BY "
       "T.V DESC",
   }));

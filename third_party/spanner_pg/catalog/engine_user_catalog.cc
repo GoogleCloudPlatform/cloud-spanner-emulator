@@ -36,23 +36,23 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/catalog.h"
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "absl/types/span.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_builder.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_builder.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 absl::StatusOr<std::vector<std::string>> EngineUserCatalog::AdjustPath(
     const absl::Span<const std::string> path) {
-  ZETASQL_RET_CHECK_LE(path.size(), 3);
+  GOOGLESQL_RET_CHECK_LE(path.size(), 3);
   if (path.size() == 2) {  // path = {schema_name, table_name}
-    ZETASQL_ASSIGN_OR_RETURN(const std::string& schema_name,
+    GOOGLESQL_ASSIGN_OR_RETURN(const std::string& schema_name,
                      MapSchemaName(path[0], path));
     if (schema_name == kPublicSchema) {
       return std::vector<std::string>{path[1]};
@@ -73,22 +73,22 @@ std::string EngineUserCatalog::FullName() const {
 }
 
 // TODO: Implementing case-sensitive catalog lookup for objects
-// in ZetaSQL's catalog.
+// in GoogleSQL's catalog.
 // This would hide GSQL INFORMATION_SCHEMA from external users, so should be
 // done after releasing the information_schema -> pg_information_schema mapping.
 absl::Status EngineUserCatalog::FindTable(
-    const absl::Span<const std::string>& path, const zetasql::Table** table,
+    const absl::Span<const std::string>& path, const googlesql::Table** table,
     const FindOptions& options) {
-  ZETASQL_ASSIGN_OR_RETURN(const auto& adjusted_path, AdjustPath(path));
+  GOOGLESQL_ASSIGN_OR_RETURN(const auto& adjusted_path, AdjustPath(path));
   return engine_provided_catalog_->FindTable(adjusted_path, table, options);
 }
 
 absl::Status EngineUserCatalog::FindFunction(
     const absl::Span<const std::string>& path,
-    const zetasql::Function** function, const FindOptions& options) {
-  ZETASQL_ASSIGN_OR_RETURN(const auto& adjusted_path, AdjustPath(path));
-  const zetasql::Function* udf_candidate;
-  ZETASQL_RETURN_IF_ERROR(engine_provided_catalog_->FindFunction(
+    const googlesql::Function** function, const FindOptions& options) {
+  GOOGLESQL_ASSIGN_OR_RETURN(const auto& adjusted_path, AdjustPath(path));
+  const googlesql::Function* udf_candidate;
+  GOOGLESQL_RETURN_IF_ERROR(engine_provided_catalog_->FindFunction(
       adjusted_path, &udf_candidate, options));
   if (!IsUserDefinedFunction(udf_candidate)) {
     return FunctionNotFoundError(path);
@@ -99,19 +99,19 @@ absl::Status EngineUserCatalog::FindFunction(
 
 absl::Status EngineUserCatalog::FindTableValuedFunction(
     const absl::Span<const std::string>& path,
-    const zetasql::TableValuedFunction** tvf, const FindOptions& options) {
-  const zetasql::TableValuedFunction* tvf_candidate;
-  ZETASQL_RETURN_IF_ERROR(engine_provided_catalog_->FindTableValuedFunction(
+    const googlesql::TableValuedFunction** tvf, const FindOptions& options) {
+  const googlesql::TableValuedFunction* tvf_candidate;
+  GOOGLESQL_RETURN_IF_ERROR(engine_provided_catalog_->FindTableValuedFunction(
       path, &tvf_candidate, options));
   *tvf = tvf_candidate;
   return absl::OkStatus();
 }
 
 absl::StatusOr<TableName> EngineUserCatalog::GetTableNameForGsqlTable(
-    const zetasql::Table& table) const {
+    const googlesql::Table& table) const {
   const std::vector<std::string> name_path = GetCatalogPathForTable(&table);
-  ZETASQL_ASSIGN_OR_RETURN(bool is_upper_case_path, InUppercaseCatalogPath(&table));
-  ZETASQL_RET_CHECK_LT(name_path.size(), 3);
+  GOOGLESQL_ASSIGN_OR_RETURN(bool is_upper_case_path, InUppercaseCatalogPath(&table));
+  GOOGLESQL_RET_CHECK_LT(name_path.size(), 3);
   if (name_path.size() == 2) {
     absl::string_view schema_name = name_path[0];
     auto iter = engine_to_pg_schema_.find(schema_name);
@@ -121,10 +121,10 @@ absl::StatusOr<TableName> EngineUserCatalog::GetTableNameForGsqlTable(
     auto lowered_if_upper = is_upper_case_path
         ? absl::AsciiStrToLower(schema_name) : std::string(schema_name);
 
-    // If MapSchemaName returns an error, then the given zetasql::Table is in
+    // If MapSchemaName returns an error, then the given googlesql::Table is in
     // a blocked schema or a schema hidden by spangres translation.
     auto mapped_back = MapSchemaName(lowered_if_upper, name_path);
-    ZETASQL_RET_CHECK_OK(mapped_back.status())
+    GOOGLESQL_RET_CHECK_OK(mapped_back.status())
             << "Attempting to get postgres name from table in hidden or blocked"
                " schemas: " << table.FullName();
 
@@ -132,7 +132,7 @@ absl::StatusOr<TableName> EngineUserCatalog::GetTableNameForGsqlTable(
         TableName({lowered_if_upper, absl::AsciiStrToLower(name_path[1])}) :
         TableName({lowered_if_upper, name_path[1]});
   } else {
-    ZETASQL_RET_CHECK(!is_upper_case_path)
+    GOOGLESQL_RET_CHECK(!is_upper_case_path)
         << "Table at the top level shouldn't be InUpperCaseCatalogPath "
         << table.FullName();
     return TableName({name_path[0]});
@@ -142,7 +142,7 @@ absl::StatusOr<TableName> EngineUserCatalog::GetTableNameForGsqlTable(
 absl::StatusOr<std::string> EngineUserCatalog::MapSchemaName(
     std::string schema_name, const absl::Span<const std::string>& path) const {
   if (blocked_schemas_.contains(schema_name)) {
-    return zetasql::Catalog::ObjectNotFoundError<zetasql::Table>(path);
+    return googlesql::Catalog::ObjectNotFoundError<googlesql::Table>(path);
   }
   auto iter = pg_to_engine_schema_.find(schema_name);
   if (iter != pg_to_engine_schema_.end()) {
@@ -153,17 +153,17 @@ absl::StatusOr<std::string> EngineUserCatalog::MapSchemaName(
   // quoted upper/mixed case INFORMATION_SCHEMA identifier will return the
   // underlying GSQL INFORMATION_SCHEMA which should be hidden from users.
   if (pg_to_engine_schema_.contains(absl::AsciiStrToLower(schema_name))) {
-    return zetasql::Catalog::ObjectNotFoundError<zetasql::Table>(path);
+    return googlesql::Catalog::ObjectNotFoundError<googlesql::Table>(path);
   }
   return schema_name;
 }
 
 absl::StatusOr<bool> EngineUserCatalog::InUppercaseCatalogPath(
-    const zetasql::Table* gsql_table) const {
+    const googlesql::Table* gsql_table) const {
   const std::vector<std::string> name_span = GetCatalogPathForTable(gsql_table);
-  // A ZetaSQL path should not be greater than three. The check protects this
+  // A GoogleSQL path should not be greater than three. The check protects this
   // function in case this guideline is changed in the future.
-  ZETASQL_RET_CHECK_LE(name_span.size(), 3);
+  GOOGLESQL_RET_CHECK_LE(name_span.size(), 3);
 
   std::string schema_name;
   if (name_span.size() == 2) {

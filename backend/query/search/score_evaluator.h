@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 
@@ -33,8 +33,8 @@ namespace search {
 
 class ScoreEvaluator {
  public:
-  static absl::StatusOr<zetasql::Value> Evaluate(
-      absl::Span<const zetasql::Value> args);
+  static absl::StatusOr<googlesql::Value> Evaluate(
+      absl::Span<const googlesql::Value> args);
 };
 
 }  // namespace search

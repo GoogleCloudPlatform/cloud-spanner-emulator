@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/memory/memory.h"
 #include "absl/types/variant.h"
@@ -37,8 +37,8 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::values::Int64;
-using zetasql_base::testing::StatusIs;
+using googlesql::values::Int64;
+using googlesql_base::testing::StatusIs;
 
 class ForeignKeyTest : public test::ActionsTest {
  public:
@@ -86,7 +86,7 @@ class ForeignKeyTest : public test::ActionsTest {
   // Test components.
   const ::google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter
       flag_setter_;
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_;
 
   // Test variables.
@@ -104,17 +104,17 @@ class ForeignKeyTest : public test::ActionsTest {
 
 TEST_F(ForeignKeyTest, InsertReferencingRowWithReferencedRow) {
   // Insert the referenced row.
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       store()->Insert(referenced_data_, Key({Int64(1), Int64(2), Int64(3)}),
                       referenced_columns_, {Int64(1), Int64(2), Int64(3)}));
 
   // Insertion of the matching referencing row should succeed. The extra key
   // value from the unused primary key column should be excluded from the
   // verification lookup.
-  ZETASQL_EXPECT_OK(referencing_verifier_->Verify(
+  GOOGLESQL_EXPECT_OK(referencing_verifier_->Verify(
       ctx(), Insert(referencing_data_, Key({Int64(1), Int64(2), Int64(4)}),
                     referencing_columns_, {Int64(1), Int64(2), Int64(4)})));
-  ZETASQL_EXPECT_OK(unenforced_referencing_verifier_->Verify(
+  GOOGLESQL_EXPECT_OK(unenforced_referencing_verifier_->Verify(
       ctx(), Insert(referencing_data_, Key({Int64(1), Int64(2), Int64(4)}),
                     referencing_columns_, {Int64(1), Int64(2), Int64(4)})));
 }
@@ -127,14 +127,14 @@ TEST_F(ForeignKeyTest, InsertReferencingRowWithoutReferencedRow) {
           ctx(), Insert(referencing_data_, Key({Int64(1), Int64(2), Int64(3)}),
                         referencing_columns_, {Int64(1), Int64(2), Int64(3)})),
       StatusIs(absl::StatusCode::kFailedPrecondition));
-  ZETASQL_EXPECT_OK(unenforced_referencing_verifier_->Verify(
+  GOOGLESQL_EXPECT_OK(unenforced_referencing_verifier_->Verify(
       ctx(), Insert(referencing_data_, Key({Int64(1), Int64(2), Int64(3)}),
                     referencing_columns_, {Int64(1), Int64(2), Int64(3)})));
 }
 
 TEST_F(ForeignKeyTest, DeleteReferencedRowWithReferencingRow) {
   // Insert referencing and referenced rows.
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       store()->Insert(referencing_data_, Key({Int64(1), Int64(2), Int64(4)}),
                       referencing_columns_, {Int64(1), Int64(2), Int64(4)}));
 
@@ -145,27 +145,27 @@ TEST_F(ForeignKeyTest, DeleteReferencedRowWithReferencingRow) {
       referenced_verifier_->Verify(
           ctx(), Delete(referenced_data_, Key({Int64(1), Int64(2), Int64(3)}))),
       StatusIs(absl::StatusCode::kFailedPrecondition));
-  ZETASQL_EXPECT_OK(unenforced_referenced_verifier_->Verify(
+  GOOGLESQL_EXPECT_OK(unenforced_referenced_verifier_->Verify(
       ctx(), Delete(referenced_data_, Key({Int64(1), Int64(2), Int64(3)}))));
 }
 
 TEST_F(ForeignKeyTest, DeleteReferencedRowWithoutReferencingRow) {
   // Insert two referenced rows and one referencing row.
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       store()->Insert(referenced_data_, Key({Int64(1), Int64(2), Int64(3)}),
                       referenced_columns_, {Int64(1), Int64(2), Int64(3)}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       store()->Insert(referenced_data_, Key({Int64(4), Int64(5), Int64(6)}),
                       referenced_columns_, {Int64(4), Int64(5), Int64(6)}));
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       store()->Insert(referencing_data_, Key({Int64(1), Int64(2), Int64(4)}),
                       referencing_columns_, {Int64(1), Int64(2), Int64(4)}));
 
   // Deletion of the referenced row without a corresponding referencing row
   // should succeed.
-  ZETASQL_EXPECT_OK(referenced_verifier_->Verify(
+  GOOGLESQL_EXPECT_OK(referenced_verifier_->Verify(
       ctx(), Delete(referenced_data_, Key({Int64(4), Int64(5), Int64(6)}))));
-  ZETASQL_EXPECT_OK(unenforced_referenced_verifier_->Verify(
+  GOOGLESQL_EXPECT_OK(unenforced_referenced_verifier_->Verify(
       ctx(), Delete(referenced_data_, Key({Int64(4), Int64(5), Int64(6)}))));
 }
 

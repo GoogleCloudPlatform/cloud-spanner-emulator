@@ -32,9 +32,9 @@
 #ifndef CATALOG_JSONB_ARRAY_ELEMENTS_TABLE_VALUED_FUNCTION_H_
 #define CATALOG_JSONB_ARRAY_ELEMENTS_TABLE_VALUED_FUNCTION_H_
 
-#include "zetasql/public/evaluator_table_iterator.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/table_valued_function.h"
+#include "googlesql/public/evaluator_table_iterator.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/table_valued_function.h"
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 
@@ -44,25 +44,25 @@ using ::postgres_translator::spangres::datatypes::GetPgJsonbType;
 
 // The emulator implementation of jsonb_array_elements.
 class JsonbArrayElementsTableValuedFunction
-    : public zetasql::FixedOutputSchemaTVF {
+    : public googlesql::FixedOutputSchemaTVF {
  public:
   explicit JsonbArrayElementsTableValuedFunction()
-      : zetasql::FixedOutputSchemaTVF(
+      : googlesql::FixedOutputSchemaTVF(
             /*function_name_path=*/{"pg.jsonb_array_elements"},
-            zetasql::FunctionSignature(
-                zetasql::FunctionArgumentType::RelationWithSchema(
-                    zetasql::TVFRelation(
+            googlesql::FunctionSignature(
+                googlesql::FunctionArgumentType::RelationWithSchema(
+                    googlesql::TVFRelation(
                         {{"jsonb_array_elements", GetPgJsonbType()}}),
                     /*extra_relation_input_columns_allowed=*/false),
                 {GetPgJsonbType()}, nullptr),
             /*result_schema=*/
-            zetasql::TVFRelation(
+            googlesql::TVFRelation(
                 {{"jsonb_array_elements", GetPgJsonbType()}})) {}
 
-  absl::StatusOr<std::unique_ptr<zetasql::EvaluatorTableIterator>>
+  absl::StatusOr<std::unique_ptr<googlesql::EvaluatorTableIterator>>
   CreateEvaluator(std::vector<TvfEvaluatorArg> input_arguments,
-                  const std::vector<zetasql::TVFSchemaColumn>& output_columns,
-                  const zetasql::FunctionSignature* function_call_signature)
+                  const std::vector<googlesql::TVFSchemaColumn>& output_columns,
+                  const googlesql::FunctionSignature* function_call_signature)
       const override;
 };
 

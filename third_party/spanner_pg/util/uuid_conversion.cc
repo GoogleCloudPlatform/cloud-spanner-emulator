@@ -35,10 +35,10 @@
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 absl::StatusOr<Const*> UuidStringToPgConst(absl::string_view uuid_string) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum uuid_datum,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum uuid_datum,
                    postgres_translator::CheckedDirectFunctionCall1(
                        /*func=*/uuid_in,
                        /*arg1=*/CStringGetDatum(uuid_string.data())));
@@ -54,7 +54,7 @@ absl::StatusOr<Const*> UuidStringToPgConst(absl::string_view uuid_string) {
 }
 
 absl::StatusOr<absl::string_view> PgConstToUuidString(const Const* pg_const) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum datum, postgres_translator::CheckedDirectFunctionCall1(
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum datum, postgres_translator::CheckedDirectFunctionCall1(
                                     /*func=*/uuid_out,
                                     /*arg1=*/pg_const->constvalue));
 

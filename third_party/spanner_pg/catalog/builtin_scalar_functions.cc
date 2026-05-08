@@ -33,10 +33,10 @@
 
 #include <vector>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/algorithm/container.h"
 #include "absl/flags/flag.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
@@ -46,14 +46,14 @@ namespace postgres_translator {
 
 namespace {
 
-const zetasql::Type* gsql_bytes = zetasql::types::BytesType();
-const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
-const zetasql::Type* gsql_date = zetasql::types::DateType();
-const zetasql::Type* gsql_int64_array = zetasql::types::Int64ArrayType();
-const zetasql::Type* gsql_interval = zetasql::types::IntervalType();
-const zetasql::Type* gsql_string = zetasql::types::StringType();
-const zetasql::Type* gsql_string_arr = zetasql::types::StringArrayType();
-const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
+const googlesql::Type* gsql_bytes = googlesql::types::BytesType();
+const googlesql::Type* gsql_int64 = googlesql::types::Int64Type();
+const googlesql::Type* gsql_date = googlesql::types::DateType();
+const googlesql::Type* gsql_int64_array = googlesql::types::Int64ArrayType();
+const googlesql::Type* gsql_interval = googlesql::types::IntervalType();
+const googlesql::Type* gsql_string = googlesql::types::StringType();
+const googlesql::Type* gsql_string_arr = googlesql::types::StringArrayType();
+const googlesql::Type* gsql_timestamp = googlesql::types::TimestampType();
 
 void AddArrayFunctions(std::vector<PostgresFunctionArguments>& functions) {
   // TODO: b/446759597 - Automate registration of array_to_string
@@ -92,7 +92,7 @@ void AddDateFunctions(std::vector<PostgresFunctionArguments>& functions) {
                              /*explicit_mapped_function_name=*/"",
                              /*postgres_proc_oid=*/50067,
                          }},
-                         /*mode=*/zetasql::Function::SCALAR,
+                         /*mode=*/googlesql::Function::SCALAR,
                          /*postgres_namespace=*/"spanner"});
 }
 
@@ -122,7 +122,7 @@ void AddFormattingFunctions(std::vector<PostgresFunctionArguments>& functions) {
 
 void AddMathematicalFunctions(
     std::vector<PostgresFunctionArguments>& functions) {
-  const zetasql::Type* gsql_pg_numeric =
+  const googlesql::Type* gsql_pg_numeric =
       spangres::types::PgNumericMapping()->mapped_type();
 
   {
@@ -149,8 +149,8 @@ void AddMathematicalFunctions(
 }
 
 void AddStringFunctions(std::vector<PostgresFunctionArguments>& functions) {
-  zetasql::FunctionArgumentTypeOptions repeated(
-      zetasql::FunctionArgumentType::REPEATED);
+  googlesql::FunctionArgumentTypeOptions repeated(
+      googlesql::FunctionArgumentType::REPEATED);
   // TODO: b/446760044 - Automate registration of textcat
   functions.push_back(
       {"textcat",

@@ -25,7 +25,7 @@
 #include <vector>
 
 #include "absl/algorithm/container.h"
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -68,13 +68,13 @@ const char kChangeStreamExcludeDeleteOptionName[] = "exclude_delete";
 const char kChangeStreamExcludeUpdateOptionName[] = "exclude_update";
 const char kChangeStreamExcludeTtlDeletesOptionName[] = "exclude_ttl_deletes";
 const char kChangeStreamAllowTxnExclusionOptionName[] = "allow_txn_exclusion";
-const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
     kChangeStreamBooleanOptions{{kChangeStreamExcludeInsertOptionName,
                                  kChangeStreamExcludeDeleteOptionName,
                                  kChangeStreamExcludeUpdateOptionName,
                                  kChangeStreamExcludeTtlDeletesOptionName,
                                  kChangeStreamAllowTxnExclusionOptionName}};
-const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
     kChangeStreamStringOptions{{kChangeStreamValueCaptureTypeOptionName,
                                 kChangeStreamRetentionPeriodOptionName}};
 const char kSearchIndexOptionSortOrderShardingName[] = "sort_order_sharding";
@@ -138,7 +138,7 @@ bool UnescapeStringLiteral(absl::string_view val, std::string* result,
     return false;
   }
   ABSL_CHECK_EQ(val[0], val[val.size() - 1]);
-  ZETASQL_VLOG(val[0] == '\'' || val[0] == '"');
+  GOOGLESQL_VLOG(val[0] == '\'' || val[0] == '"');
   if (!absl::CUnescape(absl::ClippedSubstr(val, 1, val.size() - 2), result)) {
     *error = absl::StrCat("Cannot parse string literal: ", val);
     return false;

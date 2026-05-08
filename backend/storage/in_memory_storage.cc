@@ -20,7 +20,7 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
@@ -52,19 +52,19 @@ void InMemoryStorage::RemoveExpiredVersions(Cell& cell, absl::Time timestamp) {
   }
 }
 
-zetasql::Value InMemoryStorage::GetCellValueAtTimestamp(
+googlesql::Value InMemoryStorage::GetCellValueAtTimestamp(
     const Row& row, const ColumnID& column_id, absl::Time timestamp) const {
   // Perform the lookup for given cell.
   auto cell_itr = row.find(column_id);
   if (cell_itr == row.end()) {
-    return zetasql::Value();
+    return googlesql::Value();
   }
   const Cell& cell = cell_itr->second;
   auto val_itr = cell.upper_bound(timestamp);
 
   // Timestamp is earlier than the time the cell was first written to.
   if (val_itr == cell.begin()) {
-    return zetasql::Value();
+    return googlesql::Value();
   }
 
   // Fetch the value from the column.
@@ -73,7 +73,7 @@ zetasql::Value InMemoryStorage::GetCellValueAtTimestamp(
 }
 
 bool InMemoryStorage::Exists(const Row& row, absl::Time timestamp) const {
-  zetasql::Value value =
+  googlesql::Value value =
       GetCellValueAtTimestamp(row, kExistsColumn, timestamp);
   return value.is_valid() && value.bool_value();
 }
@@ -81,7 +81,7 @@ bool InMemoryStorage::Exists(const Row& row, absl::Time timestamp) const {
 absl::Status InMemoryStorage::Lookup(
     absl::Time timestamp, const TableID& table_id, const Key& key,
     const std::vector<ColumnID>& column_ids,
-    std::vector<zetasql::Value>* values) const {
+    std::vector<googlesql::Value>* values) const {
   absl::MutexLock lock(&mu_);
 
   // Validate the request.
@@ -175,7 +175,7 @@ absl::Status InMemoryStorage::Read(
       continue;
     }
 
-    std::vector<zetasql::Value> values;
+    std::vector<googlesql::Value> values;
     values.reserve(column_ids.size());
     for (const ColumnID& column_id : column_ids) {
       values.emplace_back(GetCellValueAtTimestamp(row, column_id, timestamp));
@@ -189,7 +189,7 @@ absl::Status InMemoryStorage::Read(
 absl::Status InMemoryStorage::Write(
     absl::Time timestamp, const TableID& table_id, const Key& key,
     const std::vector<ColumnID>& column_ids,
-    const std::vector<zetasql::Value>& values) {
+    const std::vector<googlesql::Value>& values) {
   absl::MutexLock lock(&mu_);
 
   // Add the table if it does not exist.
@@ -199,7 +199,7 @@ absl::Status InMemoryStorage::Write(
   Row& row = table[key];
   if (!Exists(row, timestamp)) {
     Cell& cell = row[kExistsColumn];
-    cell[timestamp] = zetasql::values::Bool(true);
+    cell[timestamp] = googlesql::values::Bool(true);
     RemoveExpiredVersions(cell, timestamp);
   }
 
@@ -251,13 +251,13 @@ absl::Status InMemoryStorage::Delete(absl::Time timestamp,
     for (const auto& columns : itr->second) {
       if (columns.first == kExistsColumn) {
         Cell& cell = itr->second[kExistsColumn];
-        cell[timestamp] = zetasql::values::Bool(false);
+        cell[timestamp] = googlesql::values::Bool(false);
         RemoveExpiredVersions(cell, timestamp);
       } else {
-        // Column values are marked invalid zetasql::Value to avoid reading
+        // Column values are marked invalid googlesql::Value to avoid reading
         // the value of the cell before the delete.
         Cell& cell = itr->second[columns.first];
-        cell[timestamp] = zetasql::Value();
+        cell[timestamp] = googlesql::Value();
         RemoveExpiredVersions(cell, timestamp);
       }
     }

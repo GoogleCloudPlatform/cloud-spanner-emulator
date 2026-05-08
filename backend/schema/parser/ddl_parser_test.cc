@@ -23,7 +23,7 @@
 #include "google/protobuf/descriptor.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -33,7 +33,7 @@
 #include "common/feature_flags.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/scoped_feature_flags_setter.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -45,9 +45,9 @@ namespace {
 
 using absl::StatusCode;
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::IsOk;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOk;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 absl::StatusOr<DDLStatement> ParseDDLStatement(
     absl::string_view ddl,
@@ -100,7 +100,7 @@ TEST(ParseAlterDatabase, ValidSetWitnessLocationToNonEmptyString) {
     ALTER DATABASE db SET OPTIONS ( witness_location = 'us-east1' )
   )";
   DDLStatement statement;
-  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
   EXPECT_THAT(statement, test::EqualsProto(
                              R"pb(alter_database {
                                     set_options {
@@ -118,7 +118,7 @@ TEST(ParseAlterDatabase, ValidSetDefaultLeaderToNonEmptyString) {
     ALTER DATABASE db SET OPTIONS ( default_leader = 'us-east1' )
   )";
   DDLStatement statement;
-  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
   EXPECT_THAT(statement, test::EqualsProto(
                              R"pb(alter_database {
                                     set_options {
@@ -136,7 +136,7 @@ TEST(ParseAlterDatabase, ValidSetReadLeaseRegionsToNonEmptyString) {
     ALTER DATABASE db SET OPTIONS ( read_lease_regions = 'us-east1,us-west1' )
   )";
   DDLStatement statement;
-  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
   EXPECT_THAT(statement, test::EqualsProto(
                              R"pb(alter_database {
                                     set_options {
@@ -154,7 +154,7 @@ TEST(ParseAlterDatabase, ClearReadLeaseRegions) {
     ALTER DATABASE db SET OPTIONS ( read_lease_regions = NULL )
   )";
   DDLStatement statement;
-  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
   EXPECT_THAT(statement, test::EqualsProto(
                              R"pb(alter_database {
                                     set_options {
@@ -194,7 +194,7 @@ TEST(ParseAlterDatabase, ValidSetVersionRetentionPeriodToNonEmptyString) {
     ALTER DATABASE db SET OPTIONS (version_retention_period = '7d' )
   )";
   DDLStatement statement;
-  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
   EXPECT_THAT(statement, test::EqualsProto(
                              R"pb(alter_database {
                                     set_options {
@@ -212,7 +212,7 @@ TEST(ParseAlterDatabase, ValidSetVersionRetentionPeriodToNull) {
 ALTER DATABASE db SET OPTIONS (version_retention_period = NULL)
   )";
   DDLStatement statement;
-  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
   EXPECT_THAT(statement, test::EqualsProto(
                              R"pb(alter_database {
                                     set_options {
@@ -251,7 +251,7 @@ TEST(ParseAlterDatabase, SetDefaultSequenceKind) {
 ALTER DATABASE db SET OPTIONS (default_sequence_kind = 'bit_reversed_positive')
   )";
   DDLStatement statement;
-  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
   EXPECT_THAT(statement, test::EqualsProto(
                              R"pb(alter_database {
                                     set_options {
@@ -272,7 +272,7 @@ TEST(ParseAlterDatabase, SetDefaultSequenceKindNull) {
 ALTER DATABASE db SET OPTIONS (default_sequence_kind = NULL)
   )";
   DDLStatement statement;
-  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
   EXPECT_THAT(statement, test::EqualsProto(
                              R"pb(alter_database {
                                     set_options {
@@ -317,7 +317,7 @@ TEST(ParseAlterDatabase, SetDefaultTimeZone) {
 ALTER DATABASE db SET OPTIONS (default_time_zone = 'UTC')
   )";
   DDLStatement statement;
-  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
   EXPECT_THAT(statement, test::EqualsProto(
                              R"pb(alter_database {
                                     set_options {
@@ -338,7 +338,7 @@ TEST(ParseAlterDatabase, SetDefaultTimeZoneNull) {
 ALTER DATABASE db SET OPTIONS (default_time_zone = NULL)
   )";
   DDLStatement statement;
-  ZETASQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
   EXPECT_THAT(
       statement,
       test::EqualsProto(
@@ -3673,11 +3673,11 @@ class ProtoAndEnumColumns : public ::testing::Test {
       std::string fullname = (!package.empty()) ? package + "." + type : type;
       insert_proto_types.push_back(fullname);
     }
-    ZETASQL_ASSIGN_OR_RETURN(auto builder,
+    GOOGLESQL_ASSIGN_OR_RETURN(auto builder,
                      ProtoBundle::Builder::New(GenerateDescriptorBytesAsString(
                          package, proto_types, enum_types)));
-    ZETASQL_RETURN_IF_ERROR(builder->InsertTypes(insert_proto_types));
-    ZETASQL_ASSIGN_OR_RETURN(auto proto_bundle, builder->Build());
+    GOOGLESQL_RETURN_IF_ERROR(builder->InsertTypes(insert_proto_types));
+    GOOGLESQL_ASSIGN_OR_RETURN(auto proto_bundle, builder->Build());
     return proto_bundle;
   }
 };
@@ -3686,7 +3686,7 @@ TEST_F(ProtoAndEnumColumns, CanParseBasicCreateTable) {
   std::vector<std::string> proto_types{"UserInfo"};
   std::vector<std::string> enum_types{"UserState"};
   std::string package = "customer.app";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
                        SetUpBundle(package, proto_types, enum_types));
 
   EXPECT_THAT(ParseDDLStatement(R"sql(
@@ -3720,7 +3720,7 @@ TEST_F(ProtoAndEnumColumns, CanParseCreateTableWithNoPackageProtoPath) {
   std::vector<std::string> proto_types{"UserInfo"};
   std::vector<std::string> enum_types{"UserState"};
   std::string package = "";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
                        SetUpBundle(package, proto_types, enum_types));
   EXPECT_THAT(
       ParseDDLStatement(R"sql(
@@ -3750,7 +3750,7 @@ TEST_F(ProtoAndEnumColumns, CanParseCreateTableWithArrayColumns) {
   std::vector<std::string> proto_types{"UserInfo"};
   std::vector<std::string> enum_types{"UserState"};
   std::string package = "customer.app";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
                        SetUpBundle(package, proto_types, enum_types));
   EXPECT_THAT(ParseDDLStatement(R"sql(
     CREATE TABLE Users(
@@ -3810,7 +3810,7 @@ TEST_F(ProtoAndEnumColumns, CanParseBasicAlterTableAddColumn) {
   std::vector<std::string> proto_types{};
   std::vector<std::string> enum_types{"UserState"};
   std::string package = "customer.app";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
                        SetUpBundle(package, proto_types, enum_types));
   EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE Users ADD COLUMN State customer.app.UserState
@@ -3834,7 +3834,7 @@ TEST_F(ProtoAndEnumColumns, CanParseAlterTableAddColumnWithoutColumn) {
   std::vector<std::string> proto_types{};
   std::vector<std::string> enum_types{"UserState"};
   std::string package = "customer.app";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
                        SetUpBundle(package, proto_types, enum_types));
   EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE Users ADD State customer.app.UserState
@@ -3868,7 +3868,7 @@ TEST_F(ProtoAndEnumColumns,
   std::vector<std::string> enum_types{"UserState"};
   std::vector<std::string> proto_types{"UserInfo"};
   std::string package = "customer.app";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
                        SetUpBundle(package, proto_types, enum_types));
   EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE Users ADD `COLUMN` customer.app.UserState
@@ -3924,7 +3924,7 @@ TEST_F(ProtoAndEnumColumns, CanParseBasicAlterColumn) {
   std::vector<std::string> proto_types{};
   std::vector<std::string> enum_types{"UserState"};
   std::string package = "customer.app";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
                        SetUpBundle(package, proto_types, enum_types));
   EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE Users ALTER COLUMN State customer.app.UserState
@@ -3963,7 +3963,7 @@ TEST_F(ProtoAndEnumColumns, CanParseAlterColumnWithAmbiguousColumn) {
   std::vector<std::string> proto_types{"UserInfo"};
   std::vector<std::string> enum_types{"UserState"};
   std::string package = "customer.app";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
                        SetUpBundle(package, proto_types, enum_types));
   EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE Users ALTER `COLUMN` customer.app.UserInfo
@@ -3988,7 +3988,7 @@ TEST_F(ProtoAndEnumColumns, CanParseAlterColumnWithAmbiguousColumnNamedColumn) {
   std::vector<std::string> proto_types{"COLUMN"};
   std::vector<std::string> enum_types{};
   std::string package = "";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
                        SetUpBundle(package, proto_types, enum_types));
   EXPECT_THAT(ParseDDLStatement(R"sql(
     ALTER TABLE Users ALTER `COLUMN` `COLUMN`
@@ -4038,7 +4038,7 @@ TEST_F(ProtoAndEnumColumns, CanParseAlterTableWithKeywordsAsTypes) {
                                        "DROP"};
   std::vector<std::string> enum_types{};
   std::string package = "";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle,
                        SetUpBundle(package, proto_types, enum_types));
   EXPECT_THAT(
       ParseDDLStatement(R"sql(
@@ -7108,7 +7108,7 @@ TEST(UserDefinedFunction, CreateFunctionBasic) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_user_defined_functions = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto statement,
       ParseDDLStatement("CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL "
                         "SECURITY INVOKER AS (x+1)"));
@@ -7130,7 +7130,7 @@ TEST(UserDefinedFunction, CreateFunctionRemote) {
   flags.enable_user_defined_functions = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   // LANGUAGE REMOTE case
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto statement,
       ParseDDLStatement(
           "CREATE FUNCTION rudf_identity_func(x INT64) RETURNS "
@@ -7150,7 +7150,7 @@ TEST(UserDefinedFunction, CreateFunctionRemote) {
       )pb"));
 
   // REMOTE case
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       statement,
       ParseDDLStatement(
           "CREATE FUNCTION rudf_identity_func(x INT64) RETURNS "
@@ -7175,7 +7175,7 @@ TEST(UserDefinedFunction, ParameterizedTypes) {
   flags.enable_user_defined_functions = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto statement,
       ParseDDLStatement("CREATE FUNCTION T.func(a STRING(10)) "
                         "RETURNS STRING(MAX) SQL SECURITY INVOKER AS (NULL)"));
@@ -7191,7 +7191,7 @@ TEST(UserDefinedFunction, ParameterizedTypes) {
                 }
               )pb"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       statement,
       ParseDDLStatement("CREATE FUNCTION T.func(a STRING) "
                         "RETURNS STRING(10) SQL SECURITY INVOKER AS (NULL)"));
@@ -7207,7 +7207,7 @@ TEST(UserDefinedFunction, ParameterizedTypes) {
                 }
               )pb"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       statement,
       ParseDDLStatement("CREATE FUNCTION T.func(a ARRAY<STRING>) RETURNS "
                         "STRING SQL SECURITY INVOKER AS (NULL)"));
@@ -7223,7 +7223,7 @@ TEST(UserDefinedFunction, ParameterizedTypes) {
                 }
               )pb"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       statement, ParseDDLStatement(
                      "CREATE FUNCTION T.func(a STRING) "
                      "RETURNS ARRAY<STRING> SQL SECURITY INVOKER  AS (NULL)"));
@@ -7239,7 +7239,7 @@ TEST(UserDefinedFunction, ParameterizedTypes) {
                 }
               )pb"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       statement,
       ParseDDLStatement("CREATE FUNCTION T.func(a ARRAY<STRING(10)>) RETURNS "
                         "STRING SQL SECURITY INVOKER AS (NULL)"));
@@ -7255,7 +7255,7 @@ TEST(UserDefinedFunction, ParameterizedTypes) {
                 }
               )pb"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       statement,
       ParseDDLStatement("CREATE FUNCTION T.func(a STRING) RETURNS "
                         "ARRAY<STRING(10)> SQL SECURITY INVOKER AS (a)"));
@@ -7340,7 +7340,7 @@ TEST(UserDefinedFunction, CreateFunctionLowercase) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_user_defined_functions = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto statement,
       ParseDDLStatement("create function udf_1(x INT64) returns INT64 "
                         "sql security invoker as (x+1)"));
@@ -7361,7 +7361,7 @@ TEST(UserDefinedFunction, CreateFunctionComplexExpression) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_user_defined_functions = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto statement,
       ParseDDLStatement(
           "CREATE FUNCTION udf_1(x INT64, y INT64, z INT64) RETURNS INT64 SQL "
@@ -7385,7 +7385,7 @@ TEST(UserDefinedFunction, CreateFunctionWithNoParams) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_user_defined_functions = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto statement,
       ParseDDLStatement("CREATE FUNCTION udf_1() RETURNS INT64 SQL SECURITY "
                         "INVOKER AS (1)"));
@@ -7405,7 +7405,7 @@ TEST(UserDefinedFunction, CreateFunctionWithNoSqlSecurity) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_user_defined_functions = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto statement,
       ParseDDLStatement(
           "CREATE FUNCTION udf_1(x INT64) RETURNS INT64 AS (x+1)"));
@@ -7425,7 +7425,7 @@ TEST(UserDefinedFunction, CreateFunctionWithNoReturns) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_user_defined_functions = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto statement,
       ParseDDLStatement("CREATE FUNCTION udf_1(x INT64) AS (x+1)"));
   EXPECT_THAT(statement, test::EqualsProto(R"pb(
@@ -7483,7 +7483,7 @@ TEST(UserDefinedFunction, CreateOrReplaceFunction) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_user_defined_functions = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto statement,
       ParseDDLStatement(
           "CREATE OR REPLACE FUNCTION udf_1(x INT64) RETURNS INT64 SQL "
@@ -7506,7 +7506,7 @@ TEST(UserDefinedFunction, CreateFunctionWithScalarSubquery) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_user_defined_functions = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto statement,
       ParseDDLStatement("CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL "
                         "SECURITY INVOKER AS ((SELECT 1) + x)"));
@@ -7527,7 +7527,7 @@ TEST(UserDefinedFunction, CreateFunctionWithDefaultsPositional) {
   EmulatorFeatureFlags::Flags flags;
   flags.enable_user_defined_functions = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto statement,
       ParseDDLStatement(
           "CREATE FUNCTION udf_1(x INT64 DEFAULT 1) RETURNS INT64 SQL "
@@ -7544,7 +7544,7 @@ TEST(UserDefinedFunction, CreateFunctionWithDefaultsPositional) {
                 }
               )pb"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       statement,
       ParseDDLStatement("CREATE FUNCTION udf_1(x INT64 DEFAULT 1, y INT64 "
                         "DEFAULT 2) RETURNS INT64 SQL "
@@ -7576,7 +7576,7 @@ TEST(UserDefinedFunction, CreateFunctionWithManyFunctionLiterals) {
   flags.enable_user_defined_functions = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto statement, ParseDDLStatement(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto statement, ParseDDLStatement(
                                            R"(
 CREATE FUNCTION udf_many_literals(
   param_int64 INT64 DEFAULT 1,
@@ -7647,7 +7647,7 @@ TEST(UserDefinedFunction, CreateFunctionWithArrayLiterals) {
   flags.enable_user_defined_functions = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto statement, ParseDDLStatement(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto statement, ParseDDLStatement(
                                            R"(
 CREATE FUNCTION udf_array_literals(
   param_int_array ARRAY<INT64> DEFAULT [1, 2, 3],

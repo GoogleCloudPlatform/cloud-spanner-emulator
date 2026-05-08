@@ -19,7 +19,7 @@
 
 #include <memory>
 
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "absl/status/statusor.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/ddl/operations.pb.h"
@@ -29,18 +29,18 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-// Converts the ColumnType in DDL statements to zetasql::Type.
-absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
+// Converts the ColumnType in DDL statements to googlesql::Type.
+absl::StatusOr<const googlesql::Type*> DDLColumnTypeToGoogleSqlType(
     const ddl::ColumnDefinition& ddl_column_def,
-    zetasql::TypeFactory* type_factory
+    googlesql::TypeFactory* type_factory
     ,
     const ProtoBundle* proto_bundle = nullptr
 );
 
-// Converts zetasql::Type to its equivalent DDL ColumnDefinition.
+// Converts googlesql::Type to its equivalent DDL ColumnDefinition.
 // Returns a ddl::ColumnDefinition::NONE type if the passed in googlesql type is
 // not a recognized type. REQUIRES: type!=nullptr.
-ddl::ColumnDefinition GoogleSqlTypeToDDLColumnType(const zetasql::Type* type);
+ddl::ColumnDefinition GoogleSqlTypeToDDLColumnType(const googlesql::Type* type);
 
 }  // namespace backend
 }  // namespace emulator

@@ -29,7 +29,7 @@
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -57,12 +57,12 @@ absl::Status NamedSchema::CloneOrDeleteSchemaObjects(
 absl::Status NamedSchema::CloneOrDeleteSchemaObjects(
     SchemaGraphEditor* editor, std::vector<const Table*>& schema_objects,
     CaseInsensitiveStringMap<const Table*>& schema_objects_map) {
-  ZETASQL_RETURN_IF_ERROR(editor->CloneOrDeleteSchemaObjectsNameMappings(
+  GOOGLESQL_RETURN_IF_ERROR(editor->CloneOrDeleteSchemaObjectsNameMappings(
       schema_objects, schema_objects_map));
 
   // Tables must also handle synonyms.
   for (auto it = synonyms_.begin(); it != synonyms_.end();) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
     if (schema_node->is_deleted()) {
       synonyms_map_.erase((*it)->synonym());
       it = synonyms_.erase(it);
@@ -79,12 +79,12 @@ absl::Status NamedSchema::CloneOrDeleteSchemaObjects(
 
 absl::Status NamedSchema::DeepClone(SchemaGraphEditor* editor,
                                     const SchemaNode* orig) {
-  ZETASQL_RETURN_IF_ERROR(CloneOrDeleteSchemaObjects(editor, tables_, tables_map_));
-  ZETASQL_RETURN_IF_ERROR(CloneOrDeleteSchemaObjects(editor, views_, views_map_));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(CloneOrDeleteSchemaObjects(editor, tables_, tables_map_));
+  GOOGLESQL_RETURN_IF_ERROR(CloneOrDeleteSchemaObjects(editor, views_, views_map_));
+  GOOGLESQL_RETURN_IF_ERROR(
       CloneOrDeleteSchemaObjects(editor, sequences_, sequences_map_));
-  ZETASQL_RETURN_IF_ERROR(CloneOrDeleteSchemaObjects(editor, indexes_, indexes_map_));
-  ZETASQL_RETURN_IF_ERROR(CloneOrDeleteSchemaObjects(editor, udfs_, udfs_map_));
+  GOOGLESQL_RETURN_IF_ERROR(CloneOrDeleteSchemaObjects(editor, indexes_, indexes_map_));
+  GOOGLESQL_RETURN_IF_ERROR(CloneOrDeleteSchemaObjects(editor, udfs_, udfs_map_));
 
   return absl::OkStatus();
 }

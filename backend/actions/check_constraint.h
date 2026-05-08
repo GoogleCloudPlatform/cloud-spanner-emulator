@@ -19,7 +19,7 @@
 
 #include <memory>
 
-#include "zetasql/public/evaluator.h"
+#include "googlesql/public/evaluator.h"
 #include "backend/actions/action.h"
 
 namespace google {
@@ -34,11 +34,11 @@ class CheckConstraintVerifier : public Verifier {
  public:
   explicit CheckConstraintVerifier(
       const CheckConstraint* check_constraint,
-      const zetasql::AnalyzerOptions& analyzer_options,
-      zetasql::Catalog* function_catalog);
+      const googlesql::AnalyzerOptions& analyzer_options,
+      googlesql::Catalog* function_catalog);
   // Verifies that column values of the row with a given key satisfy the check
   // constraint.
-  absl::Status VerifyRow(const zetasql::ParameterValueMap& column_values,
+  absl::Status VerifyRow(const googlesql::ParameterValueMap& column_values,
                          const Key& key) const;
 
  private:
@@ -46,16 +46,16 @@ class CheckConstraintVerifier : public Verifier {
   // constraint expression.
   absl::Status PrepareExpression(
       const CheckConstraint* check_constraint,
-      const zetasql::AnalyzerOptions& analyzer_options,
-      zetasql::Catalog* function_catalog);
+      const googlesql::AnalyzerOptions& analyzer_options,
+      googlesql::Catalog* function_catalog);
   // Computes the vaule of the check constraint expression.
   absl::Status EvaluateCheckConstraintExpression(
-      const zetasql::ParameterValueMap& row_column_values) const;
+      const googlesql::ParameterValueMap& row_column_values) const;
   // An internal function used by both InsertOp and UpdateOp verification.
   absl::Status VerifyInsertUpdateOp(const ActionContext* ctx,
                                     const Table* table,
                                     const std::vector<const Column*>& columns,
-                                    const std::vector<zetasql::Value>& values,
+                                    const std::vector<googlesql::Value>& values,
                                     const Key& key) const;
   absl::Status Verify(const ActionContext* ctx,
                       const InsertOp& op) const override;
@@ -63,7 +63,7 @@ class CheckConstraintVerifier : public Verifier {
                       const UpdateOp& op) const override;
 
   const CheckConstraint* check_constraint_;
-  std::unique_ptr<zetasql::PreparedExpression> expression_;
+  std::unique_ptr<googlesql::PreparedExpression> expression_;
 };
 
 }  // namespace backend

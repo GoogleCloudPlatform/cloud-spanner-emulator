@@ -1,6 +1,7 @@
 @Dialect=GOOGLE_STANDARD_SQL
 ALTER DATABASE db SET OPTIONS (default_sequence_kind = 'bit_reversed_positive');
 ALTER DATABASE db SET OPTIONS (version_retention_period = '2h');
+ALTER DATABASE db SET OPTIONS (columnar_policy = 'enabled');
 CREATE TABLE base (
   key1 INT64,
   key2 STRING(256),
@@ -131,10 +132,19 @@ CREATE TABLE vector_table (
   embedding ARRAY<FLOAT32>(vector_length=>2),
 ) PRIMARY KEY(id);
 CREATE VECTOR INDEX vec_index ON vector_table(embedding) WHERE embedding IS NOT NULL OPTIONS(distance_type = 'COSINE', tree_depth = 2);
+CREATE TABLE filter_test (
+  k INT64 PRIMARY KEY,
+  v1 INT64,
+  v2 INT64
+);
+CREATE INDEX idx_normal ON filter_test(v1);
+CREATE INDEX idx_partial ON filter_test(v1) WHERE v1 IS NOT NULL;
+CREATE INDEX idx_partial_multi ON filter_test(v1, v2) WHERE v1 IS NOT NULL AND v2 IS NOT NULL;
 ===
 @Dialect=POSTGRESQL
 ALTER DATABASE db SET spanner.default_sequence_kind = 'bit_reversed_positive';
 ALTER DATABASE db SET spanner.version_retention_period = '2h';
+ALTER DATABASE db SET spanner.columnar_policy = 'enabled';
 CREATE TABLE base (
   key1 bigint,
   key2 varchar(256),
@@ -247,4 +257,12 @@ ALTER TABLE named_schema.ns_table_2 ADD CONSTRAINT fk_ns_table_2_delete_cascade 
 CREATE UNIQUE INDEX ns_index ON named_schema.ns_table_1 (key1 ASC);
 CREATE VIEW named_schema.ns_view SQL SECURITY INVOKER AS SELECT t.key1 FROM named_schema.ns_table_1 as t;
 CREATE SEQUENCE test_sequence BIT_REVERSED_POSITIVE START COUNTER WITH 1234;
+CREATE TABLE filter_test (
+  k bigint PRIMARY KEY,
+  v1 bigint,
+  v2 bigint
+);
+CREATE INDEX idx_normal ON filter_test(v1);
+CREATE INDEX idx_partial ON filter_test(v1) WHERE v1 IS NOT NULL;
+CREATE INDEX idx_partial_multi ON filter_test(v1, v2) WHERE v1 IS NOT NULL AND v2 IS NOT NULL;
 

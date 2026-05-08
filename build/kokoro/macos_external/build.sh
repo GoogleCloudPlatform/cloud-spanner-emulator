@@ -27,7 +27,7 @@ if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
   # Use the version of bazel that is used in corp.
   use_bazel.sh 0.29.0
 
-  # Install gnu-sed (required by ZetaSQL).
+  # Install gnu-sed (required by GoogleSQL).
   HOMEBREW_NO_AUTO_UPDATE=1 brew install gnu-sed
 
   # Switch to source root.

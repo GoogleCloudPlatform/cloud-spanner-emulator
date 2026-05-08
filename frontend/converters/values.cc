@@ -24,12 +24,12 @@
 #include <vector>
 
 #include "google/protobuf/struct.pb.h"
-#include "zetasql/public/functions/date_time_util.h"
-#include "zetasql/public/interval_value.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/uuid_value.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/functions/date_time_util.h"
+#include "googlesql/public/interval_value.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/uuid_value.h"
+#include "googlesql/public/value.h"
 #include "absl/base/optimization.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -49,7 +49,7 @@
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/interface/pg_arena_factory.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -73,9 +73,9 @@ constexpr char kRFC3339TimeFormatNoOffset[] = "%E4Y-%m-%dT%H:%M:%E*S";
 
 // Create PG.JSONB value in a valid memory context which is required for calling
 // PG code.
-static absl::StatusOr<zetasql::Value> CreatePgJsonbValueWithMemoryContext(
+static absl::StatusOr<googlesql::Value> CreatePgJsonbValueWithMemoryContext(
     absl::string_view jsonb_string) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
       postgres_translator::interfaces::CreatePGArena(nullptr));
   return postgres_translator::spangres::datatypes::CreatePgJsonbValue(
@@ -84,9 +84,9 @@ static absl::StatusOr<zetasql::Value> CreatePgJsonbValueWithMemoryContext(
 
 // Create PG.NUMERIC value in a valid memory context which is required for
 // calling PG code.
-static absl::StatusOr<zetasql::Value> CreatePgNumericValueWithMemoryContext(
+static absl::StatusOr<googlesql::Value> CreatePgNumericValueWithMemoryContext(
     absl::string_view numeric_string) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
       postgres_translator::interfaces::CreatePGArena(nullptr));
   return postgres_translator::spangres::datatypes::CreatePgNumericValue(
@@ -107,22 +107,22 @@ static bool IsValidFloat(double value) {
 
 }  // namespace
 
-absl::StatusOr<zetasql::Value> ValueFromProto(
-    const google::protobuf::Value& value_pb, const zetasql::Type* type) {
+absl::StatusOr<googlesql::Value> ValueFromProto(
+    const google::protobuf::Value& value_pb, const googlesql::Type* type) {
   if (value_pb.kind_case() == google::protobuf::Value::kNullValue) {
-    return zetasql::values::Null(type);
+    return googlesql::values::Null(type);
   }
 
   switch (type->kind()) {
-    case zetasql::TypeKind::TYPE_BOOL: {
+    case googlesql::TypeKind::TYPE_BOOL: {
       if (value_pb.kind_case() != google::protobuf::Value::kBoolValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
       }
-      return zetasql::values::Bool(value_pb.bool_value());
+      return googlesql::values::Bool(value_pb.bool_value());
     }
 
-    case zetasql::TypeKind::TYPE_INT64: {
+    case googlesql::TypeKind::TYPE_INT64: {
       int64_t num = 0;
       if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
@@ -131,10 +131,10 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
       if (!absl::SimpleAtoi(value_pb.string_value(), &num)) {
         return error::CouldNotParseStringAsInteger(value_pb.string_value());
       }
-      return zetasql::values::Int64(num);
+      return googlesql::values::Int64(num);
     }
 
-    case zetasql::TypeKind::TYPE_FLOAT: {
+    case googlesql::TypeKind::TYPE_FLOAT: {
       double val = 0;
       if (value_pb.kind_case() == google::protobuf::Value::kStringValue) {
         if (value_pb.string_value() == "Infinity") {
@@ -152,10 +152,10 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
       }
-      return zetasql::values::Float(val);
+      return googlesql::values::Float(val);
     }
 
-    case zetasql::TypeKind::TYPE_DOUBLE: {
+    case googlesql::TypeKind::TYPE_DOUBLE: {
       double val = 0;
       if (value_pb.kind_case() == google::protobuf::Value::kStringValue) {
         if (value_pb.string_value() == "Infinity") {
@@ -174,10 +174,10 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
       }
-      return zetasql::values::Double(val);
+      return googlesql::values::Double(val);
     }
 
-    case zetasql::TypeKind::TYPE_EXTENDED: {
+    case googlesql::TypeKind::TYPE_EXTENDED: {
       auto type_code = static_cast<const SpannerExtendedType*>(type)->code();
       switch (type_code) {
         case TypeAnnotationCode::PG_JSONB: {
@@ -225,13 +225,13 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
       break;
     }
 
-    case zetasql::TypeKind::TYPE_TIMESTAMP: {
+    case googlesql::TypeKind::TYPE_TIMESTAMP: {
       if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
       }
       if (value_pb.string_value() == kCommitTimestampIdentifier) {
-        return zetasql::values::String(value_pb.string_value());
+        return googlesql::values::String(value_pb.string_value());
       }
       absl::string_view time_str(value_pb.string_value());
       if (!absl::ConsumeSuffix(&time_str, "Z")) {
@@ -244,14 +244,14 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
         return error::CouldNotParseStringAsTimestamp(value_pb.string_value(),
                                                      error);
       }
-      if (!zetasql::functions::IsValidTime(time)) {
+      if (!googlesql::functions::IsValidTime(time)) {
         return error::TimestampOutOfRange(
             absl::FormatTime(time, absl::UTCTimeZone()));
       }
-      return zetasql::values::Timestamp(time);
+      return googlesql::values::Timestamp(time);
     }
 
-    case zetasql::TypeKind::TYPE_DATE: {
+    case googlesql::TypeKind::TYPE_DATE: {
       if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
@@ -264,18 +264,18 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
         return error::InvalidDate(value_pb.string_value());
       }
       absl::CivilDay epoch_date(1970, 1, 1);
-      return zetasql::values::Date(static_cast<int32_t>(date - epoch_date));
+      return googlesql::values::Date(static_cast<int32_t>(date - epoch_date));
     }
 
-    case zetasql::TypeKind::TYPE_STRING: {
+    case googlesql::TypeKind::TYPE_STRING: {
       if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
       }
-      return zetasql::values::String(value_pb.string_value());
+      return googlesql::values::String(value_pb.string_value());
     }
 
-    case zetasql::TypeKind::TYPE_BYTES: {
+    case googlesql::TypeKind::TYPE_BYTES: {
       if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
@@ -284,36 +284,36 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
       if (!absl::Base64Unescape(value_pb.string_value(), &bytes)) {
         return error::CouldNotParseStringAsBytes(value_pb.string_value());
       }
-      return zetasql::values::Bytes(bytes);
+      return googlesql::values::Bytes(bytes);
     }
 
-    case zetasql::TypeKind::TYPE_NUMERIC: {
+    case googlesql::TypeKind::TYPE_NUMERIC: {
       if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
       }
       auto status_or_numeric =
-          zetasql::NumericValue::FromStringStrict(value_pb.string_value());
+          googlesql::NumericValue::FromStringStrict(value_pb.string_value());
       if (!status_or_numeric.ok()) {
         return error::CouldNotParseStringAsNumeric(value_pb.string_value());
       }
-      return zetasql::values::Numeric(status_or_numeric.value());
+      return googlesql::values::Numeric(status_or_numeric.value());
     }
 
-    case zetasql::TypeKind::TYPE_JSON: {
+    case googlesql::TypeKind::TYPE_JSON: {
       if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
       }
       auto status_or_json =
-          zetasql::JSONValue::ParseJSONString(value_pb.string_value());
+          googlesql::JSONValue::ParseJSONString(value_pb.string_value());
       if (!status_or_json.ok()) {
         return error::CouldNotParseStringAsJson(value_pb.string_value());
       }
-      return zetasql::values::Json(std::move(status_or_json.value()));
+      return googlesql::values::Json(std::move(status_or_json.value()));
     }
 
-    case zetasql::TypeKind::TYPE_TOKENLIST: {
+    case googlesql::TypeKind::TYPE_TOKENLIST: {
       if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
@@ -325,74 +325,74 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
       return TokenListFromBytes(bytes);
     }
 
-    case zetasql::TypeKind::TYPE_INTERVAL: {
+    case googlesql::TypeKind::TYPE_INTERVAL: {
       if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
       }
 
-      absl::StatusOr<zetasql::IntervalValue> interval_value =
-          zetasql::IntervalValue::Parse(value_pb.string_value(),
+      absl::StatusOr<googlesql::IntervalValue> interval_value =
+          googlesql::IntervalValue::Parse(value_pb.string_value(),
                                           /*allow_nanos=*/true);
       if (!interval_value.ok()) {
         return error::CouldNotParseStringAsInterval(
             value_pb.string_value(), interval_value.status().message());
       }
-      return zetasql::values::Interval(interval_value.value());
+      return googlesql::values::Interval(interval_value.value());
     }
 
-    case zetasql::TypeKind::TYPE_UUID: {
+    case googlesql::TypeKind::TYPE_UUID: {
       if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
       }
 
-      absl::StatusOr<zetasql::UuidValue> uuid_value =
-          zetasql::UuidValue::FromString(value_pb.string_value());
+      absl::StatusOr<googlesql::UuidValue> uuid_value =
+          googlesql::UuidValue::FromString(value_pb.string_value());
       if (!uuid_value.ok()) {
         return error::CouldNotParseStringAsUuid(value_pb.string_value(),
                                                 uuid_value.status().message());
       }
-      return zetasql::values::Uuid(uuid_value.value());
+      return googlesql::values::Uuid(uuid_value.value());
     }
 
-    case zetasql::TypeKind::TYPE_ARRAY: {
+    case googlesql::TypeKind::TYPE_ARRAY: {
       if (value_pb.kind_case() != google::protobuf::Value::kListValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
       }
-      std::vector<zetasql::Value> values(value_pb.list_value().values_size());
+      std::vector<googlesql::Value> values(value_pb.list_value().values_size());
       for (int i = 0; i < value_pb.list_value().values_size(); ++i) {
         const google::protobuf::Value& element_pb =
             value_pb.list_value().values(i);
-        ZETASQL_ASSIGN_OR_RETURN(
+        GOOGLESQL_ASSIGN_OR_RETURN(
             values[i],
             ValueFromProto(element_pb, type->AsArray()->element_type()),
             _ << "\nWhen parsing array element #" << i << ": {"
               << element_pb.DebugString() << "} in " << value_pb.DebugString());
       }
-      return zetasql::values::Array(type->AsArray(), values);
+      return googlesql::values::Array(type->AsArray(), values);
     }
 
-    case zetasql::TypeKind::TYPE_STRUCT: {
+    case googlesql::TypeKind::TYPE_STRUCT: {
       if (value_pb.kind_case() != google::protobuf::Value::kListValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
       }
-      std::vector<zetasql::Value> values(value_pb.list_value().values_size());
+      std::vector<googlesql::Value> values(value_pb.list_value().values_size());
       for (int i = 0; i < value_pb.list_value().values_size(); ++i) {
         const google::protobuf::Value& field_pb =
             value_pb.list_value().values(i);
-        ZETASQL_ASSIGN_OR_RETURN(
+        GOOGLESQL_ASSIGN_OR_RETURN(
             values[i],
             ValueFromProto(field_pb, type->AsStruct()->field(i).type),
             _ << "\nWhen parsing struct element #" << i << ": {"
               << field_pb.DebugString() << "} in " << value_pb.DebugString());
       }
-      return zetasql::values::Struct(type->AsStruct(), values);
+      return googlesql::values::Struct(type->AsStruct(), values);
     }
 
-    case zetasql::TypeKind::TYPE_PROTO: {
+    case googlesql::TypeKind::TYPE_PROTO: {
       if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
@@ -401,9 +401,9 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
       if (!absl::Base64Unescape(value_pb.string_value(), &bytes)) {
         return error::CouldNotParseStringAsBytes(value_pb.string_value());
       }
-      return zetasql::values::Proto(type->AsProto(), absl::Cord(bytes));
+      return googlesql::values::Proto(type->AsProto(), absl::Cord(bytes));
     }
-    case zetasql::TypeKind::TYPE_ENUM: {
+    case googlesql::TypeKind::TYPE_ENUM: {
       if (value_pb.kind_case() != google::protobuf::Value::kStringValue) {
         return error::ValueProtoTypeMismatch(value_pb.DebugString(),
                                              type->DebugString());
@@ -413,7 +413,7 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
         return error::CouldNotParseStringAsInteger(value_pb.string_value());
       }
 
-      return zetasql::values::Enum(type->AsEnum(), num);
+      return googlesql::values::Enum(type->AsEnum(), num);
     }
 
     default: {
@@ -425,10 +425,10 @@ absl::StatusOr<zetasql::Value> ValueFromProto(
 }
 
 absl::StatusOr<google::protobuf::Value> ValueToProto(
-    const zetasql::Value& value) {
+    const googlesql::Value& value) {
   if (!value.is_valid()) {
     return error::Internal(
-        "Uninitialized ZetaSQL value passed to ValueToProto");
+        "Uninitialized GoogleSQL value passed to ValueToProto");
   }
 
   google::protobuf::Value value_pb;
@@ -438,17 +438,17 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
   }
 
   switch (value.type_kind()) {
-    case zetasql::TypeKind::TYPE_BOOL: {
+    case googlesql::TypeKind::TYPE_BOOL: {
       value_pb.set_bool_value(value.bool_value());
       break;
     }
 
-    case zetasql::TypeKind::TYPE_INT64: {
+    case googlesql::TypeKind::TYPE_INT64: {
       value_pb.set_string_value(absl::StrCat(value.int64_value()));
       break;
     }
 
-    case zetasql::TypeKind::TYPE_FLOAT: {
+    case googlesql::TypeKind::TYPE_FLOAT: {
       float val = value.float_value();
       if (std::isfinite(val)) {
         value_pb.set_number_value(static_cast<double>(val));
@@ -466,7 +466,7 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
       break;
     }
 
-    case zetasql::TypeKind::TYPE_DOUBLE: {
+    case googlesql::TypeKind::TYPE_DOUBLE: {
       double val = value.double_value();
       if (std::isfinite(val)) {
         value_pb.set_number_value(val);
@@ -484,7 +484,7 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
       break;
     }
 
-    case zetasql::TypeKind::TYPE_EXTENDED: {
+    case googlesql::TypeKind::TYPE_EXTENDED: {
       auto type_code =
           static_cast<const SpannerExtendedType*>(value.type())->code();
       switch (type_code) {
@@ -504,13 +504,13 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
         }
         default:
           return error::Internal(
-              absl::StrCat("Cloud Spanner unsupported ZetaSQL value ",
+              absl::StrCat("Cloud Spanner unsupported GoogleSQL value ",
                            value.DebugString(), " passed to ValueToProto"));
       }
       break;
     }
 
-    case zetasql::TypeKind::TYPE_TIMESTAMP: {
+    case googlesql::TypeKind::TYPE_TIMESTAMP: {
       value_pb.set_string_value(
           absl::StrCat(absl::FormatTime(kRFC3339TimeFormatNoOffset,
                                         value.ToTime(), absl::UTCTimeZone()),
@@ -518,7 +518,7 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
       break;
     }
 
-    case zetasql::TypeKind::TYPE_DATE: {
+    case googlesql::TypeKind::TYPE_DATE: {
       int32_t days_since_epoch = value.date_value();
       absl::CivilDay epoch_date(1970, 1, 1);
       absl::CivilDay date = epoch_date + days_since_epoch;
@@ -532,56 +532,56 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
       break;
     }
 
-    case zetasql::TypeKind::TYPE_STRING: {
+    case googlesql::TypeKind::TYPE_STRING: {
       value_pb.set_string_value(value.string_value());
       break;
     }
 
-    case zetasql::TypeKind::TYPE_NUMERIC: {
+    case googlesql::TypeKind::TYPE_NUMERIC: {
       value_pb.set_string_value(value.numeric_value().ToString());
       break;
     }
 
-    case zetasql::TypeKind::TYPE_JSON: {
+    case googlesql::TypeKind::TYPE_JSON: {
       value_pb.set_string_value(value.json_string());
       break;
     }
 
-    case zetasql::TypeKind::TYPE_BYTES: {
+    case googlesql::TypeKind::TYPE_BYTES: {
       *value_pb.mutable_string_value() =
           absl::Base64Escape(value.bytes_value());
       break;
     }
 
-    case zetasql::TypeKind::TYPE_ENUM: {
+    case googlesql::TypeKind::TYPE_ENUM: {
       value_pb.set_string_value(std::to_string(value.enum_value()));
       break;
     }
 
-    case zetasql::TypeKind::TYPE_PROTO: {
+    case googlesql::TypeKind::TYPE_PROTO: {
       std::string strvalue;
       absl::CopyCordToString(value.ToCord(), &strvalue);
       *value_pb.mutable_string_value() = absl::Base64Escape(strvalue);
       break;
     }
 
-    case zetasql::TYPE_TOKENLIST: {
+    case googlesql::TYPE_TOKENLIST: {
       *value_pb.mutable_string_value() =
           absl::Base64Escape(value.tokenlist_value().GetBytes());
       break;
     }
 
-    case zetasql::TypeKind::TYPE_INTERVAL: {
-      zetasql::IntervalValue interval_value = value.interval_value();
+    case googlesql::TypeKind::TYPE_INTERVAL: {
+      googlesql::IntervalValue interval_value = value.interval_value();
       value_pb.set_string_value(interval_value.ToISO8601());
       break;
     }
 
-    case zetasql::TypeKind::TYPE_ARRAY: {
+    case googlesql::TypeKind::TYPE_ARRAY: {
       google::protobuf::ListValue* list_value_pb =
           value_pb.mutable_list_value();
       for (int i = 0; i < value.num_elements(); ++i) {
-        ZETASQL_ASSIGN_OR_RETURN(*list_value_pb->add_values(),
+        GOOGLESQL_ASSIGN_OR_RETURN(*list_value_pb->add_values(),
                          ValueToProto(value.element(i)),
                          _ << "\nWhen encoding array element #" << i << ": "
                            << value.element(i).DebugString() << " in "
@@ -590,11 +590,11 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
       break;
     }
 
-    case zetasql::TypeKind::TYPE_STRUCT: {
+    case googlesql::TypeKind::TYPE_STRUCT: {
       google::protobuf::ListValue* list_value_pb =
           value_pb.mutable_list_value();
       for (int i = 0; i < value.num_fields(); ++i) {
-        ZETASQL_ASSIGN_OR_RETURN(
+        GOOGLESQL_ASSIGN_OR_RETURN(
             *list_value_pb->add_values(), ValueToProto(value.field(i)),
             _ << "\nWhen encoding struct element #" << i << ": "
               << value.field(i).DebugString() << " in " << value.DebugString());
@@ -602,15 +602,15 @@ absl::StatusOr<google::protobuf::Value> ValueToProto(
       break;
     }
 
-    case zetasql::TypeKind::TYPE_UUID: {
-      ZETASQL_ASSIGN_OR_RETURN(zetasql::UuidValue uuid_value, value.uuid_value());
+    case googlesql::TypeKind::TYPE_UUID: {
+      GOOGLESQL_ASSIGN_OR_RETURN(googlesql::UuidValue uuid_value, value.uuid_value());
       value_pb.set_string_value(uuid_value.ToString());
       break;
     }
 
     default: {
       return error::Internal(
-          absl::StrCat("Cloud Spanner unsupported ZetaSQL value ",
+          absl::StrCat("Cloud Spanner unsupported GoogleSQL value ",
                        value.DebugString(), " passed to ValueToProto"));
     }
   }

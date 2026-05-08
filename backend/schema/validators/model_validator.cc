@@ -18,8 +18,8 @@
 
 #include <vector>
 
-#include "zetasql/public/types/struct_type.h"
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/types/struct_type.h"
+#include "googlesql/public/types/type.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "backend/common/case.h"
@@ -28,8 +28,8 @@
 #include "backend/schema/updater/schema_validation_context.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -39,25 +39,25 @@ namespace backend {
 namespace {
 absl::Status ValidateModelColumnTypeSupported(const Model* model,
                                               const Model::ModelColumn& column,
-                                              const zetasql::Type* type) {
+                                              const googlesql::Type* type) {
   switch (type->kind()) {
-    case zetasql::TypeKind::TYPE_INT64:
-    case zetasql::TypeKind::TYPE_BOOL:
-    case zetasql::TypeKind::TYPE_DOUBLE:
-    case zetasql::TypeKind::TYPE_STRING:
-    case zetasql::TypeKind::TYPE_BYTES:
+    case googlesql::TypeKind::TYPE_INT64:
+    case googlesql::TypeKind::TYPE_BOOL:
+    case googlesql::TypeKind::TYPE_DOUBLE:
+    case googlesql::TypeKind::TYPE_STRING:
+    case googlesql::TypeKind::TYPE_BYTES:
       return absl::OkStatus();
 
-    case zetasql::TypeKind::TYPE_ARRAY: {
-      const zetasql::Type* element_type = type->AsArray()->element_type();
+    case googlesql::TypeKind::TYPE_ARRAY: {
+      const googlesql::Type* element_type = type->AsArray()->element_type();
       if (element_type->IsArray()) {
         break;
       }
       return ValidateModelColumnTypeSupported(model, column, element_type);
     }
 
-    case zetasql::TypeKind::TYPE_STRUCT: {
-      const std::vector<zetasql::StructField>& fields =
+    case googlesql::TypeKind::TYPE_STRUCT: {
+      const std::vector<googlesql::StructField>& fields =
           type->AsStruct()->fields();
       if (fields.empty()) {
         return error::EmptyStruct();
@@ -67,26 +67,26 @@ absl::Status ValidateModelColumnTypeSupported(const Model* model,
             limits::kMaxStructFieldCount);
       }
       CaseInsensitiveStringSet unique_field_names;
-      for (const zetasql::StructField& field : fields) {
+      for (const googlesql::StructField& field : fields) {
         if (field.name.empty()) {
           return error::MissingStructFieldName(type->TypeName(
-              zetasql::PRODUCT_EXTERNAL, /*use_external_float32=*/true));
+              googlesql::PRODUCT_EXTERNAL, /*use_external_float32=*/true));
         }
 
         if (auto i = unique_field_names.insert(field.name); !i.second) {
           if (field.name != *i.first) {
             return error::CaseInsensitiveDuplicateStructName(
-                type->TypeName(zetasql::PRODUCT_EXTERNAL,
+                type->TypeName(googlesql::PRODUCT_EXTERNAL,
                                /*use_external_float32=*/true),
                 field.name, *i.first);
           }
           return error::DuplicateStructName(
-              type->TypeName(zetasql::PRODUCT_EXTERNAL,
+              type->TypeName(googlesql::PRODUCT_EXTERNAL,
                              /*use_external_float32=*/true),
               field.name);
         }
 
-        ZETASQL_RETURN_IF_ERROR(
+        GOOGLESQL_RETURN_IF_ERROR(
             ValidateModelColumnTypeSupported(model, column, field.type));
       }
       return absl::OkStatus();
@@ -98,15 +98,15 @@ absl::Status ValidateModelColumnTypeSupported(const Model* model,
 
   return error::ModelColumnTypeUnsupported(
       model->Name(), column.name,
-      column.type->TypeName(zetasql::PRODUCT_EXTERNAL,
+      column.type->TypeName(googlesql::PRODUCT_EXTERNAL,
                             /*use_external_float32=*/true));
 }
 
 absl::Status ValidateModelColumn(const Model* model,
                                  const Model::ModelColumn& column) {
-  ZETASQL_RET_CHECK(!column.name.empty());
-  ZETASQL_RET_CHECK(column.type != nullptr);
-  ZETASQL_RETURN_IF_ERROR(ValidateModelColumnTypeSupported(model, column, column.type));
+  GOOGLESQL_RET_CHECK(!column.name.empty());
+  GOOGLESQL_RET_CHECK(column.type != nullptr);
+  GOOGLESQL_RETURN_IF_ERROR(ValidateModelColumnTypeSupported(model, column, column.type));
   return absl::OkStatus();
 }
 
@@ -114,8 +114,8 @@ absl::Status ValidateModelColumn(const Model* model,
 
 absl::Status ModelValidator::Validate(const Model* model,
                                       SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK(!model->name_.empty());
-  ZETASQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName("Model", model->name_));
+  GOOGLESQL_RET_CHECK(!model->name_.empty());
+  GOOGLESQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName("Model", model->name_));
 
   if (!model->is_remote()) {
     return error::LocalModelUnsupported(model->Name());
@@ -130,7 +130,7 @@ absl::Status ModelValidator::Validate(const Model* model,
   }
   CaseInsensitiveStringSet unique_column_names;
   for (const Model::ModelColumn& column : model->input()) {
-    ZETASQL_RETURN_IF_ERROR(ValidateModelColumn(model, column));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateModelColumn(model, column));
     if (auto i = unique_column_names.insert(column.name); !i.second) {
       if (column.name != *i.first) {
         return error::ModelCaseInsensitiveDuplicateColumn(
@@ -151,7 +151,7 @@ absl::Status ModelValidator::Validate(const Model* model,
                                       limits::kMaxColumnsPerTable);
   }
   for (const Model::ModelColumn& column : model->output_) {
-    ZETASQL_RETURN_IF_ERROR(ValidateModelColumn(model, column));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateModelColumn(model, column));
     if (auto i = unique_column_names.insert(column.name); !i.second) {
       if (column.name != *i.first) {
         return error::ModelCaseInsensitiveDuplicateColumn(
@@ -187,7 +187,7 @@ absl::Status ModelValidator::ValidateUpdate(const Model* model,
     context->global_names()->RemoveName(model->Name());
     return absl::OkStatus();
   }
-  ZETASQL_RET_CHECK_EQ(model->Name(), old_model->Name());
+  GOOGLESQL_RET_CHECK_EQ(model->Name(), old_model->Name());
   return absl::OkStatus();
 }
 

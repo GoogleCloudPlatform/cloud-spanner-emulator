@@ -19,9 +19,9 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/simple_catalog.h"
-#include "zetasql/public/value.h"
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/value.h"
+#include "googlesql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
@@ -35,20 +35,20 @@ namespace backend {
 
 namespace {
 
-using ::zetasql::values::Bool;
-using ::zetasql::values::Date;
-using ::zetasql::values::Int64;
+using ::googlesql::values::Bool;
+using ::googlesql::values::Date;
+using ::googlesql::values::Int64;
 
 static constexpr char kSupportedOptimizerVersions[] =
     "SUPPORTED_OPTIMIZER_VERSIONS";
 
-static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+static const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
     kSupportedTables{{
         kSupportedOptimizerVersions,
     }};
 }  // namespace
 
-SpannerSysCatalog::SpannerSysCatalog() : zetasql::SimpleCatalog(kName) {
+SpannerSysCatalog::SpannerSysCatalog() : googlesql::SimpleCatalog(kName) {
   // TODO: Use inheritance and pass SpannerSysColumnsMetadata
   // directly to AddTablesFromMetadata.
   std::vector<ColumnsMetaEntry> columns;
@@ -71,7 +71,7 @@ SpannerSysCatalog::SpannerSysCatalog() : zetasql::SimpleCatalog(kName) {
 
 void SpannerSysCatalog::FillOptimizerVersionsTable() {
   auto table = tables_by_name_.at(kSupportedOptimizerVersions).get();
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
 
   rows.push_back({// is_default
                   Bool(true),

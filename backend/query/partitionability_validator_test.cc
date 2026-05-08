@@ -20,16 +20,16 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/analyzer_output.h"
-#include "zetasql/public/simple_catalog.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/analyzer_output.h"
+#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "backend/query/query_engine.h"
 #include "backend/query/queryable_table.h"
@@ -48,10 +48,10 @@ namespace {
 class PartitionabilityValidatorTest : public testing::Test {
  public:
   const Schema* schema() { return schema_.get(); }
-  zetasql::TypeFactory* type_factory() { return &type_factory_; }
+  googlesql::TypeFactory* type_factory() { return &type_factory_; }
 
  private:
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_ =
       test::CreateSchemaWithMultiTables(&type_factory_);
 };
@@ -60,19 +60,19 @@ TEST_F(PartitionabilityValidatorTest, ValidateSimpleScanPartitionable) {
   PartitionabilityValidator validator{schema()};
   QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
 
-  std::unique_ptr<const zetasql::ResolvedScan> table_scan =
-      zetasql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+  std::unique_ptr<const googlesql::ResolvedScan> table_scan =
+      googlesql::MakeResolvedTableScan(/*column_list=*/{}, &table,
                                        /*for_system_time_expr=*/nullptr);
-  std::unique_ptr<const zetasql::ResolvedScan> project_scan =
-      zetasql::MakeResolvedProjectScan(/*column_list=*/{},
+  std::unique_ptr<const googlesql::ResolvedScan> project_scan =
+      googlesql::MakeResolvedProjectScan(/*column_list=*/{},
                                          /*expr_list=*/{},
                                          std::move(table_scan));
-  std::unique_ptr<const zetasql::ResolvedQueryStmt> query_stmt =
-      zetasql::MakeResolvedQueryStmt(/*output_column_list=*/{},
+  std::unique_ptr<const googlesql::ResolvedQueryStmt> query_stmt =
+      googlesql::MakeResolvedQueryStmt(/*output_column_list=*/{},
                                        /*is_value_table=*/false,
                                        std::move(project_scan));
 
-  ZETASQL_ASSERT_OK(query_stmt->Accept(&validator));
+  GOOGLESQL_ASSERT_OK(query_stmt->Accept(&validator));
 }
 
 TEST_F(PartitionabilityValidatorTest,
@@ -80,57 +80,57 @@ TEST_F(PartitionabilityValidatorTest,
   PartitionabilityValidator validator{schema()};
   QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
 
-  std::unique_ptr<const zetasql::ResolvedScan> table_scan =
-      zetasql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+  std::unique_ptr<const googlesql::ResolvedScan> table_scan =
+      googlesql::MakeResolvedTableScan(/*column_list=*/{}, &table,
                                        /*for_system_time_expr=*/nullptr);
-  std::unique_ptr<const zetasql::ResolvedScan> filter_scan =
-      zetasql::MakeResolvedFilterScan(/*column_list=*/{},
+  std::unique_ptr<const googlesql::ResolvedScan> filter_scan =
+      googlesql::MakeResolvedFilterScan(/*column_list=*/{},
                                         std::move(table_scan),
                                         /*filter_expr=*/nullptr);
-  std::unique_ptr<const zetasql::ResolvedScan> project_scan =
-      zetasql::MakeResolvedProjectScan(/*column_list=*/{},
+  std::unique_ptr<const googlesql::ResolvedScan> project_scan =
+      googlesql::MakeResolvedProjectScan(/*column_list=*/{},
                                          /*expr_list=*/{},
                                          std::move(filter_scan));
-  std::unique_ptr<const zetasql::ResolvedQueryStmt> query_stmt =
-      zetasql::MakeResolvedQueryStmt(/*output_column_list=*/{},
+  std::unique_ptr<const googlesql::ResolvedQueryStmt> query_stmt =
+      googlesql::MakeResolvedQueryStmt(/*output_column_list=*/{},
                                        /*is_value_table=*/false,
                                        std::move(project_scan));
 
-  ZETASQL_ASSERT_OK(query_stmt->Accept(&validator));
+  GOOGLESQL_ASSERT_OK(query_stmt->Accept(&validator));
 }
 
 TEST_F(PartitionabilityValidatorTest, ValidateSubqueryColumnNonPartitionable) {
   PartitionabilityValidator validator{schema()};
   QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
 
-  std::unique_ptr<const zetasql::ResolvedScan> table_scan =
-      zetasql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+  std::unique_ptr<const googlesql::ResolvedScan> table_scan =
+      googlesql::MakeResolvedTableScan(/*column_list=*/{}, &table,
                                        /*for_system_time_expr=*/nullptr);
   // set up a computed column with subquery expr.
-  std::unique_ptr<const zetasql::ResolvedExpr> subquery_expr =
-      zetasql::MakeResolvedSubqueryExpr();
-  zetasql::ResolvedColumn column{
-      /*column_id=*/1, zetasql::IdString::MakeGlobal("table_name"),
-      zetasql::IdString::MakeGlobal("col_name"),
+  std::unique_ptr<const googlesql::ResolvedExpr> subquery_expr =
+      googlesql::MakeResolvedSubqueryExpr();
+  googlesql::ResolvedColumn column{
+      /*column_id=*/1, googlesql::IdString::MakeGlobal("table_name"),
+      googlesql::IdString::MakeGlobal("col_name"),
       type_factory()->get_string()};
-  std::unique_ptr<const zetasql::ResolvedComputedColumn> expr =
-      zetasql::MakeResolvedComputedColumn(column, std::move(subquery_expr));
+  std::unique_ptr<const googlesql::ResolvedComputedColumn> expr =
+      googlesql::MakeResolvedComputedColumn(column, std::move(subquery_expr));
 
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>
       expr_list;
   expr_list.push_back(std::move(expr));
   // project scan has a subquery expr column.
-  std::unique_ptr<const zetasql::ResolvedScan> project_scan =
-      zetasql::MakeResolvedProjectScan(/*column_list=*/{},
+  std::unique_ptr<const googlesql::ResolvedScan> project_scan =
+      googlesql::MakeResolvedProjectScan(/*column_list=*/{},
                                          /*expr_list=*/std::move(expr_list),
                                          std::move(table_scan));
-  std::unique_ptr<const zetasql::ResolvedQueryStmt> query_stmt =
-      zetasql::MakeResolvedQueryStmt(/*output_column_list=*/{},
+  std::unique_ptr<const googlesql::ResolvedQueryStmt> query_stmt =
+      googlesql::MakeResolvedQueryStmt(/*output_column_list=*/{},
                                        /*is_value_table=*/false,
                                        std::move(project_scan));
 
   ASSERT_THAT(query_stmt->Accept(&validator),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionabilityValidatorTest,
@@ -138,26 +138,26 @@ TEST_F(PartitionabilityValidatorTest,
   PartitionabilityValidator validator{schema()};
   QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
 
-  std::unique_ptr<const zetasql::ResolvedScan> table_scan =
-      zetasql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+  std::unique_ptr<const googlesql::ResolvedScan> table_scan =
+      googlesql::MakeResolvedTableScan(/*column_list=*/{}, &table,
                                        /*for_system_time_expr=*/nullptr);
-  std::unique_ptr<const zetasql::ResolvedExpr> subquery_expr =
-      zetasql::MakeResolvedSubqueryExpr();
-  std::unique_ptr<const zetasql::ResolvedScan> filter_scan =
-      zetasql::MakeResolvedFilterScan(
+  std::unique_ptr<const googlesql::ResolvedExpr> subquery_expr =
+      googlesql::MakeResolvedSubqueryExpr();
+  std::unique_ptr<const googlesql::ResolvedScan> filter_scan =
+      googlesql::MakeResolvedFilterScan(
           /*column_list=*/{}, std::move(table_scan),
           /*filter_expr=*/std::move(subquery_expr));
-  std::unique_ptr<const zetasql::ResolvedScan> project_scan =
-      zetasql::MakeResolvedProjectScan(/*column_list=*/{},
+  std::unique_ptr<const googlesql::ResolvedScan> project_scan =
+      googlesql::MakeResolvedProjectScan(/*column_list=*/{},
                                          /*expr_list=*/{},
                                          std::move(filter_scan));
-  std::unique_ptr<const zetasql::ResolvedQueryStmt> query_stmt =
-      zetasql::MakeResolvedQueryStmt(/*output_column_list=*/{},
+  std::unique_ptr<const googlesql::ResolvedQueryStmt> query_stmt =
+      googlesql::MakeResolvedQueryStmt(/*output_column_list=*/{},
                                        /*is_value_table=*/false,
                                        std::move(project_scan));
 
   ASSERT_THAT(query_stmt->Accept(&validator),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(PartitionabilityValidatorTest, SelectOneIsPartitionable) {
@@ -166,16 +166,16 @@ TEST_F(PartitionabilityValidatorTest, SelectOneIsPartitionable) {
                                       true});
   PartitionabilityValidator validator{schema()};
 
-  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
-  zetasql::SimpleCatalog catalog("test simple catalog");
-  zetasql::TypeFactory type_factory;
-  ZETASQL_ASSERT_OK(zetasql::AnalyzeStatement("SELECT 1",
-                                        zetasql::AnalyzerOptions(), &catalog,
+  std::unique_ptr<const googlesql::AnalyzerOutput> analyzer_output;
+  googlesql::SimpleCatalog catalog("test simple catalog");
+  googlesql::TypeFactory type_factory;
+  GOOGLESQL_ASSERT_OK(googlesql::AnalyzeStatement("SELECT 1",
+                                        googlesql::AnalyzerOptions(), &catalog,
                                         &type_factory, &analyzer_output));
 
-  const zetasql::ResolvedStatement* resolved_statement =
+  const googlesql::ResolvedStatement* resolved_statement =
       analyzer_output->resolved_statement();
-  ZETASQL_EXPECT_OK(resolved_statement->Accept(&validator));
+  GOOGLESQL_EXPECT_OK(resolved_statement->Accept(&validator));
 }
 
 TEST_F(PartitionabilityValidatorTest,
@@ -185,16 +185,16 @@ TEST_F(PartitionabilityValidatorTest,
                                       true});
   PartitionabilityValidator validator{schema()};
 
-  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
-  zetasql::SimpleCatalog catalog("test simple catalog");
-  zetasql::TypeFactory type_factory;
-  ZETASQL_ASSERT_OK(zetasql::AnalyzeStatement(
+  std::unique_ptr<const googlesql::AnalyzerOutput> analyzer_output;
+  googlesql::SimpleCatalog catalog("test simple catalog");
+  googlesql::TypeFactory type_factory;
+  GOOGLESQL_ASSERT_OK(googlesql::AnalyzeStatement(
       "SELECT a FROM UNNEST([3, 2, 1]) AS a ORDER BY a",
-      zetasql::AnalyzerOptions(), &catalog, &type_factory, &analyzer_output));
+      googlesql::AnalyzerOptions(), &catalog, &type_factory, &analyzer_output));
 
-  const zetasql::ResolvedStatement* resolved_statement =
+  const googlesql::ResolvedStatement* resolved_statement =
       analyzer_output->resolved_statement();
-  ZETASQL_EXPECT_OK(resolved_statement->Accept(&validator));
+  GOOGLESQL_EXPECT_OK(resolved_statement->Accept(&validator));
 }
 
 }  // namespace

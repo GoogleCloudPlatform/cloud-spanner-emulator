@@ -34,10 +34,10 @@
 
 #include <string>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/table_valued_function.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/table_valued_function.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/status/statusor.h"
 
 namespace postgres_translator {
@@ -53,27 +53,27 @@ class EngineBuiltinFunctionCatalog {
 
   // Looks up the function by name.
   // Returns a nullptr if the function is not found.
-  virtual absl::StatusOr<const zetasql::Function*> GetFunction(
+  virtual absl::StatusOr<const googlesql::Function*> GetFunction(
       const std::string& name) const = 0;
 
-  virtual absl::StatusOr<const zetasql::Procedure*> GetProcedure(
+  virtual absl::StatusOr<const googlesql::Procedure*> GetProcedure(
       const std::string& name) const = 0;
 
-  virtual absl::StatusOr<const zetasql::TableValuedFunction*>
+  virtual absl::StatusOr<const googlesql::TableValuedFunction*>
   GetTableValuedFunction(const std::string& name) const = 0;
 
   // Gets the full list of functions in the catalog.
   virtual absl::Status GetFunctions(
-      absl::flat_hash_set<const zetasql::Function*>* output) const = 0;
+      absl::flat_hash_set<const googlesql::Function*>* output) const = 0;
 
   // Gets the full list of procedures in the catalog.
   virtual absl::Status GetProcedures(
-      absl::flat_hash_set<const zetasql::Procedure*>* output) const = 0;
+      absl::flat_hash_set<const googlesql::Procedure*>* output) const = 0;
 
-  zetasql::TypeFactory* type_factory() { return &type_factory_; }
+  googlesql::TypeFactory* type_factory() { return &type_factory_; }
 
  private:
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
 };
 
 }  // namespace postgres_translator

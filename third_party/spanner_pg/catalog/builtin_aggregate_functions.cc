@@ -33,9 +33,9 @@
 
 #include <vector>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/flags/flag.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
@@ -44,44 +44,44 @@ namespace postgres_translator {
 
 namespace {
 
-const zetasql::Type* gsql_bool = zetasql::types::BoolType();
-const zetasql::Type* gsql_bool_arr = zetasql::types::BoolArrayType();
-const zetasql::Type* gsql_bytes = zetasql::types::BytesType();
-const zetasql::Type* gsql_bytes_arr = zetasql::types::BytesArrayType();
-const zetasql::Type* gsql_date = zetasql::types::DateType();
-const zetasql::Type* gsql_date_arr = zetasql::types::DateArrayType();
-const zetasql::Type* gsql_double = zetasql::types::DoubleType();
-const zetasql::Type* gsql_double_arr = zetasql::types::DoubleArrayType();
-const zetasql::Type* gsql_float = zetasql::types::FloatType();
-const zetasql::Type* gsql_float_arr = zetasql::types::FloatArrayType();
-const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
-const zetasql::Type* gsql_int64_arr = zetasql::types::Int64ArrayType();
-const zetasql::Type* gsql_interval = zetasql::types::IntervalType();
-const zetasql::Type* gsql_interval_arr =
-    zetasql::types::IntervalArrayType();
-const zetasql::Type* gsql_string = zetasql::types::StringType();
-const zetasql::Type* gsql_string_arr = zetasql::types::StringArrayType();
-const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
-const zetasql::Type* gsql_timestamp_arr =
-    zetasql::types::TimestampArrayType();
-const zetasql::Type* gsql_tokenlist = zetasql::types::TokenListType();
-const zetasql::Type* gsql_tokenlist_arr =
-    zetasql::types::TokenListArrayType();
-const zetasql::Type* gsql_uuid = zetasql::types::UuidType();
-const zetasql::Type* gsql_uuid_arr = zetasql::types::UuidArrayType();
+const googlesql::Type* gsql_bool = googlesql::types::BoolType();
+const googlesql::Type* gsql_bool_arr = googlesql::types::BoolArrayType();
+const googlesql::Type* gsql_bytes = googlesql::types::BytesType();
+const googlesql::Type* gsql_bytes_arr = googlesql::types::BytesArrayType();
+const googlesql::Type* gsql_date = googlesql::types::DateType();
+const googlesql::Type* gsql_date_arr = googlesql::types::DateArrayType();
+const googlesql::Type* gsql_double = googlesql::types::DoubleType();
+const googlesql::Type* gsql_double_arr = googlesql::types::DoubleArrayType();
+const googlesql::Type* gsql_float = googlesql::types::FloatType();
+const googlesql::Type* gsql_float_arr = googlesql::types::FloatArrayType();
+const googlesql::Type* gsql_int64 = googlesql::types::Int64Type();
+const googlesql::Type* gsql_int64_arr = googlesql::types::Int64ArrayType();
+const googlesql::Type* gsql_interval = googlesql::types::IntervalType();
+const googlesql::Type* gsql_interval_arr =
+    googlesql::types::IntervalArrayType();
+const googlesql::Type* gsql_string = googlesql::types::StringType();
+const googlesql::Type* gsql_string_arr = googlesql::types::StringArrayType();
+const googlesql::Type* gsql_timestamp = googlesql::types::TimestampType();
+const googlesql::Type* gsql_timestamp_arr =
+    googlesql::types::TimestampArrayType();
+const googlesql::Type* gsql_tokenlist = googlesql::types::TokenListType();
+const googlesql::Type* gsql_tokenlist_arr =
+    googlesql::types::TokenListArrayType();
+const googlesql::Type* gsql_uuid = googlesql::types::UuidType();
+const googlesql::Type* gsql_uuid_arr = googlesql::types::UuidArrayType();
 
 void AddArrayFunctions(std::vector<PostgresFunctionArguments>& functions) {
-  const zetasql::Type* gsql_pg_jsonb =
+  const googlesql::Type* gsql_pg_jsonb =
       spangres::types::PgJsonbMapping()->mapped_type();
-  const zetasql::Type* gsql_pg_jsonb_arr =
+  const googlesql::Type* gsql_pg_jsonb_arr =
       spangres::types::PgJsonbArrayMapping()->mapped_type();
-  const zetasql::Type* gsql_pg_numeric =
+  const googlesql::Type* gsql_pg_numeric =
       spangres::types::PgNumericMapping()->mapped_type();
-  const zetasql::Type* gsql_pg_numeric_arr =
+  const googlesql::Type* gsql_pg_numeric_arr =
       spangres::types::PgNumericArrayMapping()->mapped_type();
-  const zetasql::Type* gsql_pg_oid =
+  const googlesql::Type* gsql_pg_oid =
       spangres::types::PgOidMapping()->mapped_type();
-  const zetasql::Type* gsql_pg_oid_arr =
+  const googlesql::Type* gsql_pg_oid_arr =
       spangres::types::PgOidArrayMapping()->mapped_type();
 
   {
@@ -99,7 +99,7 @@ void AddArrayFunctions(std::vector<PostgresFunctionArguments>& functions) {
              {{gsql_string_arr, {gsql_string}, /*context_ptr=*/nullptr}},
              {{gsql_timestamp_arr, {gsql_timestamp}, /*context_ptr=*/nullptr}},
          },
-         zetasql::Function::AGGREGATE});
+         googlesql::Function::AGGREGATE});
 
       array_agg_function.add_signature(
           {{gsql_pg_numeric_arr, {gsql_pg_numeric}, /*context_ptr=*/nullptr}});
@@ -118,39 +118,39 @@ void AddBitFunctions(std::vector<PostgresFunctionArguments>& functions) {
   functions.push_back({"bit_and",
                        "bit_and",
                        {{{gsql_int64, {gsql_int64}, /*context_ptr=*/nullptr}}},
-                       zetasql::Function::AGGREGATE});
+                       googlesql::Function::AGGREGATE});
   functions.push_back({"bit_or",
                        "bit_or",
                        {{{gsql_int64, {gsql_int64}, /*context_ptr=*/nullptr}}},
-                       zetasql::Function::AGGREGATE});
+                       googlesql::Function::AGGREGATE});
 }
 
 void AddBooleanFunctions(std::vector<PostgresFunctionArguments>& functions) {
   functions.push_back({"bool_and",
                        "logical_and",
                        {{{gsql_bool, {gsql_bool}, /*context_ptr=*/nullptr}}},
-                       zetasql::Function::AGGREGATE});
+                       googlesql::Function::AGGREGATE});
   functions.push_back({"every",
                        "logical_and",
                        {{{gsql_bool, {gsql_bool}, /*context_ptr=*/nullptr}}},
-                       zetasql::Function::AGGREGATE});
+                       googlesql::Function::AGGREGATE});
   functions.push_back({"bool_or",
                        "logical_or",
                        {{{gsql_bool, {gsql_bool}, /*context_ptr=*/nullptr}}},
-                       zetasql::Function::AGGREGATE});
+                       googlesql::Function::AGGREGATE});
 }
 
 void AddMathematicalFunctions(
     std::vector<PostgresFunctionArguments>& functions) {
-  const zetasql::Type* gsql_pg_jsonb =
+  const googlesql::Type* gsql_pg_jsonb =
       spangres::types::PgJsonbMapping()->mapped_type();
-  const zetasql::Type* gsql_pg_jsonb_arr =
+  const googlesql::Type* gsql_pg_jsonb_arr =
       spangres::types::PgJsonbArrayMapping()->mapped_type();
-  const zetasql::Type* gsql_pg_numeric =
+  const googlesql::Type* gsql_pg_numeric =
       spangres::types::PgNumericMapping()->mapped_type();
-  const zetasql::Type* gsql_pg_numeric_array =
+  const googlesql::Type* gsql_pg_numeric_array =
       spangres::types::PgNumericArrayMapping()->mapped_type();
-  const zetasql::Type* gsql_pg_oid =
+  const googlesql::Type* gsql_pg_oid =
       spangres::types::PgOidMapping()->mapped_type();
 
   {
@@ -158,7 +158,7 @@ void AddMathematicalFunctions(
         "avg",
         "pg.avg",
         {{{gsql_double, {gsql_double}, /*context_ptr=*/nullptr}}},
-        zetasql::Function::AGGREGATE};
+        googlesql::Function::AGGREGATE};
       avg_function.add_signature(
           {{gsql_pg_numeric, {gsql_int64}, /*context_ptr=*/nullptr}});
       avg_function.add_signature(
@@ -199,7 +199,7 @@ void AddMathematicalFunctions(
          {{gsql_int64, {}, /*context_ptr=*/nullptr},
           /*has_mapped_function=*/true,
           /*explicit_mapped_function_name=*/"$count_star"}},
-        zetasql::Function::AGGREGATE};
+        googlesql::Function::AGGREGATE};
 
         count_function.add_signature(
             {{gsql_int64, {gsql_pg_numeric}, /*context_ptr=*/nullptr}});
@@ -233,7 +233,7 @@ void AddMathematicalFunctions(
          {{gsql_date, {gsql_date}, /*context_ptr=*/nullptr}},
          {{gsql_pg_oid, {gsql_pg_oid}, /*context_ptr=*/nullptr}},
          {{gsql_timestamp, {gsql_timestamp}, /*context_ptr=*/nullptr}}},
-        zetasql::Function::AGGREGATE};
+        googlesql::Function::AGGREGATE};
 
       min_function.add_signature(
           {{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}});
@@ -259,7 +259,7 @@ void AddMathematicalFunctions(
          {{gsql_date, {gsql_date}, /*context_ptr=*/nullptr}},
          {{gsql_pg_oid, {gsql_pg_oid}, /*context_ptr=*/nullptr}},
          {{gsql_timestamp, {gsql_timestamp}, /*context_ptr=*/nullptr}}},
-        zetasql::Function::AGGREGATE};
+        googlesql::Function::AGGREGATE};
 
       max_function.add_signature(
           {{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}});
@@ -278,7 +278,7 @@ void AddMathematicalFunctions(
         "sum",
         "pg.sum",
         {{{gsql_double, {gsql_double}, /*context_ptr=*/nullptr}}},
-        zetasql::Function::AGGREGATE};
+        googlesql::Function::AGGREGATE};
 
       sum_function.add_signature(
           {{gsql_pg_numeric, {gsql_int64}, /*context_ptr=*/nullptr}});
@@ -303,7 +303,7 @@ void AddStringFunctions(std::vector<PostgresFunctionArguments>& functions) {
        "string_agg",
        {{{gsql_bytes, {gsql_bytes, gsql_bytes}, /*context_ptr=*/nullptr}},
         {{gsql_string, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}}},
-       zetasql::Function::AGGREGATE});
+       googlesql::Function::AGGREGATE});
 }
 
 }  // namespace

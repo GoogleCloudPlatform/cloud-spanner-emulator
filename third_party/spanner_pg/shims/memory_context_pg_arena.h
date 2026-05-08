@@ -38,7 +38,7 @@
 #include "third_party/spanner_pg/shims/memory_context_manager.h"
 #include "third_party/spanner_pg/shims/memory_reservation_holder.h"
 #include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 namespace spangres {
@@ -64,10 +64,10 @@ class MemoryContextPGArena : public interfaces::PGArena {
       memory_reservation_manager =
           std::make_unique<StubMemoryReservationManager>();
     }
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         MemoryReservationHolder holder,
         MemoryReservationHolder::Create(memory_reservation_manager.get()));
-    ZETASQL_ASSIGN_OR_RETURN(ActiveMemoryContext context,
+    GOOGLESQL_ASSIGN_OR_RETURN(ActiveMemoryContext context,
                      MemoryContextManager::Init("MemoryContextPGArena"));
     return std::make_unique<MemoryContextPGArena>(
         std::move(memory_reservation_manager), std::move(holder),

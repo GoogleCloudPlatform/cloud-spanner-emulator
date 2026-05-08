@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "google/cloud/spanner/value.h"
@@ -37,7 +37,7 @@ namespace test {
 namespace {
 
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 class UDFsTest
     : public DatabaseTest,
@@ -70,7 +70,7 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 TEST_P(UDFsTest, SimpleUdf) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"SQL(
       CREATE FUNCTION inc_udf(x INT64) RETURNS INT64
       AS (x + 1)
@@ -79,7 +79,7 @@ TEST_P(UDFsTest, SimpleUdf) {
 }
 
 TEST_P(UDFsTest, UdfWithInvokerSecurity) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"SQL(
       CREATE FUNCTION get_table_name() RETURNS STRING SQL SECURITY INVOKER
       AS ("test")
@@ -89,7 +89,7 @@ TEST_P(UDFsTest, UdfWithInvokerSecurity) {
 }
 
 TEST_P(UDFsTest, UdfNullSemantics) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"SQL(
       CREATE FUNCTION inc_udf(x INT64) RETURNS INT64 AS (x + 1)
     )SQL"}));
@@ -98,7 +98,7 @@ TEST_P(UDFsTest, UdfNullSemantics) {
 }
 
 TEST_P(UDFsTest, UdfVariousTypes) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"SQL(
       CREATE FUNCTION my_lower(s STRING) RETURNS STRING AS (LOWER(s))
     )SQL",
@@ -112,7 +112,7 @@ TEST_P(UDFsTest, UdfVariousTypes) {
 }
 
 TEST_P(UDFsTest, UdfMultipleDefinitions) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"SQL(
       CREATE FUNCTION inc_udf(x INT64) RETURNS INT64 AS (x + 1)
     )SQL",
@@ -124,7 +124,7 @@ TEST_P(UDFsTest, UdfMultipleDefinitions) {
 }
 
 TEST_P(UDFsTest, UdfCallingOtherUdf) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"SQL(
       CREATE FUNCTION inc_udf(x INT64) RETURNS INT64 AS (x + 1)
     )SQL",
@@ -135,7 +135,7 @@ TEST_P(UDFsTest, UdfCallingOtherUdf) {
 }
 
 TEST_P(UDFsTest, UdfWithQueryExpression) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"SQL(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"SQL(
       CREATE FUNCTION get_v() RETURNS STRING AS (
         (SELECT "v")
       )
@@ -144,7 +144,7 @@ TEST_P(UDFsTest, UdfWithQueryExpression) {
 }
 
 TEST_P(UDFsTest, ArrayDefaultParam) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"SQL(
       CREATE FUNCTION test_udf(x ARRAY<INT64> DEFAULT [1]) RETURNS ARRAY<INT64> AS (x)
     )SQL"}));
@@ -158,7 +158,7 @@ TEST_P(UDFsTest, IntervalDefaultParam) {
                   R"SQL(
       CREATE FUNCTION test_udf(x INTERVAL DEFAULT INTERVAL 1 DAY) RETURNS INTERVAL AS (x)
     )SQL"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr(
                       "Function parameter default value must be a literal")));

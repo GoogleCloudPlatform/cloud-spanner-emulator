@@ -72,7 +72,7 @@ absl::Status FlushWriteOpsToStorage(const std::vector<WriteOp>& write_ops,
                                     Storage* base_storage,
                                     absl::Time commit_timestamp) {
   for (const auto& write_op : write_ops) {
-    ZETASQL_RETURN_IF_ERROR(std::visit(
+    GOOGLESQL_RETURN_IF_ERROR(std::visit(
         overloaded{
             [&](const InsertOp& insert_op) {
               return FlushInsert(insert_op, base_storage, commit_timestamp);

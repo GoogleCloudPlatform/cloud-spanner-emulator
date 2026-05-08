@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "backend/datamodel/value.h"
 
@@ -32,10 +32,10 @@ namespace backend {
 
 namespace {
 
-using zetasql::types::Int64Type;
-using zetasql::values::Int64;
-using zetasql::values::Null;
-using zetasql::values::String;
+using googlesql::types::Int64Type;
+using googlesql::values::Int64;
+using googlesql::values::Null;
+using googlesql::values::String;
 
 TEST(Key, ReturnsNoColumnsForEmptyKeys) {
   Key empty_key;

@@ -17,6 +17,10 @@
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 
+# Add go_grpc_library rules using go_grpc_library targets defined by GoogleAPIs is not supported
+# when building via Bazel Central Registry.
+load("@rules_proto_grpc_go//:defs.bzl", "go_grpc_library")
+
 package(
     default_visibility = ["//:__subpackages__"],
 )
@@ -41,8 +45,8 @@ cc_test(
         "//tests/common:proto_matchers",
         "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -51,7 +55,7 @@ cc_library(
     hdrs = [
         "constants.h",
     ],
-    deps = ["@com_google_zetasql//zetasql/public:type"],
+    deps = ["@com_google_googlesql//googlesql/public:type"],
 )
 
 cc_library(
@@ -119,8 +123,8 @@ cc_test(
         "//tests/common:scoped_feature_flags_setter",
         "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -133,7 +137,7 @@ cc_library(
         "bit_reverse.h",
     ],
     deps = [
-        "@com_google_zetasql//zetasql/base:bits",
+        "@com_google_googlesql//googlesql/base:bits",
     ],
 )
 
@@ -159,7 +163,69 @@ cc_test(
         "//tests/common:proto_matchers",
         "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
+    ],
+)
+
+go_grpc_library(
+    name = "instance_go_proto",
+    importpath = "cloud.google.com/go/spanner/admin/instance/apiv1/instancepb",
+    protos = ["@com_google_googleapis//google/spanner/admin/instance/v1:instance_proto"],
+    deps = [
+        ":iam_go_proto",
+        ":longrunning_go_proto",
+        "@org_golang_google_genproto_googleapis_api//annotations",
+    ],
+)
+
+go_grpc_library(
+    name = "database_go_proto",
+    importpath = "cloud.google.com/go/spanner/admin/database/apiv1/databasepb",
+    protos = ["@com_google_googleapis//google/spanner/admin/database/v1:database_proto"],
+    deps = [
+        ":iam_go_proto",
+        ":longrunning_go_proto",
+        "@org_golang_google_genproto_googleapis_api//annotations",
+        "@org_golang_google_genproto_googleapis_rpc//status",
+    ],
+)
+
+go_grpc_library(
+    name = "spanner_go_proto",
+    importpath = "cloud.google.com/go/spanner/apiv1/spannerpb",
+    protos = ["@com_google_googleapis//google/spanner/v1:spanner_proto"],
+    deps = [
+        "@org_golang_google_genproto_googleapis_api//annotations",
+        "@org_golang_google_genproto_googleapis_rpc//status",
+    ],
+)
+
+go_grpc_library(
+    name = "longrunning_go_proto",
+    importpath = "cloud.google.com/go/longrunning/autogen/longrunningpb",
+    protos = ["@com_google_googleapis//google/longrunning:operations_proto"],
+    deps = [
+        "@org_golang_google_genproto_googleapis_api//annotations",
+        "@org_golang_google_genproto_googleapis_rpc//status",
+        "@org_golang_google_protobuf//types/descriptorpb",
+        "@org_golang_google_protobuf//types/known/anypb",
+        "@org_golang_google_protobuf//types/known/durationpb",
+        "@org_golang_google_protobuf//types/known/emptypb",
+    ],
+)
+
+go_grpc_library(
+    name = "iam_go_proto",
+    importpath = "cloud.google.com/go/iam/apiv1/iampb",
+    protos = [
+        "@com_google_googleapis//google/iam/v1:iam_policy_proto",
+        "@com_google_googleapis//google/iam/v1:options_proto",
+        "@com_google_googleapis//google/iam/v1:policy_proto",
+        "@com_google_googleapis//google/iam/v1:resource_policy_member_proto",
+    ],
+    deps = [
+        "@org_golang_google_genproto//googleapis/type/expr",
+        "@org_golang_google_genproto_googleapis_api//annotations",
     ],
 )

@@ -23,7 +23,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/substitute.h"
 #include "common/errors.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -111,7 +111,7 @@ class ResultSetBuilder {
         } else {
           StartList();
           for (const auto& list_value : value.list_value().values()) {
-            ZETASQL_RETURN_IF_ERROR(AddValue(list_value));
+            GOOGLESQL_RETURN_IF_ERROR(AddValue(list_value));
           }
           FinishList();
         }
@@ -297,7 +297,7 @@ ChunkResultSet(const google::spanner::v1::ResultSet& set,
   ResultSetBuilder builder(max_chunk_size, &results);
   for (const auto& row : set.rows()) {
     for (const auto& value : row.values()) {
-      ZETASQL_RETURN_IF_ERROR(builder.AddValue(value));
+      GOOGLESQL_RETURN_IF_ERROR(builder.AddValue(value));
     }
   }
   return results;

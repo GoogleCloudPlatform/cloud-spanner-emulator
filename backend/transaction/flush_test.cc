@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
@@ -35,14 +35,14 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::values::Int64;
-using zetasql::values::String;
+using googlesql::values::Int64;
+using googlesql::values::String;
 
 class FlushTest : public testing::Test {
  public:
   FlushTest()
       : storage_(std::make_unique<InMemoryStorage>()),
-        type_factory_(std::make_unique<zetasql::TypeFactory>()),
+        type_factory_(std::make_unique<googlesql::TypeFactory>()),
         schema_(test::CreateSchemaFromDDL(
                     {
                         R"(
@@ -61,7 +61,7 @@ class FlushTest : public testing::Test {
   std::unique_ptr<InMemoryStorage> storage_;
 
   // The type factory must outlive the type objects that it has made.
-  std::unique_ptr<zetasql::TypeFactory> type_factory_;
+  std::unique_ptr<googlesql::TypeFactory> type_factory_;
   std::unique_ptr<const Schema> schema_;
 
   // Constants
@@ -78,7 +78,7 @@ class FlushTest : public testing::Test {
 
   absl::StatusOr<std::vector<ValueList>> ReadAll(absl::Time timestamp) {
     std::unique_ptr<StorageIterator> itr;
-    ZETASQL_RETURN_IF_ERROR(storage_->Read(timestamp, table_->id(), KeyRange::All(),
+    GOOGLESQL_RETURN_IF_ERROR(storage_->Read(timestamp, table_->id(), KeyRange::All(),
                                    {int64_col_->id(), string_col_->id()},
                                    &itr));
 
@@ -93,7 +93,7 @@ class FlushTest : public testing::Test {
   }
 
   auto IsOkAndHoldsRows(const std::vector<ValueList>& rows) {
-    return zetasql_base::testing::IsOkAndHolds(testing::ElementsAreArray(rows));
+    return googlesql_base::testing::IsOkAndHolds(testing::ElementsAreArray(rows));
   }
 };
 
@@ -101,8 +101,8 @@ TEST_F(FlushTest, CanFlushWriteOpsToStorage) {
   absl::Time t0 = absl::Now();
 
   // Insert - {1, "value"}, {2, "value"}
-  ZETASQL_ASSERT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value")}));
-  ZETASQL_ASSERT_OK(Write(t0, Key({Int64(2)}), {Int64(2), String("value")}));
+  GOOGLESQL_ASSERT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value")}));
+  GOOGLESQL_ASSERT_OK(Write(t0, Key({Int64(2)}), {Int64(2), String("value")}));
 
   // Make sure we can read back the rows written to base storage.
   EXPECT_THAT(ReadAll(t0), IsOkAndHoldsRows({{Int64(1), String("value")},
@@ -124,7 +124,7 @@ TEST_F(FlushTest, CanFlushWriteOpsToStorage) {
   // Delete - {2, "value"}
   DeleteOp delete_op{table_, Key({Int64(2)})};
 
-  ZETASQL_ASSERT_OK(FlushWriteOpsToStorage({insert_op, update_op, delete_op},
+  GOOGLESQL_ASSERT_OK(FlushWriteOpsToStorage({insert_op, update_op, delete_op},
                                    storage_.get(), t1));
 
   // Make sure reads on base storage at t1 reflect the flushed write ops.

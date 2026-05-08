@@ -40,15 +40,15 @@
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/src/backend/utils/fmgroids.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::function_evaluators {
 
 absl::StatusOr<int64_t> CastNumericToInt8(
     absl::string_view numeric_decimal_string) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in, NumericIn(numeric_decimal_string));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in, NumericIn(numeric_decimal_string));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result,
                    CheckedOidFunctionCall1(F_INT8_NUMERIC, numeric_in));
 
   return DatumGetInt64(result);

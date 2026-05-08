@@ -35,7 +35,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/memory/memory.h"
 #include "third_party/spanner_pg/catalog/spangres_user_catalog.h"
 #include "third_party/spanner_pg/test_catalog/spanner_test_catalog.h"
@@ -50,13 +50,13 @@ using ::postgres_translator::spangres::test::GetSpangresTestAnalyzerOptions;
 using ::postgres_translator::spangres::test::GetSpangresTestCatalogAdapter;
 using ::postgres_translator::spangres::test::GetSpangresTestSpannerUserCatalog;
 using ::postgres_translator::spangres::test::GetSpangresTestSystemCatalog;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 using CatalogAdapterTest = ValidMemoryContext;
 
 TEST_F(CatalogAdapterTest, TestWithOneTable) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapter> catalog_adapter =
       GetSpangresTestCatalogAdapter(analyzer_options);
@@ -68,7 +68,7 @@ TEST_F(CatalogAdapterTest, TestWithOneTable) {
               StatusIs(absl::StatusCode::kInternal));
 
   // Insert 1 table to the adapter and validate correct mappings
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid mytable_oid,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid mytable_oid,
                        catalog_adapter->GetOrGenerateOidFromTableName(mytable));
 
   EXPECT_THAT(catalog_adapter->GetOrGenerateOidFromTableName(mytable),
@@ -81,24 +81,24 @@ TEST_F(CatalogAdapterTest, TestWithOneTable) {
               StatusIs(absl::StatusCode::kInternal));
 
   // Try getting oid of the same table again, expect same oid:
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid mytable_oid_take2,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid mytable_oid_take2,
                        catalog_adapter->GetOrGenerateOidFromTableName(mytable));
   EXPECT_EQ(mytable_oid, mytable_oid_take2);
 }
 
 TEST_F(CatalogAdapterTest, TestWithTwoTables) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapter> catalog_adapter =
       GetSpangresTestCatalogAdapter(analyzer_options);
 
   // Test 2 tables, expect 2 different oids
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid mytable_oid,
       catalog_adapter->GetOrGenerateOidFromTableName(TableName({"mytable"})));
 
   TableName mytable2({"public", "mytable2"});
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid mytable2_oid,
       catalog_adapter->GetOrGenerateOidFromTableName(mytable2));
   EXPECT_THAT(catalog_adapter->GetOrGenerateOidFromTableName(mytable2),
@@ -110,30 +110,30 @@ TEST_F(CatalogAdapterTest, TestWithTwoTables) {
 }
 
 TEST_F(CatalogAdapterTest, ColumnId) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapter> catalog_adapter =
       GetSpangresTestCatalogAdapter(analyzer_options);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int id1, catalog_adapter->AllocateColumnId());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int id1, catalog_adapter->AllocateColumnId());
   EXPECT_EQ(id1, 1);
   EXPECT_EQ(catalog_adapter->max_column_id(), 1);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int id2, catalog_adapter->AllocateColumnId());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int id2, catalog_adapter->AllocateColumnId());
   EXPECT_EQ(id2, 2);
   EXPECT_EQ(catalog_adapter->max_column_id(), 2);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int id3, catalog_adapter->AllocateColumnId());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int id3, catalog_adapter->AllocateColumnId());
   EXPECT_EQ(id3, 3);
   EXPECT_EQ(catalog_adapter->max_column_id(), 3);
 }
 
 TEST_F(CatalogAdapterTest, GooglesqlCatalogTest) {
   EngineSystemCatalog* engine_system_catalog = GetSpangresTestSystemCatalog();
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
 
-  // Passing in a nullptr instead of a ZetaSQL catalog, expect error:
+  // Passing in a nullptr instead of a GoogleSQL catalog, expect error:
   EXPECT_THAT(CatalogAdapter::Create(/*engine_user_catalog=*/nullptr,
                                      engine_system_catalog, analyzer_options,
                                      /*token_locations=*/{}),
@@ -144,8 +144,8 @@ TEST_F(CatalogAdapterTest, GooglesqlCatalogTest) {
   ASSERT_NE(catalog_adapter->GetEngineUserCatalog(), nullptr);
 
   // Try looking for a table, expect to find it:
-  const zetasql::Table* key_value_table;
-  ZETASQL_ASSERT_OK(catalog_adapter->GetEngineUserCatalog()->FindTable(
+  const googlesql::Table* key_value_table;
+  GOOGLESQL_ASSERT_OK(catalog_adapter->GetEngineUserCatalog()->FindTable(
       {"KeyValue"}, &key_value_table));
   ASSERT_NE(key_value_table, nullptr);
   ASSERT_EQ(key_value_table->Name(), "keyvalue");
@@ -154,9 +154,9 @@ TEST_F(CatalogAdapterTest, GooglesqlCatalogTest) {
 }
 
 TEST_F(CatalogAdapterTest, EngineCatalogsTest) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
-  zetasql::EnumerableCatalog* test_user_catalog =
+  googlesql::EnumerableCatalog* test_user_catalog =
       GetSpangresTestSpannerUserCatalog();
 
   // Wrap catalog with EngineUserCatalog wrapper. EngineUserCatalog wrapper
@@ -188,7 +188,7 @@ TEST_F(CatalogAdapterTest, EngineCatalogsTest) {
 }
 
 TEST_F(CatalogAdapterTest, OidCounterTest) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
 
   // Verify two instances of CatalogAdapter generate oids starting from the same
@@ -198,14 +198,14 @@ TEST_F(CatalogAdapterTest, OidCounterTest) {
   {
     std::unique_ptr<CatalogAdapter> catalog_adapter =
         GetSpangresTestCatalogAdapter(analyzer_options);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         table_oid, catalog_adapter->GetOrGenerateOidFromTableName(mytable));
   }
 
   {
     std::unique_ptr<CatalogAdapter> catalog_adapter =
         GetSpangresTestCatalogAdapter(analyzer_options);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         Oid second_table_oid,
         catalog_adapter->GetOrGenerateOidFromTableName(mytable));
     EXPECT_EQ(second_table_oid, table_oid);
@@ -213,53 +213,53 @@ TEST_F(CatalogAdapterTest, OidCounterTest) {
 }
 
 TEST_F(CatalogAdapterTest, NamespaceAndPublic) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapter> catalog_adapter =
       GetSpangresTestCatalogAdapter(analyzer_options);
 
   // "t" is same as "public.t" and "dbname.public.t"
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid table1_oid,
       catalog_adapter->GetOrGenerateOidFromTableName(TableName({"table1"})));
   // Can find this as "public.table1".
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid table1_oid_from_public,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid table1_oid_from_public,
                        catalog_adapter->GetOrGenerateOidFromTableName(
                            TableName({"public", "table1"})));
   EXPECT_EQ(table1_oid, table1_oid_from_public);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid table1_oid_from_public_with_db,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid table1_oid_from_public_with_db,
                        catalog_adapter->GetOrGenerateOidFromTableName(
                            TableName({"dbname", "public", "table1"})));
   EXPECT_EQ(table1_oid, table1_oid_from_public_with_db);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto table1_name,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto table1_name,
                        catalog_adapter->GetTableNameFromOid(table1_oid));
   EXPECT_EQ(table1_name, TableName({"public", "table1"}));
 
   // The name we get from GetTableNameFromOid is always <namespace>.<table>.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid table2_oid_from_public_with_db,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid table2_oid_from_public_with_db,
                        catalog_adapter->GetOrGenerateOidFromTableName(
                            TableName({"dbname", "public", "table2"})));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid table2_oid,
       catalog_adapter->GetOrGenerateOidFromTableName(TableName({"table2"})));
   EXPECT_EQ(table2_oid, table2_oid_from_public_with_db);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid table2_oid_from_public,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid table2_oid_from_public,
                        catalog_adapter->GetOrGenerateOidFromTableName(
                            TableName({"public", "table2"})));
   EXPECT_EQ(table2_oid, table2_oid_from_public);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto table2_name,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto table2_name,
                        catalog_adapter->GetTableNameFromOid(table2_oid));
   EXPECT_EQ(table2_name, TableName({"public", "table2"}));
 
   // Names in different namespaces are different.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid table3_oid,
       catalog_adapter->GetOrGenerateOidFromTableName(TableName({"table3"})));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid namespace1_table3_oid,
       catalog_adapter->GetOrGenerateOidFromTableName(
           TableName({"ns1", "table3"})));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid namespace2_table3_oid,
       catalog_adapter->GetOrGenerateOidFromTableName(
           TableName({"ns2", "table3"})));
@@ -269,7 +269,7 @@ TEST_F(CatalogAdapterTest, NamespaceAndPublic) {
 }
 
 TEST_F(CatalogAdapterTest, GeneratesOidForUDFProc) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapter> catalog_adapter =
       GetSpangresTestCatalogAdapter(analyzer_options);
@@ -280,10 +280,10 @@ TEST_F(CatalogAdapterTest, GeneratesOidForUDFProc) {
 
   // Placeholder TVF pointer just needs to be non-null. Instantiating a real TVF
   // is complex and would make this test less readable.
-  const zetasql::TableValuedFunction* tvf =
-      reinterpret_cast<const zetasql::TableValuedFunction*>(1);
+  const googlesql::TableValuedFunction* tvf =
+      reinterpret_cast<const googlesql::TableValuedFunction*>(1);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid oid,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid oid,
                        catalog_adapter->GenerateAndStoreTVFProcOid(proc, tvf));
 
   EXPECT_EQ(oid, proc->oid);
@@ -294,7 +294,7 @@ TEST_F(CatalogAdapterTest, GeneratesOidForUDFProc) {
 
 using ::testing::HasSubstr;
 TEST_F(CatalogAdapterTest, RejectsInvalidUDFProc) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapter> catalog_adapter =
       GetSpangresTestCatalogAdapter(analyzer_options);
@@ -305,8 +305,8 @@ TEST_F(CatalogAdapterTest, RejectsInvalidUDFProc) {
 
   // Placeholder TVF pointer just needs to be non-null. Instantiating a real TVF
   // is complex and would make this test less readable.
-  const zetasql::TableValuedFunction* tvf =
-      reinterpret_cast<const zetasql::TableValuedFunction*>(1);
+  const googlesql::TableValuedFunction* tvf =
+      reinterpret_cast<const googlesql::TableValuedFunction*>(1);
 
   EXPECT_THAT(catalog_adapter->GenerateAndStoreTVFProcOid(proc, tvf),
               StatusIs(absl::StatusCode::kInternal,
@@ -314,14 +314,14 @@ TEST_F(CatalogAdapterTest, RejectsInvalidUDFProc) {
 }
 
 TEST_F(CatalogAdapterTest, RejectsNullArgs) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapter> catalog_adapter =
       GetSpangresTestCatalogAdapter(analyzer_options);
 
   // Placeholder pointers just need to be non-null.
-  const zetasql::TableValuedFunction* tvf =
-      reinterpret_cast<const zetasql::TableValuedFunction*>(1);
+  const googlesql::TableValuedFunction* tvf =
+      reinterpret_cast<const googlesql::TableValuedFunction*>(1);
   FormData_pg_proc* proc = reinterpret_cast<FormData_pg_proc*>(2);
 
   EXPECT_THAT(catalog_adapter->GenerateAndStoreTVFProcOid(nullptr, tvf),
@@ -331,7 +331,7 @@ TEST_F(CatalogAdapterTest, RejectsNullArgs) {
 }
 
 TEST_F(CatalogAdapterTest, FailedTVFLookup) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapter> catalog_adapter =
       GetSpangresTestCatalogAdapter(analyzer_options);

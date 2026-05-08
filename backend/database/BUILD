@@ -58,7 +58,7 @@ cc_library(
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:variant",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
-        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_googlesql//googlesql/public:type",
     ],
 )
 
@@ -80,7 +80,7 @@ cc_test(
         "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

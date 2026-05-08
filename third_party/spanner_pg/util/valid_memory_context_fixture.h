@@ -33,7 +33,7 @@
 #define UTIL_VALID_MEMORY_CONTEXT_FIXTURE_H_
 
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/interface/memory_reservation_manager.h"
 #include "third_party/spanner_pg/shims/memory_context_manager.h"
 #include "third_party/spanner_pg/shims/memory_reservation_holder.h"

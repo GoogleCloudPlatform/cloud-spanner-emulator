@@ -17,10 +17,10 @@
 #include <memory>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/options.pb.h"
+#include "googlesql/public/options.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "backend/schema/catalog/schema.h"
@@ -34,7 +34,7 @@ namespace test {
 
 using database_api::DatabaseDialect::POSTGRESQL;
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 using DatabaseOptionTest = SchemaUpdaterTest;
 
 INSTANTIATE_TEST_SUITE_P(
@@ -48,7 +48,7 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(DatabaseOptionTest, ValidWitnessLocationOptionName) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
       ALTER DATABASE db SET spanner.witness_location = 'us-east1'
                                       )"},
@@ -56,7 +56,7 @@ TEST_P(DatabaseOptionTest, ValidWitnessLocationOptionName) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       ALTER DATABASE db SET OPTIONS (witness_location = "us-east1")
         )"}));
   }
@@ -65,7 +65,7 @@ TEST_P(DatabaseOptionTest, ValidWitnessLocationOptionName) {
 TEST_P(DatabaseOptionTest, ValidDefaultLeaderOptionName) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
       ALTER DATABASE db SET spanner.default_leader = 'us-east-1'
                                       )"},
@@ -73,7 +73,7 @@ TEST_P(DatabaseOptionTest, ValidDefaultLeaderOptionName) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       ALTER DATABASE db SET OPTIONS (default_leader = "us-east-1")
         )"}));
   }
@@ -82,7 +82,7 @@ TEST_P(DatabaseOptionTest, ValidDefaultLeaderOptionName) {
 TEST_P(DatabaseOptionTest, ValidReadLeaseRegionsOptionName) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
       ALTER DATABASE db SET spanner.read_lease_regions = 'us-east1'
                                       )"},
@@ -90,7 +90,7 @@ TEST_P(DatabaseOptionTest, ValidReadLeaseRegionsOptionName) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       ALTER DATABASE db SET OPTIONS (read_lease_regions = "us-east1")
         )"}));
   }
@@ -99,7 +99,7 @@ TEST_P(DatabaseOptionTest, ValidReadLeaseRegionsOptionName) {
 TEST_P(DatabaseOptionTest, ValidDefaultSequenceKindOptionName) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
       ALTER DATABASE db SET spanner.default_sequence_kind = DEFAULT
                                       )"},
@@ -107,7 +107,7 @@ TEST_P(DatabaseOptionTest, ValidDefaultSequenceKindOptionName) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       ALTER DATABASE db SET OPTIONS (default_sequence_kind = NULL)
         )"}));
   }
@@ -116,7 +116,7 @@ TEST_P(DatabaseOptionTest, ValidDefaultSequenceKindOptionName) {
 TEST_P(DatabaseOptionTest, ValidDefaultTimeZoneOptionName) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
       ALTER DATABASE db SET spanner.default_time_zone = 'UTC'
                                       )"},
@@ -124,7 +124,7 @@ TEST_P(DatabaseOptionTest, ValidDefaultTimeZoneOptionName) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       ALTER DATABASE db SET OPTIONS (default_time_zone = 'UTC')
         )"}));
   }
@@ -135,7 +135,7 @@ TEST_P(DatabaseOptionTest, ValidDefaultTimeZoneOptionName) {
 TEST_P(DatabaseOptionTest, VersionRetentionPeriodOptionName) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
       ALTER DATABASE db SET spanner.version_retention_period TO '2h'
                                       )"},
@@ -143,7 +143,7 @@ TEST_P(DatabaseOptionTest, VersionRetentionPeriodOptionName) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       ALTER DATABASE db SET OPTIONS (version_retention_period = '2h')
         )"}));
   }
@@ -154,7 +154,7 @@ TEST_P(DatabaseOptionTest, VersionRetentionPeriodOptionName) {
 TEST_P(DatabaseOptionTest, ValidColumnarPolicyOptionName) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
       ALTER DATABASE db SET spanner.columnar_policy TO 'enabled'
                                       )"},
@@ -162,7 +162,7 @@ TEST_P(DatabaseOptionTest, ValidColumnarPolicyOptionName) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       ALTER DATABASE db SET OPTIONS (columnar_policy = 'enabled')
         )"}));
   }

@@ -33,7 +33,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/interface/memory_reservation_manager.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/memory_context_manager.h"
@@ -46,49 +46,49 @@ namespace {
 TEST(TimezoneHelperTest, BasicSetup) {
   auto reservation_manager =
       std::make_unique<postgres_translator::StubMemoryReservationManager>();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto memory_reservation_holder,
       MemoryReservationHolder::Create(reservation_manager.get()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto memory_context, MemoryContextManager::Init("test"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto memory_context, MemoryContextManager::Init("test"));
   ASSERT_EQ(session_timezone, nullptr);
   ASSERT_EQ(log_timezone, nullptr);
 
-  ZETASQL_ASSERT_OK(InitTimezone());
+  GOOGLESQL_ASSERT_OK(InitTimezone());
   ASSERT_NE(session_timezone, nullptr);
   ASSERT_NE(log_timezone, nullptr);
   CleanupTimezone();
 
   EXPECT_EQ(session_timezone, nullptr);
   EXPECT_EQ(log_timezone, nullptr);
-  ZETASQL_EXPECT_OK(memory_context.Clear());
+  GOOGLESQL_EXPECT_OK(memory_context.Clear());
 }
 
 // Ensure that cleanup sets us up for another successful setup.
 TEST(TimezoneHelperTest, RepeatedSetup) {
   auto reservation_manager =
       std::make_unique<postgres_translator::StubMemoryReservationManager>();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto memory_reservation_holder,
       MemoryReservationHolder::Create(reservation_manager.get()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto memory_context, MemoryContextManager::Init("test"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto memory_context, MemoryContextManager::Init("test"));
 
-  ZETASQL_ASSERT_OK(InitTimezone());
+  GOOGLESQL_ASSERT_OK(InitTimezone());
   CleanupTimezone();
-  ZETASQL_ASSERT_OK(InitTimezone());
+  GOOGLESQL_ASSERT_OK(InitTimezone());
   CleanupTimezone();
 
-  ZETASQL_ASSERT_OK(memory_context.Clear());
+  GOOGLESQL_ASSERT_OK(memory_context.Clear());
 }
 
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 extern "C" bool TimezoneCleared();
 TEST(TimezoneHelperTest, FailedInitCleansUp) {
   auto reservation_manager =
       std::make_unique<postgres_translator::StubMemoryReservationManager>();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto memory_reservation_holder,
       MemoryReservationHolder::Create(reservation_manager.get()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto memory_context, MemoryContextManager::Init("test"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto memory_context, MemoryContextManager::Init("test"));
 
   ASSERT_THAT(TimeZoneScope::Create("no such time zone with this name"),
               StatusIs(absl::StatusCode::kInternal));
@@ -102,10 +102,10 @@ TEST(TimezoneHelperTest, FailedInitCleansUp) {
 TEST(TimezoneHelperTest, LowMemory) {
   auto reservation_manager =
       std::make_unique<postgres_translator::StubMemoryReservationManager>();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto memory_reservation_holder,
       MemoryReservationHolder::Create(reservation_manager.get()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto memory_context, MemoryContextManager::Init("test"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto memory_context, MemoryContextManager::Init("test"));
 
   reservation_manager->SetAvailableMemory(1);
 
@@ -124,21 +124,21 @@ TEST(TimezoneHelperTest, LowMemory) {
 TEST(TimezoneHelperTest, InitTimezoneOffset) {
   auto reservation_manager =
       std::make_unique<postgres_translator::StubMemoryReservationManager>();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       MemoryReservationHolder memory_reservation_holder,
       MemoryReservationHolder::Create(reservation_manager.get()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto memory_context, MemoryContextManager::Init("test"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto memory_context, MemoryContextManager::Init("test"));
   ASSERT_EQ(session_timezone, nullptr);
   ASSERT_EQ(log_timezone, nullptr);
 
-  ZETASQL_ASSERT_OK(InitTimezoneOffset(3600));
+  GOOGLESQL_ASSERT_OK(InitTimezoneOffset(3600));
   ASSERT_NE(session_timezone, nullptr);
   ASSERT_NE(log_timezone, nullptr);
   CleanupTimezone();
 
   EXPECT_EQ(session_timezone, nullptr);
   EXPECT_EQ(log_timezone, nullptr);
-  ZETASQL_EXPECT_OK(memory_context.Clear());
+  GOOGLESQL_EXPECT_OK(memory_context.Clear());
 }
 }  // namespace
 }  // namespace postgres_translator

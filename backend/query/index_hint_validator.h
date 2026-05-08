@@ -17,9 +17,9 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_INDEX_HINT_VALIDATOR_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_INDEX_HINT_VALIDATOR_H_
 
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_ast_visitor.h"
-#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_visitor.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "backend/schema/catalog/schema.h"
@@ -30,7 +30,7 @@ namespace emulator {
 namespace backend {
 
 // Checks if an index hint specified on a table scan is valid.
-class IndexHintValidator : public zetasql::ResolvedASTVisitor {
+class IndexHintValidator : public googlesql::ResolvedASTVisitor {
  public:
   IndexHintValidator(const Schema* schema,
                      bool disable_null_filtered_index_check = false,
@@ -46,16 +46,16 @@ class IndexHintValidator : public zetasql::ResolvedASTVisitor {
 
  private:
   absl::Status VisitResolvedQueryStmt(
-      const zetasql::ResolvedQueryStmt* stmt) final;
+      const googlesql::ResolvedQueryStmt* stmt) final;
 
   absl::Status VisitResolvedInsertStmt(
-      const zetasql::ResolvedInsertStmt* stmt) final;
+      const googlesql::ResolvedInsertStmt* stmt) final;
 
   absl::Status VisitResolvedUpdateStmt(
-      const zetasql::ResolvedUpdateStmt* stmt) final;
+      const googlesql::ResolvedUpdateStmt* stmt) final;
 
   absl::Status VisitResolvedDeleteStmt(
-      const zetasql::ResolvedDeleteStmt* stmt) final;
+      const googlesql::ResolvedDeleteStmt* stmt) final;
 
   // Validates that all the index hints used in the query can be applied to
   // serving the tables.
@@ -63,10 +63,10 @@ class IndexHintValidator : public zetasql::ResolvedASTVisitor {
 
   // To collect the 'force_index' hints from all table scans.
   absl::Status VisitResolvedTableScan(
-      const zetasql::ResolvedTableScan* scan) final;
+      const googlesql::ResolvedTableScan* scan) final;
 
   // Mapping of table scans to the index hints specified on each.
-  absl::flat_hash_map<const zetasql::ResolvedTableScan*, std::string>
+  absl::flat_hash_map<const googlesql::ResolvedTableScan*, std::string>
       index_hints_map_;
 
   // The database schema.

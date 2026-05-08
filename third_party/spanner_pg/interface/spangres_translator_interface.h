@@ -32,9 +32,9 @@
 #ifndef INTERFACE_SPANGRES_TRANSLATOR_INTERFACE_H_
 #define INTERFACE_SPANGRES_TRANSLATOR_INTERFACE_H_
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -65,7 +65,7 @@ enum class TranslationProgress {
   PARSER,
 
   // The PostgreSQL parser and analyzer processed the query, but it was not
-  // translated into ZetaSQL AST.
+  // translated into GoogleSQL AST.
   ANALYZER,
 
   // Translation was successful.
@@ -73,7 +73,7 @@ enum class TranslationProgress {
 };
 
 // `ExpressionTranslateResult` stores the result of expression/query translation
-// from PostgreSQL dialect to ZetaSQL dialect.
+// from PostgreSQL dialect to GoogleSQL dialect.
 // `original_postgresql_expression` stores original PG expression/query provided
 // for translation, while `translated_googlesql_expression` stores the
 // translation result. This function currently used in
@@ -96,7 +96,7 @@ class TranslatorCommonParams {
   // caller is responsible for keeping the engine provided catalog alive until
   // the call to the translator is complete.
   TranslatorCommonParams(absl::string_view sql_expression,
-                         zetasql::EnumerableCatalog* engine_provided_catalog,
+                         googlesql::EnumerableCatalog* engine_provided_catalog,
                          std::unique_ptr<EngineBuiltinFunctionCatalog>
                              engine_builtin_function_catalog)
       : sql_expression_(sql_expression),
@@ -109,11 +109,11 @@ class TranslatorCommonParams {
 
   // Optional analyzer options. If not provided, a default constructed instance
   // will be returned here.
-  const zetasql::AnalyzerOptions& googlesql_analyzer_options() const;
+  const googlesql::AnalyzerOptions& googlesql_analyzer_options() const;
 
-  // The ZetaSQL provided catalog to use when parsing and analyzing the query.
+  // The GoogleSQL provided catalog to use when parsing and analyzing the query.
   // Required.
-  zetasql::EnumerableCatalog* engine_provided_catalog() const {
+  googlesql::EnumerableCatalog* engine_provided_catalog() const {
     return engine_provided_catalog_;
   }
 
@@ -125,10 +125,10 @@ class TranslatorCommonParams {
   }
 
   // The TypeFactory for interning complex types. Optional.
-  zetasql::TypeFactory* type_factory() const { return type_factory_; }
+  googlesql::TypeFactory* type_factory() const { return type_factory_; }
 
   // If set to a callable target, the PostgreSQL analyzed Query object will be
-  // passed to it before transformation to ZetaSQL AST. If a failed status is
+  // passed to it before transformation to GoogleSQL AST. If a failed status is
   // returned, translation will stop and that failed status will be propagated
   // up. Intended as a test hook. Optional.
   const std::function<absl::Status(const Query*)>& pg_query_callback() const {
@@ -151,11 +151,11 @@ class TranslatorCommonParams {
 
  private:
   absl::string_view sql_expression_;
-  const zetasql::AnalyzerOptions* analyzer_options_ = nullptr;
-  zetasql::EnumerableCatalog* engine_provided_catalog_;
+  const googlesql::AnalyzerOptions* analyzer_options_ = nullptr;
+  googlesql::EnumerableCatalog* engine_provided_catalog_;
   std::unique_ptr<EngineBuiltinFunctionCatalog>
       engine_builtin_function_catalog_;
-  zetasql::TypeFactory* type_factory_ = nullptr;
+  googlesql::TypeFactory* type_factory_ = nullptr;
   std::function<absl::Status(const Query*)> pg_query_callback_;
   TranslationProgress* translation_progress_output_ = nullptr;
   std::unique_ptr<MemoryReservationManager> memory_reservation_manager_ =
@@ -174,7 +174,7 @@ class TranslateParsedQueryParams {
   // excerpt, determined by token location offsets found in the parse tree.
   TranslateParsedQueryParams(
       ParserOutput parser_output, absl::string_view original_sql,
-      zetasql::EnumerableCatalog* engine_provided_catalog,
+      googlesql::EnumerableCatalog* engine_provided_catalog,
       std::unique_ptr<EngineBuiltinFunctionCatalog>
           engine_builtin_function_catalog)
       : TranslateParsedQueryParams(
@@ -189,7 +189,7 @@ class TranslateParsedQueryParams {
   // original_sql is used to generate better error messages.  See above.
   TranslateParsedQueryParams(
       const std::string& serialized_parse_tree, absl::string_view original_sql,
-      zetasql::EnumerableCatalog* engine_provided_catalog,
+      googlesql::EnumerableCatalog* engine_provided_catalog,
       std::unique_ptr<EngineBuiltinFunctionCatalog>
           engine_builtin_function_catalog)
       : TranslateParsedQueryParams(
@@ -216,13 +216,13 @@ class TranslateParsedQueryParams {
 
   // Optional analyzer options. If not provided, a default constructed instance
   // will be returned here.
-  const zetasql::AnalyzerOptions& googlesql_analyzer_options() const {
+  const googlesql::AnalyzerOptions& googlesql_analyzer_options() const {
     return common_params_.googlesql_analyzer_options();
   }
 
-  // The ZetaSQL provided catalog to use when parsing and analyzing the query.
+  // The GoogleSQL provided catalog to use when parsing and analyzing the query.
   // Required.
-  zetasql::EnumerableCatalog* engine_provided_catalog() const {
+  googlesql::EnumerableCatalog* engine_provided_catalog() const {
     return common_params_.engine_provided_catalog();
   }
 
@@ -235,12 +235,12 @@ class TranslateParsedQueryParams {
   }
 
   // The TypeFactory for interning complex types. Optional.
-  zetasql::TypeFactory* type_factory() const {
+  googlesql::TypeFactory* type_factory() const {
     return common_params_.type_factory();
   }
 
   // If set to a callable target, the PostgreSQL analyzed Query object will be
-  // passed to it before transformation to ZetaSQL AST. If a failed status is
+  // passed to it before transformation to GoogleSQL AST. If a failed status is
   // returned, translation will stop and that failed status will be propagated
   // up. Intended as a test hook. Optional.
   const std::function<absl::Status(const Query*)>& pg_query_callback() const {
@@ -290,7 +290,7 @@ class TranslateParsedQueryParamsBuilder {
   // messages; see TranslateParsedQueryParams constructor.
   TranslateParsedQueryParamsBuilder(
       ParserOutput parser_output, absl::string_view original_sql,
-      zetasql::EnumerableCatalog* engine_provided_catalog,
+      googlesql::EnumerableCatalog* engine_provided_catalog,
       std::unique_ptr<EngineBuiltinFunctionCatalog>
           engine_builtin_function_catalog)
       : params_(std::move(parser_output), original_sql, engine_provided_catalog,
@@ -305,7 +305,7 @@ class TranslateParsedQueryParamsBuilder {
   // messages; see TranslateParsedQueryParams constructor.
   TranslateParsedQueryParamsBuilder(
       const std::string& serialized_parse_tree, absl::string_view original_sql,
-      zetasql::EnumerableCatalog* engine_provided_catalog,
+      googlesql::EnumerableCatalog* engine_provided_catalog,
       std::unique_ptr<EngineBuiltinFunctionCatalog>
           engine_builtin_function_catalog)
       : params_(serialized_parse_tree, original_sql, engine_provided_catalog,
@@ -331,24 +331,24 @@ class TranslateParsedQueryParamsBuilder {
     return *this;
   }
 
-  // Adds an optional zetasql::AnalyzerOptions. Caller is responsible for
+  // Adds an optional googlesql::AnalyzerOptions. Caller is responsible for
   // keeping the options object alive until the generated TranslateQueryParams
   // object is destroyed.
   TranslateParsedQueryParamsBuilder& SetAnalyzerOptions(
-      const zetasql::AnalyzerOptions& analyzer_options) {
+      const googlesql::AnalyzerOptions& analyzer_options) {
     params_.common_params_.analyzer_options_ = &analyzer_options;
     return *this;
   }
 
   // The TypeFactory for interning complex types. Caller-owned and optional.
   TranslateParsedQueryParamsBuilder& SetTypeFactory(
-      zetasql::TypeFactory* type_factory) {
+      googlesql::TypeFactory* type_factory) {
     params_.common_params_.type_factory_ = type_factory;
     return *this;
   }
 
   // If set to a callable target, the PostgreSQL analyzed Query object will be
-  // passed to it before transformation to ZetaSQL AST. If a failed status is
+  // passed to it before transformation to GoogleSQL AST. If a failed status is
   // returned, translation will stop and that failed status will be propagated
   // up. Intended as a test hook. Optional.
   TranslateParsedQueryParamsBuilder& SetPGQueryCallback(
@@ -384,7 +384,7 @@ class TranslateQueryParams {
   // the builtin function catalog.
   TranslateQueryParams(absl::string_view sql_expression,
                        ParserInterface* parser,
-                       zetasql::EnumerableCatalog* engine_provided_catalog,
+                       googlesql::EnumerableCatalog* engine_provided_catalog,
                        std::unique_ptr<EngineBuiltinFunctionCatalog>
                            engine_builtin_function_catalog);
 
@@ -401,13 +401,13 @@ class TranslateQueryParams {
 
   // Optional analyzer options. If not provided, a default constructed instance
   // will be returned here.
-  const zetasql::AnalyzerOptions& googlesql_analyzer_options() const {
+  const googlesql::AnalyzerOptions& googlesql_analyzer_options() const {
     return common_params_.googlesql_analyzer_options();
   }
 
-  // The ZetaSQL provided catalog to use when parsing and analyzing the query.
+  // The GoogleSQL provided catalog to use when parsing and analyzing the query.
   // Required.
-  zetasql::EnumerableCatalog* engine_provided_catalog() const {
+  googlesql::EnumerableCatalog* engine_provided_catalog() const {
     return common_params_.engine_provided_catalog();
   }
 
@@ -424,7 +424,7 @@ class TranslateQueryParams {
   absl::StatusOr<ParserInterface*> parser() const;
 
   // The TypeFactory for interning complex types. Optional.
-  zetasql::TypeFactory* type_factory() const {
+  googlesql::TypeFactory* type_factory() const {
     return common_params_.type_factory();
   }
 
@@ -446,7 +446,7 @@ class TranslateQueryParams {
   }
 
   // If set to a callable target, the PostgreSQL analyzed Query object will be
-  // passed to it before transformation to ZetaSQL AST. If a failed status is
+  // passed to it before transformation to GoogleSQL AST. If a failed status is
   // returned, translation will stop and that failed status will be propagated
   // up. Intended as a test hook. Optional.
   const std::function<absl::Status(const Query*)>& pg_query_callback() const {
@@ -492,7 +492,7 @@ class TranslateQueryParamsBuilder {
   // builtin function catalog.
   TranslateQueryParamsBuilder(
       absl::string_view sql, ParserInterface* parser,
-      zetasql::EnumerableCatalog* engine_provided_catalog,
+      googlesql::EnumerableCatalog* engine_provided_catalog,
       std::unique_ptr<EngineBuiltinFunctionCatalog>
           engine_builtin_function_catalog)
       : params_(sql, parser, engine_provided_catalog,
@@ -516,18 +516,18 @@ class TranslateQueryParamsBuilder {
     return *this;
   }
 
-  // Adds an optional zetasql::AnalyzerOptions. Caller is responsible for
+  // Adds an optional googlesql::AnalyzerOptions. Caller is responsible for
   // keeping the options object alive until the generated TranslateQueryParams
   // object is destroyed.
   TranslateQueryParamsBuilder& SetAnalyzerOptions(
-      const zetasql::AnalyzerOptions& analyzer_options) {
+      const googlesql::AnalyzerOptions& analyzer_options) {
     params_.common_params_.analyzer_options_ = &analyzer_options;
     return *this;
   }
 
   // The TypeFactory for interning complex types. Caller-owned and optional.
   TranslateQueryParamsBuilder& SetTypeFactory(
-      zetasql::TypeFactory* type_factory) {
+      googlesql::TypeFactory* type_factory) {
     params_.common_params_.type_factory_ = type_factory;
     return *this;
   }
@@ -552,7 +552,7 @@ class TranslateQueryParamsBuilder {
   }
 
   // If set to a callable target, the PostgreSQL analyzed Query object will be
-  // passed to it before transformation to ZetaSQL AST. If a failed status is
+  // passed to it before transformation to GoogleSQL AST. If a failed status is
   // returned, translation will stop and that failed status will be propagated
   // up. Intended as a test hook. Optional.
   TranslateQueryParamsBuilder& SetPGQueryCallback(
@@ -576,7 +576,7 @@ class TranslateQueryParamsBuilder {
   TranslateQueryParams params_;
 };
 
-// Invokes Spangres to parse Postgres-dialect SQL and transform to a ZetaSQL
+// Invokes Spangres to parse Postgres-dialect SQL and transform to a GoogleSQL
 // resolved AST.
 class SpangresTranslatorInterface {
  public:
@@ -590,10 +590,10 @@ class SpangresTranslatorInterface {
   SpangresTranslatorInterface& operator=(SpangresTranslatorInterface&&) =
       delete;
 
-  virtual absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
+  virtual absl::StatusOr<std::unique_ptr<googlesql::AnalyzerOutput>>
   TranslateQuery(TranslateQueryParams params) = 0;
 
-  virtual absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
+  virtual absl::StatusOr<std::unique_ptr<googlesql::AnalyzerOutput>>
   TranslateParsedQuery(TranslateParsedQueryParams params) = 0;
 
   virtual absl::StatusOr<ExpressionTranslateResult> TranslateParsedExpression(

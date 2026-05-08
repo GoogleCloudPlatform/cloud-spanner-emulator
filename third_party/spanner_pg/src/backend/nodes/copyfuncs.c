@@ -26,6 +26,7 @@
 #include "nodes/extensible.h"
 #include "nodes/pathnodes.h"
 #include "nodes/plannodes.h"
+#include "third_party/spanner_pg/src/include/nodes/parsenodes.h"
 #include "utils/datum.h"
 #include "utils/rel.h"
 

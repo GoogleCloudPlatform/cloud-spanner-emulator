@@ -19,7 +19,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -52,7 +52,7 @@ class LargeReadsTest
   void PopulateDatabase() {
     // Populate the database with more than 4MB worth of data.
     for (int i = 0; i < kNumRows; ++i) {
-      ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name"},
+      GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name"},
                        {i, std::string(kStringSize, 'a' + (i % 26))}));
     }
   }
@@ -68,7 +68,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(LargeReadsTest, CanPerformLargeReadWithRange) {
   PopulateDatabase();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<ValueRow> rows,
       Read("Users", {"ID", "Name"}, ClosedOpen(Key(0), Key(12))));
   EXPECT_THAT(rows.size(), 12);
@@ -82,7 +82,7 @@ TEST_P(LargeReadsTest, CanPerformLargeReadWithRange) {
 
 TEST_P(LargeReadsTest, CanPerformLargeReadWithAllRows) {
   PopulateDatabase();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<ValueRow> rows,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<ValueRow> rows,
                        Read("Users", {"ID", "Name"}, KeySet::All()));
   EXPECT_EQ(rows.size(), kNumRows);
   for (int i = 0; i < rows.size(); ++i) {

@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/numbers.h"
@@ -40,7 +40,7 @@ namespace test {
 namespace {
 
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 // The microseconds since epoch for "1978-02-14 01:48:23.673001+00" is
 // 256268903673001.
@@ -143,11 +143,11 @@ TEST_P(DefaultTimeZoneTest, TestDefaultTimezone) {
        testcase.timezone_and_expected_result) {
     if (timezone.empty()) {
       // Reset to the default timezone.
-      ZETASQL_ASSERT_OK(UpdateSchema({R"(
+      GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER DATABASE db SET OPTIONS (default_time_zone = NULL)
       )"}));
     } else {
-      ZETASQL_ASSERT_OK(UpdateSchema(
+      GOOGLESQL_ASSERT_OK(UpdateSchema(
           {absl::StrFormat(
                "ALTER DATABASE db SET OPTIONS (default_time_zone = '%s')",
                timezone)
@@ -155,7 +155,7 @@ TEST_P(DefaultTimeZoneTest, TestDefaultTimezone) {
     }
     auto query = Query(testcase.test_query);
     if (testcase.expected_result_type == "TIMESTAMP") {
-      ZETASQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
+      GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
                            ParseRFC3339TimeSeconds(expected_result));
       EXPECT_THAT(query, IsOkAndHoldsRows({{expected_result_timestamp}}));
     } else if (testcase.expected_result_type == "DATE") {
@@ -178,21 +178,21 @@ TEST_P(DefaultTimeZoneTest, TestDefaultTimezone) {
 TEST_F(DefaultTimeZoneTest, SetDefaultTimezone) {
   auto query = "SELECT TIMESTAMP('2008-12-25 15:30:00')";
 
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
         default_time_zone = 'UTC'))"}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
                        ParseRFC3339TimeSeconds("2008-12-25T15:30:00Z"));
   EXPECT_THAT(Query(query), IsOkAndHoldsRows({{expected_result_timestamp}}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
         default_time_zone = 'Australia/Sydney'))"}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(expected_result_timestamp,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(expected_result_timestamp,
                        ParseRFC3339TimeSeconds("2008-12-25T04:30:00Z"));
   EXPECT_THAT(Query(query), IsOkAndHoldsRows({{expected_result_timestamp}}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
         default_time_zone = NULL))"}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(expected_result_timestamp,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(expected_result_timestamp,
                        ParseRFC3339TimeSeconds("2008-12-25T23:30:00Z"));
   EXPECT_THAT(Query(query), IsOkAndHoldsRows({{expected_result_timestamp}}));
 }
@@ -216,7 +216,7 @@ TEST_F(DefaultTimeZoneTest, DisallowChangingDefaultTimezoneAfterTableCreation) {
 
 TEST_F(DefaultTimeZoneTest,
        DisallowSwitchingDefaultTimezoneAfterTableCreation) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
         default_time_zone = 'UTC'))"}));
   EXPECT_THAT(
       UpdateSchema({R"(CREATE TABLE test (id INT64 PRIMARY KEY))",
@@ -228,35 +228,35 @@ TEST_F(DefaultTimeZoneTest,
 }
 
 TEST_F(DefaultTimeZoneTest, GeneratedColumnDefaultTimezone) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(CREATE TABLE test (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(CREATE TABLE test (
         id INT64,
         value TIMESTAMP AS ('2008-12-25 15:30:00') STORED,
       ) PRIMARY KEY(id))"}));
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("INSERT INTO test (id) VALUES (1)")}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement("INSERT INTO test (id) VALUES (1)")}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
                        ParseRFC3339TimeSeconds("2008-12-25T23:30:00Z"));
   EXPECT_THAT(Query("SELECT value FROM test"),
               IsOkAndHoldsRows({{expected_result_timestamp}}));
 }
 
 TEST_F(DefaultTimeZoneTest, GeneratedColumnUTC) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
         default_time_zone = 'UTC'))"}));
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(CREATE TABLE test (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(CREATE TABLE test (
         id INT64,
         value TIMESTAMP AS ('2008-12-25 15:30:00') STORED,
       ) PRIMARY KEY(id))"}));
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("INSERT INTO test (id) VALUES (1)")}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement("INSERT INTO test (id) VALUES (1)")}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
                        ParseRFC3339TimeSeconds("2008-12-25T15:30:00Z"));
   EXPECT_THAT(Query("SELECT value FROM test"),
               IsOkAndHoldsRows({{expected_result_timestamp}}));
 }
 
 TEST_F(DefaultTimeZoneTest, CheckConstraintDefaultTimezone) {
-  ZETASQL_ASSERT_OK(UpdateSchema(
+  GOOGLESQL_ASSERT_OK(UpdateSchema(
       {"CREATE TABLE test (id INT64, value TIMESTAMP, CONSTRAINT test_check "
        "CHECK(value = '2008-12-25 15:30:00')) PRIMARY KEY(id)"}));  // Crash OK
 
@@ -265,14 +265,14 @@ TEST_F(DefaultTimeZoneTest, CheckConstraintDefaultTimezone) {
           "INSERT INTO test (id, value) VALUES (1, '2008-12-25 15:30:00Z')")}),
       StatusIs(absl::StatusCode::kOutOfRange,
                HasSubstr("Check constraint `test`.`test_check` is violated")));
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(
       "INSERT INTO test (id, value) VALUES (1, '2008-12-25 23:30:00Z')")}));
 }
 
 TEST_F(DefaultTimeZoneTest, CheckConstraintUTC) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
         default_time_zone = 'UTC'))"}));
-  ZETASQL_ASSERT_OK(UpdateSchema(
+  GOOGLESQL_ASSERT_OK(UpdateSchema(
       {"CREATE TABLE test (id INT64, value TIMESTAMP, CONSTRAINT test_check "
        "CHECK(value = '2008-12-25 15:30:00')) PRIMARY KEY(id)"}));  // Crash OK
 
@@ -281,29 +281,29 @@ TEST_F(DefaultTimeZoneTest, CheckConstraintUTC) {
           "INSERT INTO test (id, value) VALUES (1, '2008-12-25 23:30:00Z')")}),
       StatusIs(absl::StatusCode::kOutOfRange,
                HasSubstr("Check constraint `test`.`test_check` is violated")));
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(
       "INSERT INTO test (id, value) VALUES (1, '2008-12-25 15:30:00Z')")}));
 }
 
 TEST_F(DefaultTimeZoneTest, ViewDefaultTimezone) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
     CREATE VIEW test_view
     SQL SECURITY INVOKER
     AS SELECT TIMESTAMP('2008-12-25 15:30:00') AS time)"}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
                        ParseRFC3339TimeSeconds("2008-12-25T23:30:00Z"));
   EXPECT_THAT(Query("SELECT * FROM test_view"),
               IsOkAndHoldsRows({{expected_result_timestamp}}));
 }
 
 TEST_F(DefaultTimeZoneTest, ViewUTC) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
         default_time_zone = 'UTC'))"}));
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
     CREATE VIEW test_view
     SQL SECURITY INVOKER
     AS SELECT TIMESTAMP('2008-12-25 15:30:00') AS time)"}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
                        ParseRFC3339TimeSeconds("2008-12-25T15:30:00Z"));
   EXPECT_THAT(Query("SELECT * FROM test_view"),
               IsOkAndHoldsRows({{expected_result_timestamp}}));
@@ -320,7 +320,7 @@ TEST_F(DefaultTimeZoneTest, QueryParameterTimestampToString) {
 }
 
 TEST_F(DefaultTimeZoneTest, QueryParameterTimestampToStringUTC) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
         default_time_zone = 'UTC'))"}));
   Timestamp timestamp = google::cloud::spanner::MakeTimestamp(
                             absl::FromUnixMicros(kTestTimestampInMicrosecond))
@@ -331,7 +331,7 @@ TEST_F(DefaultTimeZoneTest, QueryParameterTimestampToStringUTC) {
 }
 
 TEST_F(DefaultTimeZoneTest, InsertDMLWithTimestampParameter) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(CREATE TABLE test (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(CREATE TABLE test (
         id INT64,
         value TIMESTAMP,
       ) PRIMARY KEY(id))"}));
@@ -339,7 +339,7 @@ TEST_F(DefaultTimeZoneTest, InsertDMLWithTimestampParameter) {
   Timestamp timestamp = google::cloud::spanner::MakeTimestamp(
                             absl::FromUnixMicros(kTestTimestampInMicrosecond))
                             .value();
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("INSERT INTO test (id, value) VALUES (1, @param)",
                     SqlStatement::ParamType{{"param", Value(timestamp)}})}));
 
@@ -350,9 +350,9 @@ TEST_F(DefaultTimeZoneTest, InsertDMLWithTimestampParameter) {
 TEST_F(DefaultTimeZoneTest, InsertDMLWithTimestampParameterUTC) {
   // Since we provide a timestamp value explicitly, no timezone-related
   // functions are needed and changing the default timezone has no impact.
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
         default_time_zone = 'UTC'))"}));
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(CREATE TABLE test (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(CREATE TABLE test (
         id INT64,
         value TIMESTAMP,
       ) PRIMARY KEY(id))"}));
@@ -360,7 +360,7 @@ TEST_F(DefaultTimeZoneTest, InsertDMLWithTimestampParameterUTC) {
   Timestamp timestamp = google::cloud::spanner::MakeTimestamp(
                             absl::FromUnixMicros(kTestTimestampInMicrosecond))
                             .value();
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("INSERT INTO test (id, value) VALUES (1, @param)",
                     SqlStatement::ParamType{{"param", Value(timestamp)}})}));
 
@@ -384,7 +384,7 @@ TEST_F(DefaultTimeZoneTest, QueryParameterExtractDate) {
 }
 
 TEST_F(DefaultTimeZoneTest, QueryParameterExtractDateUTC) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(ALTER DATABASE db SET OPTIONS (
         default_time_zone = 'UTC'))"}));
   std::string err;
   absl::Time time;
@@ -419,14 +419,14 @@ class PgDefaultTimeZoneTest
 };
 
 TEST_F(PgDefaultTimeZoneTest, StringLiteral) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
                        ParseRFC3339TimeSeconds("2008-12-25T23:30:00Z"));
   EXPECT_THAT(Query("select '2008-12-25 15:30:00'::timestamptz"),
               IsOkAndHoldsRows({{expected_result_timestamp}}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
       ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(expected_result_timestamp,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(expected_result_timestamp,
                        ParseRFC3339TimeSeconds("2008-12-25T15:30:00Z"));
   EXPECT_THAT(Query("select '2008-12-25 15:30:00'::timestamptz"),
               IsOkAndHoldsRows({{expected_result_timestamp}}));
@@ -437,7 +437,7 @@ TEST_F(PgDefaultTimeZoneTest, CastTimestamptzToText) {
       Query("select cast('2008-12-25 15:30:00+00'::timestamptz as text)"),
       IsOkAndHoldsRows({{"2008-12-25 07:30:00-08"}}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
       ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
   EXPECT_THAT(
       Query("select cast('2008-12-25 15:30:00+00'::timestamptz as text)"),
@@ -445,16 +445,19 @@ TEST_F(PgDefaultTimeZoneTest, CastTimestamptzToText) {
 }
 
 TEST_F(PgDefaultTimeZoneTest, DateTruncation) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto expected_result_timestamp,
                        ParseRFC3339TimeSeconds("2008-12-25T08:00:00Z"));
   EXPECT_THAT(
       Query("select date_trunc('day', timestamptz '2008-12-25 15:30:00+00')"),
       IsOkAndHoldsRows({{expected_result_timestamp}}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
       ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(expected_result_timestamp,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(expected_result_timestamp,
                        ParseRFC3339TimeSeconds("2008-12-25T00:00:00Z"));
+  EXPECT_THAT(
+      Query("select date_trunc('day', timestamptz '2008-12-25 15:30:00+00')"),
+      IsOkAndHoldsRows({{expected_result_timestamp}}));
 }
 
 TEST_F(PgDefaultTimeZoneTest, Extract) {
@@ -462,7 +465,7 @@ TEST_F(PgDefaultTimeZoneTest, Extract) {
                     "15:30:00+00')::text"),
               IsOkAndHoldsRows({{"7"}}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
       ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
   EXPECT_THAT(Query("select extract(hour from timestamptz '2008-12-25 "
                     "15:30:00+00')::text"),
@@ -474,7 +477,7 @@ TEST_F(PgDefaultTimeZoneTest, ToChar) {
                     "'YYYY-MM-DD HH24:MI:SS.USOF')"),
               IsOkAndHoldsRows({{"1902-07-20 22:07:15.421720-08"}}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
       ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
   EXPECT_THAT(Query("select to_char('1902-07-21T06:07:15.42172Z'::timestamptz, "
                     "'YYYY-MM-DD HH24:MI:SS.USOF')"),
@@ -486,7 +489,7 @@ TEST_F(PgDefaultTimeZoneTest, ToCharAnotherCase) {
                     "'YYYY-MM-DD HH24 MI SS')"),
               IsOkAndHoldsRows({{"1970-01-01 02 03 04"}}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
       ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
   EXPECT_THAT(Query("SELECT to_char('1970-01-01 02:03:04'::timestamptz, "
                     "'YYYY-MM-DD HH24 MI SS')"),
@@ -502,7 +505,7 @@ TEST_F(PgDefaultTimeZoneTest, QueryParameterTimestampToString) {
                             .value())}}),
       IsOkAndHoldsRow({"1978-02-13 17:48:23.673001-08"}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
       ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
   EXPECT_THAT(
       QueryWithParams(
@@ -514,7 +517,7 @@ TEST_F(PgDefaultTimeZoneTest, QueryParameterTimestampToString) {
 }
 
 TEST_F(PgDefaultTimeZoneTest, InsertDMLWithTimestampParameter) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(CREATE TABLE test (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(CREATE TABLE test (
         id bigint primary key,
         value timestamptz
       ))"}));
@@ -522,7 +525,7 @@ TEST_F(PgDefaultTimeZoneTest, InsertDMLWithTimestampParameter) {
   Timestamp timestamp = google::cloud::spanner::MakeTimestamp(
                             absl::FromUnixMicros(kTestTimestampInMicrosecond))
                             .value();
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("INSERT INTO test (id, value) VALUES (1, $1)",
                     SqlStatement::ParamType{{"p1", Value(timestamp)}})}));
 
@@ -533,9 +536,9 @@ TEST_F(PgDefaultTimeZoneTest, InsertDMLWithTimestampParameter) {
 TEST_F(PgDefaultTimeZoneTest, InsertDMLWithTimestampParameterUTC) {
   // Since we provide a timestamp value explicitly, no timezone-related
   // functions are needed and changing the default timezone has no impact.
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
       ALTER DATABASE db SET spanner.default_time_zone = 'UTC')"}));
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(CREATE TABLE test (
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(CREATE TABLE test (
         id bigint primary key,
         value timestamptz
       ))"}));
@@ -543,7 +546,7 @@ TEST_F(PgDefaultTimeZoneTest, InsertDMLWithTimestampParameterUTC) {
   Timestamp timestamp = google::cloud::spanner::MakeTimestamp(
                             absl::FromUnixMicros(kTestTimestampInMicrosecond))
                             .value();
-  ZETASQL_EXPECT_OK(CommitDml(
+  GOOGLESQL_EXPECT_OK(CommitDml(
       {SqlStatement("INSERT INTO test (id, value) VALUES (1, $1)",
                     SqlStatement::ParamType{{"p1", Value(timestamp)}})}));
 

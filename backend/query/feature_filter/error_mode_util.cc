@@ -18,13 +18,13 @@
 
 #include <string>
 
-#include "zetasql/public/function.h"
+#include "googlesql/public/function.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/string_view.h"
 
 namespace google::spanner::emulator::backend {
 
-bool SupportsSafeErrorMode(const zetasql::Function* function) {
+bool SupportsSafeErrorMode(const googlesql::Function* function) {
   if (function->GetGroup() == "UDF") {
     return false;
   }
@@ -54,7 +54,7 @@ bool SupportsSafeErrorMode(const zetasql::Function* function) {
   if (supported_functions->contains(name)) {
     return true;
   }
-  return function->IsZetaSQLBuiltin() && function->SupportsSafeErrorMode();
+  return function->IsGoogleSQLBuiltin() && function->SupportsSafeErrorMode();
 }
 
 }  // namespace google::spanner::emulator::backend

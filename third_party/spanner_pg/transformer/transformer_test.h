@@ -34,7 +34,7 @@
 
 #include <memory>
 
-#include "zetasql/public/analyzer_options.h"
+#include "googlesql/public/analyzer_options.h"
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
@@ -67,7 +67,7 @@ class TransformerTest : public postgres_translator::test::ValidMemoryContext {
 
  protected:
 
-  zetasql::AnalyzerOptions analyzer_options_;
+  googlesql::AnalyzerOptions analyzer_options_;
   std::unique_ptr<ForwardTransformer> forward_transformer_;
 };
 

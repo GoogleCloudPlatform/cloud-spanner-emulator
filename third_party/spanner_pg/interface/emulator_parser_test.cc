@@ -33,13 +33,13 @@
 
 #include <memory>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/simple_catalog.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/schema.h"
@@ -62,10 +62,10 @@ namespace {
 class PGEmulatorParserTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         extra_arena_,
         MemoryContextPGArena::Init(/*memory_reservation_manager=*/nullptr));
-    type_factory_ = std::make_unique<zetasql::TypeFactory>();
+    type_factory_ = std::make_unique<googlesql::TypeFactory>();
 
     // Create a dummy schema for the emulator catalog with POSTGRESQL dialect.
     // This is required for POSTGRESQL functions to be registered.
@@ -82,17 +82,17 @@ class PGEmulatorParserTest : public ::testing::Test {
   }
 
   std::unique_ptr<interfaces::PGArena> extra_arena_ = nullptr;
-  std::unique_ptr<zetasql::TypeFactory> type_factory_;
-  zetasql::AnalyzerOptions analyzer_options_ =
+  std::unique_ptr<googlesql::TypeFactory> type_factory_;
+  googlesql::AnalyzerOptions analyzer_options_ =
       test::GetPGEmulatorTestAnalyzerOptions();
   std::unique_ptr<Schema> schema_;
 };
 
 TEST_F(PGEmulatorParserTest, ParseAndAnalyzePostgreSQL) {
-  std::unique_ptr<zetasql::EnumerableCatalog> catalog =
+  std::unique_ptr<googlesql::EnumerableCatalog> catalog =
       test::GetEmulatorCatalog();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const zetasql::AnalyzerOutput> output,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const googlesql::AnalyzerOutput> output,
       ParseAndAnalyzePostgreSQL(
           "select 1234567890123", catalog.get(), analyzer_options_,
           type_factory_.get(),
@@ -102,14 +102,14 @@ TEST_F(PGEmulatorParserTest, ParseAndAnalyzePostgreSQL) {
 }
 
 TEST_F(PGEmulatorParserTest, TranslateTableLevelExpression) {
-  zetasql::SimpleTable simple_table("T");
+  googlesql::SimpleTable simple_table("T");
   ABSL_CHECK_OK(simple_table.AddColumn(
-      new zetasql::SimpleColumn("T", "K", type_factory_->get_int64()), true));
+      new googlesql::SimpleColumn("T", "K", type_factory_->get_int64()), true));
 
-  zetasql::SimpleCatalog catalog("pg simple catalog");
+  googlesql::SimpleCatalog catalog("pg simple catalog");
   catalog.AddTable(&simple_table);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       postgres_translator::interfaces::ExpressionTranslateResult result,
       TranslateTableLevelExpression(
           "\"K\" > 0", "T", catalog, analyzer_options_, type_factory_.get(),
@@ -119,15 +119,15 @@ TEST_F(PGEmulatorParserTest, TranslateTableLevelExpression) {
 }
 
 TEST_F(PGEmulatorParserTest, TranslateQueryInView) {
-  zetasql::SimpleTable simple_table("T");
+  googlesql::SimpleTable simple_table("T");
   ABSL_CHECK_OK(simple_table.AddColumn(
-      new zetasql::SimpleColumn("T", "K", type_factory_->get_int64()),
+      new googlesql::SimpleColumn("T", "K", type_factory_->get_int64()),
       /*is_owned=*/true));
 
-  zetasql::SimpleCatalog catalog("pg simple catalog");
+  googlesql::SimpleCatalog catalog("pg simple catalog");
   catalog.AddTable(&simple_table);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       postgres_translator::interfaces::ExpressionTranslateResult result,
       TranslateQueryInView(
           R"(SELECT "K" FROM "T")", catalog, analyzer_options_,
@@ -138,9 +138,9 @@ TEST_F(PGEmulatorParserTest, TranslateQueryInView) {
 }
 
 TEST_F(PGEmulatorParserTest, TranslateFunctionBody) {
-  zetasql::SimpleCatalog catalog("pg simple catalog");
+  googlesql::SimpleCatalog catalog("pg simple catalog");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       postgres_translator::interfaces::ExpressionTranslateResult result,
       TranslateFunctionBody(
           R"(CREATE FUNCTION foo() RETURNS INT RETURN 1)", catalog,

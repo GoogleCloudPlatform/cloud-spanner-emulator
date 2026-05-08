@@ -20,8 +20,8 @@
 #include <cassert>
 #include <vector>
 
-#include "zetasql/public/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/value.h"
 #include "backend/access/read.h"
 
 namespace google {
@@ -33,8 +33,8 @@ namespace test {
 class TestRowCursor : public backend::RowCursor {
  public:
   TestRowCursor(const std::vector<std::string> column_names,
-                const std::vector<const zetasql::Type*> column_types,
-                const std::vector<std::vector<zetasql::Value>> values)
+                const std::vector<const googlesql::Type*> column_types,
+                const std::vector<std::vector<googlesql::Value>> values)
       : idx_(-1),
         column_names_(column_names),
         column_types_(column_types),
@@ -57,19 +57,19 @@ class TestRowCursor : public backend::RowCursor {
     return column_names_[i];
   }
 
-  const zetasql::Value ColumnValue(int i) const override {
+  const googlesql::Value ColumnValue(int i) const override {
     return values_[idx_][i];
   }
 
-  const zetasql::Type* ColumnType(int i) const override {
+  const googlesql::Type* ColumnType(int i) const override {
     return column_types_[i];
   }
 
  private:
   size_t idx_;
   std::vector<std::string> column_names_;
-  std::vector<const zetasql::Type*> column_types_;
-  std::vector<std::vector<zetasql::Value>> values_;
+  std::vector<const googlesql::Type*> column_types_;
+  std::vector<std::vector<googlesql::Value>> values_;
 };
 
 }  // namespace test

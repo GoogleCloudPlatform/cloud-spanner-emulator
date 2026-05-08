@@ -20,7 +20,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/actions.h"
 #include "tests/common/schema_constructor.h"
@@ -31,9 +31,9 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::values::Int64;
-using zetasql::values::String;
-using zetasql_base::testing::StatusIs;
+using googlesql::values::Int64;
+using googlesql::values::String;
+using googlesql_base::testing::StatusIs;
 
 class UniqueIndexTest : public test::ActionsTest {
  public:
@@ -56,7 +56,7 @@ class UniqueIndexTest : public test::ActionsTest {
 
  protected:
   // Test components.
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_;
 
   // Test variables.
@@ -66,9 +66,9 @@ class UniqueIndexTest : public test::ActionsTest {
 
 TEST_F(UniqueIndexTest, DuplicateIndexKeysReturnsAlreadyExistsError) {
   // Add row with same key.
-  ZETASQL_EXPECT_OK(store()->Insert(index_->index_data_table(),
+  GOOGLESQL_EXPECT_OK(store()->Insert(index_->index_data_table(),
                             Key({String("value"), Int64(3)}), {}, {}));
-  ZETASQL_EXPECT_OK(store()->Insert(index_->index_data_table(),
+  GOOGLESQL_EXPECT_OK(store()->Insert(index_->index_data_table(),
                             Key({String("value"), Int64(4)}), {}, {}));
 
   EXPECT_THAT(verifier_->Verify(
@@ -89,10 +89,10 @@ TEST_F(UniqueIndexTest, IndexKeysNotInTransactionFailsWithInternalError) {
 }
 
 TEST_F(UniqueIndexTest, UniqueIndexKeysReturnsOk) {
-  ZETASQL_EXPECT_OK(store()->Insert(index_->index_data_table(), Key({String("value")}),
+  GOOGLESQL_EXPECT_OK(store()->Insert(index_->index_data_table(), Key({String("value")}),
                             {}, {}));
 
-  ZETASQL_EXPECT_OK(verifier_->Verify(ctx(), Insert(index_->index_data_table(),
+  GOOGLESQL_EXPECT_OK(verifier_->Verify(ctx(), Insert(index_->index_data_table(),
                                             Key({String("value")}), {}, {})));
 }
 

@@ -1,5 +1,3 @@
-load("@bazel_gazelle//:def.bzl", "gazelle")
-
 package(
     default_applicable_licenses = [":license"],  # copybara:strip(google3-only)
     default_visibility = [":__subpackages__"],
@@ -8,12 +6,3 @@ package(
 licenses(["notice"])
 
 exports_files(["LICENSE"])
-
-gazelle(
-    name = "gazelle-update-repos",
-    args = [
-        "-from_file=go.mod",
-        "-to_macro=deps.bzl%go_dependencies",
-    ],
-    command = "update-repos",
-)

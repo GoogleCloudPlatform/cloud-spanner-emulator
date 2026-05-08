@@ -21,14 +21,15 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/cord.h"
 #include "absl/types/span.h"
 #include "backend/database/database.h"
 #include "backend/datamodel/key_set.h"
@@ -36,8 +37,8 @@
 #include "backend/schema/updater/schema_updater.h"
 #include "backend/transaction/options.h"
 #include "common/errors.h"
-#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/common/proto_matchers.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/common/test.pb.h"
 
 namespace google {
@@ -46,16 +47,16 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::values::Array;
-using zetasql::values::Bytes;
-using zetasql::values::Int64;
-using zetasql::values::Null;
-using zetasql::values::NullBytes;
-using zetasql::values::NullString;
-using zetasql::values::String;
-using zetasql::values::BytesArray;
-using zetasql::values::Enum;
-using zetasql::values::Proto;
+using googlesql::values::Array;
+using googlesql::values::Bytes;
+using googlesql::values::Int64;
+using googlesql::values::Null;
+using googlesql::values::NullBytes;
+using googlesql::values::NullString;
+using googlesql::values::String;
+using googlesql::values::BytesArray;
+using googlesql::values::Enum;
+using googlesql::values::Proto;
 
 constexpr char kDatabaseId[] = "test-db";
 
@@ -74,12 +75,12 @@ class ColumnValueBackfillTest : public ::testing::Test {
                               bytes_array_col ARRAY<BYTES(MAX)>
                             ) PRIMARY KEY (int64_col)
                          )"};
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         database_, Database::Create(
                        &clock_, kDatabaseId,
                        SchemaChangeOperation{.statements = create_statements}));
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(
                              ReadWriteOptions(), RetryState()));
 
@@ -102,24 +103,24 @@ class ColumnValueBackfillTest : public ::testing::Test {
     m.AddWriteOp(MutationOpType::kInsert, "TestTable", {"int64_col"},
                  {{Int64(2)}});
 
-    ZETASQL_EXPECT_OK(txn->Write(m));
-    ZETASQL_EXPECT_OK(txn->Commit());
+    GOOGLESQL_EXPECT_OK(txn->Write(m));
+    GOOGLESQL_EXPECT_OK(txn->Commit());
   }
 
   absl::Status UpdateSchema(absl::Span<const std::string> update_statements) {
     int num_succesful;
     absl::Status backfill_status;
     absl::Time update_time;
-    ZETASQL_RETURN_IF_ERROR(database_->UpdateSchema(
+    GOOGLESQL_RETURN_IF_ERROR(database_->UpdateSchema(
         SchemaChangeOperation{.statements = update_statements}, &num_succesful,
         &update_time, &backfill_status));
     return backfill_status;
   }
 
-  std::vector<zetasql::Value> ColumnValues(const std::string& column_name) {
+  std::vector<googlesql::Value> ColumnValues(const std::string& column_name) {
     absl::StatusOr<std::unique_ptr<ReadOnlyTransaction>> status_or =
         database_->CreateReadOnlyTransaction(ReadOnlyOptions());
-    ZETASQL_EXPECT_OK(status_or.status());
+    GOOGLESQL_EXPECT_OK(status_or.status());
 
     auto txn = std::move(status_or.value());
     std::unique_ptr<backend::RowCursor> cursor;
@@ -127,9 +128,9 @@ class ColumnValueBackfillTest : public ::testing::Test {
     args.table = "TestTable";
     args.key_set = KeySet::All();
     args.columns = std::vector<std::string>{column_name};
-    ZETASQL_EXPECT_OK(txn->Read(args, &cursor));
+    GOOGLESQL_EXPECT_OK(txn->Read(args, &cursor));
 
-    std::vector<zetasql::Value> values;
+    std::vector<googlesql::Value> values;
     while (cursor->Next()) {
       values.push_back(cursor->ColumnValue(0));
     }
@@ -138,8 +139,8 @@ class ColumnValueBackfillTest : public ::testing::Test {
 
   Clock clock_;
   std::unique_ptr<Database> database_;
-  const zetasql::ArrayType* string_array_type_ = nullptr;
-  const zetasql::ArrayType* bytes_array_type_ = nullptr;
+  const googlesql::ArrayType* string_array_type_ = nullptr;
+  const googlesql::ArrayType* bytes_array_type_ = nullptr;
   emulator::test::ScopedEmulatorFeatureFlagsSetter emulator_feature_flags_;
 };
 
@@ -159,7 +160,7 @@ TEST_F(ColumnValueBackfillTest, FailedBackfillHasNoEffect) {
 }
 
 TEST_F(ColumnValueBackfillTest, BackfillAtomicType) {
-  ZETASQL_EXPECT_OK(UpdateSchema({R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"(
     ALTER TABLE TestTable ALTER COLUMN string_col BYTES(10)
     )"}));
 
@@ -170,7 +171,7 @@ TEST_F(ColumnValueBackfillTest, BackfillAtomicType) {
 }
 
 TEST_F(ColumnValueBackfillTest, BackfillArrayType) {
-  ZETASQL_EXPECT_OK(UpdateSchema({R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"(
     ALTER TABLE TestTable ALTER COLUMN string_array_col ARRAY<BYTES(10)>
     )"}));
 
@@ -182,7 +183,7 @@ TEST_F(ColumnValueBackfillTest, BackfillArrayType) {
 }
 
 TEST_F(ColumnValueBackfillTest, BackfillGeneratedColumn) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
     ALTER TABLE TestTable
       ADD COLUMN gen_col_1 STRING(MAX) AS (string_col) STORED
     )"}));
@@ -191,7 +192,7 @@ TEST_F(ColumnValueBackfillTest, BackfillGeneratedColumn) {
                                              String("ФдΣβaA"),
                                              NullString(),
                                          }));
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
     ALTER TABLE TestTable
       ADD COLUMN gen_col_2 STRING(MAX) AS (gen_col_1) STORED
     )"}));
@@ -207,13 +208,13 @@ TEST_F(ColumnValueBackfillTest, BackfillGeneratedColumnNotNullFail) {
     ALTER TABLE TestTable
       ADD COLUMN gen_col STRING(MAX) NOT NULL AS (string_col) STORED
     )"}),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
           testing::HasSubstr("Cannot specify a null value for column")));
 }
 
 TEST_F(ColumnValueBackfillTest, BackfillDefaultColumn) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
     ALTER TABLE TestTable
       ADD COLUMN default_col INT64 DEFAULT (1+1)
     )"}));
@@ -222,7 +223,7 @@ TEST_F(ColumnValueBackfillTest, BackfillDefaultColumn) {
                                                Int64(2),
                                                Int64(2),
                                            }));
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
     ALTER TABLE TestTable
       ADD COLUMN default_col_2 STRING(MAX) DEFAULT ("Hello")
     )"}));
@@ -238,7 +239,7 @@ TEST_F(ColumnValueBackfillTest, BackfillDefaultColumnNotNullFail) {
     ALTER TABLE TestTable
       ADD COLUMN default_col STRING(MAX) NOT NULL DEFAULT (NULL)
     )"}),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kFailedPrecondition,
           testing::HasSubstr("Cannot specify a null value for column")));
 }
@@ -280,14 +281,14 @@ class ProtoColumnValueBackfillTest : public ColumnValueBackfillTest {
                               bytes_array_col ARRAY<BYTES(11)>,
                             ) PRIMARY KEY (int64_col)
                           )sql"};
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         database_,
         Database::Create(&clock_, kDatabaseId,
                          SchemaChangeOperation{
                              .statements = statements,
                              .proto_descriptor_bytes = read_descriptors()}));
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(
                              ReadWriteOptions(), RetryState()));
     const auto* test_table = txn->schema()->FindTable("TestTable");
@@ -305,7 +306,7 @@ class ProtoColumnValueBackfillTest : public ColumnValueBackfillTest {
         MutationOpType::kInsert, "TestTable",
         {"int64_col", "array_int64_col", "proto_col", "enum_col",
          "proto_array_col", "enum_array_col", "bytes_col", "bytes_array_col"},
-        {{Int64(1), zetasql::values::Int64Array({1}),
+        {{Int64(1), googlesql::values::Int64Array({1}),
           Proto(proto_type_, kSimpleProtoTestValue),
           Enum(enum_type_, ::emulator::tests::common::TEST_ENUM_ONE),
           Array(array_proto_type_, {Proto(proto_type_, kSimpleProtoTestValue)}),
@@ -316,23 +317,23 @@ class ProtoColumnValueBackfillTest : public ColumnValueBackfillTest {
     // Add a row with null values as well.
     m.AddWriteOp(MutationOpType::kInsert, "TestTable", {"int64_col"},
                  {{Int64(2)}});
-    ZETASQL_ASSERT_OK(txn->Write(m));
-    ZETASQL_ASSERT_OK(txn->Commit());
+    GOOGLESQL_ASSERT_OK(txn->Write(m));
+    GOOGLESQL_ASSERT_OK(txn->Commit());
   }
-  const zetasql::ProtoType* proto_type_ = nullptr;
-  const zetasql::ArrayType* array_proto_type_ = nullptr;
+  const googlesql::ProtoType* proto_type_ = nullptr;
+  const googlesql::ArrayType* array_proto_type_ = nullptr;
   const ::emulator::tests::common::Simple kSimpleProtoTestValue =
       PARSE_TEXT_PROTO(R"pb(field: "TestValue"
       )pb");
   const std::string kSerializedProtoTestValue =
       kSimpleProtoTestValue.SerializeAsString();
   const std::string kRandomBytesValue = "RandomBytes";
-  const zetasql::EnumType* enum_type_ = nullptr;
-  const zetasql::ArrayType* array_enum_type_ = nullptr;
+  const googlesql::EnumType* enum_type_ = nullptr;
+  const googlesql::ArrayType* array_enum_type_ = nullptr;
 };
 
 TEST_F(ProtoColumnValueBackfillTest, BackfillProtoToBytes) {
-  ZETASQL_EXPECT_OK(UpdateSchema({R"sql(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN proto_col BYTES(11)
     )sql"}));
 
@@ -343,31 +344,31 @@ TEST_F(ProtoColumnValueBackfillTest, BackfillProtoToBytes) {
 }
 
 TEST_F(ProtoColumnValueBackfillTest, BackfillBytesToProto) {
-  ZETASQL_EXPECT_OK(UpdateSchema({R"sql(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN bytes_col emulator.tests.common.Simple
     )sql"}));
   EXPECT_THAT(ColumnValues("bytes_col"),
               testing::ElementsAreArray({
                   Proto(proto_type_, kSimpleProtoTestValue),
-                  zetasql::Value::Null(proto_type_),
+                  googlesql::Value::Null(proto_type_),
               }));
 }
 
 TEST_F(ProtoColumnValueBackfillTest, BackfillRandomBytesToProto) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<ReadWriteTransaction> txn,
       database_->CreateReadWriteTransaction(ReadWriteOptions(), RetryState()));
   Mutation m;
   m.AddWriteOp(MutationOpType::kInsert, "TestTable", {"int64_col", "bytes_col"},
                {{Int64(3), Bytes(kRandomBytesValue)}});
-  ZETASQL_ASSERT_OK(txn->Write(m));
-  ZETASQL_ASSERT_OK(txn->Commit());
+  GOOGLESQL_ASSERT_OK(txn->Write(m));
+  GOOGLESQL_ASSERT_OK(txn->Commit());
 
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"sql(
     ALTER TABLE TestTable ALTER COLUMN bytes_col emulator.tests.common.Simple
     )sql"}));
-  std::vector<zetasql::Value> values = ColumnValues("bytes_col");
+  std::vector<googlesql::Value> values = ColumnValues("bytes_col");
   EXPECT_EQ(values[2].FullDebugString(),
             "Proto<emulator.tests.common.Simple>{<unparseable>}");
 }
@@ -385,31 +386,31 @@ TEST_F(ProtoColumnValueBackfillTest,
   EXPECT_THAT(ColumnValues("proto_col"),
               testing::ElementsAreArray({
                   Proto(proto_type_, kSimpleProtoTestValue),
-                  zetasql::Value::Null(proto_type_),
+                  googlesql::Value::Null(proto_type_),
               }));
 }
 
 TEST_F(ProtoColumnValueBackfillTest, BackfillArrayProtoToArrayBytes) {
-  ZETASQL_EXPECT_OK(UpdateSchema({R"sql(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN proto_array_col ARRAY<BYTES(11)>
     )sql"}));
 
   EXPECT_THAT(ColumnValues("proto_array_col"),
               testing::ElementsAreArray({
                   BytesArray({kSerializedProtoTestValue}),
-                  zetasql::Value::Null(zetasql::types::BytesArrayType()),
+                  googlesql::Value::Null(googlesql::types::BytesArrayType()),
               }));
 }
 
 TEST_F(ProtoColumnValueBackfillTest, BackfillArrayBytesToArrayProto) {
-  ZETASQL_EXPECT_OK(UpdateSchema({R"sql(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN bytes_array_col ARRAY<emulator.tests.common.Simple>
     )sql"}));
   EXPECT_THAT(
       ColumnValues("bytes_array_col"),
       testing::ElementsAreArray({
           Array(array_proto_type_, {Proto(proto_type_, kSimpleProtoTestValue)}),
-          zetasql::Value::Null(array_proto_type_),
+          googlesql::Value::Null(array_proto_type_),
       }));
 }
 
@@ -417,7 +418,7 @@ TEST_F(ProtoColumnValueBackfillTest, FailsBackfillProtoToString) {
   EXPECT_THAT(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN proto_col STRING(30)
     )sql"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Cannot change type of column")));
 }
@@ -426,7 +427,7 @@ TEST_F(ProtoColumnValueBackfillTest, FailsBackfillArrayProtoToBytes) {
   EXPECT_THAT(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN proto_array_col BYTES(30)
     )sql"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Cannot change type of column")));
 }
@@ -435,7 +436,7 @@ TEST_F(ProtoColumnValueBackfillTest, FailsBackfillArrayBytesToProto) {
   EXPECT_THAT(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN bytes_array_col emulator.tests.common.Simple
     )sql"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Cannot change type of column")));
 }
@@ -444,24 +445,24 @@ TEST_F(ProtoColumnValueBackfillTest, FailsBackfillIntToProto) {
   EXPECT_THAT(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN int64_col emulator.tests.common.Simple
     )sql"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Cannot change type of column")));
 }
 
 TEST_F(ProtoColumnValueBackfillTest, BackfillEnumToInt) {
-  ZETASQL_EXPECT_OK(UpdateSchema({R"sql(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN enum_col INT64
     )sql"}));
   EXPECT_THAT(ColumnValues("enum_col"),
               testing::ElementsAreArray({
                   Int64(1),
-                  zetasql::Value::Null(zetasql::types::Int64Type()),
+                  googlesql::Value::Null(googlesql::types::Int64Type()),
               }));
 }
 
 TEST_F(ProtoColumnValueBackfillTest, BackfillIntToEnum) {
-  ZETASQL_EXPECT_OK(UpdateSchema({R"sql(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN int64_col emulator.tests.common.TestEnum
     )sql"}));
   EXPECT_THAT(ColumnValues("int64_col"),
@@ -472,18 +473,18 @@ TEST_F(ProtoColumnValueBackfillTest, BackfillIntToEnum) {
 }
 
 TEST_F(ProtoColumnValueBackfillTest, BackfillArrayEnumToArrayInt) {
-  ZETASQL_EXPECT_OK(UpdateSchema({R"sql(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN enum_array_col ARRAY<INT64>
     )sql"}));
   EXPECT_THAT(ColumnValues("enum_array_col"),
               testing::ElementsAreArray({
-                  zetasql::values::Int64Array({1}),
-                  zetasql::Value::Null(zetasql::types::Int64ArrayType()),
+                  googlesql::values::Int64Array({1}),
+                  googlesql::Value::Null(googlesql::types::Int64ArrayType()),
               }));
 }
 
 TEST_F(ProtoColumnValueBackfillTest, BackfillArrayIntToArrayEnum) {
-  ZETASQL_EXPECT_OK(UpdateSchema({R"sql(
+  GOOGLESQL_EXPECT_OK(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN array_int64_col ARRAY<emulator.tests.common.TestEnum>
     )sql"}));
   EXPECT_THAT(
@@ -491,7 +492,7 @@ TEST_F(ProtoColumnValueBackfillTest, BackfillArrayIntToArrayEnum) {
       testing::ElementsAreArray({
           Array(array_enum_type_,
                 {Enum(enum_type_, ::emulator::tests::common::TEST_ENUM_ONE)}),
-          zetasql::Value::Null(array_enum_type_),
+          googlesql::Value::Null(array_enum_type_),
       }));
 }
 
@@ -499,7 +500,7 @@ TEST_F(ProtoColumnValueBackfillTest, FailsBackfillArrayEnumToInt) {
   EXPECT_THAT(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN enum_array_col INT64
     )sql"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Cannot change type of column")));
 }
@@ -508,7 +509,7 @@ TEST_F(ProtoColumnValueBackfillTest, FailsBackfillArrayIntToEnum) {
   EXPECT_THAT(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN array_int64_col emulator.tests.common.TestEnum
     )sql"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Cannot change type of column")));
 }
@@ -517,7 +518,7 @@ TEST_F(ProtoColumnValueBackfillTest, FailsBackfillArrayEnumToEnum) {
   EXPECT_THAT(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN enum_array_col emulator.tests.common.TestEnum
     )sql"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Cannot change type of column")));
 }
@@ -526,7 +527,7 @@ TEST_F(ProtoColumnValueBackfillTest, FailsBackfillEnumToString) {
   EXPECT_THAT(UpdateSchema({R"sql(
     ALTER TABLE TestTable ALTER COLUMN enum_col STRING(30)
     )sql"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Cannot change type of column")));
 }
@@ -535,7 +536,7 @@ TEST_F(ProtoColumnValueBackfillTest, BackfillProtoColToAnotherProtoCol) {
   // emulator.tests.common.Simple to emulator.tests.common.Parent conversion is
   // compatible based on
   // https://developers.google.com/protocol-buffers/docs/proto#updating
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"sql(
     ALTER TABLE TestTable ALTER COLUMN proto_col emulator.tests.common.Parent
     )sql"}));
@@ -546,22 +547,22 @@ TEST_F(ProtoColumnValueBackfillTest, BackfillProtoColToAnotherProtoCol) {
   parent_proto.set_field("TestValue");
   EXPECT_THAT(ColumnValues("proto_col"), testing::ElementsAreArray({
                                              Proto(proto_type, parent_proto),
-                                             zetasql::Value::Null(proto_type),
+                                             googlesql::Value::Null(proto_type),
                                          }));
 }
 
 TEST_F(ProtoColumnValueBackfillTest, BackfillEnumColToAnotherEnumCol) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<ReadWriteTransaction> txn,
       database_->CreateReadWriteTransaction(ReadWriteOptions(), RetryState()));
   Mutation m;
   m.AddWriteOp(MutationOpType::kInsert, "TestTable", {"int64_col", "enum_col"},
                {{Int64(3),
-                 zetasql::values::Enum(
+                 googlesql::values::Enum(
                      enum_type_, ::emulator::tests::common::TEST_ENUM_THREE)}});
-  ZETASQL_ASSERT_OK(txn->Write(m));
-  ZETASQL_ASSERT_OK(txn->Commit());
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(txn->Write(m));
+  GOOGLESQL_ASSERT_OK(txn->Commit());
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"sql(
     ALTER TABLE TestTable ALTER COLUMN enum_col emulator.tests.common.SampleEnum
     )sql"}));
@@ -574,8 +575,8 @@ TEST_F(ProtoColumnValueBackfillTest, BackfillEnumColToAnotherEnumCol) {
       ColumnValues("enum_col"),
       testing::ElementsAreArray({
           Enum(updated_enum_type, ::emulator::tests::common::SAMPLE_ENUM_ONE),
-          zetasql::Value::Null(updated_enum_type),
-          zetasql::Value::Null(updated_enum_type),
+          googlesql::Value::Null(updated_enum_type),
+          googlesql::Value::Null(updated_enum_type),
       }));
 }
 
@@ -583,17 +584,25 @@ TEST_F(ProtoColumnValueBackfillTest, BackfillProtoColToIncompatibleProto) {
   // "`Simple` and `EnumContainer` are not compatible based on
   // https://developers.google.com/protocol-buffers/docs/proto#updating.
   // Backfill does not fail, but the column value would be garbage"
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"sql(
     ALTER TABLE TestTable ALTER COLUMN proto_col emulator.tests.common.EnumContainer
     )sql"}));
-  std::vector<zetasql::Value> values = ColumnValues("proto_col");
-  EXPECT_EQ(values[0].FullDebugString(),
-            "Proto<emulator.tests.common.EnumContainer>{1: \"TestValue\"\n}");
-  EXPECT_EQ(values[1].FullDebugString(),
-            "Proto<emulator.tests.common.EnumContainer>(NULL)");
-}
+  std::vector<googlesql::Value> values = ColumnValues("proto_col");
+  ASSERT_EQ(values.size(), 2);
 
+  EXPECT_FALSE(values[0].is_null());
+  EXPECT_EQ(values[0].type_kind(), googlesql::TYPE_PROTO);
+  EXPECT_EQ(values[0].type()->CapitalizedName(),
+            "Proto<emulator.tests.common.EnumContainer>");
+  // Value valid for `Simple` proto, but invalid for `EnumContainer` proto.
+  EXPECT_EQ(values[0].proto_value(), absl::Cord("\n\tTestValue"));
+
+  EXPECT_TRUE(values[1].is_null());
+  EXPECT_EQ(values[0].type_kind(), googlesql::TYPE_PROTO);
+  EXPECT_EQ(values[1].type()->CapitalizedName(),
+            "Proto<emulator.tests.common.EnumContainer>");
+}
 
 }  // namespace
 }  // namespace backend

@@ -23,14 +23,14 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/analyzer_output.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/evaluator_table_iterator.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/analyzer_output.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/evaluator_table_iterator.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -45,8 +45,8 @@
 #include "backend/schema/catalog/column.h"
 #include "common/constants.h"
 #include "common/feature_flags.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -57,13 +57,13 @@ namespace backend {
 //
 // Used by QueryableTable::CreateEvaluatorTableIterator.
 class RowCursorEvaluatorTableIterator
-    : public zetasql::EvaluatorTableIterator {
+    : public googlesql::EvaluatorTableIterator {
  public:
   explicit RowCursorEvaluatorTableIterator(std::unique_ptr<RowCursor> cursor)
       : cursor_(std::move(cursor)) {
     values_.reserve(cursor_->NumColumns());
     for (int i = 0; i < cursor_->NumColumns(); ++i) {
-      values_.push_back(zetasql::values::Null(cursor_->ColumnType(i)));
+      values_.push_back(googlesql::values::Null(cursor_->ColumnType(i)));
     }
   }
 
@@ -73,7 +73,7 @@ class RowCursorEvaluatorTableIterator
     return cursor_->ColumnName(i);
   }
 
-  const zetasql::Type* GetColumnType(int i) const override {
+  const googlesql::Type* GetColumnType(int i) const override {
     return cursor_->ColumnType(i);
   }
 
@@ -88,7 +88,7 @@ class RowCursorEvaluatorTableIterator
     }
   }
 
-  const zetasql::Value& GetValue(int i) const override { return values_[i]; }
+  const googlesql::Value& GetValue(int i) const override { return values_[i]; }
 
   absl::Status Status() const override { return cursor_->Status(); }
 
@@ -102,24 +102,24 @@ class RowCursorEvaluatorTableIterator
   // Values of the current row. EvaluatorTableIterator::GetValue need to return
   // a reference so we need to buffer the values instead of simply delegate to
   // RowCursor::ColumnValue.
-  std::vector<zetasql::Value> values_;
+  std::vector<googlesql::Value> values_;
 };
 
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
 QueryableTable::AnalyzeColumnExpression(
-    const Column* column, zetasql::TypeFactory* type_factory,
-    zetasql::Catalog* catalog,
-    std::optional<const zetasql::AnalyzerOptions> opt_options) const {
-  std::unique_ptr<const zetasql::AnalyzerOutput> output = nullptr;
+    const Column* column, googlesql::TypeFactory* type_factory,
+    googlesql::Catalog* catalog,
+    std::optional<const googlesql::AnalyzerOptions> opt_options) const {
+  std::unique_ptr<const googlesql::AnalyzerOutput> output = nullptr;
   bool enable_generated_pk =
       EmulatorFeatureFlags::instance().flags().enable_generated_pk;
   bool is_generated_column = enable_generated_pk && column->is_generated();
   if (opt_options.has_value() &&
       (column->has_default_value() || (is_generated_column))) {
-    zetasql::AnalyzerOptions options = opt_options.value();
+    googlesql::AnalyzerOptions options = opt_options.value();
     if (is_generated_column) {
       for (const Column* dep : column->dependent_columns()) {
-        ZETASQL_RETURN_IF_ERROR(
+        GOOGLESQL_RETURN_IF_ERROR(
             options.AddExpressionColumn(dep->Name(), dep->GetType()))
             << "Failed to add dependent column " << dep->Name()
             << " for generated column : " << column->FullName();
@@ -129,7 +129,7 @@ QueryableTable::AnalyzeColumnExpression(
     if (is_generated_column) {
       expression_type = "generated";
     }
-    ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeExpressionForAssignmentToType(
+    GOOGLESQL_RETURN_IF_ERROR(googlesql::AnalyzeExpressionForAssignmentToType(
         column->expression().value(), options, catalog, type_factory,
         column->GetType(), &output))
         << "Failed to analyze " << expression_type << " expression for column "
@@ -140,29 +140,29 @@ QueryableTable::AnalyzeColumnExpression(
 
 QueryableTable::QueryableTable(
     const backend::Table* table, RowReader* reader,
-    std::optional<const zetasql::AnalyzerOptions> opt_options,
-    zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+    std::optional<const googlesql::AnalyzerOptions> opt_options,
+    googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
     bool is_synonym)
     : is_synonym_(is_synonym), wrapped_table_(table), reader_(reader) {
   bool enable_generated_pk =
       EmulatorFeatureFlags::instance().flags().enable_generated_pk;
   for (const auto* column : table->columns()) {
-    absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+    absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
         analyzer_output =
             AnalyzeColumnExpression(column, type_factory, catalog, opt_options);
     ABSL_CHECK_OK(analyzer_output.status());  // Crash OK
-    std::unique_ptr<const zetasql::AnalyzerOutput> output =
+    std::unique_ptr<const googlesql::AnalyzerOutput> output =
         std::move(analyzer_output.value());
     bool is_generated_column = enable_generated_pk && column->is_generated();
     if (column->has_default_value() || (is_generated_column)) {
-      zetasql::Column::ExpressionAttributes::ExpressionKind expression_kind =
-          zetasql::Column::ExpressionAttributes::ExpressionKind::DEFAULT;
+      googlesql::Column::ExpressionAttributes::ExpressionKind expression_kind =
+          googlesql::Column::ExpressionAttributes::ExpressionKind::DEFAULT;
       if (is_generated_column) {
         expression_kind =
-            zetasql::Column::ExpressionAttributes::ExpressionKind::GENERATED;
+            googlesql::Column::ExpressionAttributes::ExpressionKind::GENERATED;
       }
-      zetasql::Column::ExpressionAttributes expression_attributes =
-          zetasql::Column::ExpressionAttributes(expression_kind,
+      googlesql::Column::ExpressionAttributes expression_attributes =
+          googlesql::Column::ExpressionAttributes(expression_kind,
                                                   column->expression().value(),
                                                   output->resolved_expr());
       columns_.push_back(std::make_unique<const QueryableColumn>(
@@ -185,10 +185,10 @@ QueryableTable::QueryableTable(
   }
 }
 
-absl::StatusOr<std::unique_ptr<zetasql::EvaluatorTableIterator>>
+absl::StatusOr<std::unique_ptr<googlesql::EvaluatorTableIterator>>
 QueryableTable::CreateEvaluatorTableIterator(
     absl::Span<const int> column_idxs) const {
-  ZETASQL_RET_CHECK_NE(reader_, nullptr);
+  GOOGLESQL_RET_CHECK_NE(reader_, nullptr);
 
   std::vector<std::string> column_names;
   for (int idx : column_idxs) {
@@ -202,7 +202,7 @@ QueryableTable::CreateEvaluatorTableIterator(
   // Pending commit timestamp restrictions for queries are implemented in
   // QueryValidator so we do not need enforcement during the read here.
   // Furthermore, without enabling this certain internal reads issued by the
-  // ZetaSQL reference implementation will be rejected.
+  // GoogleSQL reference implementation will be rejected.
   read_arg.allow_pending_commit_timestamps = true;
 
   // If current table is a change stream internal data/partition table, change
@@ -219,11 +219,11 @@ QueryableTable::CreateEvaluatorTableIterator(
     }
   }
   std::unique_ptr<RowCursor> cursor;
-  ZETASQL_RETURN_IF_ERROR(reader_->Read(read_arg, &cursor));
+  GOOGLESQL_RETURN_IF_ERROR(reader_->Read(read_arg, &cursor));
   return std::make_unique<RowCursorEvaluatorTableIterator>(std::move(cursor));
 }
 
-const zetasql::Column* QueryableTable::FindColumnByName(
+const googlesql::Column* QueryableTable::FindColumnByName(
     const std::string& name) const {
   const auto* to_find = wrapped_table_->FindColumn(name);
   auto it = std::find_if(columns_.begin(), columns_.end(),

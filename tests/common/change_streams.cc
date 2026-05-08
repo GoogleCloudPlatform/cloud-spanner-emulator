@@ -36,8 +36,8 @@
 #include "tests/common/chunking.h"
 #include "grpcpp/client_context.h"
 #include "google/protobuf/json/json.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 namespace google {
 namespace spanner {
 namespace emulator {
@@ -122,7 +122,7 @@ bool IsEmptyChildPartitionsRecord(
 
 absl::StatusOr<google::protobuf::Value> ValueFromJSON(const std::string& json) {
   google::protobuf::Value proto;
-  ZETASQL_RET_CHECK(google::protobuf::json::JsonStringToMessage(json, &proto).ok());
+  GOOGLESQL_RET_CHECK(google::protobuf::json::JsonStringToMessage(json, &proto).ok());
   return proto;
 }
 
@@ -145,7 +145,7 @@ absl::Status GetChangeStreamRecordsFromArrayHelper(
     if ((has_data_change_record && has_heartbeat_record) ||
         (has_data_change_record && has_child_partition_record) ||
         (has_heartbeat_record && has_child_partition_record)) {
-      ZETASQL_RET_CHECK_FAIL()
+      GOOGLESQL_RET_CHECK_FAIL()
           << "ChangeRecord can have exactly one of the three STRUCTs: "
              "DataChangeRecord, HeartbeatRecord and ChildPartitionsRecord. "
           << change_record.DebugString();
@@ -181,7 +181,7 @@ absl::Status GetChangeStreamRecordsFromJsonHelper(
   for (const auto& row : result_set.rows()) {
     // The change_record is of type JSON, which is represented in
     // google::protobuf::Value as a Struct.
-    ZETASQL_ASSIGN_OR_RETURN(google::protobuf::Value change_record,
+    GOOGLESQL_ASSIGN_OR_RETURN(google::protobuf::Value change_record,
                      ValueFromJSON(row.values(0).string_value()));
     bool has_data_change_record = !IsEmptyDataChangeRecord(change_record);
     bool has_heartbeat_record = !IsEmptyHeartbeatRecord(change_record);
@@ -194,7 +194,7 @@ absl::Status GetChangeStreamRecordsFromJsonHelper(
                                         has_heartbeat_record};
     if (std::count_if(has_one_record.begin(), has_one_record.end(),
                       [](bool v) { return v; }) != 1) {
-      ZETASQL_RET_CHECK_FAIL()
+      GOOGLESQL_RET_CHECK_FAIL()
           << "ChangeRecord can have exactly one of the DataChangeRecord, "
              "HeartbeatRecord or ChildPartitionsRecord. "
           << change_record.DebugString();
@@ -237,11 +237,11 @@ absl::StatusOr<ChangeStreamRecords> GetChangeStreamRecordsFromResultSet(
   }
   const auto& row_value = result_set.rows(0).values(0);
   if (row_value.has_list_value()) {
-    ZETASQL_RET_CHECK(GetChangeStreamRecordsFromArrayHelper(result_set,
+    GOOGLESQL_RET_CHECK(GetChangeStreamRecordsFromArrayHelper(result_set,
                                                     &change_stream_records)
                   .ok());
   } else {
-    ZETASQL_RET_CHECK(
+    GOOGLESQL_RET_CHECK(
         GetChangeStreamRecordsFromJsonHelper(result_set, &change_stream_records)
             .ok());
   }
@@ -255,7 +255,7 @@ absl::StatusOr<std::string> CreateTestSession(
   spanner_api::CreateSessionRequest request;
   spanner_api::Session response;
   request.set_database(database->FullName());
-  ZETASQL_RETURN_IF_ERROR(client->CreateSession(&context, request, &response));
+  GOOGLESQL_RETURN_IF_ERROR(client->CreateSession(&context, request, &response));
   return response.name();
 }
 
@@ -286,11 +286,11 @@ absl::StatusOr<test::ChangeStreamRecords> ExecuteChangeStreamQuery(
   std::vector<spanner_api::PartialResultSet> response;
   grpc::ClientContext context;
   auto client_reader = client->ExecuteStreamingSql(&context, request);
-  ZETASQL_RETURN_IF_ERROR(ReadFromClientReader(std::move(client_reader), &response));
+  GOOGLESQL_RETURN_IF_ERROR(ReadFromClientReader(std::move(client_reader), &response));
 
-  ZETASQL_ASSIGN_OR_RETURN(auto result_set, backend::test::MergePartialResultSets(
+  GOOGLESQL_ASSIGN_OR_RETURN(auto result_set, backend::test::MergePartialResultSets(
                                         response, /*columns_per_row=*/1));
-  ZETASQL_ASSIGN_OR_RETURN(ChangeStreamRecords change_records,
+  GOOGLESQL_ASSIGN_OR_RETURN(ChangeStreamRecords change_records,
                    GetChangeStreamRecordsFromResultSet(result_set));
   return change_records;
 }
@@ -306,7 +306,7 @@ absl::StatusOr<std::vector<std::string>> GetActiveTokenFromInitialQuery(
         "SELECT * FROM spanner.read_json_$0 ('$1', NULL, NULL, 300000)";
   }
   std::string sql = absl::Substitute(sql_template, change_stream_name, start);
-  ZETASQL_ASSIGN_OR_RETURN(test::ChangeStreamRecords change_records,
+  GOOGLESQL_ASSIGN_OR_RETURN(test::ChangeStreamRecords change_records,
                    ExecuteChangeStreamQuery(sql, session_uri, client));
   for (const auto& child_partition_record :
        change_records.child_partition_records) {

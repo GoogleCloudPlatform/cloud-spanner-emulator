@@ -23,7 +23,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/flags/flag.h"
 #include "backend/datamodel/key_range.h"
@@ -40,8 +40,8 @@ namespace backend {
 
 namespace {
 
-using zetasql::values::Int64;
-using zetasql::values::String;
+using googlesql::values::Int64;
+using googlesql::values::String;
 
 TEST(KeySet, ConstructorsInitializeCorrectly) {
   KeySet empty_set;

@@ -18,7 +18,7 @@ syntax = "proto2";
 
 package google.spanner.emulator.backend.catalog;
 
-// TODO: remove this proto and use the ZetaSQL one once when it's released.
+// TODO: remove this proto and use the GoogleSQL one once when it's released.
 // Top-level protobuf to describe a property graph.
 message PropertyGraphProto {
   // Name of the catalog containing the property graph.

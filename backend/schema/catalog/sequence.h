@@ -19,7 +19,7 @@
 #include <memory>
 #include <string>
 
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "absl/base/thread_annotations.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -71,11 +71,11 @@ class Sequence : public SchemaNode {
       ABSL_GUARDED_BY(SequenceMutex);
 
   // Returns the next sequence value according to the sequence kind.
-  absl::StatusOr<zetasql::Value> GetNextSequenceValue() const
+  absl::StatusOr<googlesql::Value> GetNextSequenceValue() const
       ABSL_LOCKS_EXCLUDED(SequenceMutex);
 
   // Returns the internal current counter of the sequence.
-  zetasql::Value GetInternalSequenceState() const
+  googlesql::Value GetInternalSequenceState() const
       ABSL_LOCKS_EXCLUDED(SequenceMutex);
 
   // Reset the sequence's last value to the schema's current start_with_.

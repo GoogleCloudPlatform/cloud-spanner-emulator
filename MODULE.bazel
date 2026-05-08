@@ -1,0 +1,298 @@
+#
+# Copyright 2020 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+module(
+    name = "cloud_spanner_emulator",
+    version = "1.5.48",
+    repo_name = "com_google_cloud_spanner_emulator",
+)
+
+bazel_dep(name = "google_bazel_common", version = "0.0.1")
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+################################################################################
+# Generic Bazel Support                                                        #
+################################################################################
+
+bazel_dep(name = "bazel_skylib", version = "1.9.0")
+bazel_dep(name = "grpc_ecosystem_grpc_gateway", version = "2.27.6")
+bazel_dep(name = "rules_proto_grpc_grpc_gateway", version = "5.0.1")
+bazel_dep(name = "javacc", version = "7.0.13")
+bazel_dep(name = "rules_cc", version = "0.2.14")
+bazel_dep(name = "rules_go", version = "0.60.0", repo_name = "io_bazel_rules_go")
+bazel_dep(name = "rules_java", version = "9.0.3")
+bazel_dep(name = "rules_pkg", version = "1.0.1")
+bazel_dep(name = "rules_proto", version = "7.1.0")
+bazel_dep(name = "rules_proto_grpc_go", version = "5.8.0")
+bazel_dep(name = "rules_python", version = "1.8.3")
+bazel_dep(name = "platforms", version = "1.0.0")
+
+################################################################################
+# C Toolchain                                                                   #
+################################################################################
+
+bazel_dep(name = "gcc_toolchain", version = "0.9.0")
+
+register_toolchains("@gcc_toolchain//:all")
+
+################################################################################
+# GoogleAPIs                                                                   #
+################################################################################
+
+bazel_dep(name = "googleapis", version = "0.0.0-20260223-edfe7983", repo_name = "com_google_googleapis")
+bazel_dep(name = "googleapis-cc", version = "1.0.0")
+bazel_dep(name = "googleapis-grpc-cc", version = "1.0.0")
+bazel_dep(name = "googleapis-go", version = "1.0.0")
+bazel_dep(name = "googleapis-rules-registry", version = "1.0.0")
+
+################################################################################
+# Java Libraries                                                                   #
+################################################################################
+
+java_toolchains = use_extension("@rules_java//java:extensions.bzl", "toolchains")
+use_repo(java_toolchains, "local_jdk")
+
+bazel_dep(name = "rules_jvm_external", version = "6.8")
+
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+use_repo(maven, "maven")
+
+maven.install(
+    artifacts = [
+        "com.google.api.grpc:proto-google-common-protos:2.59.2",
+        "com.google.code.findbugs:jsr305:3.0.2",
+        "com.google.code.gson:gson:2.11.0",
+        "com.google.errorprone:error_prone_annotations:2.30.0",
+        "com.google.guava:guava:32.1.3-jre",
+        "com.google.truth:truth:1.4.2",
+        "io.netty:netty-common:4.1.124.Final",
+        "io.netty:netty-transport:4.1.124.Final",
+        "io.opencensus:opencensus-api:0.31.0",
+        "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
+        "junit:junit:4.13.2",
+        "net.java.dev.javacc:javacc:7.0.3",
+    ],
+    known_contributing_modules = [
+        "cloud_spanner_emulator",
+        "googlesql",
+        "grpc-java",
+        "protobuf",
+    ],
+)
+
+################################################################################
+# Golang Libraries                                                             #
+################################################################################
+
+bazel_dep(name = "gazelle", version = "0.45.0", repo_name = "bazel_gazelle")
+
+go_sdk = use_extension("@io_bazel_rules_go//go:extensions.bzl", "go_sdk")
+go_sdk.download(
+    name = "go_sdk",
+    version = "1.25.9",
+)
+use_repo(go_sdk, "go_sdk")
+
+register_toolchains("@go_sdk//:all")
+
+go_deps = use_extension("@bazel_gazelle//:extensions.bzl", "go_deps")
+go_deps.from_file(go_mod = "//:go.mod")
+use_repo(
+    go_deps,
+    "com_github_golang_protobuf",
+    "com_github_grpc_ecosystem_grpc_gateway_v2",
+    "com_google_cloud_go_spanner",
+    "in_gopkg_yaml_v3",
+    "org_golang_google_genproto",
+    "org_golang_google_genproto_googleapis_api",
+    "org_golang_google_genproto_googleapis_rpc",
+    "org_golang_google_grpc",
+    "org_golang_google_protobuf",
+    "org_golang_x_net",
+    "org_golang_x_sys",
+    "org_golang_x_text",
+)
+
+go_deps.gazelle_override(
+    directives = [
+        "gazelle:proto disable_global",
+    ],
+    path = "google.golang.org/grpc",
+)
+go_deps.gazelle_override(
+    directives = [
+        "gazelle:proto disable_global",
+    ],
+    path = "google.golang.org/genproto",
+)
+go_deps.gazelle_override(
+    directives = [
+        "gazelle:proto disable_global",
+    ],
+    path = "google.golang.org/protobuf",
+)
+go_deps.gazelle_override(
+    directives = [
+        "gazelle:proto disable_global",
+    ],
+    path = "github.com/golang/protobuf",
+)
+go_deps.gazelle_override(
+    directives = [
+        "gazelle:proto disable_global",
+    ],
+    path = "gopkg.in/yaml.v3",
+)
+go_deps.gazelle_override(
+    directives = [
+        "gazelle:proto disable_global",
+    ],
+    path = "github.com/grpc-ecosystem/grpc-gateway/v2",
+)
+go_deps.gazelle_override(
+    directives = [
+        "gazelle:proto disable_global",
+    ],
+    path = "golang.org/x/net",
+)
+go_deps.gazelle_override(
+    directives = [
+        "gazelle:proto disable_global",
+    ],
+    path = "golang.org/x/sys",
+)
+go_deps.gazelle_override(
+    directives = [
+        "gazelle:proto disable_global",
+    ],
+    path = "golang.org/x/text",
+)
+
+################################################################################
+# C++ Libraries                                                                #
+################################################################################
+
+bazel_dep(name = "re2", version = "2025.11.5", repo_name = "com_googlesource_code_re2")
+archive_override(
+    module_name = "re2",
+    integrity = "sha256-h/YCnS9t6KoCNlQkCgOtqQ6HbOmkZ24ljdAepMJv/Wc=",
+    strip_prefix = "re2-2025-11-05",
+    urls = ["https://github.com/google/re2/archive/refs/tags/2025-11-05.tar.gz"],
+)
+
+bazel_dep(name = "cpp-httplib", version = "0.22.0")
+bazel_dep(name = "riegeli", version = "0.0.0-20250822-9f2744d", repo_name = "com_googlesource_code_riegeli")
+bazel_dep(name = "protobuf", version = "33.4", repo_name = "com_google_protobuf")
+bazel_dep(name = "abseil-cpp", version = "20260107.1", repo_name = "com_google_absl")
+bazel_dep(name = "googletest", version = "1.17.0.bcr.2", repo_name = "com_google_googletest")
+bazel_dep(name = "google_cloud_cpp", version = "3.1.0", repo_name = "com_github_googleapis_google_cloud_cpp")
+bazel_dep(name = "grpc", version = "1.76.0", repo_name = "com_github_grpc_grpc")
+single_version_override(
+    module_name = "grpc",
+    # Patches applied:
+    # - Adding implicit conversion between grpc::Status and absl::Status
+    # - Add missing include for std::any_of
+    patch_strip = 1,
+    patches = ["//build/bazel:grpc.patch"],
+    version = "1.76.0",
+)
+
+bazel_dep(name = "nlohmann_json", version = "3.12.0.bcr.1", repo_name = "json")
+
+# Pinning to 3.12.bcr.1
+single_version_override(
+    module_name = "nlohmann_json",
+    version = "3.12.0.bcr.1",
+)
+
+http_archive(
+    name = "com_google_farmhash",
+    build_file = "//build/bazel:farmhash.BUILD",
+    sha256 = "6560547c63e4af82b0f202cb710ceabb3f21347a4b996db565a411da5b17aba0",
+    strip_prefix = "farmhash-816a4ae622e964763ca0862d9dbd19324a1eaf45",
+    url = "https://github.com/google/farmhash/archive/816a4ae622e964763ca0862d9dbd19324a1eaf45.tar.gz",
+)
+
+bazel_dep(name = "google_benchmark", version = "1.8.3", repo_name = "com_github_google_benchmark")
+bazel_dep(name = "googlesql", version = "2026.1.1", repo_name = "com_google_googlesql")
+archive_override(
+    module_name = "googlesql",
+    # Patches applied:
+    # - Give visibility to GoogleSQL's base library to reuse some utilities
+    # - Correct the module version to semantic versioning format (2026.01.1 -> 2026.1.1)
+    integrity = "sha256-ZnGi8IIn5G5QnV4sjP57k3ZVvSzmaPWcLSsMtvrWUTg=",
+    patch_strip = 1,
+    patches = ["//build/bazel:googlesql.patch"],
+    strip_prefix = "googlesql-2026.01.1",
+    urls = ["https://github.com/google/googlesql/archive/refs/tags/2026.01.1.zip"],
+)
+
+################################################################################
+# Python Libraries                                                             #
+################################################################################
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    is_default = True,
+    python_version = "3.11",
+)
+use_repo(python, "python_3_11")
+
+register_toolchains("@python_3_11//:all")
+
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "pypi_cloud_spanner_emulator",
+    python_version = "3.11",
+    requirements_lock = "//:requirements.txt",
+)
+use_repo(pip, "pypi_cloud_spanner_emulator")
+
+################################################################################
+# Libraries for PostgreSQL interface                                           #
+################################################################################
+
+bazel_dep(name = "lz4", version = "1.9.4")
+
+http_archive(
+    name = "net_zstd",
+    build_file = "//build/bazel:net_zstd.BUILD",
+    sha256 = "3b1c3b46e416d36931efd34663122d7f51b550c87f74de2d38249516fe7d8be5",
+    strip_prefix = "zstd-1.5.6/lib",
+    urls = ["https://github.com/facebook/zstd/archive/v1.5.6.zip"],
+)
+
+bazel_dep(name = "zlib", version = "1.3.1.bcr.8")
+
+################################################################################
+# Libraries for PostgreSQL Source                                              #
+################################################################################
+
+bazel_dep(name = "rules_flex", version = "0.4")
+
+rules_hdl_git_hash = "8cc8977cc305ed94ec7852495ed576fcbde1c18d"
+
+rules_hdl_git_sha256 = "046193f4a0b006f43bd5f9615c218d2171d0169e231028a22d8d9c011c675ad6"
+
+http_archive(
+    name = "rules_hdl",
+    sha256 = rules_hdl_git_sha256,
+    strip_prefix = "bazel_rules_hdl-%s" % rules_hdl_git_hash,
+    urls = [
+        "https://github.com/hdl/bazel_rules_hdl/archive/%s.tar.gz" % rules_hdl_git_hash,
+    ],
+)

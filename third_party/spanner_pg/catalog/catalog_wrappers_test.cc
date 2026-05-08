@@ -33,10 +33,10 @@
 
 #include <memory>
 
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/catalog.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/log/scoped_mock_log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -48,7 +48,7 @@
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
 #include "third_party/spanner_pg/util/postgres.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 
 namespace postgres_translator::test {
 namespace {
@@ -61,7 +61,7 @@ using ::testing::AnyNumber;
 using ::testing::AtLeast;
 using ::testing::HasSubstr;
 using ::testing::UnorderedElementsAre;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 using CatalogWrappersTest = ValidMemoryContext;
 
@@ -109,7 +109,7 @@ std::vector<const FormData_pg_amop*> GetAmopsByOprOid(const Oid& opid) {
 
 // Failed table lookups.
 TEST_F(CatalogWrappersTest, FailedTableLookup) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -131,7 +131,7 @@ TEST_F(CatalogWrappersTest, FailedTableLookup) {
 }
 
 TEST_F(CatalogWrappersTest, SuccessfulTableLookup) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -151,7 +151,7 @@ TEST_F(CatalogWrappersTest, SuccessfulTableLookup) {
 }
 
 TEST_F(CatalogWrappersTest, FailedTableLookupInvalidSchema) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -174,7 +174,7 @@ TEST_F(CatalogWrappersTest, FailedTableLookupInvalidSchema) {
 }
 
 TEST_F(CatalogWrappersTest, AddRangeTableEntryCSucceeds) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -198,7 +198,7 @@ TEST_F(CatalogWrappersTest, AddRangeTableEntryCSucceeds) {
 }
 
 TEST_F(CatalogWrappersTest, FailedTableLookupValidSchema) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -221,7 +221,7 @@ TEST_F(CatalogWrappersTest, FailedTableLookupValidSchema) {
 }
 
 TEST_F(CatalogWrappersTest, SuccessfulTableLookupWithSchema) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -240,7 +240,7 @@ TEST_F(CatalogWrappersTest, SuccessfulTableLookupWithSchema) {
 }
 
 TEST_F(CatalogWrappersTest, TableLookupDatabase) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -262,7 +262,7 @@ TEST_F(CatalogWrappersTest, TableLookupDatabase) {
 }
 
 TEST_F(CatalogWrappersTest, AddRangeTableEntryByOidCInvalidOid) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -289,7 +289,7 @@ TEST_F(CatalogWrappersTest, AddRangeTableEntryByOidCInvalidOid) {
 }
 
 TEST_F(CatalogWrappersTest, AddRangeTableEntryByOidCNoTableWithOid) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -315,7 +315,7 @@ TEST_F(CatalogWrappersTest, AddRangeTableEntryByOidCNoTableWithOid) {
 }
 
 TEST_F(CatalogWrappersTest, AddRangeTableEntryByOidCSucceeds) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -329,8 +329,8 @@ TEST_F(CatalogWrappersTest, AddRangeTableEntryByOidCSucceeds) {
   log.StartCapturingLogs();
 
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid relation_oid,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid relation_oid,
                        catalog_adapter->GetOrGenerateOidFromTableName(
                            TableName({"AllSpangresTypes"})));
   RangeTblEntry* rte = AddRangeTableEntryByOidC(
@@ -341,7 +341,7 @@ TEST_F(CatalogWrappersTest, AddRangeTableEntryByOidCSucceeds) {
 }
 
 TEST_F(CatalogWrappersTest, addRangeTableEntry) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -406,12 +406,12 @@ TEST_F(CatalogWrappersTest, NoCatalogTest) {
 
 // Test that translating with no input table specified fails.
 TEST_F(CatalogWrappersTest, NoRelationTranslateTest) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
 
-  ZETASQL_ASSERT_OK(GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK(GetCatalogAdapter());
 
   absl::ScopedMockLog log(absl::MockLogDefault::kDisallowUnexpected);
   // Ignore other messages.
@@ -430,15 +430,15 @@ TEST_F(CatalogWrappersTest, NoRelationTranslateTest) {
 
 // Test the attribute name lookup wrapper.
 TEST_F(CatalogWrappersTest, AttributeNameLookupTest) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
 
   // Teach the catalog adapter about our table.
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid table_oid,
       catalog_adapter->GetOrGenerateOidFromTableName(TableName({"keyvalue"})));
 
@@ -456,7 +456,7 @@ TEST_F(CatalogWrappersTest, AttributeNameLookupTest) {
 }
 
 TEST_F(CatalogWrappersTest, AttributeNameFailedLookupTest) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -467,15 +467,15 @@ TEST_F(CatalogWrappersTest, AttributeNameFailedLookupTest) {
 }
 
 TEST_F(CatalogWrappersTest, TableNameLookupTest) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
 
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid table_oid,
       catalog_adapter->GetOrGenerateOidFromTableName(TableName({"KeyValue"})));
 
@@ -484,13 +484,13 @@ TEST_F(CatalogWrappersTest, TableNameLookupTest) {
 }
 
 TEST_F(CatalogWrappersTest, ColumnsNameLookupTest) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
 
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
 
   // Table oid doesn't exist in the adapter, expects error.
   // 16385 is in the valid oid range that a catalog adapter can accept. However,
@@ -499,7 +499,7 @@ TEST_F(CatalogWrappersTest, ColumnsNameLookupTest) {
   EXPECT_THAT(catalog_adapter->GetTableNameFromOid(16385),
               StatusIs(absl::StatusCode::kInternal));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid table_oid,
       catalog_adapter->GetOrGenerateOidFromTableName(TableName({"KeyValue"})));
 
@@ -515,16 +515,16 @@ TEST_F(CatalogWrappersTest, ColumnsNameLookupTest) {
 
 // Test the attribute type lookup wrapper.
 TEST_F(CatalogWrappersTest, AttributeTypeLookupTest) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
 
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
 
   // Teach the catalog adapter about our table.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid table_oid,
       catalog_adapter->GetOrGenerateOidFromTableName(TableName({"keyvalue"})));
 
@@ -534,7 +534,7 @@ TEST_F(CatalogWrappersTest, AttributeTypeLookupTest) {
   GetAttributeTypeC(table_oid, /*attnum=*/1, &type_oid, &typmod, &collation_id);
 
   EXPECT_EQ(type_oid, INT8OID);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_type* int8_type,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_type* int8_type,
                        PgBootstrapCatalog::Default()->GetType(INT8OID));
   EXPECT_EQ(typmod, int8_type->typtypmod);
   EXPECT_EQ(collation_id, int8_type->typcollation);
@@ -561,7 +561,7 @@ TEST(GetType, Bool) {
 }
 
 TEST(GetProc, Int8SumProc) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -648,7 +648,7 @@ TEST(GetOperatorList, FailedOperator) {
 }
 
 TEST_F(CatalogWrappersTest, BoolInProc) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -658,7 +658,7 @@ TEST_F(CatalogWrappersTest, BoolInProc) {
 }
 
 TEST_F(CatalogWrappersTest, Int8Proc) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -671,7 +671,7 @@ TEST_F(CatalogWrappersTest, Int8Proc) {
 }
 
 TEST_F(CatalogWrappersTest, FailedProc) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -682,7 +682,7 @@ TEST_F(CatalogWrappersTest, FailedProc) {
 
 TEST(GetAmopList, SuccessfulAmop) {
   // Get a sample operator oid.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const Oid int8_eq_oid,
       PgBootstrapCatalog::Default()->GetOperatorOidByOprLeftRight("=", INT8OID,
                                                                   INT8OID));
@@ -730,13 +730,13 @@ TEST(GetAggregateTest, FailedAggregate) {
 // Oid. ExpandRelation will use this Oid to look up the table's attribute
 // information.
 absl::StatusOr<Oid> GetTableAndOid(const char table_name_cstr[],
-                                   const zetasql::Table** table) {
+                                   const googlesql::Table** table) {
   CatalogAdapter* catalog_adapter = nullptr;  // Declare here due to b/17073013.
-  ZETASQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
   TableName table_name({table_name_cstr});
-  ZETASQL_RET_CHECK_OK(catalog_adapter->GetEngineUserCatalog()->FindTable(
+  GOOGLESQL_RET_CHECK_OK(catalog_adapter->GetEngineUserCatalog()->FindTable(
       table_name.AsSpan(), table));
-  ZETASQL_RET_CHECK_NE(*table, nullptr);
+  GOOGLESQL_RET_CHECK_NE(*table, nullptr);
   return catalog_adapter->GetOrGenerateOidFromTableName(table_name);
 }
 // Arbitrary test constants for ExpandRelation test cases.
@@ -747,13 +747,13 @@ constexpr int kSublevelsUp = 2;
 
 // Basic ExpandRelation test: no column aliases, verify both out args.
 TEST_F(CatalogWrappersTest, ExpandRelationBasicTest) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
 
-  const zetasql::Table* table;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid table_oid, GetTableAndOid(kTableName, &table));
+  const googlesql::Table* table;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid table_oid, GetTableAndOid(kTableName, &table));
   Alias* eref = makeAlias(kTableName, /*colnames=*/nullptr);
 
   List* colnames = nullptr;
@@ -762,7 +762,7 @@ TEST_F(CatalogWrappersTest, ExpandRelationBasicTest) {
                   &colvars);
 
   for (int i = 0; i < table->NumColumns(); ++i) {
-    const zetasql::Column* column = table->GetColumn(i);
+    const googlesql::Column* column = table->GetColumn(i);
     ASSERT_NE(column, nullptr);
     // We don't expect to find Pseudo Columns, so exclude them.
     if (column->IsPseudoColumn()) {
@@ -773,12 +773,12 @@ TEST_F(CatalogWrappersTest, ExpandRelationBasicTest) {
     EXPECT_EQ(strVal(list_nth(colnames, i)), column->Name());
     Var* node = internal::PostgresCastNode(Var, list_nth(colvars, i));
     CatalogAdapter* catalog_adapter = nullptr;  // Separate due to b/17073013.
-    ZETASQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
     const Oid expected_type_oid =
         catalog_adapter->GetEngineSystemCatalog()
             ->GetTypeFromReverseMapping(column->GetType())
             ->PostgresTypeOid();
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         const FormData_pg_type* pg_type,
         PgBootstrapCatalog::Default()->GetType(expected_type_oid));
     Var* expected =
@@ -793,13 +793,13 @@ TEST_F(CatalogWrappersTest, ExpandRelationBasicTest) {
 
 // ExpandRelation test with column aliases.
 TEST_F(CatalogWrappersTest, ExpandRelationColumnAliasesTest) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
 
-  const zetasql::Table* table;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid table_oid, GetTableAndOid(kTableName, &table));
+  const googlesql::Table* table;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid table_oid, GetTableAndOid(kTableName, &table));
   List* column_aliases = list_make2(makeString(pstrdup("key_alias")),
                                     makeString(pstrdup("value_alias")));
   Alias* eref = makeAlias(kTableName, column_aliases);
@@ -810,7 +810,7 @@ TEST_F(CatalogWrappersTest, ExpandRelationColumnAliasesTest) {
                   &colvars);
 
   for (int i = 0; i < table->NumColumns(); ++i) {
-    const zetasql::Column* column = table->GetColumn(i);
+    const googlesql::Column* column = table->GetColumn(i);
     ASSERT_NE(column, nullptr);
     // We don't expect to find Pseudo Columns, so exclude them.
     if (column->IsPseudoColumn()) {
@@ -830,13 +830,13 @@ TEST_F(CatalogWrappersTest, ExpandRelationColumnAliasesTest) {
 
 // ExpandRelation test with no requested out args.
 TEST_F(CatalogWrappersTest, ExpandRelationNullOutargsTest) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
 
-  const zetasql::Table* table;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid table_oid, GetTableAndOid(kTableName, &table));
+  const googlesql::Table* table;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid table_oid, GetTableAndOid(kTableName, &table));
   Alias* eref = makeAlias(kTableName, /*colnames=*/nullptr);
 
   List** null_colnames = nullptr;
@@ -884,7 +884,7 @@ TEST(GetLanguage, PgLanguage) {
 
 TEST(GetAccessMethodOperator, Basic) {
   // Get a sample opfamily.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const FormData_pg_opclass* int8_opclass,
       PgBootstrapCatalog::Default()->GetOpclass(INT8_BTREE_OPS_OID));
   ASSERT_NE(int8_opclass, nullptr);
@@ -911,7 +911,7 @@ TEST(GetAccessMethodOperator, Failure) {
 
 TEST(GetAccessMethodProcedure, Basic) {
   // Get a sample opfamily.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const FormData_pg_opclass* int8_opclass,
       PgBootstrapCatalog::Default()->GetOpclass(INT8_BTREE_OPS_OID));
   ASSERT_NE(int8_opclass, nullptr);
@@ -938,14 +938,14 @@ TEST(GetAccessMethodProcedure, Failure) {
 
 TEST_F(CatalogWrappersTest, GetsTableName) {
   const TableName kTableName({"my_table"});
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
   // Teach the adapter about our table.
   CatalogAdapter* catalog_adapter = nullptr;  // Separate due to b/17073013.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid my_oid, catalog_adapter->GetOrGenerateOidFromTableName(kTableName));
 
   EXPECT_EQ(
@@ -956,18 +956,18 @@ TEST_F(CatalogWrappersTest, GetsTableName) {
 }
 
 TEST_F(CatalogWrappersTest, GetsTableNameInNamespace) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
 
   CatalogAdapter* catalog_adapter = nullptr;  // Separate due to b/17073013.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
 
   // Register table names and oids with the catalog adapter.
   std::vector<std::string> name_in_namespace{"namespace_name", "rel_name"};
   std::vector<std::string> name_in_public_namespace{"public", "rel_name"};
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid table_oid,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid table_oid,
                        catalog_adapter->GetOrGenerateOidFromTableName(
                            TableName(name_in_namespace)));
   Oid namespace_oid = GetOrGenerateOidFromNamespaceNameC("namespace_name");
@@ -984,7 +984,7 @@ TEST_F(CatalogWrappersTest, GetsTableNameInNamespace) {
   // table oid for "public.rel_name" or "rel_name". Reverse translation from
   // googlesql will never trigger this case, because the table name we get from
   // googlesql will always be "rel_name", and never "public.rel_name".
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid table_oid_in_public,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid table_oid_in_public,
                        catalog_adapter->GetOrGenerateOidFromTableName(
                            TableName(name_in_public_namespace)));
 
@@ -1044,7 +1044,7 @@ absl::StatusOr<ParseNamespaceItem*> BuildPartialJoinNSItem(
 // excluded when asked.
 TEST_F(CatalogWrappersTest, ExpandJoinTableToTable) {
   // Teach CatalogAdapter about our table (keyvalue).
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -1060,7 +1060,7 @@ TEST_F(CatalogWrappersTest, ExpandJoinTableToTable) {
 
   // Build the join ParseNamespaceItem.
   ParseNamespaceItem* join_nsitem;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       join_nsitem,
       BuildPartialJoinNSItem(parse_state, table_nsitem, table_nsitem));
   // Expand the join.
@@ -1074,7 +1074,7 @@ TEST_F(CatalogWrappersTest, ExpandJoinTableToTable) {
 
 // Verify we can look up (by name) a UDF and get a reasonable-looking proc.
 TEST_F(CatalogWrappersTest, LooksUpUdfProcByName) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -1090,7 +1090,7 @@ TEST_F(CatalogWrappersTest, LooksUpUdfProcByName) {
   // TODO: enable this check after making lookup case sensitive.
   // EXPECT_STREQ(NameStr(proc->proname), kTvfName.c_str());
   EXPECT_NE(proc->oid, InvalidOid);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const Oid namespace_id,
       PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
   EXPECT_EQ(proc->pronamespace, namespace_id);
@@ -1099,7 +1099,7 @@ TEST_F(CatalogWrappersTest, LooksUpUdfProcByName) {
 }
 
 TEST_F(CatalogWrappersTest, LooksUpUdfProcBySchemaAndFuncNames) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -1124,7 +1124,7 @@ TEST_F(CatalogWrappersTest, LooksUpUdfProcBySchemaAndFuncNames) {
   // `spanner` namespace
   {
     const std::string kSchemaName = "spanner";
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         const Oid namespace_id,
         PgBootstrapCatalog::Default()->GetNamespaceOid(kSchemaName));
 
@@ -1179,7 +1179,7 @@ TEST_F(CatalogWrappersTest, LooksUpUdfProcBySchemaAndFuncNames) {
 
 // Verify we can look up (by oid) a UDF and get a reasonable-looking proc.
 TEST_F(CatalogWrappersTest, LooksUpUdfProcByOid) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -1195,7 +1195,7 @@ TEST_F(CatalogWrappersTest, LooksUpUdfProcByOid) {
   ASSERT_NE(proc, nullptr);
   EXPECT_NE(proc->oid, InvalidOid);
   EXPECT_TRUE(proc->proretset);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const Oid namespace_id,
       PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
   EXPECT_EQ(proc->pronamespace, namespace_id);
@@ -1205,7 +1205,7 @@ TEST_F(CatalogWrappersTest, LooksUpUdfProcByOid) {
 
 // Verify UDF lookup is case-sensitive.
 TEST_F(CatalogWrappersTest, UdfLookUpCaseSensitive) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -1228,7 +1228,7 @@ TEST_F(CatalogWrappersTest, UdfLookUpCaseSensitive) {
 }
 
 TEST_F(CatalogWrappersTest, GetFunctionArgInfo) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);

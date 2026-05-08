@@ -34,9 +34,9 @@
 
 #include <string>
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
@@ -80,38 +80,38 @@ absl::StatusOr<List*> ParseFromPostgres(const std::string& sql);
 // The function returns an error status if either one of them is invalid.
 absl::StatusOr<Query*> AnalyzeFromPostgresForTest(
     const std::string& sql, List* parse_tree,
-    const zetasql::AnalyzerOptions& analyzer_options);
+    const googlesql::AnalyzerOptions& analyzer_options);
 
 // Helper function to parse, analyze, and transform a single SQL statement,
 // returning just the AnalyzerOutput. This is intended for testing transformer
 // behaviors with different AnalyzerOptions.
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
 ParseAnalyzeAndTransformStatement(const std::string& sql,
-                                  const zetasql::AnalyzerOptions& options);
+                                  const googlesql::AnalyzerOptions& options);
 
-// Parses and analyzes a ZetaSQL string, producing a ZetaSQL resolved AST
+// Parses and analyzes a GoogleSQL string, producing a GoogleSQL resolved AST
 // and put it into `gsql_output` in case of success.
 // This function can be used in tests, it creates default `AnalyzerOptions` and
 // `TypeFactory` objects.
-absl::Status ParseAndAnalyzeFromZetaSQLForTest(
-    const std::string& sql, zetasql::TypeFactory* type_factory,
-    std::unique_ptr<const zetasql::AnalyzerOutput>* gsql_output);
+absl::Status ParseAndAnalyzeFromGoogleSQLForTest(
+    const std::string& sql, googlesql::TypeFactory* type_factory,
+    std::unique_ptr<const googlesql::AnalyzerOutput>* gsql_output);
 
 // Like above but allows specifying non-default AnalyzerOptions.
-absl::Status ParseAndAnalyzeFromZetaSQLForTest(
-    const std::string& sql, zetasql::TypeFactory* type_factory,
-    const zetasql::AnalyzerOptions& analyzer_options,
-    std::unique_ptr<const zetasql::AnalyzerOutput>* gsql_output);
+absl::Status ParseAndAnalyzeFromGoogleSQLForTest(
+    const std::string& sql, googlesql::TypeFactory* type_factory,
+    const googlesql::AnalyzerOptions& analyzer_options,
+    std::unique_ptr<const googlesql::AnalyzerOutput>* gsql_output);
 
-// Parse a single ZetaSQL/Spanner type name into the type pointer.
+// Parse a single GoogleSQL/Spanner type name into the type pointer.
 // Used by the golden tests, dump_query, and dump_builtin_function_data.
-absl::StatusOr<const zetasql::Type*> ParseTypeName(const std::string& type);
+absl::StatusOr<const googlesql::Type*> ParseTypeName(const std::string& type);
 
-// Parse a comma separated list of <parameter name>=<ZetaSQL/Spanner type>
+// Parse a comma separated list of <parameter name>=<GoogleSQL/Spanner type>
 // into a map of name to type. Used by the golden tests and dump_query.
 absl::Status ParseParameters(
     const std::string& parameters,
-    std::map<std::string, const zetasql::Type*>& result);
+    std::map<std::string, const googlesql::Type*>& result);
 
 // Creates a PostgreSQL query tree from the input SQL string.
 // As this function calls 'AnalyzeFromPostgresForTest' call sites are
@@ -121,7 +121,7 @@ absl::Status ParseParameters(
 // This function allows for specifying non-default 'AnalyzerOptions'.
 // The returned pointer is owned by CurrentMemoryContext.
 absl::StatusOr<Query*> BuildPgQuery(
-    const std::string& sql, const zetasql::AnalyzerOptions& analyzer_options);
+    const std::string& sql, const googlesql::AnalyzerOptions& analyzer_options);
 
 // Creates a PostgreSQL query tree with the default test analyzer options.
 // The same as above but passes in default analyzer options.
@@ -132,9 +132,9 @@ absl::StatusOr<Query*> BuildPgQuery(const std::string& sql);
 // Call sites are responsible for creating a valid thread local
 // 'MemoryReservationManager' or else an error will be returned. This function
 // creates a local 'CatalogAdapter' already.
-absl::StatusOr<std::unique_ptr<zetasql::ResolvedStatement>>
+absl::StatusOr<std::unique_ptr<googlesql::ResolvedStatement>>
 ForwardTransformQuery(const std::string& sql,
-                      const zetasql::AnalyzerOptions& analyzer_options);
+                      const googlesql::AnalyzerOptions& analyzer_options);
 
 }  // namespace postgres_translator::spangres::test
 

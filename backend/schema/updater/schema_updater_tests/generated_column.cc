@@ -19,10 +19,10 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/type.pb.h"
+#include "googlesql/public/type.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/types/span.h"
@@ -38,7 +38,7 @@ namespace backend {
 namespace test {
 
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 // For the following tests, a custom PG DDL statement is required as translating
 // expressions from GSQL to PG is not supported in tests.
 using database_api::DatabaseDialect::GOOGLE_STANDARD_SQL;
@@ -47,7 +47,7 @@ using database_api::DatabaseDialect::POSTGRESQL;
 TEST_P(SchemaUpdaterTest, GeneratedColumnBasic) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
       create table "T" (
         "K" bigint primary key,
@@ -59,7 +59,7 @@ TEST_P(SchemaUpdaterTest, GeneratedColumnBasic) {
                                       database_api::DatabaseDialect::POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE TABLE T (
           K INT64 NOT NULL,
           V STRING(10),
@@ -80,7 +80,7 @@ TEST_P(SchemaUpdaterTest, GeneratedColumnBasic) {
   col = table->FindColumn("G1");
   ASSERT_NE(col, nullptr);
   EXPECT_EQ(col->Name(), "G1");
-  EXPECT_EQ(col->GetType()->kind(), zetasql::TYPE_INT64);
+  EXPECT_EQ(col->GetType()->kind(), googlesql::TYPE_INT64);
   EXPECT_FALSE(col->is_nullable());
   EXPECT_TRUE(col->is_generated());
   EXPECT_FALSE(col->has_default_value());
@@ -127,7 +127,7 @@ TEST_P(SchemaUpdaterTest, AlterTableReferenceAnotherGeneratedColumn) {
                          HasSubstr("A generated column \"G2\" cannot reference "
                                    "another generated column \"G1\".")));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE TABLE T (
           K INT64 NOT NULL,
           V STRING(10),
@@ -151,7 +151,7 @@ TEST_P(SchemaUpdaterTest, AlterTableReferenceAnotherGeneratedColumn) {
     const Column* col = table->FindColumn("G2");
     ASSERT_NE(col, nullptr);
     EXPECT_EQ(col->Name(), "G2");
-    EXPECT_EQ(col->GetType()->kind(), zetasql::TYPE_INT64);
+    EXPECT_EQ(col->GetType()->kind(), googlesql::TYPE_INT64);
     EXPECT_TRUE(col->is_nullable());
     EXPECT_TRUE(col->is_generated());
     EXPECT_FALSE(col->has_default_value());
@@ -187,7 +187,7 @@ TEST_P(SchemaUpdaterTest, CreateTableReferenceAnotherGeneratedColumn) {
                          HasSubstr("A generated column \"h\" cannot reference "
                                    "another generated column \"g\".")));
   } else {
-    ZETASQL_EXPECT_OK(CreateSchema({R"(
+    GOOGLESQL_EXPECT_OK(CreateSchema({R"(
         CREATE TABLE T (
           K INT64 NOT NULL,
           V INT64,
@@ -210,9 +210,9 @@ TEST_P(SchemaUpdaterTest, CannotCreateTableAddNonStoredGeneratedColumn) {
                              /*proto_descriptor_bytes=*/"",
                              database_api::DatabaseDialect::POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
-                zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+                googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   } else {
-    ZETASQL_EXPECT_OK(CreateSchema({R"(
+    GOOGLESQL_EXPECT_OK(CreateSchema({R"(
         CREATE TABLE T (
           K INT64 NOT NULL,
           V INT64,
@@ -236,9 +236,9 @@ TEST_P(SchemaUpdaterTest, CannotAlterTableAddNonStoredGeneratedColumn) {
                              /*proto_descriptor_bytes=*/"",
                              database_api::DatabaseDialect::POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
-                zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+                googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   } else {
-    ZETASQL_EXPECT_OK(CreateSchema({R"(
+    GOOGLESQL_EXPECT_OK(CreateSchema({R"(
         CREATE TABLE T (
           K INT64 NOT NULL,
           V INT64,
@@ -265,7 +265,7 @@ TEST_P(SchemaUpdaterTest, CannotAlterTableAlterColumnToNonStoredGenerated) {
                              /*proto_descriptor_bytes=*/"",
                              database_api::DatabaseDialect::POSTGRESQL,
                              /*use_gsql_to_pg_translation=*/false),
-                zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+                googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   } else {
     EXPECT_THAT(
         CreateSchema({R"(
@@ -308,24 +308,24 @@ std::vector<std::string> SchemaForCaseSensitivityTests(
 
 TEST_P(SchemaUpdaterTest, StoredColumnExpressionIsCaseInsensitive) {
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                          CreateSchema(SchemaForCaseSensitivityTests(POSTGRESQL),
                                       /*proto_descriptor_bytes=*/"",
                                       POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
 
-    ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         ALTER TABLE T ADD COLUMN G bigint generated always as (k + v) STORED
       )"},
                            /*proto_descriptor_bytes=*/"",
                            POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         auto schema,
         CreateSchema(SchemaForCaseSensitivityTests(GOOGLE_STANDARD_SQL)));
 
-    ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         ALTER TABLE T ADD COLUMN G INT64 AS (k + v) STORED
       )"}));
   }
@@ -333,12 +333,12 @@ TEST_P(SchemaUpdaterTest, StoredColumnExpressionIsCaseInsensitive) {
 
 TEST_P(SchemaUpdaterTest, StoredColumnNameIsCaseSensitive) {
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                          CreateSchema(SchemaForCaseSensitivityTests(POSTGRESQL),
                                       /*proto_descriptor_bytes=*/"",
                                       POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
-    ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         ALTER TABLE T ADD COLUMN G bigint generated always as (k + v) STORED
       )"},
                            /*proto_descriptor_bytes=*/"",
@@ -352,10 +352,10 @@ TEST_P(SchemaUpdaterTest, StoredColumnNameIsCaseSensitive) {
                 StatusIs(absl::StatusCode::kNotFound,
                          HasSubstr("Column not found in table t: g")));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         auto schema,
         CreateSchema(SchemaForCaseSensitivityTests(GOOGLE_STANDARD_SQL)));
-    ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+    GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
         ALTER TABLE T ADD COLUMN G INT64 AS (k + v) STORED
       )"}));
     EXPECT_THAT(UpdateSchema(schema.get(), {R"(
@@ -370,7 +370,7 @@ TEST_P(SchemaUpdaterTest, SqlInlinedFunctionInGeneratedColumn) {
   // A SQL-inlined function is a function whose implementation is a SQL string
   // instead of an evaluator.
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK(CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK(CreateSchema({R"(
       create table array_table (
         id bigint primary key,
         array_col varchar[]
@@ -384,7 +384,7 @@ TEST_P(SchemaUpdaterTest, SqlInlinedFunctionInGeneratedColumn) {
                            database_api::DatabaseDialect::POSTGRESQL,
                            /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK(CreateSchema({
+    GOOGLESQL_ASSERT_OK(CreateSchema({
         R"(
         CREATE TABLE array_table (
           id INT64,

@@ -29,7 +29,7 @@
 #include "google/spanner/v1/spanner.grpc.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -112,7 +112,7 @@ class ServerTest : public testing::Test {
     request.set_instance_id(test_instance_name_);
     grpc::ClientContext context;
     longrunning::Operation operation;
-    ZETASQL_RETURN_IF_ERROR(test_env()->instance_admin_client()->CreateInstance(
+    GOOGLESQL_RETURN_IF_ERROR(test_env()->instance_admin_client()->CreateInstance(
         &context, request, &operation));
     return WaitForOperation(operation.name(), &operation);
   }
@@ -133,7 +133,7 @@ class ServerTest : public testing::Test {
         absl::StrCat("CREATE DATABASE `", test_database_name_, "`"));
     grpc::ClientContext context;
     longrunning::Operation operation;
-    ZETASQL_RETURN_IF_ERROR(test_env()->database_admin_client()->CreateDatabase(
+    GOOGLESQL_RETURN_IF_ERROR(test_env()->database_admin_client()->CreateDatabase(
         &context, request, &operation));
     return WaitForOperation(operation.name(), &operation);
   }
@@ -149,11 +149,11 @@ class ServerTest : public testing::Test {
       request.add_statements(statement);
     }
     longrunning::Operation operation;
-    ZETASQL_RETURN_IF_ERROR(test_env()->database_admin_client()->UpdateDatabaseDdl(
+    GOOGLESQL_RETURN_IF_ERROR(test_env()->database_admin_client()->UpdateDatabaseDdl(
         &context, request, &operation));
-    ZETASQL_RETURN_IF_ERROR(WaitForOperation(operation.name(), &operation));
+    GOOGLESQL_RETURN_IF_ERROR(WaitForOperation(operation.name(), &operation));
     if (metadata) {
-      ZETASQL_RET_CHECK(operation.metadata().UnpackTo(metadata));
+      GOOGLESQL_RET_CHECK(operation.metadata().UnpackTo(metadata));
     }
     google::rpc::Status status = operation.error();
     return absl::Status(static_cast<absl::StatusCode>(status.code()),
@@ -234,7 +234,7 @@ class ServerTest : public testing::Test {
                                  test_database_name_ + quote);
     grpc::ClientContext context;
     longrunning::Operation operation;
-    ZETASQL_RETURN_IF_ERROR(test_env()->database_admin_client()->CreateDatabase(
+    GOOGLESQL_RETURN_IF_ERROR(test_env()->database_admin_client()->CreateDatabase(
         &context, request, &operation));
     return WaitForOperation(operation.name(), &operation);
   }
@@ -255,7 +255,7 @@ class ServerTest : public testing::Test {
       request.mutable_session()->set_multiplexed(true);
     }
 
-    ZETASQL_RETURN_IF_ERROR(test_env()->spanner_client()->CreateSession(
+    GOOGLESQL_RETURN_IF_ERROR(test_env()->spanner_client()->CreateSession(
         &context, request, &response));
     return response.name();
   }
@@ -265,7 +265,7 @@ class ServerTest : public testing::Test {
     absl::Duration deadline = absl::Seconds(10);
     absl::Time start = absl::Now();
     while (true) {
-      ZETASQL_RETURN_IF_ERROR(GetOperation(operation_uri, op));
+      GOOGLESQL_RETURN_IF_ERROR(GetOperation(operation_uri, op));
       if (op->done()) return absl::OkStatus();
       if (absl::Now() - start > deadline) {
         return absl::Status(absl::StatusCode::kDeadlineExceeded,

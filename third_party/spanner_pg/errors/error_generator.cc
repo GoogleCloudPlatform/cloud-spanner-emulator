@@ -38,10 +38,10 @@
 #include <vector>
 
 #include "absl/flags/parse.h"
-#include "zetasql/base/file_util.h"
-#include "zetasql/base/status.h"
-#include "zetasql/base/logging.h"
-#include "zetasql/base/path.h"
+#include "googlesql/base/file_util.h"
+#include "googlesql/base/status.h"
+#include "googlesql/base/logging.h"
+#include "googlesql/base/path.h"
 #include "google/rpc/code.pb.h"
 #include "google/rpc/error_details.pb.h"
 #include "absl/flags/flag.h"
@@ -683,7 +683,7 @@ int main(int argc, char** argv) {
   FileProto file_proto;
   {
     std::string text;
-    ABSL_CHECK_OK(zetasql::internal::GetContents(message_file,
+    ABSL_CHECK_OK(googlesql::internal::GetContents(message_file,
                                &text
                                ));
     bool is_ok =
@@ -697,7 +697,7 @@ int main(int argc, char** argv) {
   }
 
   // Generate output files.
-  std::string basename = zetasql_base::JoinPath(absl::GetFlag(FLAGS_package),
+  std::string basename = googlesql_base::JoinPath(absl::GetFlag(FLAGS_package),
                                         absl::GetFlag(FLAGS_file_basename));
   std::string h_filename = absl::StrCat(basename, ".h");
   std::string cc_filename = absl::StrCat(basename, ".cc");

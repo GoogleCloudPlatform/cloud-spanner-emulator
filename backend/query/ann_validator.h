@@ -17,9 +17,9 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_ANN_VALIDATOR_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_ANN_VALIDATOR_H_
 
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_ast_visitor.h"
-#include "zetasql/resolved_ast/resolved_column.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_visitor.h"
+#include "googlesql/resolved_ast/resolved_column.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "backend/schema/catalog/index.h"
@@ -48,14 +48,14 @@ namespace backend {
 //
 // ANNValidator also keeps track of the ANN functions it has visited to make
 // sure all the ANN functions passed the validation.
-class ANNValidator : public zetasql::ResolvedASTVisitor {
+class ANNValidator : public googlesql::ResolvedASTVisitor {
  public:
   explicit ANNValidator(const Schema* schema) : schema_(schema) {}
 
   absl::Status VisitResolvedLimitOffsetScan(
-      const zetasql::ResolvedLimitOffsetScan* node) override;
+      const googlesql::ResolvedLimitOffsetScan* node) override;
 
-  absl::flat_hash_set<const zetasql::ResolvedFunctionCall*>& ann_functions() {
+  absl::flat_hash_set<const googlesql::ResolvedFunctionCall*>& ann_functions() {
     return ann_functions_;
   }
 
@@ -63,7 +63,7 @@ class ANNValidator : public zetasql::ResolvedASTVisitor {
   // The database schema.
   const Schema* schema_;
 
-  absl::flat_hash_set<const zetasql::ResolvedFunctionCall*> ann_functions_;
+  absl::flat_hash_set<const googlesql::ResolvedFunctionCall*> ann_functions_;
 };
 }  // namespace backend
 }  // namespace emulator

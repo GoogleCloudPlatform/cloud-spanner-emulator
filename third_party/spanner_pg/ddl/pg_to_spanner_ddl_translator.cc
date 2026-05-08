@@ -50,6 +50,7 @@
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
@@ -65,10 +66,12 @@
 #include "third_party/spanner_pg/util/interval_helpers.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
+#include "third_party/spanner_pg/src/include/nodes/nodes.h"
+#include "third_party/spanner_pg/src/include/nodes/parsenodes.h"
 #include "google/protobuf/repeated_ptr_field.h"
 #include "re2/re2.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::spangres {
 
@@ -134,6 +137,8 @@ absl::optional<ChangeStreamOption> GetChangeStreamOption(
   }
   return absl::nullopt;
 }
+
+// TODO: expose when queue is implemented.
 }  // namespace
 
 namespace {
@@ -188,7 +193,7 @@ class PostgreSQLToSpannerDDLTranslatorImpl
         std::function<SchemaStatementT*(google::spanner::emulator::backend::ddl::DDLStatement&)>
             statement_member_selector) {
       google::spanner::emulator::backend::ddl::DDLStatement statement;
-      ZETASQL_RETURN_IF_ERROR(translate_function(
+      GOOGLESQL_RETURN_IF_ERROR(translate_function(
           input_statement, *statement_member_selector(statement)));
       AddStatementToOutput(std::move(statement));
       return absl::OkStatus();
@@ -390,6 +395,19 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   absl::Status TranslateVacuum(const VacuumStmt& vacuum_statement,
                                const TranslationOptions& options,
                                google::spanner::emulator::backend::ddl::Analyze& out) const;
+  absl::Status TranslateCreateFunction(
+      const CreateFunctionStmt& function_statement,
+      const TranslationOptions& options,
+      google::spanner::emulator::backend::ddl::CreateFunction& out) const;
+  std::string PrintAsSpannerType(
+      google::spanner::emulator::backend::ddl::ColumnDefinition const& column) const;
+  absl::StatusOr<std::string> PgTypeNameToGoogleSqlString(
+      const TypeName& type, const TranslationOptions& options) const;
+  absl::Status PopulateFunctionOptions(
+      List* opt_options, absl::string_view function_name,
+      google::spanner::emulator::backend::ddl::Function_SqlSecurity* sql_security,
+      absl::optional<Function::Determinism>* determinism,
+      const TranslationOptions& options) const;
   absl::Status TranslateCreateView(const ViewStmt& view_statement,
                                    const TranslationOptions& options,
                                    google::spanner::emulator::backend::ddl::CreateFunction& out) const;
@@ -605,12 +623,12 @@ class PostgreSQLToSpannerDDLTranslatorImpl
 // IntervalString extracts the interval from a TTL struct, or returns an
 // error if the chain of nodes from the TTL struct aren't valid.
 absl::StatusOr<char*> IntervalString(const Ttl& node) {
-  ZETASQL_ASSIGN_OR_RETURN(const TypeCast* tcnode,
+  GOOGLESQL_ASSIGN_OR_RETURN(const TypeCast* tcnode,
                    (DowncastNode<TypeCast, T_TypeCast>(node.interval)));
   if (tcnode->arg == nullptr) {
     return UnsupportedTranslationError("null arg field in ttl struct");
   }
-  ZETASQL_ASSIGN_OR_RETURN(const A_Const* acnode,
+  GOOGLESQL_ASSIGN_OR_RETURN(const A_Const* acnode,
                    (DowncastNode<A_Const, T_A_Const>(tcnode->arg)));
   return acnode->val.sval.sval;
 }
@@ -788,14 +806,14 @@ bool IsSerialType(absl::string_view type_name) {
 // <NodeType*>. Checks that element's type is equal to NodeTypeTag.
 template <typename NodeType, const NodeTag NodeTypeTag>
 absl::StatusOr<const NodeType*> SingleItemListAsNode(const List* list) {
-  ZETASQL_RET_CHECK_NE(list, nullptr);
-  ZETASQL_RET_CHECK_EQ(list->type, T_List);
-  ZETASQL_RET_CHECK_EQ(list_length(list), 1);
+  GOOGLESQL_RET_CHECK_NE(list, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(list->type, T_List);
+  GOOGLESQL_RET_CHECK_EQ(list_length(list), 1);
 
   NodeType* node = static_cast<NodeType*>(linitial(list));
 
-  ZETASQL_RET_CHECK_NE(node, nullptr);
-  ZETASQL_RET_CHECK_EQ(node->type, NodeTypeTag);
+  GOOGLESQL_RET_CHECK_NE(node, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node->type, NodeTypeTag);
 
   return node;
 }
@@ -804,16 +822,16 @@ absl::StatusOr<const NodeType*> SingleItemListAsNode(const List* list) {
 // element's type is equal to NodeTypeTag.
 template <typename NodeType, const NodeTag NodeTypeTag>
 absl::StatusOr<const NodeType*> GetListItemAsNode(const List* list, int n) {
-  ZETASQL_RET_CHECK_NE(list, nullptr);
-  ZETASQL_RET_CHECK_EQ(list->type, T_List);
-  ZETASQL_RET_CHECK_GT(list_length(list), n);
+  GOOGLESQL_RET_CHECK_NE(list, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(list->type, T_List);
+  GOOGLESQL_RET_CHECK_GT(list_length(list), n);
 
   // PostgreSQL now (13+) stores lists as arrays of cells with O(1) access to
   // any one of them via new helper functions.
   NodeType* node = static_cast<NodeType*>(list_nth(list, n));
 
-  ZETASQL_RET_CHECK_NE(node, nullptr);
-  ZETASQL_RET_CHECK_EQ(node->type, NodeTypeTag);
+  GOOGLESQL_RET_CHECK_NE(node, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(node->type, NodeTypeTag);
 
   return node;
 }
@@ -825,11 +843,11 @@ absl::StatusOr<const NodeType*> GetListItemAsNode(const List* list, int n) {
 // connected to one another via C++ inheritance, which is not true in this case.
 template <typename NodeType, const NodeTag NodeTypeTag, typename FromNodeType>
 absl::StatusOr<const NodeType*> DowncastNode(const FromNodeType* node) {
-  ZETASQL_RET_CHECK_NE(node, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node, nullptr);
   // Extra precaution: nothing prevents reinterpret_cast from casting Node to
   // any type available, with a subsequent segfaults, so we pass expected type
   // tag explicitly and make sure the node has this type before casting.
-  ZETASQL_RET_CHECK_EQ(node->type, NodeTypeTag);
+  GOOGLESQL_RET_CHECK_EQ(node->type, NodeTypeTag);
 
   return reinterpret_cast<const NodeType*>(node);
 }
@@ -865,13 +883,13 @@ PostgreSQLToSpannerDDLTranslatorImpl::GetInterleaveClauseType(
     }
   }
 
-  ZETASQL_RET_CHECK_FAIL() << "Unknown value of InterleaveInType " << type << ".";
+  GOOGLESQL_RET_CHECK_FAIL() << "Unknown value of InterleaveInType " << type << ".";
 }
 
 absl::StatusOr<internal::PGAlterOption>
 PostgreSQLToSpannerDDLTranslatorImpl::TranslateOption(
     absl::string_view option_name, const TranslationOptions& options) const {
-  ZETASQL_RET_CHECK(!option_name.empty()) << "Option name is missing.";
+  GOOGLESQL_RET_CHECK(!option_name.empty()) << "Option name is missing.";
 
   absl::optional<internal::PGAlterOption> option =
       internal::GetOptionByInternalName(option_name);
@@ -931,7 +949,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
     const Constraint& constraint, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::ColumnDefinition* target_column,
     TableContext& context) const {
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateParseTreeNode(constraint, /*add_in_alter=*/false, options));
 
   switch (constraint.contype) {
@@ -950,16 +968,16 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
 
       if (target_column != nullptr) {
         // Constraint is defined directly on the column.
-        ZETASQL_RET_CHECK(target_column->has_column_name());
+        GOOGLESQL_RET_CHECK(target_column->has_column_name());
 
         primary_key_column_names.push_back(target_column->column_name());
       } else {
         // Constraint is defined as a separate expression.
-        ZETASQL_RET_CHECK(!IsListEmpty(constraint.keys));
+        GOOGLESQL_RET_CHECK(!IsListEmpty(constraint.keys));
         for (const String* primary_key_part :
              StructList<String*>(constraint.keys)) {
-          ZETASQL_RET_CHECK_EQ(primary_key_part->type, T_String);
-          ZETASQL_RET_CHECK_NE(primary_key_part->sval, nullptr);
+          GOOGLESQL_RET_CHECK_EQ(primary_key_part->type, T_String);
+          GOOGLESQL_RET_CHECK_NE(primary_key_part->sval, nullptr);
 
           primary_key_column_names.push_back(primary_key_part->sval);
         }
@@ -984,8 +1002,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
 
     case CONSTR_NOTNULL: {
       // NOT NULL can be defined only as column constraint
-      ZETASQL_RET_CHECK_NE(target_column, nullptr);
-      ZETASQL_RET_CHECK(target_column->has_column_name());
+      GOOGLESQL_RET_CHECK_NE(target_column, nullptr);
+      GOOGLESQL_RET_CHECK(target_column->has_column_name());
       if (constraint.conname != nullptr) {
         return UnsupportedTranslationError(
             "Setting a name of a <NOT NULL> constraint is not supported.");
@@ -997,8 +1015,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
 
     case CONSTR_NULL: {
       // NULL can be defined only as column constraint
-      ZETASQL_RET_CHECK_NE(target_column, nullptr);
-      ZETASQL_RET_CHECK(target_column->has_column_name());
+      GOOGLESQL_RET_CHECK_NE(target_column, nullptr);
+      GOOGLESQL_RET_CHECK(target_column->has_column_name());
       if (constraint.conname != nullptr) {
           return UnsupportedTranslationError(
               "Setting a name of a <NULL> constraint is not supported.");
@@ -1010,7 +1028,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
 
     case CONSTR_FOREIGN: {
       google::spanner::emulator::backend::ddl::ForeignKey foreign_key;
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           TranslateForeignKey(constraint, target_column, foreign_key));
       context.foreign_keys.push_back(std::move(foreign_key));
 
@@ -1019,7 +1037,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
 
     case CONSTR_CHECK: {
       google::spanner::emulator::backend::ddl::CheckConstraint check_constraint;
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           TranslateCheckConstraint(constraint, options, check_constraint));
       context.check_constraints.push_back(std::move(check_constraint));
       return absl::OkStatus();
@@ -1036,7 +1054,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
                             "for column \"%s\"",
                             target_column->column_name()));
       }
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           TranslateGeneratedColumn(constraint, options, *target_column));
       return absl::OkStatus();
     }
@@ -1065,7 +1083,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
                             "for column \"%s\"",
                             target_column->column_name()));
       }
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           TranslateIdentityColumn(constraint, options, *target_column));
       return absl::OkStatus();
     }
@@ -1080,7 +1098,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
             "Both identity and default value specified for column \"%s\"",
             target_column->column_name()));
       }
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           TranslateColumnDefault(constraint, options, *target_column));
       return absl::OkStatus();
     }
@@ -1091,16 +1109,16 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
             "Both identity and on update specified for column \"%s\"",
             target_column->column_name()));
       }
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           TranslateColumnOnUpdate(constraint, options, *target_column));
       return absl::OkStatus();
     }
 
     case CONSTR_VECTOR_LENGTH: {
       // VECTOR LENGTH can be defined only as column constraint.
-      ZETASQL_RET_CHECK_NE(target_column, nullptr);
-      ZETASQL_RET_CHECK(target_column->has_column_name());
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RET_CHECK_NE(target_column, nullptr);
+      GOOGLESQL_RET_CHECK(target_column->has_column_name());
+      GOOGLESQL_RETURN_IF_ERROR(
           TranslateVectorLength(constraint, options, *target_column));
       return absl::OkStatus();
     }
@@ -1114,8 +1132,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
         return UnsupportedTranslationError(
             "Setting a name of a <HIDDEN> constraint is not supported.");
       }
-      ZETASQL_RET_CHECK_NE(target_column, nullptr);
-      ZETASQL_RET_CHECK(target_column->has_column_name());
+      GOOGLESQL_RET_CHECK_NE(target_column, nullptr);
+      GOOGLESQL_RET_CHECK(target_column->has_column_name());
       target_column->set_hidden(true);
       return absl::OkStatus();
     }
@@ -1129,7 +1147,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
     }
 
     default:
-      ZETASQL_RET_CHECK_FAIL() << "Constraint type should have been validated "
+      GOOGLESQL_RET_CHECK_FAIL() << "Constraint type should have been validated "
                           "separately in ValidateParseTreeNode";
   }
 
@@ -1168,7 +1186,7 @@ absl::StatusOr<std::string> PostgreSQLToSpannerDDLTranslatorImpl::GetSchemaName(
 
 absl::StatusOr<std::string> PostgreSQLToSpannerDDLTranslatorImpl::GetTableName(
     const RangeVar& range_var, absl::string_view parent_statement_type) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(range_var, parent_statement_type));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(range_var, parent_statement_type));
   if (range_var.schemaname != nullptr &&
       strcmp(range_var.schemaname, "public") != 0) {
     return absl::Substitute("$0.$1", range_var.schemaname, range_var.relname);
@@ -1179,7 +1197,7 @@ absl::StatusOr<std::string> PostgreSQLToSpannerDDLTranslatorImpl::GetTableName(
 absl::StatusOr<std::string> PostgreSQLToSpannerDDLTranslatorImpl::
     GetChangeStreamTableName(
     const RangeVar& range_var, absl::string_view parent_statement_type) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(range_var, parent_statement_type));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(range_var, parent_statement_type));
   if (range_var.schemaname != nullptr &&
       strcmp(range_var.schemaname, "public") != 0) {
     return absl::InvalidArgumentError(absl::Substitute(
@@ -1192,7 +1210,7 @@ absl::StatusOr<std::string> PostgreSQLToSpannerDDLTranslatorImpl::
 absl::StatusOr<std::string>
 PostgreSQLToSpannerDDLTranslatorImpl::GetLocalityGroupName(
     const RangeVar& range_var, absl::string_view parent_statement_type) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(range_var, parent_statement_type));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(range_var, parent_statement_type));
   if (range_var.schemaname != nullptr &&
       strcmp(range_var.schemaname, "public") != 0) {
     return absl::InvalidArgumentError(
@@ -1206,7 +1224,7 @@ absl::StatusOr<std::string>
 PostgreSQLToSpannerDDLTranslatorImpl::GetFunctionName(
     const ObjectWithArgs& object_with_args, bool is_grant,
     absl::string_view parent_statement_type) const {
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateParseTreeNode(object_with_args, /*is_grant=*/is_grant));
   bool uses_spanner_namespace = false;
   if (list_length(object_with_args.objname) == 2) {
@@ -1232,15 +1250,15 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateInterleaveIn(
     const InterleaveSpec* pg_interleave,
     google::spanner::emulator::backend::ddl::InterleaveClause* interleave_out,
     const TranslationOptions& options) const {
-  ZETASQL_RET_CHECK_NE(pg_interleave, nullptr);
-  ZETASQL_RET_CHECK_NE(interleave_out, nullptr);
-  ZETASQL_RET_CHECK_NE(pg_interleave->parent, nullptr);
+  GOOGLESQL_RET_CHECK_NE(pg_interleave, nullptr);
+  GOOGLESQL_RET_CHECK_NE(interleave_out, nullptr);
+  GOOGLESQL_RET_CHECK_NE(pg_interleave->parent, nullptr);
 
-  ZETASQL_ASSIGN_OR_RETURN(auto relname,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto relname,
                    GetTableName(*pg_interleave->parent, "INTERLEAVE"));
   interleave_out->set_table_name(relname);
 
-  ZETASQL_ASSIGN_OR_RETURN(google::spanner::emulator::backend::ddl::InterleaveClause::Type type,
+  GOOGLESQL_ASSIGN_OR_RETURN(google::spanner::emulator::backend::ddl::InterleaveClause::Type type,
                    GetInterleaveClauseType(pg_interleave->interleavetype));
 
   switch (type) {
@@ -1254,7 +1272,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateInterleaveIn(
     [[fallthrough]];
     case google::spanner::emulator::backend::ddl::InterleaveClause::IN_PARENT: {
       if (pg_interleave->on_delete_action) {
-        ZETASQL_ASSIGN_OR_RETURN(
+        GOOGLESQL_ASSIGN_OR_RETURN(
             google::spanner::emulator::backend::ddl::InterleaveClause::Action action,
             GetInterleaveParentDeleteActionType(
                 pg_interleave->on_delete_action));
@@ -1265,7 +1283,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateInterleaveIn(
 
     default:
       // Should never get here
-      ZETASQL_RET_CHECK_FAIL() << "Unknown interleave type.";
+      GOOGLESQL_RET_CHECK_FAIL() << "Unknown interleave type.";
   }
   interleave_out->set_type(type);
 
@@ -1292,8 +1310,8 @@ PostgreSQLToSpannerDDLTranslatorImpl::GetForeignKeyAction(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCheckConstraint(
     const Constraint& check_constraint, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::CheckConstraint& out) const {
-  ZETASQL_RET_CHECK_EQ(check_constraint.contype, CONSTR_CHECK);
-  ZETASQL_RET_CHECK_NE(check_constraint.raw_expr, nullptr)
+  GOOGLESQL_RET_CHECK_EQ(check_constraint.contype, CONSTR_CHECK);
+  GOOGLESQL_RET_CHECK_NE(check_constraint.raw_expr, nullptr)
       << "parse tree must be present for CHECK constraints.";
 
   out.set_enforced(true);
@@ -1305,7 +1323,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCheckConstraint(
   google::spanner::emulator::backend::ddl::SQLExpressionOrigin* expression_origin =
       out.mutable_expression_origin();
 
-  ZETASQL_ASSIGN_OR_RETURN(std::string serialized_expression,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string serialized_expression,
                    CheckedPgNodeToString(check_constraint.raw_expr));
   expression_origin->set_serialized_parse_tree(serialized_expression);
   if (options.enable_expression_string) {
@@ -1318,8 +1336,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCheckConstraint(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateColumnDefault(
     const Constraint& column_default, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::ColumnDefinition& out) const {
-  ZETASQL_RET_CHECK_EQ(column_default.contype, CONSTR_DEFAULT);
-  ZETASQL_RET_CHECK_NE(column_default.raw_expr, nullptr)
+  GOOGLESQL_RET_CHECK_EQ(column_default.contype, CONSTR_DEFAULT);
+  GOOGLESQL_RET_CHECK_NE(column_default.raw_expr, nullptr)
       << "parse tree must be present for column DEFAULT constraints.";
 
   google::spanner::emulator::backend::ddl::ColumnDefinition::ColumnDefaultDefinition* column_default_def =
@@ -1328,7 +1346,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateColumnDefault(
   google::spanner::emulator::backend::ddl::SQLExpressionOrigin* expression_origin =
       column_default_def->mutable_expression_origin();
 
-  ZETASQL_ASSIGN_OR_RETURN(std::string serialized_expression,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string serialized_expression,
                    CheckedPgNodeToString(column_default.raw_expr));
   expression_origin->set_serialized_parse_tree(serialized_expression);
   if (options.enable_expression_string) {
@@ -1341,8 +1359,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateColumnDefault(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateColumnOnUpdate(
     const Constraint& column_on_update, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::ColumnDefinition& out) const {
-  ZETASQL_RET_CHECK_EQ(column_on_update.contype, CONSTR_ON_UPDATE);
-  ZETASQL_RET_CHECK_NE(column_on_update.raw_expr, nullptr)
+  GOOGLESQL_RET_CHECK_EQ(column_on_update.contype, CONSTR_ON_UPDATE);
+  GOOGLESQL_RET_CHECK_NE(column_on_update.raw_expr, nullptr)
       << "parse tree must be present for column ON UPDATE constraints.";
 
   google::spanner::emulator::backend::ddl::ColumnDefinition::ColumnOnUpdateDefinition*
@@ -1351,7 +1369,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateColumnOnUpdate(
   google::spanner::emulator::backend::ddl::SQLExpressionOrigin* expression_origin =
       column_on_update_def->mutable_expression_origin();
 
-  ZETASQL_ASSIGN_OR_RETURN(std::string serialized_expression,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string serialized_expression,
                    CheckedPgNodeToString(column_on_update.raw_expr));
   expression_origin->set_serialized_parse_tree(serialized_expression);
   if (options.enable_expression_string) {
@@ -1367,8 +1385,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateColumnOnUpdate(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateIdentityColumn(
     const Constraint& identity, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::ColumnDefinition& out) const {
-  ZETASQL_RET_CHECK_EQ(identity.contype, CONSTR_IDENTITY);
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RET_CHECK_EQ(identity.contype, CONSTR_IDENTITY);
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateParseTreeNode(identity, /*add_in_alter=*/false, options));
 
   // Currently we only support GENERATED BY DEFAULT for identity column.
@@ -1400,36 +1418,36 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateIdentityColumn(
         return absl::InvalidArgumentError(
             "START COUNTER WITH is set more than once.");
       }
-      ZETASQL_ASSIGN_OR_RETURN(int64_t value, CheckedPgDefGetInt64(elem));
+      GOOGLESQL_ASSIGN_OR_RETURN(int64_t value, CheckedPgDefGetInt64(elem));
       identity_column_def->set_start_with_counter(value);
     } else if (name == "skip_range" && elem->arg != nullptr) {
       if (identity_column_def->has_skip_range_min() ||
           identity_column_def->has_skip_range_max()) {
         return absl::InvalidArgumentError("SKIP RANGE is set more than once.");
       }
-      ZETASQL_ASSIGN_OR_RETURN(const List* skip_range,
+      GOOGLESQL_ASSIGN_OR_RETURN(const List* skip_range,
                        (DowncastNode<List, T_List>(elem->arg)));
 
       // Can not use the DowncastNode because the type tag could be either
       // T_INTEGER or T_FLOAT.
       Node* skip_range_min = PostgresCastToNode(linitial(skip_range));
       char min_name[] = "skip_range_min";
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           DefElem * min_elem,
           CheckedPgMakeDefElem(min_name, PostgresCastToNode(skip_range_min),
                                elem->location));
-      ZETASQL_ASSIGN_OR_RETURN(int64_t min_int64, CheckedPgDefGetInt64(min_elem));
+      GOOGLESQL_ASSIGN_OR_RETURN(int64_t min_int64, CheckedPgDefGetInt64(min_elem));
       identity_column_def->set_skip_range_min(min_int64);
 
       // Can not use the DowncastNode because the type tag could be either
       // T_INTEGER or T_FLOAT.
       Node* skip_range_max = PostgresCastToNode(lsecond(skip_range));
       char max_name[] = "skip_range_max";
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           DefElem * max_elem,
           CheckedPgMakeDefElem(max_name, PostgresCastToNode(skip_range_max),
                                elem->location));
-      ZETASQL_ASSIGN_OR_RETURN(int64_t max_int64, CheckedPgDefGetInt64(max_elem));
+      GOOGLESQL_ASSIGN_OR_RETURN(int64_t max_int64, CheckedPgDefGetInt64(max_elem));
       identity_column_def->set_skip_range_max(max_int64);
     }
     // else ignore NO MINVALUE | NO MAXVALUE | NO CYCLE
@@ -1441,8 +1459,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateIdentityColumn(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateGeneratedColumn(
     const Constraint& generated, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::ColumnDefinition& out) const {
-  ZETASQL_RET_CHECK_EQ(generated.contype, CONSTR_GENERATED);
-  ZETASQL_RET_CHECK_NE(generated.raw_expr, nullptr)
+  GOOGLESQL_RET_CHECK_EQ(generated.contype, CONSTR_GENERATED);
+  GOOGLESQL_RET_CHECK_NE(generated.raw_expr, nullptr)
       << "parse tree must be present for GENERATED column constraints.";
 
   // Postgresql also support GENERATED BY DEFAULT for identity column which we
@@ -1472,7 +1490,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateGeneratedColumn(
   google::spanner::emulator::backend::ddl::SQLExpressionOrigin* expression_origin =
       generated_column_def->mutable_expression_origin();
 
-  ZETASQL_ASSIGN_OR_RETURN(std::string serialized_expression,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string serialized_expression,
                    CheckedPgNodeToString(generated.raw_expr));
   expression_origin->set_serialized_parse_tree(serialized_expression);
   if (options.enable_expression_string) {
@@ -1485,7 +1503,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateGeneratedColumn(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateVectorLength(
     const Constraint& length, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::ColumnDefinition& out) const {
-  ZETASQL_RET_CHECK_EQ(length.contype, CONSTR_VECTOR_LENGTH);
+  GOOGLESQL_RET_CHECK_EQ(length.contype, CONSTR_VECTOR_LENGTH);
   out.set_vector_length(length.vector_length);
   return absl::OkStatus();
 }
@@ -1494,8 +1512,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateForeignKey(
     const Constraint& constraint,
     const google::spanner::emulator::backend::ddl::ColumnDefinition* target_column,
     google::spanner::emulator::backend::ddl::ForeignKey& out) const {
-  ZETASQL_RET_CHECK_EQ(constraint.contype, CONSTR_FOREIGN);
-  ZETASQL_RET_CHECK_NE(constraint.pktable, nullptr)
+  GOOGLESQL_RET_CHECK_EQ(constraint.contype, CONSTR_FOREIGN);
+  GOOGLESQL_RET_CHECK_NE(constraint.pktable, nullptr)
       << "Referenced table name is missing.";
 
   if (IsListEmpty(constraint.pk_attrs)) {
@@ -1514,38 +1532,38 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateForeignKey(
   if (target_column != nullptr) {
     // Constraint is defined directly on the column -> we use column name as
     // constrained column
-    ZETASQL_RET_CHECK(IsListEmpty(constraint.fk_attrs));
-    ZETASQL_RET_CHECK(target_column->has_column_name());
+    GOOGLESQL_RET_CHECK(IsListEmpty(constraint.fk_attrs));
+    GOOGLESQL_RET_CHECK(target_column->has_column_name());
 
     out.add_constrained_column_name(target_column->column_name());
   } else {
     // Constraint is defined at table level -> we use data from constraint
     // itself to set constrained columns
-    ZETASQL_RET_CHECK(!IsListEmpty(constraint.fk_attrs));
+    GOOGLESQL_RET_CHECK(!IsListEmpty(constraint.fk_attrs));
     for (String* attr_name : StructList<String*>(constraint.fk_attrs)) {
-      ZETASQL_RET_CHECK_NE(attr_name, nullptr);
-      ZETASQL_RET_CHECK_EQ(attr_name->type, T_String);
+      GOOGLESQL_RET_CHECK_NE(attr_name, nullptr);
+      GOOGLESQL_RET_CHECK_EQ(attr_name->type, T_String);
 
       out.add_constrained_column_name(attr_name->sval);
     }
   }
 
   for (String* attr_name : StructList<String*>(constraint.pk_attrs)) {
-    ZETASQL_RET_CHECK_NE(attr_name, nullptr);
-    ZETASQL_RET_CHECK_EQ(attr_name->type, T_String);
+    GOOGLESQL_RET_CHECK_NE(attr_name, nullptr);
+    GOOGLESQL_RET_CHECK_EQ(attr_name->type, T_String);
     out.add_referenced_column_name(attr_name->sval);
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(std::string pk_table_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string pk_table_name,
                    GetTableName(*constraint.pktable, "FOREIGN KEY"));
 
   out.set_referenced_table_name(pk_table_name);
 
-  ZETASQL_ASSIGN_OR_RETURN(google::spanner::emulator::backend::ddl::ForeignKey::Action del_action,
+  GOOGLESQL_ASSIGN_OR_RETURN(google::spanner::emulator::backend::ddl::ForeignKey::Action del_action,
                    GetForeignKeyAction(constraint.fk_del_action));
   out.set_on_delete(del_action);
 
-  ZETASQL_ASSIGN_OR_RETURN(google::spanner::emulator::backend::ddl::ForeignKey::Action upd_action,
+  GOOGLESQL_ASSIGN_OR_RETURN(google::spanner::emulator::backend::ddl::ForeignKey::Action upd_action,
                    GetForeignKeyAction(constraint.fk_upd_action));
   out.set_on_update(upd_action);
 
@@ -1555,12 +1573,12 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateForeignKey(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateColumnDefinition(
     const ColumnDef& column_definition, const TranslationOptions& options,
     TableContext& context, google::spanner::emulator::backend::ddl::ColumnDefinition& out) const {
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateParseTreeNode(column_definition, /*alter_column=*/false));
 
   *out.mutable_column_name() = column_definition.colname;
 
-  ZETASQL_RETURN_IF_ERROR(ProcessColumnTypeWithAttributes(*column_definition.typeName,
+  GOOGLESQL_RETURN_IF_ERROR(ProcessColumnTypeWithAttributes(*column_definition.typeName,
                                                   options, out));
 
   if (column_definition.is_not_null) {
@@ -1570,7 +1588,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateColumnDefinition(
   if (column_definition.constraints != nullptr) {
     for (const Constraint* constraint :
          StructList<Constraint*>(column_definition.constraints)) {
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           ProcessTableConstraint(*constraint, options, &out, context));
     }
   }
@@ -1598,7 +1616,7 @@ absl::Status
 PostgreSQLToSpannerDDLTranslatorImpl::ProcessColumnTypeWithAttributes(
     const TypeName& type, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::ColumnDefinition& out) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(type));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(type));
 
   // This checking could be removed soon after 28.1 released and merged to
   // mainline. There is on branch test depends on this.
@@ -1607,7 +1625,7 @@ PostgreSQLToSpannerDDLTranslatorImpl::ProcessColumnTypeWithAttributes(
   }
 
   std::string schema_name, type_name;
-  ZETASQL_RETURN_IF_ERROR(ParseColumnType(type, schema_name, type_name));
+  GOOGLESQL_RETURN_IF_ERROR(ParseColumnType(type, schema_name, type_name));
 
   if (schema_name.empty() || schema_name == "pg_catalog") {
     // Postgres integral types
@@ -1709,7 +1727,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessPostgresType(
           // Otherwise (if length is not specified, or for TEXT types) 'length'
           // is left not set on the target STRING type, meaning it defaults to
           // MAX.
-          ZETASQL_ASSIGN_OR_RETURN(
+          GOOGLESQL_ASSIGN_OR_RETURN(
               const A_Const* length,
               (SingleItemListAsNode<A_Const, T_A_Const>)(type.typmods));
           if (length->val.ival.ival > PGConstants::kMaxStringLength) {
@@ -1720,7 +1738,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessPostgresType(
           where_to_set_type->set_length(length->val.ival.ival);
         } else {
           // should never get here
-          ZETASQL_RET_CHECK_FAIL() << "Unexpected type name: " << type_name << ".";
+          GOOGLESQL_RET_CHECK_FAIL() << "Unexpected type name: " << type_name << ".";
         }
         break;
       }
@@ -1794,8 +1812,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateRowDeletionPolicy(
 
   google::spanner::emulator::backend::ddl::DDLTimeLengthProto* older_than =
       row_deletion_policy.mutable_older_than();
-  ZETASQL_ASSIGN_OR_RETURN(char* interval_str, IntervalString(ttl));
-  ZETASQL_ASSIGN_OR_RETURN(int64_t ttl_secs, IntervalToSecs(interval_str));
+  GOOGLESQL_ASSIGN_OR_RETURN(char* interval_str, IntervalString(ttl));
+  GOOGLESQL_ASSIGN_OR_RETURN(int64_t ttl_secs, IntervalToSecs(interval_str));
 
   if (ttl_secs < 0) {
     return UnsupportedTranslationError(
@@ -1817,27 +1835,27 @@ absl::Status
 PostgreSQLToSpannerDDLTranslatorImpl::ProcessSequenceSkipRangeOption(
     const DefElem& skip_range, ::google::spanner::emulator::backend::ddl::SetOption& skip_range_min_option,
     ::google::spanner::emulator::backend::ddl::SetOption& skip_range_max_option) const {
-  ZETASQL_ASSIGN_OR_RETURN(const List* args,
+  GOOGLESQL_ASSIGN_OR_RETURN(const List* args,
                    (DowncastNode<List, T_List>(skip_range.arg)));
   // Can not use the DowncastNode because the type tag could be either
   // T_INTEGER or T_FLOAT.
   char min_name[] = "skip_range_min";
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       DefElem * min_elem,
       CheckedPgMakeDefElem(min_name, PostgresCastToNode(linitial(args)),
                            skip_range.location));
-  ZETASQL_ASSIGN_OR_RETURN(int64_t min_int64, CheckedPgDefGetInt64(min_elem));
+  GOOGLESQL_ASSIGN_OR_RETURN(int64_t min_int64, CheckedPgDefGetInt64(min_elem));
   skip_range_min_option.set_option_name(min_name);
   skip_range_min_option.set_int64_value(min_int64);
 
   // Can not use the DowncastNode because the type tag could be either
   // T_INTEGER or T_FLOAT.
   char max_name[] = "skip_range_max";
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       DefElem * max_elem,
       CheckedPgMakeDefElem(max_name, PostgresCastToNode(lsecond(args)),
                            skip_range.location));
-  ZETASQL_ASSIGN_OR_RETURN(int64_t max_int64, CheckedPgDefGetInt64(max_elem));
+  GOOGLESQL_ASSIGN_OR_RETURN(int64_t max_int64, CheckedPgDefGetInt64(max_elem));
   skip_range_max_option.set_option_name(max_name);
   skip_range_max_option.set_int64_value(max_int64);
 
@@ -1847,10 +1865,10 @@ PostgreSQLToSpannerDDLTranslatorImpl::ProcessSequenceSkipRangeOption(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateSequence(
     const CreateSeqStmt& create_statement, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::CreateSequence& out) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_statement, options));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_statement, options));
 
   absl::string_view sequence_name;
-  ZETASQL_ASSIGN_OR_RETURN(sequence_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(sequence_name,
                    GetTableName(*create_statement.sequence, "CREATE SEQUENCE"));
   out.set_sequence_name(sequence_name);
 
@@ -1886,10 +1904,10 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateSequence(
         DefElem, opts->elements[i].ptr_value);
     absl::string_view name = elem->defname;
     if (name == "start_counter") {
-      ZETASQL_ASSIGN_OR_RETURN(int64_t value, CheckedPgDefGetInt64(elem));
+      GOOGLESQL_ASSIGN_OR_RETURN(int64_t value, CheckedPgDefGetInt64(elem));
       start_counter->set_int64_value(value);
     } else if (name == "skip_range") {
-      ZETASQL_RETURN_IF_ERROR(ProcessSequenceSkipRangeOption(
+      GOOGLESQL_RETURN_IF_ERROR(ProcessSequenceSkipRangeOption(
           *elem, *out.add_set_options(), *out.add_set_options()));
     }
   }
@@ -1904,10 +1922,10 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateSequence(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterSequence(
     const AlterSeqStmt& alter_statement, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::AlterSequence& out) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_statement, options));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_statement, options));
 
   absl::string_view sequence_name;
-  ZETASQL_ASSIGN_OR_RETURN(sequence_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(sequence_name,
                    GetTableName(*alter_statement.sequence, "ALTER SEQUENCE"));
   out.set_sequence_name(sequence_name);
 
@@ -1917,13 +1935,13 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterSequence(
         DefElem, opts->elements[i].ptr_value);
     absl::string_view name = elem->defname;
     if (name == "restart_counter") {
-      ZETASQL_ASSIGN_OR_RETURN(int64_t value, CheckedPgDefGetInt64(elem));
+      GOOGLESQL_ASSIGN_OR_RETURN(int64_t value, CheckedPgDefGetInt64(elem));
       auto* opt = out.mutable_set_options()->add_options();
       opt->set_option_name("start_with_counter");
       opt->set_int64_value(value);
       continue;
     } else if (name == "skip_range") {
-      ZETASQL_RETURN_IF_ERROR(ProcessSequenceSkipRangeOption(
+      GOOGLESQL_RETURN_IF_ERROR(ProcessSequenceSkipRangeOption(
           *elem, *out.mutable_set_options()->add_options(),
           *out.mutable_set_options()->add_options()));
     }
@@ -1939,22 +1957,22 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterSequence(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSequence(
     const DropStmt& drop_statement, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::DropSequence& out) const {
-  ZETASQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_SEQUENCE);
+  GOOGLESQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_SEQUENCE);
   if (!options.enable_sequence) {
     return UnsupportedTranslationError("DROP SEQUENCE is not supported");
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       const List* sequence_to_drop_list,
       (SingleItemListAsNode<List, T_List>(drop_statement.objects)));
 
   // Caller should have called ValidateParseTreeNode, which ensures the size of
   // sequence_to_drop_list is 1 or 2.
   if (sequence_to_drop_list->length == 2) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const String* schema_to_drop_node,
         (GetListItemAsNode<String, T_String>)(sequence_to_drop_list, 0));
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const String* sequence_to_drop_node,
         (GetListItemAsNode<String, T_String>)(sequence_to_drop_list, 1));
     if (strcmp(schema_to_drop_node->sval, "public") != 0) {
@@ -1966,9 +1984,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSequence(
           absl::StrCat(sequence_to_drop_node->sval);
     }
   } else {
-    ZETASQL_RET_CHECK_EQ(sequence_to_drop_list->length, 1)
+    GOOGLESQL_RET_CHECK_EQ(sequence_to_drop_list->length, 1)
         << "Incorrect number of name components in drop target.";
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const String* sequence_to_drop_node,
         (SingleItemListAsNode<String, T_String>)(sequence_to_drop_list));
     *out.mutable_sequence_name() = sequence_to_drop_node->sval;
@@ -1985,10 +2003,10 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSequence(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
     const CreateStmt& create_statement, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::CreateTable& out) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_statement, options));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_statement, options));
 
   absl::string_view table_name;
-  ZETASQL_ASSIGN_OR_RETURN(table_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(table_name,
                    GetTableName(*create_statement.relation, "CREATE TABLE"));
   if (internal::IsReservedName(table_name)) {
     return absl::InvalidArgumentError(
@@ -2001,26 +2019,26 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
   // <tableElts> contains a List that can include ColumnDef, Constraint or
   // T_TableLikeClause. See transformCreateStmt for details.
   for (const Node* node : StructList<Node*>(create_statement.tableElts)) {
-    ZETASQL_RET_CHECK_NE(node, nullptr);
+    GOOGLESQL_RET_CHECK_NE(node, nullptr);
     switch (node->type) {
       case T_ColumnDef: {
-        ZETASQL_ASSIGN_OR_RETURN(const ColumnDef* column,
+        GOOGLESQL_ASSIGN_OR_RETURN(const ColumnDef* column,
                          (DowncastNode<ColumnDef, T_ColumnDef>(node)));
-        ZETASQL_RETURN_IF_ERROR(TranslateColumnDefinition(*column, options, context,
+        GOOGLESQL_RETURN_IF_ERROR(TranslateColumnDefinition(*column, options, context,
                                                   *out.add_column()));
         break;
       }
 
       case T_Constraint: {
-        ZETASQL_ASSIGN_OR_RETURN(const Constraint* constraint,
+        GOOGLESQL_ASSIGN_OR_RETURN(const Constraint* constraint,
                          (DowncastNode<Constraint, T_Constraint>(node)));
-        ZETASQL_RETURN_IF_ERROR(
+        GOOGLESQL_RETURN_IF_ERROR(
             ProcessTableConstraint(*constraint, options, nullptr, context));
         break;
       }
 
       case T_SynonymClause: {
-        ZETASQL_ASSIGN_OR_RETURN(const SynonymClause* synonym_clause,
+        GOOGLESQL_ASSIGN_OR_RETURN(const SynonymClause* synonym_clause,
                          (DowncastNode<SynonymClause, T_SynonymClause>(node)));
         out.set_synonym(synonym_clause->name);
         break;
@@ -2042,19 +2060,19 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
     // <constraints> contains list of Constraint nodes.
     for (const Constraint* constraint :
          StructList<Constraint*>(create_statement.constraints)) {
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           ProcessTableConstraint(*constraint, options, nullptr, context));
     }
   }
 
   if (create_statement.interleavespec != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(TranslateInterleaveIn(create_statement.interleavespec,
+    GOOGLESQL_RETURN_IF_ERROR(TranslateInterleaveIn(create_statement.interleavespec,
                                           out.mutable_interleave_clause(),
                                           options));
   }
 
   if (create_statement.ttl != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(TranslateRowDeletionPolicy(
+    GOOGLESQL_RETURN_IF_ERROR(TranslateRowDeletionPolicy(
         *create_statement.ttl, *out.mutable_row_deletion_policy()));
   }
 
@@ -2141,8 +2159,8 @@ absl::Status
 PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTableAlterIdentity(
     const AlterTableStmt& alter_statement, const AlterTableCmd& first_cmd,
     const TranslationOptions& options, google::spanner::emulator::backend::ddl::AlterTable& out) const {
-  ZETASQL_RET_CHECK_EQ(alter_statement.objtype, OBJECT_TABLE);
-  ZETASQL_RET_CHECK_EQ(first_cmd.subtype, AT_SetIdentity);
+  GOOGLESQL_RET_CHECK_EQ(alter_statement.objtype, OBJECT_TABLE);
+  GOOGLESQL_RET_CHECK_EQ(first_cmd.subtype, AT_SetIdentity);
   if (!options.enable_identity_column) {
     return UnsupportedTranslationError(
         "Identity option altering is not supported in <ALTER TABLE ... "
@@ -2158,35 +2176,35 @@ PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTableAlterIdentity(
   // in analyzer.
   alter_column->mutable_column()->set_type(
       google::spanner::emulator::backend::ddl::ColumnDefinition::NONE);
-  ZETASQL_ASSIGN_OR_RETURN(const List* alter_options,
+  GOOGLESQL_ASSIGN_OR_RETURN(const List* alter_options,
                    (DowncastNode<List, T_List>(first_cmd.def)));
   // We currently support altering only one option at a time, so get the
   // first and only option.
-  ZETASQL_ASSIGN_OR_RETURN(const DefElem* elem,
+  GOOGLESQL_ASSIGN_OR_RETURN(const DefElem* elem,
                    (GetListItemAsNode<DefElem, T_DefElem>(alter_options, 0)));
   absl::string_view name = elem->defname;
   if (name == "skip_range") {
     alter_column->set_identity_alter_skip_range(true);
     if (elem->arg != nullptr) {
-      ZETASQL_ASSIGN_OR_RETURN(const List* skip_range,
+      GOOGLESQL_ASSIGN_OR_RETURN(const List* skip_range,
                        (DowncastNode<List, T_List>(elem->arg)));
 
       Node* skip_range_min = PostgresCastToNode(linitial(skip_range));
       char min_name[] = "skip_range_min";
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           DefElem * min_elem,
           CheckedPgMakeDefElem(min_name, skip_range_min, elem->location));
-      ZETASQL_ASSIGN_OR_RETURN(int64_t min_int64, CheckedPgDefGetInt64(min_elem));
+      GOOGLESQL_ASSIGN_OR_RETURN(int64_t min_int64, CheckedPgDefGetInt64(min_elem));
       alter_column->mutable_column()
           ->mutable_identity_column()
           ->set_skip_range_min(min_int64);
 
       Node* skip_range_max = PostgresCastToNode(lsecond(skip_range));
       char max_name[] = "skip_range_max";
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           DefElem * max_elem,
           CheckedPgMakeDefElem(max_name, skip_range_max, elem->location));
-      ZETASQL_ASSIGN_OR_RETURN(int64_t max_int64, CheckedPgDefGetInt64(max_elem));
+      GOOGLESQL_ASSIGN_OR_RETURN(int64_t max_int64, CheckedPgDefGetInt64(max_elem));
       alter_column->mutable_column()
           ->mutable_identity_column()
           ->set_skip_range_max(max_int64);
@@ -2209,8 +2227,8 @@ absl::Status
 PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTableRestartCounter(
     const AlterTableStmt& alter_statement, const AlterTableCmd& first_cmd,
     const TranslationOptions& options, google::spanner::emulator::backend::ddl::AlterTable& out) const {
-  ZETASQL_RET_CHECK_EQ(alter_statement.objtype, OBJECT_TABLE);
-  ZETASQL_RET_CHECK_EQ(first_cmd.subtype, AT_RestartCounter);
+  GOOGLESQL_RET_CHECK_EQ(alter_statement.objtype, OBJECT_TABLE);
+  GOOGLESQL_RET_CHECK_EQ(first_cmd.subtype, AT_RestartCounter);
   if (!options.enable_identity_column) {
     return UnsupportedTranslationError(
         "Identity option altering is not supported in <ALTER TABLE ... "
@@ -2230,9 +2248,9 @@ PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTableRestartCounter(
   // Can not use the DowncastNode because the type tag could be either
   // T_INTEGER or T_FLOAT.
   char restart_counter_name[] = "restart_counter";
-  ZETASQL_ASSIGN_OR_RETURN(DefElem * elem, CheckedPgMakeDefElem(restart_counter_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(DefElem * elem, CheckedPgMakeDefElem(restart_counter_name,
                                                         first_cmd.def, 0));
-  ZETASQL_ASSIGN_OR_RETURN(int64_t restart_counter_int64, CheckedPgDefGetInt64(elem));
+  GOOGLESQL_ASSIGN_OR_RETURN(int64_t restart_counter_int64, CheckedPgDefGetInt64(elem));
   alter_column->mutable_column()
       ->mutable_identity_column()
       ->set_start_with_counter(restart_counter_int64);
@@ -2242,23 +2260,27 @@ PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTableRestartCounter(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
     const AlterTableStmt& alter_statement, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::AlterTable& out) const {
-  ZETASQL_RET_CHECK_EQ(alter_statement.objtype, OBJECT_TABLE);
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_statement, options));
+  GOOGLESQL_RET_CHECK_EQ(alter_statement.objtype, OBJECT_TABLE);
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_statement, options));
 
-  ZETASQL_ASSIGN_OR_RETURN(*out.mutable_table_name(),
+  GOOGLESQL_ASSIGN_OR_RETURN(*out.mutable_table_name(),
                    GetTableName(*alter_statement.relation, "ALTER TABLE"));
 
-  ZETASQL_ASSIGN_OR_RETURN(const AlterTableCmd* first_cmd,
+  GOOGLESQL_ASSIGN_OR_RETURN(const AlterTableCmd* first_cmd,
                    (GetListItemAsNode<AlterTableCmd, T_AlterTableCmd>(
                        alter_statement.cmds, 0)));
+
+  if (alter_statement.missing_ok) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
+  }
 
   switch (first_cmd->subtype) {
     case AT_AddColumn: {
       TableContext context;
 
-      ZETASQL_ASSIGN_OR_RETURN(const ColumnDef* column,
+      GOOGLESQL_ASSIGN_OR_RETURN(const ColumnDef* column,
                        (DowncastNode<ColumnDef, T_ColumnDef>(first_cmd->def)));
-      ZETASQL_RETURN_IF_ERROR(TranslateColumnDefinition(
+      GOOGLESQL_RETURN_IF_ERROR(TranslateColumnDefinition(
           *column, options, context,
           *out.mutable_add_column()->mutable_column()));
 
@@ -2310,10 +2332,10 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
     }
 
     case AT_AddConstraint: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const Constraint* constraint,
           (DowncastNode<Constraint, T_Constraint>(first_cmd->def)));
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           ValidateParseTreeNode(*constraint, /*add_in_alter=*/true, options));
 
       if (!constraint->initially_valid && constraint->skip_validation) {
@@ -2324,19 +2346,19 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
 
       switch (constraint->contype) {
         case CONSTR_FOREIGN:
-          ZETASQL_RETURN_IF_ERROR(TranslateForeignKey(
+          GOOGLESQL_RETURN_IF_ERROR(TranslateForeignKey(
               *constraint, /*target_column=*/nullptr,
               *out.mutable_add_foreign_key()->mutable_foreign_key()));
           break;
 
         case CONSTR_CHECK:
-          ZETASQL_RETURN_IF_ERROR(TranslateCheckConstraint(
+          GOOGLESQL_RETURN_IF_ERROR(TranslateCheckConstraint(
               *constraint, options,
               *out.mutable_add_check_constraint()->mutable_check_constraint()));
           break;
 
         default:
-          ZETASQL_RET_CHECK_FAIL() << "Constraint type should have been validated "
+          GOOGLESQL_RET_CHECK_FAIL() << "Constraint type should have been validated "
                               "separately in ValidateParseTreeNode";
       }
 
@@ -2361,13 +2383,13 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
           out.mutable_alter_column()->mutable_column();
 
       out_column->set_column_name(first_cmd->name);
-      ZETASQL_ASSIGN_OR_RETURN(const ColumnDef* column_def,
+      GOOGLESQL_ASSIGN_OR_RETURN(const ColumnDef* column_def,
                        (DowncastNode<ColumnDef, T_ColumnDef>(first_cmd->def)));
       const TypeName* t = column_def->typeName;
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           ProcessColumnTypeWithAttributes(*t, options, *out_column));
       if (list_length(alter_statement.cmds) == 2) {
-        ZETASQL_ASSIGN_OR_RETURN(const AlterTableCmd* second_cmd,
+        GOOGLESQL_ASSIGN_OR_RETURN(const AlterTableCmd* second_cmd,
                          (GetListItemAsNode<AlterTableCmd, T_AlterTableCmd>(
                              alter_statement.cmds, 1)));
         out_column->set_not_null(second_cmd->subtype == AT_SetNotNull);
@@ -2392,7 +2414,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
       } else {
         alter_column->set_operation(
             google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::SET_DEFAULT);
-        ZETASQL_ASSIGN_OR_RETURN(std::string serialized_expression,
+        GOOGLESQL_ASSIGN_OR_RETURN(std::string serialized_expression,
                          CheckedPgNodeToString(first_cmd->def));
         google::spanner::emulator::backend::ddl::SQLExpressionOrigin* expression_origin =
             alter_column->mutable_column()
@@ -2423,7 +2445,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
       } else {
         alter_column->set_operation(
             google::spanner::emulator::backend::ddl::AlterTable::AlterColumn::SET_ON_UPDATE);
-        ZETASQL_ASSIGN_OR_RETURN(std::string serialized_expression,
+        GOOGLESQL_ASSIGN_OR_RETURN(std::string serialized_expression,
                          CheckedPgNodeToString(first_cmd->def));
         google::spanner::emulator::backend::ddl::SQLExpressionOrigin* expression_origin =
             alter_column->mutable_column()
@@ -2483,13 +2505,13 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
     }
 
     case AT_AddTtl: {
-      ZETASQL_ASSIGN_OR_RETURN(const Ttl* ttl,
+      GOOGLESQL_ASSIGN_OR_RETURN(const Ttl* ttl,
                        (DowncastNode<Ttl, T_Ttl>(first_cmd->def)));
       return TranslateRowDeletionPolicy(*ttl,
                                         *out.mutable_add_row_deletion_policy());
     }
     case AT_AlterTtl: {
-      ZETASQL_ASSIGN_OR_RETURN(const Ttl* ttl,
+      GOOGLESQL_ASSIGN_OR_RETURN(const Ttl* ttl,
                        (DowncastNode<Ttl, T_Ttl>(first_cmd->def)));
       return TranslateRowDeletionPolicy(
           *ttl, *out.mutable_alter_row_deletion_policy());
@@ -2512,11 +2534,11 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
             "<ALTER TABLE ... SET INTERLEAVE IN> statement is not supported.");
       }
 
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const InterleaveSpec* interleavespec,
           (DowncastNode<InterleaveSpec, T_InterleaveSpec>(first_cmd->def)));
 
-      ZETASQL_RETURN_IF_ERROR(TranslateInterleaveIn(
+      GOOGLESQL_RETURN_IF_ERROR(TranslateInterleaveIn(
           interleavespec,
           out.mutable_set_interleave_clause()->mutable_interleave_clause(),
           options));
@@ -2568,7 +2590,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterTable(
     }
 
     default: {
-      ZETASQL_RET_CHECK_FAIL() << "Unknown command type in <ALTER TABLE> statement.";
+      GOOGLESQL_RET_CHECK_FAIL() << "Unknown command type in <ALTER TABLE> statement.";
     }
   }
 
@@ -2583,10 +2605,10 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::UnsupportedTranslationError(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateDatabase(
     const CreatedbStmt& create_statement,
     google::spanner::emulator::backend::ddl::CreateDatabase& out) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_statement));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_statement));
 
   *out.mutable_db_name() = create_statement.dbname;
-  ZETASQL_RET_CHECK(!out.db_name().empty());
+  GOOGLESQL_RET_CHECK(!out.db_name().empty());
 
   return absl::OkStatus();
 }
@@ -2594,7 +2616,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateDatabase(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropStatement(
     const DropStmt& drop_statement, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::DDLStatement& out) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(drop_statement, options));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(drop_statement, options));
 
   switch (drop_statement.removeType) {
     case OBJECT_TABLE:
@@ -2632,7 +2654,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropStatement(
                                    *out.mutable_drop_sequence());
     // TODO: expose when queue is implemented.
     default:
-      ZETASQL_RET_CHECK_FAIL()
+      GOOGLESQL_RET_CHECK_FAIL()
           << "removeType should have been validated in ValidateTreeNode.";
   }
 }
@@ -2646,18 +2668,18 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropChangeStream(
         "<DROP CHANGE STREAM> statement is not supported.");
   }
 
-  ZETASQL_RET_CHECK_EQ(drop_change_stream_statement.removeType, OBJECT_CHANGE_STREAM);
+  GOOGLESQL_RET_CHECK_EQ(drop_change_stream_statement.removeType, OBJECT_CHANGE_STREAM);
   if (drop_change_stream_statement.missing_ok) {
     out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
   }
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       const RangeVar* changestream_to_drop_node,
       (SingleItemListAsNode<RangeVar, T_RangeVar>(
           drop_change_stream_statement.objects)));
-  ZETASQL_RET_CHECK(changestream_to_drop_node->relname &&
+  GOOGLESQL_RET_CHECK(changestream_to_drop_node->relname &&
             *changestream_to_drop_node->relname != '\0');
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::string change_stream_name,
       GetChangeStreamTableName(*changestream_to_drop_node,
                                "DROP CHANGE STREAM"));
@@ -2673,19 +2695,19 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSearchIndex(
     return UnsupportedTranslationError(
         "<DROP SEARCH INDEX> statement is not supported.");
   }
-  ZETASQL_RET_CHECK_EQ(drop_search_index_statement.removeType, OBJECT_SEARCH_INDEX);
+  GOOGLESQL_RET_CHECK_EQ(drop_search_index_statement.removeType, OBJECT_SEARCH_INDEX);
 
-  ZETASQL_ASSIGN_OR_RETURN(const List* search_index_to_drop_list,
+  GOOGLESQL_ASSIGN_OR_RETURN(const List* search_index_to_drop_list,
                    (SingleItemListAsNode<List, T_List>(
                        drop_search_index_statement.objects)));
 
   // Caller should have called ValidateParseTreeNode, which ensures the size of
   // search_index_to_drop_list is 1 or 2.
   if (search_index_to_drop_list->length == 2) {
-    ZETASQL_ASSIGN_OR_RETURN(const String* schema_to_drop_node,
+    GOOGLESQL_ASSIGN_OR_RETURN(const String* schema_to_drop_node,
                      (GetListItemAsNode<String, T_String>)(
                          search_index_to_drop_list, 0));
-    ZETASQL_ASSIGN_OR_RETURN(const String* search_index_to_drop_node,
+    GOOGLESQL_ASSIGN_OR_RETURN(const String* search_index_to_drop_node,
                      (GetListItemAsNode<String, T_String>)(
                          search_index_to_drop_list, 1));
     if (strcmp(schema_to_drop_node->sval, "public") != 0) {
@@ -2696,9 +2718,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSearchIndex(
       *out.mutable_index_name() = absl::StrCat(search_index_to_drop_node->sval);
     }
   } else {
-    ZETASQL_RET_CHECK_EQ(search_index_to_drop_list->length, 1)
+    GOOGLESQL_RET_CHECK_EQ(search_index_to_drop_list->length, 1)
         << "Incorrect number of name components in drop target.";
-    ZETASQL_ASSIGN_OR_RETURN(const String* search_index_to_drop_node,
+    GOOGLESQL_ASSIGN_OR_RETURN(const String* search_index_to_drop_node,
                      (SingleItemListAsNode<String, T_String>)(
                          search_index_to_drop_list));
     *out.mutable_index_name() = search_index_to_drop_node->sval;
@@ -2718,14 +2740,14 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropLocalityGroup(
     return UnsupportedTranslationError(
         "<DROP LOCALITY GROUP> statement is not supported.");
   }
-  ZETASQL_RET_CHECK_EQ(drop_locality_group_statement.removeType, OBJECT_LOCALITY_GROUP);
+  GOOGLESQL_RET_CHECK_EQ(drop_locality_group_statement.removeType, OBJECT_LOCALITY_GROUP);
   if (drop_locality_group_statement.missing_ok) {
     out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
   }
-  ZETASQL_ASSIGN_OR_RETURN(const RangeVar* locality_group_to_drop_node,
+  GOOGLESQL_ASSIGN_OR_RETURN(const RangeVar* locality_group_to_drop_node,
                    (SingleItemListAsNode<RangeVar, T_RangeVar>(
                        drop_locality_group_statement.objects)));
-  ZETASQL_ASSIGN_OR_RETURN(std::string locality_group_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string locality_group_name,
                    GetLocalityGroupName(*locality_group_to_drop_node,
                                         "DROP LOCALITY GROUP"));
   out.set_locality_group_name(locality_group_name);
@@ -2736,10 +2758,10 @@ absl::Status TranslateDropFunctionOrView(const DropStmt& drop_statement,
                                          const List* name_parts_node_list,
                                          google::spanner::emulator::backend::ddl::DropFunction& out) {
   if (name_parts_node_list->length == 2) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const String* name_node,
         (GetListItemAsNode<String, T_String>)(name_parts_node_list, 0));
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const String* function_to_drop_node,
         (GetListItemAsNode<String, T_String>)(name_parts_node_list, 1));
     if (strcmp(name_node->sval, "public") != 0) {
@@ -2749,14 +2771,14 @@ absl::Status TranslateDropFunctionOrView(const DropStmt& drop_statement,
       *out.mutable_function_name() = function_to_drop_node->sval;
     }
   } else if (name_parts_node_list->length == 1) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const String* name_node,
         (SingleItemListAsNode<String, T_String>)(name_parts_node_list));
     *out.mutable_function_name() = name_node->sval;
   } else {
     // Caller should have called ValidateParseTreeNode, which ensures the size
     // of name_parts_node_list is 1 or 2. So this should never be reached.
-    ZETASQL_RET_CHECK_FAIL() << "Incorrect number of name components in drop target: "
+    GOOGLESQL_RET_CHECK_FAIL() << "Incorrect number of name components in drop target: "
                      << name_parts_node_list->length;
   }
 
@@ -2774,11 +2796,11 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropFunction(
     return UnsupportedTranslationError(
         "<DROP FUNCTION> statement is not supported.");
   }
-  ZETASQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_FUNCTION);
+  GOOGLESQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_FUNCTION);
 
   out.set_function_kind(google::spanner::emulator::backend::ddl::Function::FUNCTION);
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       const ObjectWithArgs* object_with_args,
       (SingleItemListAsNode<ObjectWithArgs, T_ObjectWithArgs>)(drop_statement
                                                                    .objects));
@@ -2789,9 +2811,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropFunction(
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropView(
     const DropStmt& drop_statement, google::spanner::emulator::backend::ddl::DropFunction& out) const {
-  ZETASQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_VIEW);
+  GOOGLESQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_VIEW);
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       const List* view_to_drop_list,
       (SingleItemListAsNode<List, T_List>)(drop_statement.objects));
 
@@ -2803,19 +2825,19 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropView(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropTable(
     const DropStmt& drop_statement, google::spanner::emulator::backend::ddl::DropTable& out,
     const TranslationOptions& options) const {
-  ZETASQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_TABLE);
+  GOOGLESQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_TABLE);
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       const List* table_to_drop_list,
       (SingleItemListAsNode<List, T_List>(drop_statement.objects)));
 
   // Caller should have called ValidateParseTreeNode, which ensures the size of
   // table_to_drop_list is 1 or 2.
   if (table_to_drop_list->length == 2) {
-    ZETASQL_ASSIGN_OR_RETURN(const String* schema_to_drop_node,
+    GOOGLESQL_ASSIGN_OR_RETURN(const String* schema_to_drop_node,
                      (GetListItemAsNode<String, T_String>)(
                          table_to_drop_list, 0));
-    ZETASQL_ASSIGN_OR_RETURN(const String* table_to_drop_node,
+    GOOGLESQL_ASSIGN_OR_RETURN(const String* table_to_drop_node,
                      (GetListItemAsNode<String, T_String>)(
                          table_to_drop_list, 1));
     if (strcmp(schema_to_drop_node->sval, "public") != 0) {
@@ -2826,9 +2848,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropTable(
       *out.mutable_table_name() = absl::StrCat(table_to_drop_node->sval);
     }
   } else {
-    ZETASQL_RET_CHECK_EQ(table_to_drop_list->length, 1)
+    GOOGLESQL_RET_CHECK_EQ(table_to_drop_list->length, 1)
         << "Incorrect number of name components in drop target.";
-    ZETASQL_ASSIGN_OR_RETURN(const String* table_to_drop_node,
+    GOOGLESQL_ASSIGN_OR_RETURN(const String* table_to_drop_node,
                      (SingleItemListAsNode<String, T_String>)(
                          table_to_drop_list));
     *out.mutable_table_name() = table_to_drop_node->sval;
@@ -2845,7 +2867,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateIndex(
     const IndexStmt& create_index_statement, const TranslationOptions&
     options, google::spanner::emulator::backend::ddl::CreateIndex& out) const {
   CreateIndexStatementTranslator translator(*this, options);
-  ZETASQL_RETURN_IF_ERROR(translator.Translate(create_index_statement, out,
+  GOOGLESQL_RETURN_IF_ERROR(translator.Translate(create_index_statement, out,
   options)); return absl::OkStatus();
 }
 
@@ -2856,30 +2878,30 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterIndex(
     return UnsupportedTranslationError("<ALTER INDEX> is not supported.");
   }
 
-  ZETASQL_RET_CHECK_EQ(alter_index_statement.objtype, OBJECT_INDEX);
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_index_statement, options));
+  GOOGLESQL_RET_CHECK_EQ(alter_index_statement.objtype, OBJECT_INDEX);
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_index_statement, options));
 
   CreateIndexStatementTranslator translator(*this, options);
-  ZETASQL_RETURN_IF_ERROR(translator.Translate(alter_index_statement, out));
+  GOOGLESQL_RETURN_IF_ERROR(translator.Translate(alter_index_statement, out));
   return absl::OkStatus();
 }
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropIndex(
     const DropStmt& drop_statement, google::spanner::emulator::backend::ddl::DropIndex& out,
     const TranslationOptions& options) const {
-  ZETASQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_INDEX);
+  GOOGLESQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_INDEX);
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       const List* index_to_drop_list,
       (SingleItemListAsNode<List, T_List>)(drop_statement.objects));
 
   // Caller should have called ValidateParseTreeNode, which ensures the size of
   // index_to_drop_list is 1 or 2.
   if (index_to_drop_list->length == 2) {
-    ZETASQL_ASSIGN_OR_RETURN(const String* schema_to_drop_node,
+    GOOGLESQL_ASSIGN_OR_RETURN(const String* schema_to_drop_node,
                      (GetListItemAsNode<String, T_String>)(
                          index_to_drop_list, 0));
-    ZETASQL_ASSIGN_OR_RETURN(const String* index_to_drop_node,
+    GOOGLESQL_ASSIGN_OR_RETURN(const String* index_to_drop_node,
                      (GetListItemAsNode<String, T_String>)(
                          index_to_drop_list, 1));
     if (strcmp(schema_to_drop_node->sval, "public") != 0) {
@@ -2890,9 +2912,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropIndex(
       *out.mutable_index_name() = absl::StrCat(index_to_drop_node->sval);
     }
   } else {
-    ZETASQL_RET_CHECK_EQ(index_to_drop_list->length, 1)
+    GOOGLESQL_RET_CHECK_EQ(index_to_drop_list->length, 1)
         << "Incorrect number of name components in drop target.";
-    ZETASQL_ASSIGN_OR_RETURN(const String* index_to_drop_node,
+    GOOGLESQL_ASSIGN_OR_RETURN(const String* index_to_drop_node,
                      (SingleItemListAsNode<String, T_String>)(
                          index_to_drop_list));
     *out.mutable_index_name() = index_to_drop_node->sval;
@@ -2908,7 +2930,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropIndex(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateSchema(
     const CreateSchemaStmt& create_statement,
     google::spanner::emulator::backend::ddl::CreateSchema& out) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_statement));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_statement));
 
   if (internal::IsReservedName(create_statement.schemaname)) {
     return absl::InvalidArgumentError(
@@ -2930,9 +2952,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateSchema(
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSchema(
     const DropStmt& drop_statement, google::spanner::emulator::backend::ddl::DropSchema& out) const {
-  ZETASQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_SCHEMA);
+  GOOGLESQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_SCHEMA);
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       const String* schema_to_drop_node,
       (SingleItemListAsNode<String, T_String>)(drop_statement.objects));
 
@@ -2948,7 +2970,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSchema(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterDatabase(
     const AlterDatabaseSetStmt& alter_statement,
     const TranslationOptions& options, google::spanner::emulator::backend::ddl::AlterDatabase& out) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_statement));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_statement));
 
   const VariableSetStmt* set_statement = alter_statement.setstmt;
 
@@ -2957,15 +2979,15 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterDatabase(
 
   switch (set_statement->kind) {
     case VAR_SET_VALUE: {
-      ZETASQL_ASSIGN_OR_RETURN(internal::PGAlterOption option,
+      GOOGLESQL_ASSIGN_OR_RETURN(internal::PGAlterOption option,
                        TranslateOption(set_statement->name, options));
 
       opt->set_option_name(option.SpannerName());
 
-      ZETASQL_RET_CHECK(!IsListEmpty(set_statement->args))
+      GOOGLESQL_RET_CHECK(!IsListEmpty(set_statement->args))
           << "Option value is missing.";
 
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const A_Const* arg,
           (SingleItemListAsNode<A_Const, T_A_Const>)(set_statement->args));
 
@@ -2996,13 +3018,13 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterDatabase(
 
     case VAR_SET_DEFAULT:
     case VAR_RESET: {
-      ZETASQL_ASSIGN_OR_RETURN(internal::PGAlterOption option,
+      GOOGLESQL_ASSIGN_OR_RETURN(internal::PGAlterOption option,
                        TranslateOption(set_statement->name, options));
 
       opt->set_option_name(option.SpannerName());
 
       opt->set_null_value(true);
-      ZETASQL_RET_CHECK(IsListEmpty(set_statement->args));
+      GOOGLESQL_RET_CHECK(IsListEmpty(set_statement->args));
       break;
     }
 
@@ -3024,7 +3046,227 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateVacuum(
     return UnsupportedTranslationError("<ANALYZE> statement is not supported.");
   }
 
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(vacuum_statement));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(vacuum_statement));
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateFunction(
+    const CreateFunctionStmt& function_statement,
+    const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::CreateFunction& out) const {
+  if (!options.enable_create_function) {
+    return UnsupportedTranslationError(
+        "<CREATE FUNCTION> statement is not supported.");
+  }
+
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(function_statement));
+
+  std::vector<std::string> function_name_parts;
+  for (String* function_name_part :
+       StructList<String*>(function_statement.funcname)) {
+    function_name_parts.push_back(function_name_part->sval);
+  }
+  out.set_function_name(absl::StrJoin(function_name_parts, "."));
+
+  out.set_function_kind(google::spanner::emulator::backend::ddl::Function_Kind_FUNCTION);
+  out.set_is_or_replace(function_statement.replace);
+  google::spanner::emulator::backend::ddl::Function_SqlSecurity sql_security = google::spanner::emulator::backend::ddl::
+      Function_SqlSecurity::Function_SqlSecurity_UNSPECIFIED_SQL_SECURITY;
+  absl::optional<Function::Determinism> determinism = absl::nullopt;
+  GOOGLESQL_RETURN_IF_ERROR(PopulateFunctionOptions(
+      function_statement.options, out.function_name(), &sql_security,
+      &determinism, options));
+  if (sql_security != google::spanner::emulator::backend::ddl::Function_SqlSecurity::
+                          Function_SqlSecurity_UNSPECIFIED_SQL_SECURITY) {
+    out.set_sql_security(sql_security);
+  }
+  if (determinism.has_value()) {
+    out.set_determinism(determinism.value());
+  }
+
+  // Note that the parameter default naming convention is 1-based.
+  int param_index = 0;
+  absl::flat_hash_set<std::string> seen_param_names;
+  for (FunctionParameter* param :
+       StructList<FunctionParameter*>(function_statement.parameters)) {
+    ++param_index;
+    google::spanner::emulator::backend::ddl::Function_Parameter* param_out = out.add_param();
+    // If the parameter has a name, use it. Otherwise, set the name as the
+    // stringified parameter index - e.g. `$1`.
+    if (param->name != nullptr) {
+      if (seen_param_names.contains(param->name)) {
+        return absl::InvalidArgumentError(
+            absl::Substitute("Duplicate parameter name '$0' in CREATE "
+                             "FUNCTION statement.",
+                             param->name));
+      }
+      seen_param_names.insert(param->name);
+      param_out->set_name(param->name);
+    } else {
+      param_out->set_name(GetUdfParameterName(param_index));
+    }
+    const TypeName* t = param->argType;
+    GOOGLESQL_ASSIGN_OR_RETURN(*param_out->mutable_param_typename(),
+                     PgTypeNameToGoogleSqlString(*t, options));
+    if (param->def_expr_string != nullptr) {
+      param_out->mutable_default_value_origin()->set_original_expression(
+          param->def_expr_string);
+    }
+  }
+  const TypeName* t = function_statement.returnType;
+  GOOGLESQL_ASSIGN_OR_RETURN(*out.mutable_return_typename(),
+                   PgTypeNameToGoogleSqlString(*t, options));
+  absl::string_view routine_body_string =
+      function_statement.routine_body_string;
+  std::string* sql_body_origin =
+      out.mutable_sql_body_origin()->mutable_original_expression();
+  if (!RE2::FullMatch(routine_body_string, R"((?is)return\s+(.*))",
+                      sql_body_origin)) {
+    if (RE2::FullMatch(routine_body_string, R"((?i)begin\s+atomic\s+.*)")) {
+      return UnsupportedTranslationError(
+          "<CREATE FUNCTION> statement with block SQL body is not supported.");
+    }
+    return UnsupportedTranslationError(
+        "<CREATE FUNCTION> statement without a SQL body is not supported.");
+  }
+  return absl::OkStatus();
+}
+
+std::string PostgreSQLToSpannerDDLTranslatorImpl::PrintAsSpannerType(
+    google::spanner::emulator::backend::ddl::ColumnDefinition const& column) const {
+  std::string type_name;
+  if (column.type() == google::spanner::emulator::backend::ddl::ColumnDefinition::ARRAY) {
+    std::string subtype_name = ::google::spanner::emulator::backend::ddl::ColumnDefinition_Type_Name(
+        column.array_subtype().type());
+    type_name = absl::StrCat("ARRAY<", subtype_name, ">");
+  } else {
+    type_name = ::google::spanner::emulator::backend::ddl::ColumnDefinition_Type_Name(column.type());
+  }
+  return type_name;
+}
+
+// TODO: Remove after type refactoring.
+absl::StatusOr<std::string> SpannerSdlTypeEnumNameToGoogleSqlTypeName(
+    const std::string& sdl_enum_name) {
+  // Handle special Spangres extended types
+  if (sdl_enum_name == "PG_NUMERIC") {
+    return "PG.NUMERIC";
+  }
+  if (sdl_enum_name == "PG_JSONB") {
+    return "PG.JSONB";
+  }
+  if (sdl_enum_name == "PG_OID") {
+    return "PG.OID";
+  }
+  GOOGLESQL_RET_CHECK(!absl::StartsWith(sdl_enum_name, "PG_"))
+      << "Unexpected type name: " << sdl_enum_name;
+
+  if (sdl_enum_name == "FLOAT") {
+    return "FLOAT32";
+  }
+  if (sdl_enum_name == "DOUBLE") {
+    return "FLOAT64";
+  }
+
+  // For standard types, the enum name usually matches the GoogleSQL name (e.g.,
+  // "INT64", "STRING") The current logic handles arrays, this function assumes
+  // the input is a non-array name.
+  return sdl_enum_name;
+}
+
+absl::StatusOr<std::string>
+PostgreSQLToSpannerDDLTranslatorImpl::PgTypeNameToGoogleSqlString(
+    const TypeName& type, const TranslationOptions& options) const {
+  google::spanner::emulator::backend::ddl::ColumnDefinition column;
+  GOOGLESQL_RETURN_IF_ERROR(ProcessColumnTypeWithAttributes(type, options, column));
+  std::string type_name = PrintAsSpannerType(column);
+  if (absl::StartsWith(type_name, "ARRAY<") && absl::EndsWith(type_name, ">")) {
+    std::string array_type_name = type_name.substr(6, type_name.size() - 7);
+    GOOGLESQL_ASSIGN_OR_RETURN(array_type_name, SpannerSdlTypeEnumNameToGoogleSqlTypeName(
+                                          array_type_name));
+    type_name = absl::StrCat("ARRAY<", array_type_name, ">");
+  } else {
+    GOOGLESQL_ASSIGN_OR_RETURN(type_name,
+                     SpannerSdlTypeEnumNameToGoogleSqlTypeName(type_name));
+  }
+  return type_name;
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulateFunctionOptions(
+    List* opt_options, absl::string_view function_name,
+    google::spanner::emulator::backend::ddl::Function_SqlSecurity* sql_security,
+    absl::optional<Function::Determinism>* determinism,
+    const TranslationOptions& options) const {
+  absl::flat_hash_set<std::string> seen_options;
+  for (DefElem* def_elem : StructList<DefElem*>(opt_options)) {
+    if (def_elem == nullptr || def_elem->arg == nullptr || !def_elem->defname ||
+        *def_elem->defname == '\0') {
+      return absl::InvalidArgumentError(
+          absl::Substitute("Failed to parse function option correctly in "
+                           "CREATE FUNCTION statement for '$0'.",
+                           function_name));
+    }
+    if (seen_options.contains(def_elem->defname)) {
+      return absl::InvalidArgumentError(
+          absl::Substitute("Contains duplicate function option '$0' in CREATE "
+                           "FUNCTION statement.",
+                           def_elem->defname));
+    }
+    seen_options.insert(def_elem->defname);
+    if (def_elem->defname ==
+        internal::PostgreSQLConstants::kFunctionAsOptionName) {
+      return absl::InvalidArgumentError(absl::Substitute(
+          "Function body defined in AS clause is not supported."));
+    } else if (def_elem->defname ==
+               internal::PostgreSQLConstants::kFunctionSecurityOptionName) {
+      if (def_elem->arg->type != T_Boolean) {
+        return absl::InvalidArgumentError(
+            absl::Substitute("Failed to provide valid option value for '$0' in "
+                             "CREATE FUNCTION statement.",
+                             def_elem->defname));
+      }
+      GOOGLESQL_ASSIGN_OR_RETURN(const Boolean* arg_value,
+                       (DowncastNode<Boolean, T_Boolean>(def_elem->arg)));
+      if (arg_value->boolval) {
+        return absl::InvalidArgumentError(
+            "Security value DEFINER is not supported in CREATE FUNCTION "
+            "statement.");
+      } else {
+        *sql_security =
+            google::spanner::emulator::backend::ddl::Function_SqlSecurity::Function_SqlSecurity_INVOKER;
+      }
+    } else if (def_elem->defname == internal::PostgreSQLConstants::
+                                        kFunctionVolatilityOptionName ||
+               def_elem->defname ==
+                   internal::PostgreSQLConstants::kFunctionLanguageOptionName) {
+      if (def_elem->arg->type != T_String) {
+        return absl::InvalidArgumentError(
+            absl::Substitute("Failed to provide valid option value for '$0' in "
+                             "CREATE FUNCTION statement.",
+                             def_elem->defname));
+      }
+      GOOGLESQL_ASSIGN_OR_RETURN(const String* arg_value,
+                       (DowncastNode<String, T_String>(def_elem->arg)));
+      if (def_elem->defname ==
+          internal::PostgreSQLConstants::kFunctionLanguageOptionName) {
+        if (strcmp(arg_value->sval, "sql") == 0) {
+          // Only SQL language is supported, ignore.
+          continue;
+        } else {
+          return absl::InvalidArgumentError(
+              absl::Substitute("Unsupported option value '$0' for '$1' in "
+                               "CREATE FUNCTION statement.",
+                               arg_value->sval, def_elem->defname));
+        }
+      }
+      GOOGLESQL_RETURN_IF_ERROR(GetFunctionDeterminism(arg_value->sval, determinism));
+    } else {
+      return UnsupportedTranslationError(
+          absl::Substitute("Unsupported option value in function option "
+                           "'$0' in CREATE FUNCTION statement.",
+                           def_elem->defname));
+    }
+  }
   return absl::OkStatus();
 }
 
@@ -3036,7 +3278,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateView(
         "<CREATE VIEW> statement is not supported.");
   }
 
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(view_statement));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(view_statement));
 
   out.set_function_kind(google::spanner::emulator::backend::ddl::Function_Kind_VIEW);
   out.set_is_or_replace(view_statement.replace);
@@ -3057,10 +3299,10 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterChangeStream(
     return UnsupportedTranslationError(
         "<ALTER CHANGE STREAM> statement is not supported.");
   }
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_change_stream_stmt));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_change_stream_stmt));
 
   // Populate the change stream name.
-  ZETASQL_ASSIGN_OR_RETURN(std::string change_stream_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string change_stream_name,
                    GetChangeStreamTableName(
                        *alter_change_stream_stmt.change_stream_name,
                        "ALTER CHANGE STREAM"));
@@ -3069,7 +3311,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterChangeStream(
   // Change stream set for clause.
   if (alter_change_stream_stmt.opt_for_tables != nullptr ||
       alter_change_stream_stmt.for_all) {
-    ZETASQL_RETURN_IF_ERROR(PopulateChangeStreamForClause(
+    GOOGLESQL_RETURN_IF_ERROR(PopulateChangeStreamForClause(
         alter_change_stream_stmt.opt_for_tables,
         alter_change_stream_stmt.for_all, "ALTER CHANGE STREAM",
         out.mutable_set_for_clause()));
@@ -3081,7 +3323,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterChangeStream(
         "Only DROP FOR ALL is supported for now.");
   }
   if (alter_change_stream_stmt.drop_for_all) {
-    ZETASQL_RETURN_IF_ERROR(PopulateChangeStreamForClause(
+    GOOGLESQL_RETURN_IF_ERROR(PopulateChangeStreamForClause(
         alter_change_stream_stmt.opt_drop_for_tables,
         alter_change_stream_stmt.drop_for_all, "ALTER CHANGE STREAM",
         out.mutable_drop_for_clause()));
@@ -3089,7 +3331,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterChangeStream(
 
   // Populate the change stream options, if any.
   if (alter_change_stream_stmt.opt_options != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(PopulateChangeStreamOptions(
+    GOOGLESQL_RETURN_IF_ERROR(PopulateChangeStreamOptions(
         alter_change_stream_stmt.opt_options, "ALTER CHANGE STREAM",
         out.mutable_set_options()->mutable_options(), options));
   }
@@ -3098,9 +3340,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterChangeStream(
   if (alter_change_stream_stmt.opt_reset_options != nullptr) {
     for (const String* option_name :
          StructList<String*>(alter_change_stream_stmt.opt_reset_options)) {
-      ZETASQL_RET_CHECK_EQ(option_name->type, T_String);
-      ZETASQL_RET_CHECK_NE(option_name->sval, nullptr);
-      ZETASQL_RET_CHECK_NE(*option_name->sval, '\0');
+      GOOGLESQL_RET_CHECK_EQ(option_name->type, T_String);
+      GOOGLESQL_RET_CHECK_NE(option_name->sval, nullptr);
+      GOOGLESQL_RET_CHECK_NE(*option_name->sval, '\0');
       std::string option_string = option_name->sval;
       absl::optional<ChangeStreamOption> option_kind =
           GetChangeStreamOption(option_string);
@@ -3155,13 +3397,13 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateChangeStream(
     return UnsupportedTranslationError(
         "<CREATE CHANGE STREAM> statement is not supported.");
   }
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_change_stream_stmt, options));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_change_stream_stmt, options));
   if (create_change_stream_stmt.if_not_exists) {
     out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_NOT_EXISTS);
   }
 
   // Populate the change stream name.
-  ZETASQL_ASSIGN_OR_RETURN(std::string change_stream_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string change_stream_name,
                    GetChangeStreamTableName(
                        *create_change_stream_stmt.change_stream_name,
                        "CREATE CHANGE STREAM"));
@@ -3170,7 +3412,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateChangeStream(
   // Change stream for clause.
   if (create_change_stream_stmt.opt_for_tables != nullptr ||
       create_change_stream_stmt.for_all) {
-    ZETASQL_RETURN_IF_ERROR(PopulateChangeStreamForClause(
+    GOOGLESQL_RETURN_IF_ERROR(PopulateChangeStreamForClause(
         create_change_stream_stmt.opt_for_tables,
         create_change_stream_stmt.for_all, "CREATE CHANGE STREAM",
         out.mutable_for_clause()));
@@ -3178,7 +3420,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateChangeStream(
 
   // Populate the change stream options, if any.
   if (create_change_stream_stmt.opt_options != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(PopulateChangeStreamOptions(
+    GOOGLESQL_RETURN_IF_ERROR(PopulateChangeStreamOptions(
         create_change_stream_stmt.opt_options, "CREATE CHANGE STREAM",
         out.mutable_set_options(), options));
   }
@@ -3230,7 +3472,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamOptions(
               "statement.",
               defname, parent_statement));
         }
-        ZETASQL_ASSIGN_OR_RETURN(const String* arg_value,
+        GOOGLESQL_ASSIGN_OR_RETURN(const String* arg_value,
                          (DowncastNode<String, T_String>(def_elem->arg)));
         std::string value = arg_value->sval;
         google::spanner::emulator::backend::ddl::SetOption* option_out = options_out->Add();
@@ -3279,7 +3521,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamOptions(
               "statement.",
               defname, parent_statement));
         }
-        ZETASQL_ASSIGN_OR_RETURN(const String* arg_value,
+        GOOGLESQL_ASSIGN_OR_RETURN(const String* arg_value,
                          (DowncastNode<String, T_String>(def_elem->arg)));
         std::string value = arg_value->sval;
         google::spanner::emulator::backend::ddl::SetOption* option_out = options_out->Add();
@@ -3319,7 +3561,7 @@ PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamForClause(
           tracked_table_out = change_stream_for_clause->mutable_tracked_tables()
                                   ->add_table_entry();
       // Set the table name.
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           std::string table_name,
           GetTableName(*tracked_table->table_name, parent_statement));
 
@@ -3331,11 +3573,11 @@ PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamForClause(
       if (tracked_table->columns != nullptr) {
         // If there are explicitly tracked columns, for_all_columns cannot
         // be set to true.
-        ZETASQL_RET_CHECK_EQ(tracked_table->for_all_columns, false);
+        GOOGLESQL_RET_CHECK_EQ(tracked_table->for_all_columns, false);
         for (String* column_value :
              StructList<String*>(tracked_table->columns)) {
           const char* column_name = column_value->sval;
-          ZETASQL_RET_CHECK(column_name && *column_name != '\0');
+          GOOGLESQL_RET_CHECK(column_name && *column_name != '\0');
           columns->add_column_name(column_name);
         }
       } else if (tracked_table->for_all_columns == true) {
@@ -3357,7 +3599,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateSearchIndex(
         "<CREATE SEARCH INDEX> statement is not supported.");
   }
   CreateSearchIndexStatementTranslator translator(*this, options);
-  ZETASQL_RETURN_IF_ERROR(translator.Translate(create_search_index_stmt, options, out));
+  GOOGLESQL_RETURN_IF_ERROR(translator.Translate(create_search_index_stmt, options, out));
   return absl::OkStatus();
 }
 
@@ -3366,8 +3608,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
         const CreateSearchIndexStmt& create_search_index_stmt,
         const TranslationOptions& options,
         google::spanner::emulator::backend::ddl::CreateSearchIndex& out) {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_search_index_stmt));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_search_index_stmt));
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::string table_name,
       ddl_search_translator_.GetTableName(*create_search_index_stmt.table_name,
                                           "CREATE SEARCH INDEX"));
@@ -3422,7 +3664,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
        StructList<IndexElem*>(create_search_index_stmt.partition)) {
     google::spanner::emulator::backend::ddl::KeyPartClause* partition_by_key = out.add_partition_by();
     google::spanner::emulator::backend::ddl::KeyPartClause::Order ordering;
-    ZETASQL_ASSIGN_OR_RETURN(absl::string_view partition_key_name,
+    GOOGLESQL_ASSIGN_OR_RETURN(absl::string_view partition_key_name,
                      TranslatePartitionBy(*partition_key, ordering, options));
     partition_by_key->set_key_name(partition_key_name);
     partition_by_key->set_order(ordering);
@@ -3433,7 +3675,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
        StructList<SortBy*>(create_search_index_stmt.order)) {
     google::spanner::emulator::backend::ddl::KeyPartClause* key_part = out.add_order_by();
     google::spanner::emulator::backend::ddl::KeyPartClause::Order ordering;
-    ZETASQL_ASSIGN_OR_RETURN(absl::string_view column_name,
+    GOOGLESQL_ASSIGN_OR_RETURN(absl::string_view column_name,
                      TranslateSortBy(*sort_elem, ordering, options));
     key_part->set_key_name(column_name);
     key_part->set_order(ordering);
@@ -3442,7 +3684,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
   // Process Where clause for null filtered conditions.
   if (create_search_index_stmt.null_filters != nullptr) {
     std::set<absl::string_view> null_filtered_columns;
-    ZETASQL_RETURN_IF_ERROR(TranslateWhereNode(create_search_index_stmt.null_filters,
+    GOOGLESQL_RETURN_IF_ERROR(TranslateWhereNode(create_search_index_stmt.null_filters,
                                        &null_filtered_columns,
                                        "CREATE SEARCH INDEX"));
 
@@ -3453,9 +3695,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
 
   // Process Interleave in.
   if (create_search_index_stmt.interleave != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         CheckInterleaveInParserOutput(create_search_index_stmt.interleave));
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         std::string relname,
         ddl_translator_.GetTableName(
             *create_search_index_stmt.interleave->parent, "INTERLEAVE"));
@@ -3464,7 +3706,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
 
   // Process Search Index options.
   if (create_search_index_stmt.options != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(PopulateSearchIndexOptions(
+    GOOGLESQL_RETURN_IF_ERROR(PopulateSearchIndexOptions(
         create_search_index_stmt.options, "CREATE SEARCH INDEX",
         out.mutable_set_options(), options));
   }
@@ -3479,17 +3721,17 @@ absl::StatusOr<absl::string_view> PostgreSQLToSpannerDDLTranslatorImpl::
   }
   // TODO : Possible refactoring possible between this and
   // CreateIndex where column_ref is obtained.
-  ZETASQL_ASSIGN_OR_RETURN(const ColumnRef* column_ref,
+  GOOGLESQL_ASSIGN_OR_RETURN(const ColumnRef* column_ref,
                    (DowncastNode<ColumnRef, T_ColumnRef>(node)));
   const List* column_list = column_ref->fields;
   if (list_length(column_list) != 1) {
     return OrderByTranslationError("CREATE SEARCH INDEX");
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(const String* value,
+  GOOGLESQL_ASSIGN_OR_RETURN(const String* value,
                    (SingleItemListAsNode<String, T_String>(column_list)));
   const char* column_name = value->sval;
-  ZETASQL_RET_CHECK(column_name && *column_name != '\0');
+  GOOGLESQL_RET_CHECK(column_name && *column_name != '\0');
 
   return column_name;
 }
@@ -3498,9 +3740,9 @@ absl::StatusOr<absl::string_view> PostgreSQLToSpannerDDLTranslatorImpl::
     CreateSearchIndexStatementTranslator::TranslateSortBy(
         const SortBy& sort_by, google::spanner::emulator::backend::ddl::KeyPartClause::Order& ordering,
         const TranslationOptions& options) {
-  ZETASQL_ASSIGN_OR_RETURN(ordering, ProcessOrdering(sort_by.sortby_dir,
+  GOOGLESQL_ASSIGN_OR_RETURN(ordering, ProcessOrdering(sort_by.sortby_dir,
                                              sort_by.sortby_nulls, options));
-  ZETASQL_ASSIGN_OR_RETURN(absl::string_view name, GetNodeColumnName(sort_by.node));
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::string_view name, GetNodeColumnName(sort_by.node));
   return name;
 }
 
@@ -3509,7 +3751,7 @@ absl::StatusOr<absl::string_view> PostgreSQLToSpannerDDLTranslatorImpl::
         const IndexElem& index_elem,
         google::spanner::emulator::backend::ddl::KeyPartClause::Order& ordering,
         const TranslationOptions& options) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       ordering,
       ProcessOrdering(index_elem.ordering, index_elem.nulls_ordering, options));
   return index_elem.name;
@@ -3544,7 +3786,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
             def_elem->defname, parent_statement));
       }
 
-      ZETASQL_ASSIGN_OR_RETURN(const String* arg_value,
+      GOOGLESQL_ASSIGN_OR_RETURN(const String* arg_value,
                        (DowncastNode<String, T_String>(def_elem->arg)));
       std::string value = arg_value->sval;
       google::spanner::emulator::backend::ddl::SetOption* option_out = options_out->Add();
@@ -3617,11 +3859,11 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateLocalityGroup(
     return UnsupportedTranslationError(
         "<CREATE LOCALITY GROUP> statement is not supported.");
   }
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_locality_group_stmt));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_locality_group_stmt));
   if (create_locality_group_stmt.if_not_exists) {
     out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_NOT_EXISTS);
   }
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::string locality_group_name,
       GetLocalityGroupName(*create_locality_group_stmt.locality_group_name,
                            "CREATE LOCALITY GROUP"));
@@ -3629,13 +3871,13 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateLocalityGroup(
 
   if (create_locality_group_stmt.storage != nullptr) {
     google::spanner::emulator::backend::ddl::SetOption* option_out = out.add_set_options();
-    ZETASQL_RETURN_IF_ERROR(TranslateStorageOption(create_locality_group_stmt.storage,
+    GOOGLESQL_RETURN_IF_ERROR(TranslateStorageOption(create_locality_group_stmt.storage,
                                            *option_out));
   }
 
   if (create_locality_group_stmt.ssd_to_hdd_spill_timespan != nullptr) {
     google::spanner::emulator::backend::ddl::SetOption* option_out = out.add_set_options();
-    ZETASQL_RETURN_IF_ERROR(TranslateSpillTimespanOption(
+    GOOGLESQL_RETURN_IF_ERROR(TranslateSpillTimespanOption(
         create_locality_group_stmt.ssd_to_hdd_spill_timespan, *option_out));
   }
 
@@ -3650,11 +3892,11 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterLocalityGroup(
     return UnsupportedTranslationError(
         "<ALTER LOCALITY GROUP> statement is not supported.");
   }
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_locality_group_stmt));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_locality_group_stmt));
   if (alter_locality_group_stmt.if_exists) {
     out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
   }
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::string locality_group_name,
       GetLocalityGroupName(*alter_locality_group_stmt.locality_group_name,
                            "ALTER LOCALITY GROUP"));
@@ -3663,14 +3905,14 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterLocalityGroup(
   if (alter_locality_group_stmt.storage != nullptr) {
     google::spanner::emulator::backend::ddl::SetOption* option_out =
         out.mutable_set_options()->add_options();
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         TranslateStorageOption(alter_locality_group_stmt.storage, *option_out));
   }
 
   if (alter_locality_group_stmt.ssd_to_hdd_spill_timespan != nullptr) {
     google::spanner::emulator::backend::ddl::SetOption* option_out =
         out.mutable_set_options()->add_options();
-    ZETASQL_RETURN_IF_ERROR(TranslateSpillTimespanOption(
+    GOOGLESQL_RETURN_IF_ERROR(TranslateSpillTimespanOption(
         alter_locality_group_stmt.ssd_to_hdd_spill_timespan, *option_out));
   }
 
@@ -3686,9 +3928,9 @@ PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterColumnLocalityGroup(
     return UnsupportedTranslationError(
         "<ALTER TABLE ... SET LOCALITY GROUP> statement is not supported.");
   }
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_column_locality_group_stmt));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_column_locality_group_stmt));
 
-  ZETASQL_ASSIGN_OR_RETURN(std::string table_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string table_name,
                    GetTableName(*alter_column_locality_group_stmt.relation,
                                 "ALTER TABLE ALTER COLUMN"));
   google::spanner::emulator::backend::ddl::SetColumnOptions_ColumnPath* column_path =
@@ -3711,11 +3953,15 @@ PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterColumnLocalityGroup(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateRenameStatement(
     const RenameStmt& rename_statement, const TranslationOptions& options,
     google::spanner::emulator::backend::ddl::AlterTable& out) const {
-  ZETASQL_RET_CHECK_EQ(rename_statement.renameType, OBJECT_TABLE);
+  GOOGLESQL_RET_CHECK_EQ(rename_statement.renameType, OBJECT_TABLE);
 
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(rename_statement, options));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(rename_statement, options));
 
-  ZETASQL_ASSIGN_OR_RETURN(*out.mutable_table_name(),
+  if (rename_statement.missing_ok) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
+  }
+
+  GOOGLESQL_ASSIGN_OR_RETURN(*out.mutable_table_name(),
                    GetTableName(*rename_statement.relation, "RENAME TABLE"));
 
   *out.mutable_rename_to()->mutable_name() = rename_statement.newname;
@@ -3731,11 +3977,11 @@ absl::Status
 PostgreSQLToSpannerDDLTranslatorImpl::TranslateTableChainedRenameStatement(
     const TableChainedRenameStmt& table_chained_rename_statement,
     const TranslationOptions& options, google::spanner::emulator::backend::ddl::RenameTable& out) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(table_chained_rename_statement, options));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(table_chained_rename_statement, options));
   for (TableRenameOp* rename_op :
        StructList<TableRenameOp*>(table_chained_rename_statement.ops)) {
     auto op = out.add_rename_op();
-    ZETASQL_ASSIGN_OR_RETURN(*op->mutable_from_name(),
+    GOOGLESQL_ASSIGN_OR_RETURN(*op->mutable_from_name(),
                      GetTableName(*rename_op->fromName, "RENAME TABLE"));
     *op->mutable_to_name() = rename_op->toName;
   }
@@ -3758,47 +4004,47 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
         "Statement hints are not supported in DDL.");
   }
 
-  ZETASQL_RET_CHECK_EQ(raw_statement.type, T_RawStmt);
-  ZETASQL_RET_CHECK_NE(raw_statement.stmt, nullptr);
+  GOOGLESQL_RET_CHECK_EQ(raw_statement.type, T_RawStmt);
+  GOOGLESQL_RET_CHECK_NE(raw_statement.stmt, nullptr);
 
   google::spanner::emulator::backend::ddl::DDLStatement result_statement;
 
   switch (raw_statement.stmt->type) {
     //LINT.IfChange
     case T_CreatedbStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const CreatedbStmt* statement,
           (DowncastNode<CreatedbStmt, T_CreatedbStmt>(raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateDatabase(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateDatabase(
           *statement, *result_statement.mutable_create_database()));
 
       break;
     }
 
     case T_CreateStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const CreateStmt* statement,
           (DowncastNode<CreateStmt, T_CreateStmt>(raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateTable(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateTable(
           *statement, options_, *result_statement.mutable_create_table()));
 
       break;
     }
 
     case T_AlterTableStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const AlterTableStmt* statement,
           (DowncastNode<AlterTableStmt, T_AlterTableStmt>(raw_statement.stmt)));
 
       switch (statement->objtype) {
         case OBJECT_TABLE: {
-          ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterTable(
+          GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterTable(
               *statement, options_, *result_statement.mutable_alter_table()));
           break;
         }
 
         case OBJECT_INDEX: {
-          ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterIndex(
+          GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterIndex(
               *statement, options_, *result_statement.mutable_alter_index()));
           break;
         }
@@ -3811,72 +4057,81 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
     }
 
     case T_DropStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const DropStmt* statement,
           (DowncastNode<DropStmt, T_DropStmt>(raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateDropStatement(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateDropStatement(
           *statement, options_, result_statement));
 
       break;
     }
 
     case T_AlterDatabaseSetStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const AlterDatabaseSetStmt* statement,
           (DowncastNode<AlterDatabaseSetStmt, T_AlterDatabaseSetStmt>(
               raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterDatabase(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterDatabase(
           *statement, options_, *result_statement.mutable_alter_database()));
 
       break;
     }
 
     case T_IndexStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const IndexStmt* statement,
           (DowncastNode<IndexStmt, T_IndexStmt>(raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateIndex(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateIndex(
           *statement, options_, *result_statement.mutable_create_index()));
       break;
     }
 
     case T_CreateSchemaStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const CreateSchemaStmt* statement,
           (DowncastNode<CreateSchemaStmt, T_CreateSchemaStmt>(
               raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateSchema(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateSchema(
           *statement, *result_statement.mutable_create_schema()));
 
       break;
     }
 
     case T_VacuumStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const VacuumStmt* statement,
           (DowncastNode<VacuumStmt, T_VacuumStmt>(raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateVacuum(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateVacuum(
           *statement, options_, *result_statement.mutable_analyze()));
 
       break;
     }
 
     case T_ViewStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const ViewStmt* statement,
           (DowncastNode<ViewStmt, T_ViewStmt>(raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateView(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateView(
           *statement, options_, *result_statement.mutable_create_function()));
 
       break;
     }
 
+    case T_CreateFunctionStmt: {
+      GOOGLESQL_ASSIGN_OR_RETURN(const CreateFunctionStmt* statement,
+                       (DowncastNode<CreateFunctionStmt, T_CreateFunctionStmt>(
+                           raw_statement.stmt)));
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateFunction(
+          *statement, options_, *result_statement.mutable_create_function()));
+      break;
+    }
+
     case T_CreateChangeStreamStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const CreateChangeStreamStmt* statement,
           (DowncastNode<CreateChangeStreamStmt, T_CreateChangeStreamStmt>(
               raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateChangeStream(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateChangeStream(
           *statement, options_,
           *result_statement.mutable_create_change_stream()));
 
@@ -3884,11 +4139,11 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
     }
 
     case T_AlterChangeStreamStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const AlterChangeStreamStmt* statement,
           (DowncastNode<AlterChangeStreamStmt, T_AlterChangeStreamStmt>(
               raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterChangeStream(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterChangeStream(
           *statement, options_,
           *result_statement.mutable_alter_change_stream()));
 
@@ -3896,54 +4151,54 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
     }
 
     case T_CreateSearchIndexStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const CreateSearchIndexStmt* statement,
           (DowncastNode<CreateSearchIndexStmt, T_CreateSearchIndexStmt>(
               raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateSearchIndex(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateSearchIndex(
           *statement, options_,
           *result_statement.mutable_create_search_index()));
       break;
     }
 
     case T_CreateLocalityGroupStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const CreateLocalityGroupStmt* statement,
           (DowncastNode<CreateLocalityGroupStmt, T_CreateLocalityGroupStmt>(
               raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateLocalityGroup(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateLocalityGroup(
           *statement, options_,
           *result_statement.mutable_create_locality_group()));
       break;
     }
 
     case T_AlterLocalityGroupStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const AlterLocalityGroupStmt* statement,
           (DowncastNode<AlterLocalityGroupStmt, T_AlterLocalityGroupStmt>(
               raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterLocalityGroup(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterLocalityGroup(
           *statement, options_,
           *result_statement.mutable_alter_locality_group()));
       break;
     }
 
     case T_AlterColumnLocalityGroupStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const AlterColumnLocalityGroupStmt* statement,
           (DowncastNode<AlterColumnLocalityGroupStmt,
                         T_AlterColumnLocalityGroupStmt>(raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterColumnLocalityGroup(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterColumnLocalityGroup(
           *statement, options_,
           *result_statement.mutable_set_column_options()));
       break;
     }
 
     case T_CreateSeqStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const CreateSeqStmt* statement,
           (DowncastNode<CreateSeqStmt, T_CreateSeqStmt>(raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateSequence(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateSequence(
           *statement, options_, *result_statement.mutable_create_sequence()));
       break;
     }
@@ -3951,42 +4206,42 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
     // TODO: expose when queue is implemented.
 
     case T_AlterSeqStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const AlterSeqStmt* statement,
           (DowncastNode<AlterSeqStmt, T_AlterSeqStmt>(raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterSequence(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterSequence(
           *statement, options_, *result_statement.mutable_alter_sequence()));
       break;
     }
 
     case T_RenameStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const RenameStmt* statement,
           (DowncastNode<RenameStmt, T_RenameStmt>(raw_statement.stmt)));
       if (statement->renameType != ObjectType::OBJECT_TABLE) {
         return ddl_translator_.UnsupportedTranslationError(
             "Only <TABLE> is supported for renaming.");
       }
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateRenameStatement(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateRenameStatement(
           *statement, options_, *result_statement.mutable_alter_table()));
 
       break;
     }
     case T_TableChainedRenameStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const TableChainedRenameStmt* statement,
           (DowncastNode<TableChainedRenameStmt, T_TableChainedRenameStmt>(
               raw_statement.stmt)));
-      ZETASQL_RETURN_IF_ERROR(ddl_translator_.TranslateTableChainedRenameStatement(
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateTableChainedRenameStatement(
           *statement, options_, *result_statement.mutable_rename_table()));
 
       break;
     }
     case T_AlterOwnerStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const AlterOwnerStmt* statement,
           (DowncastNode<AlterOwnerStmt, T_AlterOwnerStmt>(raw_statement.stmt)));
-      ZETASQL_ASSIGN_OR_RETURN(std::string object_name,
+      GOOGLESQL_ASSIGN_OR_RETURN(std::string object_name,
                        internal::ObjectTypeToString(statement->objectType));
       return ddl_translator_.UnsupportedTranslationError(
           absl::StrCat("<ALTER ", object_name, " OWNER> is not supported"));
@@ -3998,11 +4253,11 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
       break;
     }
     case T_AlterObjectSchemaStmt: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const AlterObjectSchemaStmt* statement,
           (DowncastNode<AlterObjectSchemaStmt, T_AlterObjectSchemaStmt>(
               raw_statement.stmt)));
-      ZETASQL_ASSIGN_OR_RETURN(std::string object_name,
+      GOOGLESQL_ASSIGN_OR_RETURN(std::string object_name,
                        internal::ObjectTypeToString(statement->objectType));
       return ddl_translator_.UnsupportedTranslationError(absl::StrCat(
           "<ALTER ", object_name, " SET SCHEMA> is not supported"));
@@ -4021,7 +4276,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
     const List& parse_tree) {
   for (const RawStmt* raw_statement : StructList<RawStmt*>(&parse_tree)) {
-    ZETASQL_RETURN_IF_ERROR(Visit(*raw_statement));
+    GOOGLESQL_RETURN_IF_ERROR(Visit(*raw_statement));
   }
 
   return absl::OkStatus();
@@ -4144,7 +4399,7 @@ absl::Status ProcessColumnarPolicy(const IndexStmt& create_index_statement,
       const IndexStmt& create_index_statement,
       google::spanner::emulator::backend::ddl::CreateIndex& create_index_out,
       const TranslationOptions& options) {
-    ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_index_statement, options));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_index_statement, options));
 
   if (create_index_statement.nulls_not_distinct) {
     return UnsupportedTranslationError(
@@ -4153,7 +4408,7 @@ absl::Status ProcessColumnarPolicy(const IndexStmt& create_index_statement,
 
   create_index_out.set_unique(create_index_statement.unique);
 
-  ZETASQL_ASSIGN_OR_RETURN(std::string table_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string table_name,
                    ddl_translator_.GetTableName(
                        *create_index_statement.relation, "CREATE INDEX"));
   create_index_out.set_index_base_name(table_name);
@@ -4165,12 +4420,12 @@ absl::Status ProcessColumnarPolicy(const IndexStmt& create_index_statement,
   } else {
     create_index_out.set_index_name(create_index_statement.idxname);
   }
-
+  bool has_hash_partition_key = false;
   // Process key columns
   for (IndexElem* index_elem :
        StructList<IndexElem*>(create_index_statement.indexParams)) {
     google::spanner::emulator::backend::ddl::KeyPartClause::Order ordering;
-    ZETASQL_ASSIGN_OR_RETURN(absl::string_view key_name,
+    GOOGLESQL_ASSIGN_OR_RETURN(absl::string_view key_name,
                      TranslateIndexElem(*index_elem, ordering, options_));
     google::spanner::emulator::backend::ddl::KeyPartClause* key_part = create_index_out.add_key();
     key_part->set_key_name(key_name);
@@ -4187,7 +4442,7 @@ absl::Status ProcessColumnarPolicy(const IndexStmt& create_index_statement,
   for (IndexElem* index_elem :
        StructList<IndexElem*>(create_index_statement.indexIncludingParams)) {
     google::spanner::emulator::backend::ddl::KeyPartClause::Order ordering;
-    ZETASQL_ASSIGN_OR_RETURN(absl::string_view key_name,
+    GOOGLESQL_ASSIGN_OR_RETURN(absl::string_view key_name,
                      TranslateIndexElem(*index_elem, ordering, options_));
     google::spanner::emulator::backend::ddl::StoredColumnDefinition* stored_column =
         create_index_out.add_stored_column_definition();
@@ -4195,7 +4450,7 @@ absl::Status ProcessColumnarPolicy(const IndexStmt& create_index_statement,
   }
 
   if (create_index_statement.whereClause != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(TranslateWhereNode(create_index_statement.whereClause,
+    GOOGLESQL_RETURN_IF_ERROR(TranslateWhereNode(create_index_statement.whereClause,
                                        &null_filtered_columns_,
                                        "CREATE INDEX"));
   }
@@ -4205,16 +4460,16 @@ absl::Status ProcessColumnarPolicy(const IndexStmt& create_index_statement,
   }
 
   if (create_index_statement.interleavespec != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         CheckInterleaveInParserOutput(create_index_statement.interleavespec));
-    ZETASQL_ASSIGN_OR_RETURN(std::string relname, ddl_translator_.GetTableName(
+    GOOGLESQL_ASSIGN_OR_RETURN(std::string relname, ddl_translator_.GetTableName(
         *create_index_statement.interleavespec->parent, "INTERLEAVE"));
     create_index_out.set_interleave_in_table(relname);
   }
 
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ProcessLocalityGroup(create_index_statement, create_index_out, options));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ProcessColumnarPolicy(create_index_statement, create_index_out, options));
 
   if (create_index_statement.if_not_exists && options.enable_if_not_exists) {
@@ -4229,11 +4484,11 @@ PostgreSQLToSpannerDDLTranslatorImpl::CreateIndexStatementTranslator::Translate(
     const AlterTableStmt& alter_index_statement,
     google::spanner::emulator::backend::ddl::AlterIndex& out) {
   // alter_index_statement has been verified
-  ZETASQL_RET_CHECK_EQ(list_length(alter_index_statement.cmds), 1);
-  ZETASQL_ASSIGN_OR_RETURN(const AlterTableCmd* first_cmd,
+  GOOGLESQL_RET_CHECK_EQ(list_length(alter_index_statement.cmds), 1);
+  GOOGLESQL_ASSIGN_OR_RETURN(const AlterTableCmd* first_cmd,
                    (GetListItemAsNode<AlterTableCmd, T_AlterTableCmd>(
                        alter_index_statement.cmds, 0)));
-  ZETASQL_ASSIGN_OR_RETURN(std::string relname,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string relname,
                    ddl_translator_.GetTableName(*alter_index_statement.relation,
                                                 "ALTER INDEX"));
 
@@ -4283,9 +4538,9 @@ absl::StatusOr<absl::string_view> PostgreSQLToSpannerDDLTranslatorImpl::
         const IndexElem& index_elem,
         google::spanner::emulator::backend::ddl::KeyPartClause::Order& ordering,
         const TranslationOptions& options) {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(index_elem));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(index_elem));
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       ordering,
       ProcessOrdering(index_elem.ordering, index_elem.nulls_ordering, options));
 
@@ -4297,8 +4552,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
         const BoolExpr* bool_expr,
         std::set<absl::string_view>* null_filtered_columns,
         absl::string_view parent_statement) {
-  ZETASQL_RET_CHECK_NE(bool_expr, nullptr);
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*bool_expr));
+  GOOGLESQL_RET_CHECK_NE(bool_expr, nullptr);
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*bool_expr));
 
   // Only support conjunction of <column IS NOT NULL> expressions using <AND>
   if (bool_expr->boolop != AND_EXPR) {
@@ -4306,7 +4561,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
   }
 
   for (Node* node : StructList<Node*>(bool_expr->args)) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         TranslateWhereNode(node, null_filtered_columns, parent_statement));
   }
 
@@ -4316,24 +4571,24 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
 absl::StatusOr<absl::string_view> PostgreSQLToSpannerDDLTranslatorImpl::
     CreateIndexStatementTranslator::GetColumnName(
         const NullTest& null_test, absl::string_view parent_statement) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(null_test));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(null_test));
 
   const Expr* column_expr = null_test.arg;
   if (nodeTag(column_expr) != T_ColumnRef) {
     return WhereClauseTranslationError(parent_statement);
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(const ColumnRef* column_ref,
+  GOOGLESQL_ASSIGN_OR_RETURN(const ColumnRef* column_ref,
                    (DowncastNode<ColumnRef, T_ColumnRef, Expr>(column_expr)));
   const List* column_list = column_ref->fields;
   if (list_length(column_list) != 1) {
     return WhereClauseTranslationError(parent_statement);
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(const String* value,
+  GOOGLESQL_ASSIGN_OR_RETURN(const String* value,
                    (SingleItemListAsNode<String, T_String>(column_list)));
   const char* column_name = value->sval;
-  ZETASQL_RET_CHECK(column_name && *column_name != '\0');
+  GOOGLESQL_RET_CHECK(column_name && *column_name != '\0');
 
   return column_name;
 }
@@ -4343,15 +4598,15 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
         const NullTest* null_test,
         std::set<absl::string_view>* null_filtered_columns,
         absl::string_view parent_statement) {
-  ZETASQL_RET_CHECK_NE(null_test, nullptr);
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*null_test));
+  GOOGLESQL_RET_CHECK_NE(null_test, nullptr);
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*null_test));
 
   // Only support IS_NOT_NULL
   if (null_test->nulltesttype != IS_NOT_NULL) {
     return WhereClauseTranslationError(parent_statement);
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(absl::string_view column_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::string_view column_name,
                    GetColumnName(*null_test, parent_statement));
   null_filtered_columns->insert(column_name);
 
@@ -4361,11 +4616,11 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
     CreateIndexStatementTranslator::CheckInterleaveInParserOutput(
         const InterleaveSpec* pg_interleave) const {
-  ZETASQL_RET_CHECK_NE(pg_interleave, nullptr);
+  GOOGLESQL_RET_CHECK_NE(pg_interleave, nullptr);
 
-  ZETASQL_RETURN_IF_ERROR(ValidateParseTreeNode(*pg_interleave, "CREATE INDEX"));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*pg_interleave, "CREATE INDEX"));
 
-  ZETASQL_ASSIGN_OR_RETURN(google::spanner::emulator::backend::ddl::InterleaveClause::Type type,
+  GOOGLESQL_ASSIGN_OR_RETURN(google::spanner::emulator::backend::ddl::InterleaveClause::Type type,
                    GetInterleaveClauseType(pg_interleave->interleavetype));
 
   switch (type) {
@@ -4380,7 +4635,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
     }
     default:
       // Should never get here
-      ZETASQL_RET_CHECK_FAIL() << "Unknown interleave type.";
+      GOOGLESQL_RET_CHECK_FAIL() << "Unknown interleave type.";
   }
 
   return absl::OkStatus();
@@ -4390,20 +4645,20 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::
     CreateIndexStatementTranslator::TranslateWhereNode(
         const Node* node, std::set<absl::string_view>* null_filtered_columns,
         absl::string_view parent_statement) {
-  ZETASQL_RET_CHECK_NE(node, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node, nullptr);
 
   switch (nodeTag(node)) {
     case T_BoolExpr: {
-      ZETASQL_ASSIGN_OR_RETURN(const BoolExpr* bool_expr,
+      GOOGLESQL_ASSIGN_OR_RETURN(const BoolExpr* bool_expr,
                        (DowncastNode<BoolExpr, T_BoolExpr>(node)));
-      ZETASQL_RETURN_IF_ERROR(TranslateBoolExpr(bool_expr, null_filtered_columns,
+      GOOGLESQL_RETURN_IF_ERROR(TranslateBoolExpr(bool_expr, null_filtered_columns,
                                         parent_statement));
       break;
     }
     case T_NullTest: {
-      ZETASQL_ASSIGN_OR_RETURN(const NullTest* null_test,
+      GOOGLESQL_ASSIGN_OR_RETURN(const NullTest* null_test,
                        (DowncastNode<NullTest, T_NullTest>(node)));
-      ZETASQL_RETURN_IF_ERROR(TranslateNullTest(null_test, null_filtered_columns,
+      GOOGLESQL_RETURN_IF_ERROR(TranslateNullTest(null_test, null_filtered_columns,
                                         parent_statement));
       break;
     }
@@ -4420,7 +4675,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Translate(
   Visitor visitor(*this, options, out_statements);
 
   const List* parse_tree = parser_output.parse_tree();
-  ZETASQL_RET_CHECK_NE(parse_tree, nullptr);
+  GOOGLESQL_RET_CHECK_NE(parse_tree, nullptr);
   return visitor.Visit(*parse_tree);
 }
 
