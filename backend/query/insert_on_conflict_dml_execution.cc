@@ -65,6 +65,7 @@ using googlesql::ResolvedColumnRef;
 using googlesql::ResolvedDMLValue;
 using googlesql::ResolvedInsertStmt;
 using googlesql::ResolvedOnConflictClauseEnums;
+using googlesql::ResolvedSubqueryExpr;
 }  // namespace
 
 absl::Status InsertOnConflictDoUpdateRewriter::VisitResolvedColumnRef(
@@ -88,13 +89,65 @@ absl::Status InsertOnConflictDoUpdateRewriter::VisitResolvedColumnRef(
   std::pair<const googlesql::Type*, int> column_info =
       column_ids_referenced_from_insert_row_.at(node->column().column_id());
   auto array_element_column_ref = googlesql::MakeResolvedColumnRef(
-      struct_column_holder_->type(), *struct_column_holder_, false);
+      struct_column_holder_->type(), *struct_column_holder_,
+      node->is_correlated());
   // Build RESOLVED_GET_STRUCT_FIELD to extract the column value from the
   // source STRUCT column.
   auto get_struct_field = googlesql::MakeResolvedGetStructField(
       column_info.first, std::move(array_element_column_ref),
       column_info.second);
   PushNodeToStack(std::move(get_struct_field));
+  return absl::OkStatus();
+}
+
+absl::Status InsertOnConflictDoUpdateRewriter::VisitResolvedSubqueryExpr(
+    const ResolvedSubqueryExpr* node) {
+  std::vector<std::unique_ptr<ResolvedColumnRef>> parameter_list;
+  parameter_list.reserve(node->parameter_list_size());
+  bool added_struct_column_holder = false;
+  for (const auto& parameter : node->parameter_list()) {
+    if (column_ids_referenced_from_insert_row_.contains(
+            parameter->column().column_id())) {
+      if (!added_struct_column_holder) {
+        parameter_list.push_back(googlesql::MakeResolvedColumnRef(
+            struct_column_holder_->type(), *struct_column_holder_, false));
+        added_struct_column_holder = true;
+      }
+      continue;
+    }
+    GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<ResolvedColumnRef> parameter_copy,
+                       ProcessNode(parameter.get()));
+    parameter_list.push_back(std::move(parameter_copy));
+  }
+
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedExpr> in_expr,
+                     ProcessNode(node->in_expr()));
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedScan> subquery,
+                     ProcessNode(node->subquery()));
+
+  auto copy = googlesql::MakeResolvedSubqueryExpr(
+      node->type(), node->subquery_type(), std::move(parameter_list),
+      std::move(in_expr), std::move(subquery));
+  copy->set_type_annotation_map(node->type_annotation_map());
+  copy->set_in_collation(node->in_collation());
+
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::vector<std::unique_ptr<googlesql::ResolvedOption>> hint_list,
+      ProcessNodeList(node->hint_list()));
+  copy->set_hint_list({std::make_move_iterator(hint_list.begin()),
+                       std::make_move_iterator(hint_list.end())});
+
+  const auto parse_location = node->GetParseLocationRangeOrNULL();
+  if (parse_location != nullptr) {
+    copy->SetParseLocationRange(*parse_location);
+  }
+  const auto operator_keyword_parse_location =
+      node->GetOperatorKeywordLocationRangeOrNULL();
+  if (operator_keyword_parse_location != nullptr) {
+    copy->SetOperatorKeywordLocationRange(*operator_keyword_parse_location);
+  }
+
+  PushNodeToStack(std::move(copy));
   return absl::OkStatus();
 }
 

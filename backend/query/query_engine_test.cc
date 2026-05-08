@@ -1899,6 +1899,39 @@ TEST_P(QueryEngineTest, InsertOnConflictDoUpdateDml) {
   EXPECT_EQ(result.modified_row_count, 2);
 }
 
+TEST_P(QueryEngineTest, InsertOnConflictDoUpdateSubqueryCanReferenceExcluded) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "GoogleSQL-specific regression test";
+  }
+
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kUpdate),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "string_col"}),
+              Field(&MutationOp::rows,
+                    UnorderedElementsAre(ValueList{Int64(1), String("ten")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col, string_col) "
+                "VALUES(1, 'ten') "
+                "ON CONFLICT(int64_col) DO UPDATE SET string_col = "
+                "(SELECT excluded.string_col)"},
+          QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_EQ(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 1);
+}
+
 TEST_P(QueryEngineTest, InsertOnConflictDoUpdateDmlWithReturning) {
   std::string returning =
       (GetParam() == POSTGRESQL) ? "RETURNING" : "THEN RETURN WITH ACTION";
