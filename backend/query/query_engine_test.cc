@@ -1900,10 +1900,6 @@ TEST_P(QueryEngineTest, InsertOnConflictDoUpdateDml) {
 }
 
 TEST_P(QueryEngineTest, InsertOnConflictDoUpdateSubqueryCanReferenceExcluded) {
-  if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP() << "GoogleSQL-specific regression test";
-  }
-
   MockRowWriter writer;
   EXPECT_CALL(
       writer,
