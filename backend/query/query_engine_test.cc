@@ -1911,7 +1911,8 @@ TEST_P(QueryEngineTest, InsertOnConflictDoUpdateSubqueryCanReferenceExcluded) {
               Field(&MutationOp::columns,
                     std::vector<std::string>{"int64_col", "string_col"}),
               Field(&MutationOp::rows,
-                    UnorderedElementsAre(ValueList{Int64(1), String("ten")})))))))
+                    UnorderedElementsAre(
+                        ValueList{Int64(1), String("one-ten")})))))))
       .Times(1)
       .WillOnce(Return(absl::OkStatus()));
 
@@ -1921,7 +1922,8 @@ TEST_P(QueryEngineTest, InsertOnConflictDoUpdateSubqueryCanReferenceExcluded) {
           Query{"INSERT INTO test_table (int64_col, string_col) "
                 "VALUES(1, 'ten') "
                 "ON CONFLICT(int64_col) DO UPDATE SET string_col = "
-                "(SELECT excluded.string_col)"},
+                "(SELECT CONCAT(t.string_col, '-', excluded.string_col) "
+                "FROM test_table t WHERE t.int64_col = 1)"},
           QueryContext{schema(), reader(), &writer}));
 
   ASSERT_EQ(result.rows, nullptr);
