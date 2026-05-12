@@ -109,6 +109,8 @@ absl::Status InsertOnConflictDoUpdateRewriter::VisitResolvedSubqueryExpr(
     if (column_ids_referenced_from_insert_row_.contains(
             parameter->column().column_id())) {
       if (!added_struct_column_holder) {
+        // Replace the column references from insert row with the insert row
+        // value struct.
         parameter_list.push_back(googlesql::MakeResolvedColumnRef(
             struct_column_holder_->type(), *struct_column_holder_, false));
         added_struct_column_holder = true;
