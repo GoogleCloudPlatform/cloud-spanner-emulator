@@ -36,6 +36,7 @@
 #include <string>
 
 #include "googlesql/base/logging.h"
+#include "third_party/spanner_pg/util/integral_types.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/types/type.h"
 #include "absl/status/statusor.h"

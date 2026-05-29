@@ -333,7 +333,8 @@ absl::StatusOr<std::unique_ptr<const googlesql::ResolvedOnConflictClause>>
 ForwardTransformer::BuildGsqlOnConflictClauseForInsertDML(
     const googlesql::Table& table, const OnConflictExpr* on_conflict,
     RangeTblEntry* rte_for_excluded_alias, Index insert_table_rtindex,
-    Index excluded_alias_rtindex, const VarIndexScope* target_table_scope) {
+    Index excluded_alias_rtindex, const List* rteperminfos,
+    const VarIndexScope* target_table_scope) {
   GOOGLESQL_RET_CHECK_NE(on_conflict, nullptr);
   GOOGLESQL_RET_CHECK_NE(rte_for_excluded_alias, nullptr);
   GOOGLESQL_RET_CHECK_NE(target_table_scope, nullptr);
@@ -394,7 +395,14 @@ ForwardTransformer::BuildGsqlOnConflictClauseForInsertDML(
   // Additionally, add the columns to scope `on_conflict_scope` to resolve
   // SET and WHERE expressions.
   std::unique_ptr<googlesql::ResolvedTableScan> insert_row_scan = nullptr;
-  if (rte_for_excluded_alias->selectedCols != nullptr) {
+  bool has_selected_cols = false;
+  if (rte_for_excluded_alias->perminfoindex > 0) {
+    GOOGLESQL_RET_CHECK_NE(rteperminfos, nullptr);
+    const RTEPermissionInfo* perminfo = static_cast<const RTEPermissionInfo*>(
+        list_nth(rteperminfos, rte_for_excluded_alias->perminfoindex - 1));
+    has_selected_cols = perminfo->selectedCols != nullptr;
+  }
+  if (has_selected_cols) {
     auto transformer_info = std::make_unique<TransformerInfo>();
     GOOGLESQL_ASSIGN_OR_RETURN(insert_row_scan,
                      BuildGsqlResolvedTableScan(
@@ -625,6 +633,12 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
     // objects are provided.
     GOOGLESQL_RET_CHECK_EQ(table_scan->column_list().size(),
                  table_scan->column_index_list().size());
+    const RTEPermissionInfo* perminfo = nullptr;
+    if (rte->perminfoindex > 0) {
+      GOOGLESQL_RET_CHECK_NE(query.rteperminfos, nullptr);
+      perminfo = static_cast<const RTEPermissionInfo*>(
+          list_nth(query.rteperminfos, rte->perminfoindex - 1));
+    }
     for (int i = 0; i < table_scan->column_list().size(); ++i) {
       // Skip over unwritable columns.
       if (unwritable_table_columns.find(i) != unwritable_table_columns.end()) {
@@ -632,8 +646,11 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
       }
       int column_index = table_scan->column_index_list()[i];
       int column_attnum = column_index - FirstLowInvalidHeapAttributeNumber + 1;
-      GOOGLESQL_ASSIGN_OR_RETURN(bool inserted,
-                       CheckedPgBmsIsMember(column_attnum, rte->insertedCols));
+      bool inserted = false;
+      if (perminfo != nullptr && perminfo->insertedCols != nullptr) {
+        GOOGLESQL_ASSIGN_OR_RETURN(inserted, CheckedPgBmsIsMember(
+                                       column_attnum, perminfo->insertedCols));
+      }
       if (inserted) {
         insert_column_list.push_back(table_scan->column_list()[i]);
       }
@@ -790,7 +807,8 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
         BuildGsqlOnConflictClauseForInsertDML(
             *table_scan->table(), query.onConflict, rte_for_excluded_alias,
             /*insert_table_rtindex=*/rtindex,
-            /*excluded_alias_rtindex=*/rte_count, &target_table_scope));
+            /*excluded_alias_rtindex=*/rte_count, query.rteperminfos,
+            &target_table_scope));
   }
 
   GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<const googlesql::ResolvedReturningClause>

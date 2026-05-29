@@ -28,8 +28,8 @@
 #include "absl/status/status.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
-#include "absl/status/status.h"
 #include "googlesql/base/status_macros.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

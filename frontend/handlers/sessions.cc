@@ -29,8 +29,8 @@
 #include "frontend/entities/session.h"
 #include "frontend/server/environment.h"
 #include "frontend/server/handler.h"
-#include "absl/status/status.h"
 #include "googlesql/base/status_macros.h"
+#include "absl/status/status.h"
 
 namespace protobuf_api = ::google::protobuf;
 

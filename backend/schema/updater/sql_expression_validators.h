@@ -17,7 +17,9 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_SQL_EXPRESSION_VALIDATORS_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_UPDATER_SQL_EXPRESSION_VALIDATORS_H_
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -32,7 +34,9 @@
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/udf.h"
 #include "backend/schema/catalog/view.h"
+#include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/graph/schema_node.h"
+#include "google/protobuf/repeated_ptr_field.h"
 
 namespace google {
 namespace spanner {
@@ -72,13 +76,14 @@ absl::Status AnalyzeViewDefinition(
 // the analyzed UDF's signature in `function_signature`.
 absl::Status AnalyzeUdfDefinition(
     absl::string_view udf_name, absl::string_view param_list,
-    absl::string_view udf_definition, std::optional<absl::string_view> endpoint,
-    std::optional<int> max_batching_rows, bool is_remote,
-    bool is_language_remote, absl::string_view return_type,
-    const Schema* schema, googlesql::TypeFactory* type_factory,
+    absl::string_view udf_definition, bool is_remote,
+    absl::string_view language, absl::string_view return_type,
+    absl::string_view options, const Schema* schema,
+    googlesql::TypeFactory* type_factory,
     absl::flat_hash_set<const SchemaNode*>* dependencies,
     std::unique_ptr<googlesql::FunctionSignature>* function_signature,
-    Udf::Determinism* determinism_level);
+    Udf::Determinism* determinism_level, std::optional<std::string>* endpoint,
+    std::optional<int64_t>* max_batching_rows);
 
 }  // namespace backend
 }  // namespace emulator

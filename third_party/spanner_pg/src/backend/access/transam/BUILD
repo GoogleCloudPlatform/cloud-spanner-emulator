@@ -65,6 +65,7 @@ cc_library(
         "xact.c",
         "xlog.c",
         "xlogarchive.c",
+        "xlogbackup.c",
         "xlogfuncs.c",
         "xloginsert.c",
         "xlogprefetcher.c",

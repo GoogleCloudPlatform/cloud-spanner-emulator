@@ -5,7 +5,7 @@
  *
  * Note: this file must be includable in both frontend and backend contexts.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/datatype/timestamp.h
@@ -140,7 +140,7 @@ struct pg_itm_in
 /*
  * We allow numeric timezone offsets up to 15:59:59 either way from Greenwich.
  * Currently, the record holders for wackiest offsets in actual use are zones
- * Asia/Manila, at -15:56:00 until 1844, and America/Metlakatla, at +15:13:42
+ * Asia/Manila, at -15:56:08 until 1844, and America/Metlakatla, at +15:13:42
  * until 1867.  If we were to reject such values we would fail to dump and
  * restore old timestamptz values with these zone settings.
  */
@@ -148,10 +148,17 @@ struct pg_itm_in
 #define TZDISP_LIMIT		((MAX_TZDISP_HOUR + 1) * SECS_PER_HOUR)
 
 /*
- * DT_NOBEGIN represents timestamp -infinity; DT_NOEND represents +infinity
+ * We reserve the minimum and maximum integer values to represent
+ * timestamp (or timestamptz) -infinity and +infinity.
  */
-#define DT_NOBEGIN		PG_INT64_MIN
-#define DT_NOEND		PG_INT64_MAX
+#define TIMESTAMP_MINUS_INFINITY	PG_INT64_MIN
+#define TIMESTAMP_INFINITY	PG_INT64_MAX
+
+/*
+ * Historically these alias for infinity have been used.
+ */
+#define DT_NOBEGIN		TIMESTAMP_MINUS_INFINITY
+#define DT_NOEND		TIMESTAMP_INFINITY
 
 #define TIMESTAMP_NOBEGIN(j)	\
 	do {(j) = DT_NOBEGIN;} while (0)

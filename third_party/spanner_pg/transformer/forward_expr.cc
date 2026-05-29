@@ -35,6 +35,7 @@
 #include <utility>
 #include <vector>
 
+#include "third_party/spanner_pg/util/integral_types.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/cast.h"
 #include "googlesql/public/function_signature.h"
@@ -76,6 +77,8 @@
 #include "third_party/spanner_pg/util/oid_to_string.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
+#include "third_party/spanner_pg/src/include/nodes/pg_list.h"
+#include "third_party/spanner_pg/src/include/nodes/primnodes.h"
 #include "googlesql/base/map_util.h"
 #include "googlesql/base/ret_check.h"
 #include "googlesql/base/status_macros.h"
@@ -111,6 +114,16 @@ bool IsFixedPrecisionNumericCastSignature(
              spangres::types::PgNumericMapping()->mapped_type()) &&
          signature.argument(1).type()->IsInt64() &&
          signature.argument(2).type()->IsInt64();
+}
+
+int CountNonJunkColumns(const List* target_list) {
+  int count = 0;
+  for (const TargetEntry* entry : StructList<TargetEntry*>(target_list)) {
+    if (entry != nullptr && !entry->resjunk) {
+      count++;
+    }
+  }
+  return count;
 }
 
 }  // namespace
@@ -959,7 +972,7 @@ ForwardTransformer::BuildGsqlResolvedSubqueryExpr(
       const Query* subquery =
           PostgresConstCastNode(Query, pg_sublink.subselect);
 
-      if (list_length(subquery->targetList) > 1) {
+      if (CountNonJunkColumns(subquery->targetList) > 1) {
         return absl::InvalidArgumentError(
             "ALL subqueries must only have one output column");
       }
@@ -999,7 +1012,7 @@ ForwardTransformer::BuildGsqlResolvedSubqueryExpr(
       const Query* subquery =
           PostgresConstCastNode(Query, pg_sublink.subselect);
 
-      if (list_length(subquery->targetList) > 1) {
+      if (CountNonJunkColumns(subquery->targetList) > 1) {
         return absl::InvalidArgumentError(
             "ANY/SOME/IN subqueries must only have one output column");
       }

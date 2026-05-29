@@ -173,10 +173,13 @@ cc_library(
         "levenshtein.c",
         "like_match.c",
         "jsonpath_gram.h",
+        "jsonpath_internal.h",
     ],
     deps = [
         "//third_party/spanner_pg/interface:catalog_wrappers",
         "//third_party/spanner_pg/src/backend/utils:generated_headers",
+        "//third_party/spanner_pg/src/backend/utils/activity",
+        "//third_party/spanner_pg/src/backend/utils/sort",
         "//third_party/spanner_pg/src/include",
         "//third_party/spanner_pg/util:nodetag_to_string",
     ],

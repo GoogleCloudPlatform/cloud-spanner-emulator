@@ -5,10 +5,10 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: pg_archivecleanup (PostgreSQL) 15\n"
+"Project-Id-Version: pg_archivecleanup (PostgreSQL) 16\n"
 "Report-Msgid-Bugs-To: pgsql-bugs@lists.postgresql.org\n"
-"POT-Creation-Date: 2023-04-12 00:50+0000\n"
-"PO-Revision-Date: 2023-04-05 18:06+0900\n"
+"POT-Creation-Date: 2023-09-07 05:51+0000\n"
+"PO-Revision-Date: 2023-05-30 12:38+0900\n"
 "Last-Translator: Ioseph Kim <ioseph@uri.sarang.net>\n"
 "Language-Team: Korean <pgsql-kr@postgresql.kr>\n"
 "Language: ko\n"
@@ -187,11 +187,3 @@ msgstr "남길 가장 오래된 WAL 파일은 지정해야 함"
 #, c-format
 msgid "too many command-line arguments"
 msgstr "너무 많은 명령행 인자를 지정했음"
-
-#, c-format
-#~ msgid "Try \"%s --help\" for more information.\n"
-#~ msgstr "보다 자세한 정보는 \"%s --help\" 명령을 참조하세요.\n"
-
-#, c-format
-#~ msgid "fatal: "
-#~ msgstr "심각: "

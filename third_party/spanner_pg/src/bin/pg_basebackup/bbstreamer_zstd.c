@@ -2,7 +2,7 @@
  *
  * bbstreamer_zstd.c
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		  src/bin/pg_basebackup/bbstreamer_zstd.c
@@ -106,6 +106,19 @@ bbstreamer_zstd_compressor_new(bbstreamer *next, pg_compress_specification *comp
 					 compress->workers, ZSTD_getErrorName(ret));
 	}
 
+	if ((compress->options & PG_COMPRESSION_OPTION_LONG_DISTANCE) != 0)
+	{
+		ret = ZSTD_CCtx_setParameter(streamer->cctx,
+									 ZSTD_c_enableLongDistanceMatching,
+									 compress->long_distance);
+		if (ZSTD_isError(ret))
+		{
+			pg_log_error("could not enable long-distance mode: %s",
+						 ZSTD_getErrorName(ret));
+			exit(1);
+		}
+	}
+
 	/* Initialize the ZSTD output buffer. */
 	streamer->zstd_outBuf.dst = streamer->base.bbs_buffer.data;
 	streamer->zstd_outBuf.size = streamer->base.bbs_buffer.maxlen;
@@ -113,7 +126,7 @@ bbstreamer_zstd_compressor_new(bbstreamer *next, pg_compress_specification *comp
 
 	return &streamer->base;
 #else
-	pg_fatal("this build does not support zstd compression");
+	pg_fatal("this build does not support compression with %s", "ZSTD");
 	return NULL;				/* keep compiler quiet */
 #endif
 }
@@ -268,7 +281,7 @@ bbstreamer_zstd_decompressor_new(bbstreamer *next)
 
 	return &streamer->base;
 #else
-	pg_fatal("this build does not support zstd compression");
+	pg_fatal("this build does not support compression with %s", "ZSTD");
 	return NULL;				/* keep compiler quiet */
 #endif
 }

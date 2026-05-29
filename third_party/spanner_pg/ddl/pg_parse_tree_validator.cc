@@ -48,17 +48,23 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "third_party/spanner_pg/ddl/ddl_translator.h"
 #include "third_party/spanner_pg/ddl/translation_utils.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
+#include "third_party/spanner_pg/util/nodetag_to_string.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
 #include "third_party/spanner_pg/src/include/nodes/nodes.h"
 #include "third_party/spanner_pg/src/include/nodes/parsenodes.h"
 #include "googlesql/base/ret_check.h"
 #include "googlesql/base/status_macros.h"
+
+extern "C" {
+const char *alter_table_type_to_string(AlterTableType cmdtype);
+}
 
 ABSL_DECLARE_FLAG(bool, spangres_enable_udf_unnamed_parameters);
 
@@ -180,6 +186,7 @@ absl::Status ValidateParseTreeNode(const ColumnDef& node,
       FieldTypeChecker<bool>(node.is_not_null),
       FieldTypeChecker<bool>(node.is_from_type),
       FieldTypeChecker<char>(node.storage),
+      FieldTypeChecker<char*>(node.storage_name),
       FieldTypeChecker<Node*>(node.raw_default),
       FieldTypeChecker<Node*>(node.cooked_default),
       FieldTypeChecker<char>(node.identity),
@@ -415,8 +422,11 @@ absl::Status ValidateParseTreeNode(const AlterTableCmd& node,
           break;
         }
         default: {
-          return UnsupportedTranslationError(
-              "Operation is not supported in <ALTER INDEX> statement.");
+          const char* type_str = alter_table_type_to_string(node.subtype);
+          std::string msg = absl::StrFormat(
+              "Operation \"%s\" is not supported in <ALTER INDEX> statement.",
+              type_str ? type_str : "Unknown");
+          return UnsupportedTranslationError(msg);
         }
       }
       break;
@@ -484,12 +494,6 @@ absl::Status ValidateParseTreeNode(const VariableSetStmt& node,
 
   // `args` might be empty for certain kinds of SET statement and is therefore
   // validated in TranslateAlterDatabase method.
-  if (list_length(node.args) > 1) {
-    return UnsupportedTranslationError(
-        absl::Substitute("List values for options are not supported in <$0> "
-                         "statement.",
-                         parent_statement_type));
-  }
 
   // `is_local` represents use of SET LOCAL and is not supported by ALTER
   // DATABASE.
@@ -2192,8 +2196,7 @@ absl::Status ValidateParseTreeNode(const ObjectWithArgs& node, bool is_grant) {
   }
 
   // `objfuncargs` contains the full specification of the parameter list (if not
-  // NULL). This is not supported.
-  GOOGLESQL_RET_CHECK_EQ(node.objfuncargs, nullptr);
+  // NULL). This is not supported, and handled by args_unspecified check below.
 
   // `args_unspecified` and `objargs` must indicate that no function arguments
   // are provided.
@@ -2225,7 +2228,7 @@ absl::Status ValidateParseTreeNode(const GrantRoleStmt& node) {
   AssertPGNodeConsistsOf(node, FieldTypeChecker<List*>(node.granted_roles),
                          FieldTypeChecker<List*>(node.grantee_roles),
                          FieldTypeChecker<bool>(node.is_grant),
-                         FieldTypeChecker<bool>(node.admin_opt),
+                         FieldTypeChecker<List*>(node.opt),
                          FieldTypeChecker<RoleSpec*>(node.grantor),
                          FieldTypeChecker<DropBehavior>(node.behavior));
 
@@ -2236,16 +2239,25 @@ absl::Status ValidateParseTreeNode(const GrantRoleStmt& node) {
     grant_type = "REVOKE ROLE";
   }
 
-  // `admin_opt` is used by ADMIN OPTION, which is not supported.
-  if (node.admin_opt) {
-    absl::string_view clause;
-    if (node.is_grant) {
-      clause = "WITH ADMIN OPTION";
-    } else {
-      clause = "ADMIN OPTION";
+  // `opt` is used by ADMIN OPTION, which is not supported.
+  if (node.opt != nullptr) {
+    for (int i = 0; i < list_length(node.opt); ++i) {
+      DefElem* def = ::postgres_translator::internal::PostgresCastNode(
+          DefElem, node.opt->elements[i].ptr_value);
+      if (def != nullptr && strcmp(def->defname, "admin") == 0) {
+        // Check if value is true (or just assume it since it's an option that
+        // shouldn't be here)
+        absl::string_view clause;
+        if (node.is_grant) {
+          clause = "WITH ADMIN OPTION";
+        } else {
+          clause = "ADMIN OPTION";
+        }
+        return UnsupportedTranslationError(
+            absl::Substitute("<$0> clause is not supported in <$1> statement.",
+                             clause, grant_type));
+      }
     }
-    return UnsupportedTranslationError(absl::Substitute(
-        "<$0> clause is not supported in <$1> statement.", clause, grant_type));
   }
 
   // `grantor` is used by GRANTED BY, which is not supported.
@@ -2293,9 +2305,10 @@ absl::Status ValidateParseTreeNode(const IndexStmt& node,
       FieldTypeChecker<Node*>(node.whereClause),
       FieldTypeChecker<List*>(node.excludeOpNames),
       FieldTypeChecker<char*>(node.idxcomment),
-      FieldTypeChecker<Oid>(node.indexOid), FieldTypeChecker<Oid>(node.oldNode),
+      FieldTypeChecker<Oid>(node.indexOid),
+      FieldTypeChecker<Oid>(node.oldNumber),
       FieldTypeChecker<SubTransactionId>(node.oldCreateSubid),
-      FieldTypeChecker<SubTransactionId>(node.oldFirstRelfilenodeSubid),
+      FieldTypeChecker<SubTransactionId>(node.oldFirstRelfilelocatorSubid),
       FieldTypeChecker<bool>(node.unique),
       FieldTypeChecker<bool>(node.nulls_not_distinct),
       FieldTypeChecker<bool>(node.primary),
@@ -2369,13 +2382,13 @@ absl::Status ValidateParseTreeNode(const IndexStmt& node,
 
   // `oldNode` defines the object id on storage layer. This is used in PG
   // analyzer phase internally.
-  GOOGLESQL_RET_CHECK_EQ(node.oldNode, InvalidOid);
+  GOOGLESQL_RET_CHECK_EQ(node.oldNumber, InvalidOid);
 
   // `oldCreateSubid` and `oldFirstRelfilenodeSubid` define the object id on
   // storage layer of an existed index. They are used in PG analyzer phase
   // internally.
   GOOGLESQL_RET_CHECK_EQ(node.oldCreateSubid, InvalidSubTransactionId);
-  GOOGLESQL_RET_CHECK_EQ(node.oldFirstRelfilenodeSubid, InvalidSubTransactionId);
+  GOOGLESQL_RET_CHECK_EQ(node.oldFirstRelfilelocatorSubid, InvalidSubTransactionId);
 
   // `unique` defines if index should be UNIQUE.
 

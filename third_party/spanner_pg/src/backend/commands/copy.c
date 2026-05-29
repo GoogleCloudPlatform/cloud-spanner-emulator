@@ -3,7 +3,7 @@
  * copy.c
  *		Implements the COPY utility command
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -83,7 +83,9 @@ DoCopy(ParseState *pstate, const CopyStmt *stmt,
 			if (!has_privs_of_role(GetUserId(), ROLE_PG_EXECUTE_SERVER_PROGRAM))
 				ereport(ERROR,
 						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-						 errmsg("must be superuser or have privileges of the pg_execute_server_program role to COPY to or from an external program"),
+						 errmsg("permission denied to COPY to or from an external program"),
+						 errdetail("Only roles with privileges of the \"%s\" role may COPY to or from an external program.",
+								   "pg_execute_server_program"),
 						 errhint("Anyone can COPY to stdout or from stdin. "
 								 "psql's \\copy command also works for anyone.")));
 		}
@@ -92,14 +94,18 @@ DoCopy(ParseState *pstate, const CopyStmt *stmt,
 			if (is_from && !has_privs_of_role(GetUserId(), ROLE_PG_READ_SERVER_FILES))
 				ereport(ERROR,
 						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-						 errmsg("must be superuser or have privileges of the pg_read_server_files role to COPY from a file"),
+						 errmsg("permission denied to COPY from a file"),
+						 errdetail("Only roles with privileges of the \"%s\" role may COPY from a file.",
+								   "pg_read_server_files"),
 						 errhint("Anyone can COPY to stdout or from stdin. "
 								 "psql's \\copy command also works for anyone.")));
 
 			if (!is_from && !has_privs_of_role(GetUserId(), ROLE_PG_WRITE_SERVER_FILES))
 				ereport(ERROR,
 						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-						 errmsg("must be superuser or have privileges of the pg_write_server_files role to COPY to a file"),
+						 errmsg("permission denied to COPY to a file"),
+						 errdetail("Only roles with privileges of the \"%s\" role may COPY to a file.",
+								   "pg_write_server_files"),
 						 errhint("Anyone can COPY to stdout or from stdin. "
 								 "psql's \\copy command also works for anyone.")));
 		}
@@ -109,7 +115,7 @@ DoCopy(ParseState *pstate, const CopyStmt *stmt,
 	{
 		LOCKMODE	lockmode = is_from ? RowExclusiveLock : AccessShareLock;
 		ParseNamespaceItem *nsitem;
-		RangeTblEntry *rte;
+		RTEPermissionInfo *perminfo;
 		TupleDesc	tupDesc;
 		List	   *attnums;
 		ListCell   *cur;
@@ -123,11 +129,15 @@ DoCopy(ParseState *pstate, const CopyStmt *stmt,
 
 		nsitem = addRangeTableEntryForRelation(pstate, rel, lockmode,
 											   NULL, false, false);
-		rte = nsitem->p_rte;
-		rte->requiredPerms = (is_from ? ACL_INSERT : ACL_SELECT);
+
+		perminfo = nsitem->p_perminfo;
+		perminfo->requiredPerms = (is_from ? ACL_INSERT : ACL_SELECT);
 
 		if (stmt->whereClause)
 		{
+			Bitmapset  *expr_attrs = NULL;
+			int			i;
+
 			/* add nsitem to query namespace */
 			addNSItemToQuery(pstate, nsitem, false, true, true);
 
@@ -140,6 +150,40 @@ DoCopy(ParseState *pstate, const CopyStmt *stmt,
 			/* we have to fix its collations too */
 			assign_expr_collations(pstate, whereClause);
 
+			/*
+			 * Examine all the columns in the WHERE clause expression.  When
+			 * the whole-row reference is present, examine all the columns of
+			 * the table.
+			 */
+			pull_varattnos(whereClause, 1, &expr_attrs);
+			if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, expr_attrs))
+			{
+				expr_attrs = bms_add_range(expr_attrs,
+										   1 - FirstLowInvalidHeapAttributeNumber,
+										   RelationGetNumberOfAttributes(rel) - FirstLowInvalidHeapAttributeNumber);
+				expr_attrs = bms_del_member(expr_attrs, 0 - FirstLowInvalidHeapAttributeNumber);
+			}
+
+			i = -1;
+			while ((i = bms_next_member(expr_attrs, i)) >= 0)
+			{
+				AttrNumber	attno = i + FirstLowInvalidHeapAttributeNumber;
+
+				Assert(attno != 0);
+
+				/*
+				 * Prohibit generated columns in the WHERE clause.  Stored
+				 * generated columns are not yet computed when the filtering
+				 * happens.
+				 */
+				if (TupleDescAttr(RelationGetDescr(rel), attno - 1)->attgenerated)
+					ereport(ERROR,
+							errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+							errmsg("generated columns are not supported in COPY FROM WHERE conditions"),
+							errdetail("Column \"%s\" is a generated column.",
+									  get_attname(RelationGetRelid(rel), attno, false)));
+			}
+
 			whereClause = eval_const_expressions(NULL, whereClause);
 
 			whereClause = (Node *) canonicalize_qual((Expr *) whereClause, false);
@@ -150,15 +194,15 @@ DoCopy(ParseState *pstate, const CopyStmt *stmt,
 		attnums = CopyGetAttnums(tupDesc, rel, stmt->attlist);
 		foreach(cur, attnums)
 		{
-			int			attno = lfirst_int(cur) -
-			FirstLowInvalidHeapAttributeNumber;
+			int			attno;
+			Bitmapset **bms;
 
-			if (is_from)
-				rte->insertedCols = bms_add_member(rte->insertedCols, attno);
-			else
-				rte->selectedCols = bms_add_member(rte->selectedCols, attno);
+			attno = lfirst_int(cur) - FirstLowInvalidHeapAttributeNumber;
+			bms = is_from ? &perminfo->insertedCols : &perminfo->selectedCols;
+
+			*bms = bms_add_member(*bms, attno);
 		}
-		ExecCheckRTPerms(pstate->p_rtable, true);
+		ExecCheckPermissions(pstate->p_rtable, list_make1(perminfo), true);
 
 		/*
 		 * Permission check for row security policies.
@@ -174,7 +218,7 @@ DoCopy(ParseState *pstate, const CopyStmt *stmt,
 		 * If RLS is not enabled for this, then just fall through to the
 		 * normal non-filtering relation handling.
 		 */
-		if (check_enable_rls(rte->relid, InvalidOid, false) == RLS_ENABLED)
+		if (check_enable_rls(relid, InvalidOid, false) == RLS_ENABLED)
 		{
 			SelectStmt *select;
 			ColumnRef  *cr;
@@ -313,7 +357,7 @@ DoCopy(ParseState *pstate, const CopyStmt *stmt,
 
 		cstate = BeginCopyTo(pstate, rel, query, relid,
 							 stmt->filename, stmt->is_program,
-							 stmt->attlist, stmt->options);
+							 NULL, stmt->attlist, stmt->options);
 		*processed = DoCopyTo(cstate);	/* copy from database to file */
 		EndCopyTo(cstate);
 	}
@@ -330,7 +374,7 @@ static CopyHeaderChoice
 defGetCopyHeaderChoice(DefElem *def, bool is_from)
 {
 	/*
-	 * If no parameter given, assume "true" is meant.
+	 * If no parameter value given, assume "true" is meant.
 	 */
 	if (def->arg == NULL)
 		return COPY_HEADER_TRUE;
@@ -463,6 +507,12 @@ ProcessCopyOptions(ParseState *pstate,
 				errorConflictingDefElem(defel, pstate);
 			opts_out->null_print = defGetString(defel);
 		}
+		else if (strcmp(defel->defname, "default") == 0)
+		{
+			if (opts_out->default_print)
+				errorConflictingDefElem(defel, pstate);
+			opts_out->default_print = defGetString(defel);
+		}
 		else if (strcmp(defel->defname, "header") == 0)
 		{
 			if (header_specified)
@@ -576,6 +626,11 @@ ProcessCopyOptions(ParseState *pstate,
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("cannot specify NULL in BINARY mode")));
 
+	if (opts_out->binary && opts_out->default_print)
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				 errmsg("cannot specify DEFAULT in BINARY mode")));
+
 	/* Set defaults for omitted options */
 	if (!opts_out->delim)
 		opts_out->delim = opts_out->csv_mode ? "," : "\t";
@@ -610,6 +665,17 @@ ProcessCopyOptions(ParseState *pstate,
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("COPY null representation cannot use newline or carriage return")));
+
+	if (opts_out->default_print)
+	{
+		opts_out->default_print_len = strlen(opts_out->default_print);
+
+		if (strchr(opts_out->default_print, '\r') != NULL ||
+			strchr(opts_out->default_print, '\n') != NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("COPY default representation cannot use newline or carriage return")));
+	}
 
 	/*
 	 * Disallow unsafe delimiter characters in non-CSV mode.  We can't allow
@@ -704,6 +770,35 @@ ProcessCopyOptions(ParseState *pstate,
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("CSV quote character must not appear in the NULL specification")));
+
+	if (opts_out->default_print)
+	{
+		if (!is_from)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("COPY DEFAULT only available using COPY FROM")));
+
+		/* Don't allow the delimiter to appear in the default string. */
+		if (strchr(opts_out->default_print, opts_out->delim[0]) != NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("COPY delimiter must not appear in the DEFAULT specification")));
+
+		/* Don't allow the CSV quote char to appear in the default string. */
+		if (opts_out->csv_mode &&
+			strchr(opts_out->default_print, opts_out->quote[0]) != NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("CSV quote character must not appear in the DEFAULT specification")));
+
+		/* Don't allow the NULL and DEFAULT string to be the same */
+		if (opts_out->null_print_len == opts_out->default_print_len &&
+			strncmp(opts_out->null_print, opts_out->default_print,
+					opts_out->null_print_len) == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("NULL specification and DEFAULT specification cannot be the same")));
+	}
 }
 
 /*

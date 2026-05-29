@@ -3,7 +3,7 @@
  * alter.c
  *	  Drivers for generic alter commands
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -24,6 +24,7 @@
 #include "catalog/objectaccess.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_conversion.h"
+#include "catalog/pg_database_d.h"
 #include "catalog/pg_event_trigger.h"
 #include "catalog/pg_foreign_data_wrapper.h"
 #include "catalog/pg_foreign_server.h"
@@ -59,7 +60,9 @@
 #include "commands/user.h"
 #include "miscadmin.h"
 #include "parser/parse_func.h"
+#include "replication/logicalworker.h"
 #include "rewrite/rewriteDefine.h"
+#include "storage/lmgr.h"
 #include "tcop/utility.h"
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
@@ -99,7 +102,7 @@ report_name_conflict(Oid classId, const char *name)
 			msgfmt = gettext_noop("subscription \"%s\" already exists");
 			break;
 		default:
-			elog(ERROR, "unsupported object class %u", classId);
+			elog(ERROR, "unsupported object class: %u", classId);
 			break;
 	}
 
@@ -142,7 +145,7 @@ report_namespace_conflict(Oid classId, const char *name, Oid nspOid)
 			msgfmt = gettext_noop("text search configuration \"%s\" already exists in schema \"%s\"");
 			break;
 		default:
-			elog(ERROR, "unsupported object class %u", classId);
+			elog(ERROR, "unsupported object class: %u", classId);
 			break;
 	}
 
@@ -228,11 +231,34 @@ AlterObjectRename_internal(Relation rel, Oid objectId, const char *new_name)
 		/* User must have CREATE privilege on the namespace */
 		if (OidIsValid(namespaceId))
 		{
-			aclresult = pg_namespace_aclcheck(namespaceId, GetUserId(),
-											  ACL_CREATE);
+			aclresult = object_aclcheck(NamespaceRelationId, namespaceId, GetUserId(),
+										ACL_CREATE);
 			if (aclresult != ACLCHECK_OK)
 				aclcheck_error(aclresult, OBJECT_SCHEMA,
 							   get_namespace_name(namespaceId));
+		}
+
+		if (classId == SubscriptionRelationId)
+		{
+			Form_pg_subscription form;
+
+			/* must have CREATE privilege on database */
+			aclresult = object_aclcheck(DatabaseRelationId, MyDatabaseId,
+										GetUserId(), ACL_CREATE);
+			if (aclresult != ACLCHECK_OK)
+				aclcheck_error(aclresult, OBJECT_DATABASE,
+							   get_database_name(MyDatabaseId));
+
+			/*
+			 * Don't allow non-superuser modification of a subscription with
+			 * password_required=false.
+			 */
+			form = (Form_pg_subscription) GETSTRUCT(oldtup);
+			if (!form->subpasswordrequired && !superuser())
+				ereport(ERROR,
+						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+						 errmsg("password_required=false is superuser-only"),
+						 errhint("Subscriptions with the password_required option set to false may only be created or modified by the superuser.")));
 		}
 	}
 
@@ -279,6 +305,9 @@ AlterObjectRename_internal(Relation rel, Oid objectId, const char *new_name)
 		if (strncmp(new_name, "regress_", 8) != 0)
 			elog(WARNING, "subscriptions created by regression test cases should have names starting with \"regress_\"");
 #endif
+
+		/* Wake up related replication workers to handle this change quickly */
+		LogicalRepWorkersWakeupAtCommit(objectId);
 	}
 	else if (nameCacheId >= 0)
 	{
@@ -650,6 +679,7 @@ AlterObjectNamespace_oid(Oid classId, Oid objid, Oid nspOid,
 		case OCLASS_TRIGGER:
 		case OCLASS_SCHEMA:
 		case OCLASS_ROLE:
+		case OCLASS_ROLE_MEMBERSHIP:
 		case OCLASS_DATABASE:
 		case OCLASS_TBLSPACE:
 		case OCLASS_FDW:
@@ -756,7 +786,7 @@ AlterObjectNamespace_internal(Relation rel, Oid objid, Oid nspOid)
 						   NameStr(*(DatumGetName(name))));
 
 		/* User must have CREATE privilege on new namespace */
-		aclresult = pg_namespace_aclcheck(nspOid, GetUserId(), ACL_CREATE);
+		aclresult = object_aclcheck(NamespaceRelationId, nspOid, GetUserId(), ACL_CREATE);
 		if (aclresult != ACLCHECK_OK)
 			aclcheck_error(aclresult, OBJECT_SCHEMA,
 						   get_namespace_name(nspOid));
@@ -900,9 +930,8 @@ ExecAlterOwnerStmt(AlterOwnerStmt *stmt)
 				classId = address.classId;
 
 				/*
-				 * XXX - get_object_address returns Oid of pg_largeobject
-				 * catalog for OBJECT_LARGEOBJECT because of historical
-				 * reasons.  Fix up it here.
+				 * For large objects, the catalog to modify is
+				 * pg_largeobject_metadata
 				 */
 				if (classId == LargeObjectRelationId)
 					classId = LargeObjectMetadataRelationId;
@@ -947,7 +976,9 @@ AlterObjectOwner_internal(Relation rel, Oid objectId, Oid new_ownerId)
 	Oid			old_ownerId;
 	Oid			namespaceId = InvalidOid;
 
-	oldtup = get_catalog_object_by_oid(rel, Anum_oid, objectId);
+	/* Search tuple and lock it. */
+	oldtup =
+		get_catalog_object_by_oid_extended(rel, Anum_oid, objectId, true);
 	if (oldtup == NULL)
 		elog(ERROR, "cache lookup failed for object %u of catalog \"%s\"",
 			 objectId, RelationGetRelationName(rel));
@@ -998,15 +1029,15 @@ AlterObjectOwner_internal(Relation rel, Oid objectId, Oid new_ownerId)
 							   objname);
 			}
 			/* Must be able to become new owner */
-			check_is_member_of_role(GetUserId(), new_ownerId);
+			check_can_set_role(GetUserId(), new_ownerId);
 
 			/* New owner must have CREATE privilege on namespace */
 			if (OidIsValid(namespaceId))
 			{
 				AclResult	aclresult;
 
-				aclresult = pg_namespace_aclcheck(namespaceId, new_ownerId,
-												  ACL_CREATE);
+				aclresult = object_aclcheck(NamespaceRelationId, namespaceId, new_ownerId,
+											ACL_CREATE);
 				if (aclresult != ACLCHECK_OK)
 					aclcheck_error(aclresult, OBJECT_SCHEMA,
 								   get_namespace_name(namespaceId));
@@ -1046,6 +1077,8 @@ AlterObjectOwner_internal(Relation rel, Oid objectId, Oid new_ownerId)
 		/* Perform actual update */
 		CatalogTupleUpdate(rel, &newtup->t_self, newtup);
 
+		UnlockTuple(rel, &oldtup->t_self, InplaceUpdateTupleLock);
+
 		/*
 		 * Update owner dependency reference.  When working on a large object,
 		 * we have to translate back to the OID conventionally used for LOs'
@@ -1063,6 +1096,8 @@ AlterObjectOwner_internal(Relation rel, Oid objectId, Oid new_ownerId)
 	}
 	else
 	{
+		UnlockTuple(rel, &oldtup->t_self, InplaceUpdateTupleLock);
+
 		/*
 		 * No need to change anything.  But when working on a large object, we
 		 * have to translate back to the OID conventionally used for LOs'

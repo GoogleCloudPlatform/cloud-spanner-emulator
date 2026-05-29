@@ -85,6 +85,7 @@ cc_library(
     ],
     textual_hdrs = [
         "gram.h",
+        "gramparse.h",
     ],
     deps = [
         "//third_party/spanner_pg/interface:catalog_wrappers",

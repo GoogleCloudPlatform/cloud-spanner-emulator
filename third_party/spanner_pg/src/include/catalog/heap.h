@@ -4,7 +4,7 @@
  *	  prototypes for functions in backend/catalog/heap.c
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/heap.h
@@ -28,7 +28,7 @@ typedef struct RawColumnDefault
 {
 	AttrNumber	attnum;			/* attribute to attach default to */
 	Node	   *raw_default;	/* default value (untransformed parse tree) */
-	bool		missingMode;	/* true if part of add column processing */
+	bool		missingMode;	/* obsolete, no longer used */
 	char		generated;		/* attgenerated setting */
 } RawColumnDefault;
 
@@ -50,7 +50,7 @@ extern Relation heap_create(const char *relname,
 							Oid relnamespace,
 							Oid reltablespace,
 							Oid relid,
-							Oid relfilenode,
+							RelFileNumber relfilenumber,
 							Oid accessmtd,
 							TupleDesc tupDesc,
 							char relkind,
@@ -115,6 +115,9 @@ extern List *AddRelationNewConstraints(Relation rel,
 									   const char *queryString);
 
 extern void RelationClearMissing(Relation rel);
+
+extern void StoreAttrMissingVal(Relation rel, AttrNumber attnum,
+								Datum missingval);
 extern void SetAttrMissing(Oid relid, char *attname, char *value);
 
 extern Node *cookDefault(ParseState *pstate,

@@ -31,9 +31,9 @@
 #include "frontend/entities/session.h"
 #include "frontend/entities/transaction.h"
 #include "frontend/server/handler.h"
+#include "googlesql/base/status_macros.h"
 #include "google/protobuf/repeated_ptr_field.h"
 #include "absl/status/status.h"
-#include "googlesql/base/status_macros.h"
 
 namespace protobuf_api = ::google::protobuf;
 

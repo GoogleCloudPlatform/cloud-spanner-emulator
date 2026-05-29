@@ -65,6 +65,8 @@ var (
 			"time from 20-40 seconds(default for Emulator only, not for production Spanner) to X-2X seconds.")
 	printNotices = flag.Bool("notices", false,
 		"If true, the emulator will print all third-party notices to stdout.")
+	remoteFunctionsHostPort = flag.String("remote_functions_host_port", "",
+		"The host:port to use for remote functions.")
 )
 
 // resolveGRPCBinary figures out the full path to the grpc binary from the --grpc_binary flag.
@@ -160,6 +162,7 @@ func main() {
 		DisableQueryNullFilteredIndexCheck: *disableQueryNullFilteredIndexCheck,
 		OverrideMaxDatabasesPerInstance:    instanceDbs,
 		OverrideChangeStreamPartitionTokenAliveSeconds: overrideChangeStreamPartitionTokenAliveSeconds,
+		RemoteFunctionsHostPort:                        *remoteFunctionsHostPort,
 	}
 	gw := gateway.New(gwopts)
 	gw.Run()

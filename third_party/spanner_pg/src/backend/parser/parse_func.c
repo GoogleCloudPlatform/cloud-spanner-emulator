@@ -3,7 +3,7 @@
  * parse_func.c
  *		handle function calls in parser
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -806,6 +806,7 @@ ParseFuncOrColumn(ParseState *pstate, List *funcname, List *fargs,
 		aggref->aggstar = agg_star;
 		aggref->aggvariadic = func_variadic;
 		aggref->aggkind = aggkind;
+		aggref->aggpresorted = false;
 		/* agglevelsup will be set by transformAggregateCall */
 		aggref->aggsplit = AGGSPLIT_SIMPLE; /* planner might change this */
 		// SPANGRES BEGIN
@@ -1693,7 +1694,6 @@ func_get_detail(List *funcname,
 			// SPANGRES BEGIN
 			// Unused variables
 			// Datum		proargdefaults;
-			// bool		isnull;
 			// char	   *str;
 			// List	   *defaults;
 			// SPANGRES END

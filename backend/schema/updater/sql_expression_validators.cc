@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -33,6 +34,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "backend/query/analyzer_options.h"
@@ -467,44 +469,37 @@ absl::Status AnalyzeViewDefinition(
 
 absl::Status AnalyzeUdfDefinition(
     absl::string_view udf_name, absl::string_view param_list,
-    absl::string_view udf_definition, std::optional<absl::string_view> endpoint,
-    std::optional<int> max_batching_rows, bool is_remote,
-    bool is_language_remote, absl::string_view return_type,
-    const Schema* schema, googlesql::TypeFactory* type_factory,
+    absl::string_view udf_definition, bool is_remote,
+    absl::string_view language, absl::string_view return_type,
+    absl::string_view options, const Schema* schema,
+    googlesql::TypeFactory* type_factory,
     absl::flat_hash_set<const SchemaNode*>* dependencies,
     std::unique_ptr<googlesql::FunctionSignature>* function_signature,
-    Udf::Determinism* determinism_level) {
-  std::string body;
-  if (is_remote || is_language_remote) {
-    std::string language = is_language_remote ? "LANGUAGE REMOTE" : "REMOTE";
-    std::string endpoint_str =
-        endpoint.has_value() ? absl::Substitute("endpoint = '$0'", *endpoint)
-                             : "";
-    std::string max_batching_rows_str =
-        max_batching_rows.has_value()
-            ? absl::Substitute("max_batching_rows = $0", *max_batching_rows)
-            : "";
-    std::string options;
-    if (!endpoint_str.empty() || !max_batching_rows_str.empty()) {
-      if (!endpoint_str.empty()) {
-        options += endpoint_str;
-      }
-      if (!max_batching_rows_str.empty()) {
-        if (!endpoint_str.empty()) {
-          options += ", ";
-        }
-        options += max_batching_rows_str;
-      }
-    }
+    Udf::Determinism* determinism_level, std::optional<std::string>* endpoint,
+    std::optional<int64_t>* max_batching_rows) {
+  std::string body = absl::Substitute("CREATE FUNCTION `$0`($1) RETURNS $2",
+                                      udf_name, param_list, return_type);
 
-    body =
-        absl::Substitute("CREATE FUNCTION `$0`($1) RETURNS $2 $3 OPTIONS ($4) ",
-                         udf_name, param_list, return_type, language, options);
-  } else {
-    body = absl::Substitute(
-        "CREATE FUNCTION `$0`($1) RETURNS $2 SQL SECURITY INVOKER AS ($3)",
-        udf_name, param_list, return_type, udf_definition);
+  if (!is_remote && language != "REMOTE") {
+    absl::StrAppend(&body, " SQL SECURITY INVOKER");
   }
+
+  if (!language.empty()) {
+    absl::StrAppend(&body, " LANGUAGE ", language);
+  }
+
+  if (is_remote) {
+    absl::StrAppend(&body, " REMOTE");
+  }
+
+  if (!options.empty()) {
+    absl::StrAppend(&body, " ", options);
+  }
+
+  if (!udf_definition.empty()) {
+    absl::StrAppend(&body, " AS (", udf_definition, ")");
+  }
+
   // Analyze the udf definition.
   auto analyzer_options = MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
       schema->default_time_zone(), schema->dialect());
@@ -534,6 +529,32 @@ absl::Status AnalyzeUdfDefinition(
   *function_signature = absl::make_unique<googlesql::FunctionSignature>(
       create_function_stmt->signature());
 
+  // Capture the options from SQL expressions.
+  for (const std::unique_ptr<const googlesql::ResolvedOption>& option :
+       create_function_stmt->option_list()) {
+    // All options must be literals.
+    if (!option->value()->Is<googlesql::ResolvedLiteral>()) {
+      return error::InvalidOptionValueForFunction(option->name(), udf_name);
+    }
+    const googlesql::Value& value =
+        option->value()->GetAs<googlesql::ResolvedLiteral>()->value();
+
+    // Extract the option value. UdfValidator will later check if the values are
+    // valid w.r.t. function language and other constraints.
+    if (option->name() == "max_batching_rows") {
+      if (!value.type()->IsInt64()) {
+        return error::InvalidOptionValueForFunction(option->name(), udf_name);
+      }
+      (*max_batching_rows) = value.int64_value();
+    } else if (option->name() == "endpoint") {
+      if (!value.type()->IsString()) {
+        return error::InvalidOptionValueForFunction(option->name(), udf_name);
+      }
+      (*endpoint) = value.string_value();
+    } else {
+      return error::InvalidOptionForFunction(option->name(), udf_name);
+    }
+  }
   return absl::OkStatus();
 }
 

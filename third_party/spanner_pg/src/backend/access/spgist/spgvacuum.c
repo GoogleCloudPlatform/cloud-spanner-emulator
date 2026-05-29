@@ -4,7 +4,7 @@
  *	  vacuum for SP-GiST
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -491,7 +491,7 @@ vacuumLeafRoot(spgBulkDeleteState *bds, Relation index, Buffer buffer)
  * Unlike the routines above, this works on both leaf and inner pages.
  */
 static void
-vacuumRedirectAndPlaceholder(Relation index, Buffer buffer)
+vacuumRedirectAndPlaceholder(Relation index, Relation heaprel, Buffer buffer)
 {
 	Page		page = BufferGetPage(buffer);
 	SpGistPageOpaque opaque = SpGistPageGetOpaque(page);
@@ -505,11 +505,11 @@ vacuumRedirectAndPlaceholder(Relation index, Buffer buffer)
 	spgxlogVacuumRedirect xlrec;
 	GlobalVisState *vistest;
 
+	xlrec.isCatalogRel = RelationIsAccessibleInLogicalDecoding(heaprel);
 	xlrec.nToPlaceholder = 0;
-	xlrec.newestRedirectXid = InvalidTransactionId;
+	xlrec.snapshotConflictHorizon = InvalidTransactionId;
 
-	/* XXX: providing heap relation would allow more pruning */
-	vistest = GlobalVisTestFor(NULL);
+	vistest = GlobalVisTestFor(heaprel);
 
 	START_CRIT_SECTION();
 
@@ -544,9 +544,9 @@ vacuumRedirectAndPlaceholder(Relation index, Buffer buffer)
 			opaque->nPlaceholder++;
 
 			/* remember newest XID among the removed redirects */
-			if (!TransactionIdIsValid(xlrec.newestRedirectXid) ||
-				TransactionIdPrecedes(xlrec.newestRedirectXid, dt->xid))
-				xlrec.newestRedirectXid = dt->xid;
+			if (!TransactionIdIsValid(xlrec.snapshotConflictHorizon) ||
+				TransactionIdPrecedes(xlrec.snapshotConflictHorizon, dt->xid))
+				xlrec.snapshotConflictHorizon = dt->xid;
 
 			ItemPointerSetInvalid(&dt->pointer);
 
@@ -654,13 +654,13 @@ spgvacuumpage(spgBulkDeleteState *bds, BlockNumber blkno)
 		else
 		{
 			vacuumLeafPage(bds, index, buffer, false);
-			vacuumRedirectAndPlaceholder(index, buffer);
+			vacuumRedirectAndPlaceholder(index, bds->info->heaprel, buffer);
 		}
 	}
 	else
 	{
 		/* inner page */
-		vacuumRedirectAndPlaceholder(index, buffer);
+		vacuumRedirectAndPlaceholder(index, bds->info->heaprel, buffer);
 	}
 
 	/*
@@ -730,7 +730,7 @@ spgprocesspending(spgBulkDeleteState *bds)
 			/* deal with any deletable tuples */
 			vacuumLeafPage(bds, index, buffer, true);
 			/* might as well do this while we are here */
-			vacuumRedirectAndPlaceholder(index, buffer);
+			vacuumRedirectAndPlaceholder(index, bds->info->heaprel, buffer);
 
 			SpGistSetLastUsedPage(index, buffer);
 

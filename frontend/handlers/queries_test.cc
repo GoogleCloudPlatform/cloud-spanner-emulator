@@ -367,6 +367,88 @@ TEST_P(QueryApiTest, ExecuteSql) {
                             )pb")));
 }
 
+TEST_P(QueryApiTest, ExecuteSqlDataBoostEnabledMissingPartitionTokenFails) {
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
+      R"pb(
+        transaction { single_use { read_only { strong: true } } }
+        sql: "SELECT int64_col, string_col FROM test_table"
+        data_boost_enabled: true
+      )pb");
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
+
+  spanner_api::ResultSet response;
+  EXPECT_THAT(ExecuteSql(request, &response),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Data Boost is only valid for partitioned queries or "
+                       "reads, and requires a partition token."));
+}
+
+TEST_P(QueryApiTest, ExecuteSqlDataBoostEnabledWithPartitionTokenSucceeds) {
+  spanner_api::PartitionQueryRequest partition_request;
+  partition_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
+  partition_request.mutable_transaction()
+      ->mutable_begin()
+      ->mutable_read_only()
+      ->set_strong(true);
+  partition_request.set_sql("SELECT int64_col, string_col FROM test_table");
+
+  spanner_api::PartitionResponse partition_response;
+  grpc::ClientContext context;
+  GOOGLESQL_ASSERT_OK(test_env()->spanner_client()->PartitionQuery(
+      &context, partition_request, &partition_response));
+  ASSERT_GT(partition_response.partitions().size(), 0);
+
+  // The emulator returns an empty partition and a full partition. To be robust
+  // against future changes in the number or order of partitions, we iterate
+  // over all partitions and use the first one that returns rows when executed.
+  std::string valid_token;
+  for (const auto& partition : partition_response.partitions()) {
+    spanner_api::ExecuteSqlRequest test_request;
+    test_request.set_session(
+        GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
+    test_request.mutable_transaction()->set_id(
+        partition_response.transaction().id());
+    test_request.set_sql("SELECT int64_col, string_col FROM test_table");
+    test_request.set_partition_token(partition.partition_token());
+
+    spanner_api::ResultSet test_response;
+    if (ExecuteSql(test_request, &test_response).ok() &&
+        test_response.rows_size() > 0) {
+      valid_token = partition.partition_token();
+      break;
+    }
+  }
+  ASSERT_FALSE(valid_token.empty()) << "No non-empty partition found";
+
+  spanner_api::ExecuteSqlRequest request;
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
+  request.mutable_transaction()->set_id(partition_response.transaction().id());
+  request.set_sql("SELECT int64_col, string_col FROM test_table");
+  request.set_partition_token(valid_token);
+  request.set_data_boost_enabled(true);
+
+  spanner_api::ResultSet response;
+  GOOGLESQL_EXPECT_OK(ExecuteSql(request, &response));
+  EXPECT_THAT(response, Partially(EqualsProto(
+                            R"pb(
+                              rows {
+                                values { string_value: "2" }
+                                values { string_value: "row_2" }
+                              }
+                              rows {
+                                values { string_value: "1" }
+                                values { string_value: "row_1" }
+                              }
+                              rows {
+                                values { string_value: "3" }
+                                values { string_value: "row_3" }
+                              }
+                            )pb")));
+}
+
 TEST_P(QueryApiTest, ExecuteSqlWithParameters) {
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"(
@@ -942,6 +1024,92 @@ TEST_P(QueryApiTest, ExecuteStreamingSql) {
                                  values { string_value: "3" }
                                  values { string_value: "row_3" }
                                  chunked_value: false
+                            )pb"))));
+}
+
+TEST_P(QueryApiTest,
+       ExecuteStreamingSqlDataBoostEnabledMissingPartitionTokenFails) {
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
+      R"pb(
+        transaction { single_use { read_only { strong: true } } }
+        sql: "SELECT int64_col, string_col FROM test_table"
+        data_boost_enabled: true
+      )pb");
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
+
+  std::vector<spanner_api::PartialResultSet> response;
+  EXPECT_THAT(ExecuteStreamingSql(request, &response),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Data Boost is only valid for partitioned queries or "
+                       "reads, and requires a partition token."));
+}
+
+TEST_P(QueryApiTest,
+       ExecuteStreamingSqlDataBoostEnabledWithPartitionTokenSucceeds) {
+  spanner_api::PartitionQueryRequest partition_request;
+  partition_request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
+  partition_request.mutable_transaction()
+      ->mutable_begin()
+      ->mutable_read_only()
+      ->set_strong(true);
+  partition_request.set_sql("SELECT int64_col, string_col FROM test_table");
+
+  spanner_api::PartitionResponse partition_response;
+  grpc::ClientContext context;
+  GOOGLESQL_ASSERT_OK(test_env()->spanner_client()->PartitionQuery(
+      &context, partition_request, &partition_response));
+  ASSERT_GT(partition_response.partitions().size(), 0);
+
+  // The emulator returns an empty partition and a full partition. To be robust
+  // against future changes in the number or order of partitions, we iterate
+  // over all partitions and use the first one that returns rows when executed.
+  std::string valid_token;
+  for (const auto& partition : partition_response.partitions()) {
+    spanner_api::ExecuteSqlRequest test_request;
+    test_request.set_session(
+        GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
+    test_request.mutable_transaction()->set_id(
+        partition_response.transaction().id());
+    test_request.set_sql("SELECT int64_col, string_col FROM test_table");
+    test_request.set_partition_token(partition.partition_token());
+
+    std::vector<spanner_api::PartialResultSet> test_response;
+    if (ExecuteStreamingSql(test_request, &test_response).ok()) {
+      bool has_rows = false;
+      for (const auto& r : test_response) {
+        if (r.values_size() > 0) {
+          has_rows = true;
+          break;
+        }
+      }
+      if (has_rows) {
+        valid_token = partition.partition_token();
+        break;
+      }
+    }
+  }
+  ASSERT_FALSE(valid_token.empty()) << "No non-empty partition found";
+
+  spanner_api::ExecuteSqlRequest request;
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
+  request.mutable_transaction()->set_id(partition_response.transaction().id());
+  request.set_sql("SELECT int64_col, string_col FROM test_table");
+  request.set_partition_token(valid_token);
+  request.set_data_boost_enabled(true);
+
+  std::vector<spanner_api::PartialResultSet> response;
+  GOOGLESQL_EXPECT_OK(ExecuteStreamingSql(request, &response));
+  EXPECT_THAT(response, ElementsAre(Partially(EqualsProto(
+                            R"pb(
+                              values { string_value: "2" }
+                              values { string_value: "row_2" }
+                              values { string_value: "1" }
+                              values { string_value: "row_1" }
+                              values { string_value: "3" }
+                              values { string_value: "row_3" }
                             )pb"))));
 }
 

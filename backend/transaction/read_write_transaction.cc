@@ -257,7 +257,7 @@ ReadWriteTransaction::ReadWriteTransaction(
       schema_(versioned_catalog_->GetLatestSchema()) {}
 
 absl::StatusOr<absl::Time> ReadWriteTransaction::GetCommitTimestamp() {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   if (state_ != State::kCommitted) {
     return error::Internal(
         absl::StrCat("Commit timestamp is only available after call to "
@@ -311,7 +311,7 @@ void ReadWriteTransaction::UpdateTrackedCommitTimestamps() {
 }
 
 const Schema* ReadWriteTransaction::schema() const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   if (state_ == State::kUninitialized) {
     return versioned_catalog_->GetLatestSchema();
   }
@@ -330,7 +330,7 @@ void ReadWriteTransaction::Reset() {
 
 absl::Status ReadWriteTransaction::GuardedCall(
     OpType op, const std::function<absl::Status()>& fn) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   switch (state_) {
     case State::kRolledback: {
       return error::Internal(absl::StrCat(
@@ -659,12 +659,12 @@ absl::Status ReadWriteTransaction::Rollback() {
 }
 
 absl::Status ReadWriteTransaction::TryAbort() {
-  if (!mu_.TryLock()) {
+  if (!mu_.try_lock()) {
     return error::CouldNotObtainTransactionMutex(id());
   }
 
   if (state_ != State::kActive) {
-    mu_.Unlock();
+    mu_.unlock();
     return error::TransactionClosed(id());
   }
 
@@ -676,7 +676,7 @@ absl::Status ReadWriteTransaction::TryAbort() {
   // Mark the transaction as aborted.
   state_ = State::kAborted;
 
-  mu_.Unlock();
+  mu_.unlock();
   return absl::OkStatus();
 }
 

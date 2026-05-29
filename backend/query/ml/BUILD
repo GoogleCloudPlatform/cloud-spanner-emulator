@@ -15,6 +15,7 @@
 #
 
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
 
 package(
     default_visibility = ["//:__subpackages__"],
@@ -27,16 +28,45 @@ cc_library(
     deps = [
         "//backend/common:case",
         "//backend/query:queryable_model",
+        "//backend/query/remote_udf:remote_udf_evaluator",
+        "//backend/schema/catalog:schema",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-        "@com_google_farmhash//:farmhash_fingerprint",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googlesql//googlesql/base:no_destructor",
         "@com_google_googlesql//googlesql/base:ret_check",
         "@com_google_googlesql//googlesql/base:status",
         "@com_google_googlesql//googlesql/public:catalog",
         "@com_google_googlesql//googlesql/public:json_value",
         "@com_google_googlesql//googlesql/public:type",
         "@com_google_googlesql//googlesql/public:value",
+    ],
+)
+
+cc_test(
+    name = "model_evaluator_test",
+    srcs = ["model_evaluator_test.cc"],
+    deps = [
+        ":model_evaluator",
+        "//backend/common:case",
+        "//backend/query:queryable_model",
+        "//backend/query/remote_udf:remote_udf_evaluator",
+        "//backend/schema/catalog:schema",
+        "//tests/common:proto_matchers",
+        "//tests/common:test_schema_constructor",
+        "@com_github_google_benchmark//:benchmark",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:json_value",
+        "@com_google_googlesql//googlesql/public:type",
+        "@com_google_googlesql//googlesql/public:value",
+        "@com_google_googletest//:gtest_main",
+        "@cpp-httplib//:httplib",
     ],
 )
 

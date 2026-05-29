@@ -329,7 +329,9 @@ ForwardTransformer::BuildGsqlResolvedScanForTableExpression(
                                           "supported");
         }
         GOOGLESQL_RET_CHECK_NE(rte->subquery, nullptr);
-        GOOGLESQL_RET_CHECK_NE(rte->alias->aliasname, nullptr);
+        const std::string scan_name = (rte->alias != nullptr)
+                                          ? rte->alias->aliasname
+                                          : rte->eref->aliasname;
 
         // GoogleSQL does not create another scope here because it is only
         // concerned with whether a column is correlated or not.
@@ -343,7 +345,7 @@ ForwardTransformer::BuildGsqlResolvedScanForTableExpression(
         GOOGLESQL_ASSIGN_OR_RETURN(current_scan,
                          BuildGsqlResolvedScanForQueryExpression(
                              *rte->subquery, /*is_top_level_query=*/false,
-                             &subquery_scope, rte->alias->aliasname,
+                             &subquery_scope, scan_name,
                              /*output_name_list=*/nullptr));
         GOOGLESQL_RETURN_IF_ERROR(
             MapVarIndexToColumn(*current_scan, rtindex, output_scope));

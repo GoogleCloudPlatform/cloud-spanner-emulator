@@ -19,16 +19,20 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>  // NOLINT
 #include <utility>
 #include <vector>
 
 #include "google/spanner/v1/spanner.pb.h"
+#include "googlesql/public/json_value.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "googlesql/base/testing/status_matchers.h"
+#include "absl/cleanup/cleanup.h"
+#include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -45,6 +49,7 @@
 #include "backend/datamodel/key_set.h"
 #include "backend/datamodel/value.h"
 #include "backend/query/query_context.h"
+#include "backend/query/remote_udf/remote_udf_evaluator.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/feature_flags.h"
 #include "common/limits.h"
@@ -52,6 +57,7 @@
 #include "tests/common/schema_constructor.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/common/test.pb.h"
+#include "httplib.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "google/protobuf/util/message_differencer.h"
@@ -244,6 +250,7 @@ class QueryEngineTestBase : public testing::Test {
   const Schema* views_schema() { return views_schema_.get(); }
   const Schema* change_stream_schema() { return change_stream_schema_.get(); }
   const Schema* model_schema() { return model_schema_.get(); }
+  const Schema* remote_udf_schema() { return remote_udf_schema_.get(); }
   const Schema* sequence_schema() { return sequence_schema_.get(); }
   const Schema* gpk_schema() { return gpk_schema_.get(); }
   const Schema* timestamp_date_schema() { return timestamp_date_schema_.get(); }
@@ -346,6 +353,7 @@ class QueryEngineTestBase : public testing::Test {
   std::unique_ptr<const Schema> multi_table_schema_;
   std::unique_ptr<const Schema> change_stream_schema_;
   std::unique_ptr<const Schema> model_schema_;
+  std::unique_ptr<const Schema> remote_udf_schema_;
   std::unique_ptr<const Schema> sequence_schema_;
   std::unique_ptr<const Schema> gpk_schema_;
   std::unique_ptr<const Schema> timestamp_date_schema_;
@@ -477,6 +485,7 @@ class QueryEngineTest
       change_stream_schema_ =
           test::CreateSchemaWithOneTableAndOneChangeStream(&type_factory_);
       model_schema_ = test::CreateSchemaWithOneModel(&type_factory_);
+      remote_udf_schema_ = test::CreateSchemaWithOneRemoteUdf(&type_factory_);
       property_graph_schema_ =
           test::CreateSchemaWithOnePropertyGraph(&type_factory_);
       dynamic_property_graph_schema_ =
@@ -553,6 +562,36 @@ INSTANTIATE_TEST_SUITE_P(
     [](const testing::TestParamInfo<QueryEngineTest::ParamType>& info) {
       return database_api::DatabaseDialect_Name(info.param);
     });
+
+TEST_P(QueryEngineTest, InsertOnConflictDoUpdateSubqueryCanReferenceExcluded) {
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          UnorderedElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kUpdate),
+              Field(&MutationOp::table, "test_table"),
+              Field(&MutationOp::columns,
+                    std::vector<std::string>{"int64_col", "string_col"}),
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(1), String("one-ten")})))))))
+      .Times(1)
+      .WillOnce(Return(absl::OkStatus()));
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{"INSERT INTO test_table (int64_col, string_col) "
+                "VALUES(1, 'ten') "
+                "ON CONFLICT(int64_col) DO UPDATE SET string_col = "
+                "(SELECT CONCAT(t.string_col, '-', excluded.string_col) "
+                " FROM test_table t WHERE t.int64_col = 1)"},
+          QueryContext{schema(), reader(), &writer}));
+
+  ASSERT_EQ(result.rows, nullptr);
+  EXPECT_EQ(result.modified_row_count, 1);
+}
 
 TEST_P(QueryEngineTest, DetectsDMLQueries) {
   EXPECT_TRUE(IsDMLQuery("INSERT INTO Users VALUES('John')"));
@@ -2391,6 +2430,264 @@ TEST_P(QueryEngineTest, TestMlQuery) {
         query_engine().ExecuteSql(Query{R"sql(
                 SELECT int64_col, Outcome
                 FROM ML.PREDICT(MODEL test_model, TABLE test_table))sql"},
+                                  QueryContext{model_schema(), reader()}));
+    ASSERT_NE(result.rows, nullptr);
+    EXPECT_EQ(ToString(result),
+              R"(int64_col,Outcome(INT64,BOOL) : 1,false,2,false,4,true,)");
+  }
+}
+TEST_P(QueryEngineTest, TestAiIf) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  Query query{R"sql(SELECT AI.IF('Is this a test?') AS result)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{schema(), reader()}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), R"(result(BOOL) : true,)");
+}
+
+TEST_P(QueryEngineTest, TestAiScore) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{R"sql(SELECT AI.SCORE('Is this a test?') AS result)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{schema(), reader()}));
+
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), R"(result(DOUBLE) : -250,)");
+}
+
+TEST_P(QueryEngineTest, TestAiClassify) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  std::string query;
+  if (GetParam() == POSTGRESQL) {
+    query =
+        R"sql(SELECT AI.CLASSIFY('Is this a test?', ARRAY['yes', 'no']::text[]) AS result)sql";
+  } else {
+    query =
+        R"sql(SELECT AI.CLASSIFY('Is this a test?', ARRAY['yes', 'no']) AS result)sql";
+  }
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(QueryResult result,
+                       query_engine().ExecuteSql(
+                           Query{query}, QueryContext{schema(), reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), R"(result(STRING) : "yes",)");
+}
+
+TEST_P(QueryEngineTest, TestAiClassify_WithStructs) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  if (GetParam() == POSTGRESQL) {
+    Query query{R"sql(
+      SELECT AI.CLASSIFY(
+        'Is this a test?',
+        '[{"label": "yes", "description": "is a test"}, {"label": "no", "description": "is not a test"}]'::jsonb) AS result
+        )sql"};
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        QueryResult result,
+        query_engine().ExecuteSql(query, QueryContext{schema(), reader()}));
+    ASSERT_NE(result.rows, nullptr);
+    EXPECT_EQ(ToString(result), R"(result(STRING) : "yes",)");
+
+  } else {
+    Query query{R"sql(
+      SELECT AI.CLASSIFY(
+        'Is this a test?', [('yes', 'is a test'), ('no', 'is not a test')]) AS result
+        )sql"};
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        QueryResult result,
+        query_engine().ExecuteSql(query, QueryContext{schema(), reader()}));
+    ASSERT_NE(result.rows, nullptr);
+    EXPECT_EQ(ToString(result), R"(result(STRING) : "yes",)");
+  }
+}
+
+TEST_P(QueryEngineTest, TestMlQuery_Http) {
+  absl::StatusOr<googlesql::JSONValue> last_request_body;
+
+  {
+    httplib::Server svr;
+    svr.Post("/", [&last_request_body](const httplib::Request& req,
+                                       httplib::Response& res) {
+      last_request_body = googlesql::JSONValue::ParseJSONString(req.body);
+      res.set_content(R"({"replies": [{"outcome": true}]})",
+                      "application/json");
+    });
+
+    int port = svr.bind_to_any_port("localhost");
+    std::thread server_thread([&svr]() { svr.listen_after_bind(); });
+    svr.wait_until_ready();
+
+    absl::Cleanup cleanup = [&svr, &server_thread] {
+      svr.stop();
+      server_thread.join();
+    };
+
+    absl::SetFlag(&FLAGS_remote_functions_host_port,
+                  "localhost:" + std::to_string(port));
+
+    if (GetParam() == POSTGRESQL) {
+      GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+          QueryResult result,
+          query_engine().ExecuteSql(Query{R"sql(
+                  SELECT spanner.ml_predict_row(
+                    'test'::text,
+                    '{"instances" : [{"string_col":"four"}]}'::jsonb))sql"},
+                                    QueryContext{schema(), reader()}));
+      ASSERT_NE(result.rows, nullptr);
+      EXPECT_EQ(
+          ToString(result),
+          R"(ml_predict_row(PG.JSONB) : {"predictions": [{"outcome": true}]},)");
+    } else {
+      GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+          QueryResult result,
+          query_engine().ExecuteSql(Query{R"sql(
+                SELECT int64_col, Outcome
+                FROM ML.PREDICT(MODEL test_model, TABLE test_table))sql"},
+                                    QueryContext{model_schema(), reader()}));
+      ASSERT_NE(result.rows, nullptr);
+      EXPECT_EQ(ToString(result),
+                R"(int64_col,Outcome(INT64,BOOL) : 1,true,2,true,4,true,)");
+    }
+  }
+
+  googlesql::JSONValue expected_request_body;
+
+  if (GetParam() == POSTGRESQL) {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(expected_request_body,
+                         googlesql::JSONValue::ParseJSONString(R"({
+    "_spanner_schema_object":"",
+    "_spanner_endpoint":"test",
+    "caller":"",
+    "sessionUser":"",
+    "userDefinedContext":{},
+    "requestId":"00000000-0000-0000-0000-000000000000",
+    "calls":[[{"string_col":"four"}, {}]]
+  })"));
+  } else {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(expected_request_body,
+                         googlesql::JSONValue::ParseJSONString(R"({
+    "_spanner_schema_object":"test_model",
+    "_spanner_endpoint":"test",
+    "caller":"",
+    "sessionUser":"",
+    "userDefinedContext":{},
+    "requestId":"00000000-0000-0000-0000-000000000000",
+    "calls":[[{"string_col":"four"}, {}]]
+  })"));
+  }
+
+  GOOGLESQL_ASSERT_OK(last_request_body);
+  EXPECT_EQ(last_request_body->GetConstRef().ToString(),
+            expected_request_body.GetConstRef().ToString());
+}
+
+TEST_P(QueryEngineTest, TestRemoteUDF) {
+  // TODO: Enable tests once DDL parsing is implemented.
+  if (GetParam() == POSTGRESQL) {
+    return;
+  }
+
+  Query query{R"sql(SELECT my_remote_udf(1) AS result)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(QueryResult result,
+                       query_engine().ExecuteSql(
+                           query, QueryContext{remote_udf_schema(), reader()}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_EQ(ToString(result), R"(result(INT64) : -9142586270102516767,)");
+}
+
+TEST_P(QueryEngineTest, TestRemoteUDF_Http) {
+  // TODO: Enable tests once DDL parsing is implemented.
+  if (GetParam() == POSTGRESQL) {
+    return;
+  }
+
+  absl::StatusOr<googlesql::JSONValue> last_request_body;
+
+  {
+    httplib::Server svr;
+    svr.Post("/", [&last_request_body](const httplib::Request& req,
+                                       httplib::Response& res) {
+      last_request_body = googlesql::JSONValue::ParseJSONString(req.body);
+      res.set_content(R"({"replies": [1]})", "application/json");
+    });
+
+    int port = svr.bind_to_any_port("localhost");
+    std::thread server_thread([&svr]() { svr.listen_after_bind(); });
+    svr.wait_until_ready();
+
+    absl::Cleanup cleanup = [&svr, &server_thread] {
+      svr.stop();
+      server_thread.join();
+    };
+
+    absl::SetFlag(&FLAGS_remote_functions_host_port,
+                  "localhost:" + std::to_string(port));
+
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        QueryResult result,
+        query_engine().ExecuteSql(
+            Query{R"sql(SELECT my_remote_udf(1) AS result)sql"},
+            QueryContext{remote_udf_schema(), reader()}));
+    ASSERT_NE(result.rows, nullptr);
+    if (GetParam() == POSTGRESQL) {
+      EXPECT_EQ(ToString(result), R"(result(BIGINT) : 1,)");
+    } else {
+      EXPECT_EQ(ToString(result), R"(result(INT64) : 1,)");
+    }
+  }
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::JSONValue expected_request_body,
+                       googlesql::JSONValue::ParseJSONString(R"({
+    "_spanner_schema_object":"my_remote_udf",
+    "_spanner_endpoint":"test",
+    "caller":"",
+    "sessionUser":"",
+    "userDefinedContext":{},
+    "requestId":"00000000-0000-0000-0000-000000000000",
+    "calls":[[1]]
+  })"));
+  GOOGLESQL_ASSERT_OK(last_request_body);
+  EXPECT_EQ(last_request_body->GetConstRef().ToString(),
+            expected_request_body.GetConstRef().ToString());
+}
+
+TEST_P(QueryEngineTest, TestMlQuery_WithParameters) {
+  if (GetParam() == POSTGRESQL) {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        QueryResult result,
+        query_engine().ExecuteSql(Query{R"sql(
+          SELECT spanner.ml_predict_row(
+            'test'::text,
+            '{"instances" : [{"string_col":"foo"}], "parameters" : {"p": 123}}'::jsonb)
+          )sql"},
+                                  QueryContext{schema(), reader()}));
+    ASSERT_NE(result.rows, nullptr);
+    EXPECT_EQ(
+        ToString(result),
+        R"(ml_predict_row(PG.JSONB) : {"predictions": [{"Outcome": false}]},)");
+  } else {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        QueryResult result,
+        query_engine().ExecuteSql(Query{R"sql(
+          SELECT int64_col, Outcome
+          FROM ML.PREDICT(
+            MODEL test_model,
+            TABLE test_table,
+            STRUCT(123 AS p))
+          )sql"},
                                   QueryContext{model_schema(), reader()}));
     ASSERT_NE(result.rows, nullptr);
     EXPECT_EQ(ToString(result),

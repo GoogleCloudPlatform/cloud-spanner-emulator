@@ -183,6 +183,7 @@ cc_test(
         "@com_google_absl//absl/time",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:function",
         "@com_google_googlesql//googlesql/public:type",
         "@com_google_googletest//:gtest_main",
     ],

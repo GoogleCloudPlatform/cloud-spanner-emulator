@@ -42,10 +42,10 @@
 #include "common/errors.h"
 #include "common/limits.h"
 #include "tests/common/schema_constructor.h"
+#include "googlesql/base/status_macros.h"
 #include "third_party/spanner_pg/interface/emulator_parser.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
-#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {

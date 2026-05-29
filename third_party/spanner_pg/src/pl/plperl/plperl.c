@@ -23,7 +23,6 @@
 #include "commands/trigger.h"
 #include "executor/spi.h"
 #include "funcapi.h"
-#include "mb/pg_wchar.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_type.h"
@@ -47,7 +46,6 @@
 /* string literal macros defining chunks of perl code */
 #include "perlchunks.h"
 #include "plperl.h"
-#include "plperl_helpers.h"
 /* defines PLPERL_SET_OPMASK */
 #include "plperl_opmask.h"
 
@@ -245,7 +243,6 @@ static plperl_call_data *current_call_data = NULL;
 /**********************************************************************
  * Forward declarations
  **********************************************************************/
-void		_PG_init(void);
 
 static PerlInterpreter *plperl_init_interp(void);
 static void plperl_destroy_interp(PerlInterpreter **);
@@ -1867,7 +1864,7 @@ plperl_call_handler(PG_FUNCTION_ARGS)
 	{
 		current_call_data = &this_call_data;
 		if (CALLED_AS_TRIGGER(fcinfo))
-			retval = PointerGetDatum(plperl_trigger_handler(fcinfo));
+			retval = plperl_trigger_handler(fcinfo);
 		else if (CALLED_AS_EVENT_TRIGGER(fcinfo))
 		{
 			plperl_event_trigger_handler(fcinfo);
@@ -2128,7 +2125,7 @@ plperl_create_sub(plperl_proc_desc *prodesc, const char *s, Oid fn_oid)
 	/*
 	 * G_KEEPERR seems to be needed here, else we don't recognize compile
 	 * errors properly.  Perhaps it's because there's another level of eval
-	 * inside mksafefunc?
+	 * inside mkfunc?
 	 */
 	count = call_pv("PostgreSQL::InServer::mkfunc",
 					G_SCALAR | G_EVAL | G_KEEPERR);
@@ -2934,10 +2931,8 @@ compile_plperl_function(Oid fn_oid, bool is_trigger, bool is_event_trigger)
 		 * we do not use a named subroutine so that we can call directly
 		 * through the reference.
 		 ************************************************************/
-		prosrcdatum = SysCacheGetAttr(PROCOID, procTup,
-									  Anum_pg_proc_prosrc, &isnull);
-		if (isnull)
-			elog(ERROR, "null prosrc");
+		prosrcdatum = SysCacheGetAttrNotNull(PROCOID, procTup,
+											 Anum_pg_proc_prosrc);
 		proc_source = TextDatumGetCString(prosrcdatum);
 
 		/************************************************************
@@ -3632,7 +3627,7 @@ plperl_spi_prepare(char *query, int argc, SV **argv)
 			char	   *typstr;
 
 			typstr = sv2cstr(argv[i]);
-			parseTypeString(typstr, &typId, &typmod, false);
+			(void) parseTypeString(typstr, &typId, &typmod, NULL);
 			pfree(typstr);
 
 			getTypeInputInfo(typId, &typInput, &typIOParam);

@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -65,7 +66,7 @@ class MlPredictTableValuedFunctionEvaluator
   MlPredictTableValuedFunctionEvaluator(
       const googlesql::Model* model,
       std::unique_ptr<EvaluatorTableIterator> input,
-      googlesql::Value parameters,
+      std::optional<googlesql::Value> parameters,
       const std::vector<googlesql::TVFSchemaColumn>& output_columns)
       : model_(model),
         input_(std::move(input)),
@@ -114,7 +115,8 @@ class MlPredictTableValuedFunctionEvaluator
     }
 
     // Invoke model evaluator to populate output values.
-    status_ = ModelEvaluator::Predict(model_, model_inputs_, model_outputs_);
+    status_ = ModelEvaluator::Predict(model_, model_inputs_, model_params_,
+                                      model_outputs_);
     return status_.ok();
   }
 
@@ -124,7 +126,7 @@ class MlPredictTableValuedFunctionEvaluator
   // The relation argument of ML.PREDICT function.
   std::unique_ptr<EvaluatorTableIterator> input_;
   // The parameters argument of ML.PREDICT function.
-  const googlesql::Value parameters_;
+  const std::optional<googlesql::Value> parameters_;
   // Selected output columns: model outputs and pass-through columns.
   const std::vector<googlesql::TVFSchemaColumn> output_columns_;
   // Maps input iterator column index to either input_values_ for model inputs
@@ -137,9 +139,11 @@ class MlPredictTableValuedFunctionEvaluator
   };
   std::vector<InputColumn> input_columns_;
   // Model input columns sent as arguments to ModelEvaluator.
-  CaseInsensitiveStringMap<const ModelEvaluator::ModelColumn> model_inputs_;
+  CaseInsensitiveStringMap<const googlesql::Value*> model_inputs_;
+  // Model parameters sent as arguments to ModelEvaluator.
+  CaseInsensitiveStringMap<const googlesql::Value*> model_params_;
   // Model output columns values of which are set by ModelEvaluator.
-  CaseInsensitiveStringMap<ModelEvaluator::ModelColumn> model_outputs_;
+  CaseInsensitiveStringMap<googlesql::Value*> model_outputs_;
   // Vector of values referenced by model_inputs_.
   std::vector<googlesql::Value> input_values_;
   // Vector of values accessible through GetValue().
@@ -197,11 +201,18 @@ absl::Status MlPredictTableValuedFunctionEvaluator::Init() {
 
     input_columns_.push_back(InputColumn{.input_index = input_column_index,
                                          .value = &input_values_[i]});
+    model_inputs_.insert({model_column->Name(), &input_values_[i]});
 
-    model_inputs_.insert(
-        {model_column->Name(),
-         ModelEvaluator::ModelColumn{.model_column = model_column,
-                                     .value = &input_values_[i]}});
+    // Prepare parameters.
+    if (parameters_.has_value()) {
+      GOOGLESQL_RET_CHECK(parameters_->type()->IsStruct());
+      GOOGLESQL_RET_CHECK_EQ(parameters_->type()->AsStruct()->num_fields(),
+                   parameters_->fields().size());
+      for (int i = 0; i < parameters_->type()->AsStruct()->num_fields(); ++i) {
+        model_params_.insert({parameters_->type()->AsStruct()->field(i).name,
+                              &parameters_->field(i)});
+      }
+    }
   }
 
   // Map output columns to model outputs or passthrough columns.
@@ -216,11 +227,8 @@ absl::Status MlPredictTableValuedFunctionEvaluator::Init() {
     if (model_column != nullptr) {
       GOOGLESQL_RET_CHECK(model_column->Is<QueryableModelColumn>());
       GOOGLESQL_RET_CHECK(model_column->GetType()->Equals(column_type));
-      model_outputs_.insert(
-          {model_column->Name(),
-           ModelEvaluator::ModelColumn{
-               .model_column = model_column->GetAs<QueryableModelColumn>(),
-               .value = &output_values_[i]}});
+      model_outputs_.insert({model_column->Name(), &output_values_[i]});
+      output_values_[i] = googlesql::Value::Null(column_type);
       continue;
     }
 
@@ -330,7 +338,7 @@ MlPredictTableValuedFunction::CreateEvaluator(
   std::unique_ptr<googlesql::EvaluatorTableIterator> input =
       std::move(input_arguments[1].relation);
 
-  googlesql::Value parameters;
+  std::optional<googlesql::Value> parameters;
   if (input_arguments.size() >= 3) {
     GOOGLESQL_RET_CHECK(input_arguments[2].value);
     parameters = *input_arguments[2].value;

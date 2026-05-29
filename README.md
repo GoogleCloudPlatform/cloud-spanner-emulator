@@ -141,6 +141,8 @@ Notable supported features:
 
 - Full SQL/DML query execution (limitations noted below)
 
+- [GQL support](https://docs.cloud.google.com/spanner/docs/reference/standard-sql/graph-intro)
+
 - DML sequence numbers
 
 - Non-SQL read and write methods

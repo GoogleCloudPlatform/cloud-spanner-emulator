@@ -534,10 +534,10 @@ SELECT * FROM rec1;    -- fail, mutual recursion via s.b. views
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE s1 (a int, b text);
-INSERT INTO s1 (SELECT x, md5(x::text) FROM generate_series(-10,10) x);
+INSERT INTO s1 (SELECT x, public.fipshash(x::text) FROM generate_series(-10,10) x);
 
 CREATE TABLE s2 (x int, y text);
-INSERT INTO s2 (SELECT x, md5(x::text) FROM generate_series(-6,6) x);
+INSERT INTO s2 (SELECT x, public.fipshash(x::text) FROM generate_series(-6,6) x);
 
 GRANT SELECT ON s1, s2 TO regress_rls_bob;
 
@@ -669,7 +669,7 @@ DELETE FROM t1 WHERE f_leak(b) RETURNING tableoid::regclass, *, t1;
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE b1 (a int, b text);
-INSERT INTO b1 (SELECT x, md5(x::text) FROM generate_series(-10,10) x);
+INSERT INTO b1 (SELECT x, public.fipshash(x::text) FROM generate_series(-10,10) x);
 
 CREATE POLICY p1 ON b1 USING (a % 2 = 0);
 ALTER TABLE b1 ENABLE ROW LEVEL SECURITY;
@@ -1303,7 +1303,7 @@ DROP VIEW rls_sbv;
 -- Expression structure
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
-INSERT INTO y2 (SELECT x, md5(x::text) FROM generate_series(0,20) x);
+INSERT INTO y2 (SELECT x, public.fipshash(x::text) FROM generate_series(0,20) x);
 CREATE POLICY p2 ON y2 USING (a % 3 = 0);
 CREATE POLICY p3 ON y2 USING (a % 4 = 0);
 
@@ -1375,7 +1375,7 @@ ALTER TABLE t1 ENABLE ROW LEVEL SECURITY;
 
 GRANT ALL ON t1 TO regress_rls_bob;
 
-INSERT INTO t1 (SELECT x, md5(x::text) FROM generate_series(0,20) x);
+INSERT INTO t1 (SELECT x, public.fipshash(x::text) FROM generate_series(0,20) x);
 
 SET SESSION AUTHORIZATION regress_rls_bob;
 
@@ -1507,7 +1507,7 @@ ALTER TABLE copy_t ENABLE ROW LEVEL SECURITY;
 
 GRANT ALL ON copy_t TO regress_rls_bob, regress_rls_exempt_user;
 
-INSERT INTO copy_t (SELECT x, md5(x::text) FROM generate_series(0,10) x);
+INSERT INTO copy_t (SELECT x, public.fipshash(x::text) FROM generate_series(0,10) x);
 
 -- Check COPY TO as Superuser/owner.
 RESET SESSION AUTHORIZATION;
@@ -1547,7 +1547,7 @@ ALTER TABLE copy_rel_to ENABLE ROW LEVEL SECURITY;
 
 GRANT ALL ON copy_rel_to TO regress_rls_bob, regress_rls_exempt_user;
 
-INSERT INTO copy_rel_to VALUES (1, md5('1'));
+INSERT INTO copy_rel_to VALUES (1, public.fipshash('1'));
 
 -- Check COPY TO as Superuser/owner.
 RESET SESSION AUTHORIZATION;
@@ -1780,30 +1780,6 @@ DROP ROLE regress_rls_frank; -- succeeds
 ROLLBACK TO q;
 
 ROLLBACK; -- cleanup
-
---
--- Converting table to view
---
-BEGIN;
-CREATE TABLE t (c int);
-CREATE POLICY p ON t USING (c % 2 = 1);
-ALTER TABLE t ENABLE ROW LEVEL SECURITY;
-
-SAVEPOINT q;
-CREATE RULE "_RETURN" AS ON SELECT TO t DO INSTEAD
-  SELECT * FROM generate_series(1,5) t0(c); -- fails due to row-level security enabled
-ROLLBACK TO q;
-
-ALTER TABLE t DISABLE ROW LEVEL SECURITY;
-SAVEPOINT q;
-CREATE RULE "_RETURN" AS ON SELECT TO t DO INSTEAD
-  SELECT * FROM generate_series(1,5) t0(c); -- fails due to policy p on t
-ROLLBACK TO q;
-
-DROP POLICY p ON t;
-CREATE RULE "_RETURN" AS ON SELECT TO t DO INSTEAD
-  SELECT * FROM generate_series(1,5) t0(c); -- succeeds
-ROLLBACK;
 
 --
 -- Policy expression handling
@@ -2146,7 +2122,7 @@ DROP VIEW rls_view;
 DROP TABLE rls_tbl;
 DROP TABLE ref_tbl;
 
--- Leaky operator test
+-- Leaky operator tests
 CREATE TABLE rls_tbl (a int);
 INSERT INTO rls_tbl SELECT x/10 FROM generate_series(1, 100) x;
 ANALYZE rls_tbl;
@@ -2161,9 +2137,58 @@ CREATE FUNCTION op_leak(int, int) RETURNS bool
 CREATE OPERATOR <<< (procedure = op_leak, leftarg = int, rightarg = int,
                      restrict = scalarltsel);
 SELECT * FROM rls_tbl WHERE a <<< 1000;
+RESET SESSION AUTHORIZATION;
+
+CREATE TABLE rls_child_tbl () INHERITS (rls_tbl);
+INSERT INTO rls_child_tbl SELECT x/10 FROM generate_series(1, 100) x;
+ANALYZE rls_child_tbl;
+
+CREATE TABLE rls_ptbl (a int) PARTITION BY RANGE (a);
+CREATE TABLE rls_part PARTITION OF rls_ptbl FOR VALUES FROM (-100) TO (100);
+INSERT INTO rls_ptbl SELECT x/10 FROM generate_series(1, 100) x;
+ANALYZE rls_ptbl, rls_part;
+
+ALTER TABLE rls_ptbl ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rls_part ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON rls_ptbl TO regress_rls_alice;
+GRANT SELECT ON rls_part TO regress_rls_alice;
+CREATE POLICY p1 ON rls_tbl USING (a < 0);
+CREATE POLICY p2 ON rls_ptbl USING (a < 0);
+CREATE POLICY p3 ON rls_part USING (a < 0);
+
+SET SESSION AUTHORIZATION regress_rls_alice;
+SELECT * FROM rls_tbl WHERE a <<< 1000;
+SELECT * FROM rls_child_tbl WHERE a <<< 1000;
+SELECT * FROM rls_ptbl WHERE a <<< 1000;
+SELECT * FROM rls_part WHERE a <<< 1000;
+SELECT * FROM (SELECT * FROM rls_tbl UNION ALL
+               SELECT * FROM rls_tbl) t WHERE a <<< 1000;
+SELECT * FROM (SELECT * FROM rls_child_tbl UNION ALL
+               SELECT * FROM rls_child_tbl) t WHERE a <<< 1000;
+RESET SESSION AUTHORIZATION;
+
+REVOKE SELECT ON rls_tbl FROM regress_rls_alice;
+CREATE VIEW rls_tbl_view AS SELECT * FROM rls_tbl;
+
+ALTER TABLE rls_child_tbl ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON rls_child_tbl TO regress_rls_alice;
+CREATE POLICY p4 ON rls_child_tbl USING (a < 0);
+
+SET SESSION AUTHORIZATION regress_rls_alice;
+SELECT * FROM rls_tbl WHERE a <<< 1000;
+SELECT * FROM rls_tbl_view WHERE a <<< 1000;
+SELECT * FROM rls_child_tbl WHERE a <<< 1000;
+SELECT * FROM (SELECT * FROM rls_tbl UNION ALL
+               SELECT * FROM rls_tbl) t WHERE a <<< 1000;
+SELECT * FROM (SELECT * FROM rls_child_tbl UNION ALL
+               SELECT * FROM rls_child_tbl) t WHERE a <<< 1000;
 DROP OPERATOR <<< (int, int);
 DROP FUNCTION op_leak(int, int);
 RESET SESSION AUTHORIZATION;
+DROP TABLE rls_part;
+DROP TABLE rls_ptbl;
+DROP TABLE rls_child_tbl;
+DROP VIEW rls_tbl_view;
 DROP TABLE rls_tbl;
 
 -- Bug #16006: whole-row Vars in a policy don't play nice with sub-selects

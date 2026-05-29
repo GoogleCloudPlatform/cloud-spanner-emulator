@@ -18,6 +18,7 @@
 #include "backend/schema/catalog/udf.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "googlesql/public/json_value.h"
@@ -115,12 +116,25 @@ TEST_P(SchemaUpdaterTest, CreateUDF_Basic) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateRemoteUDF_Basic) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const Schema> schema,
-      CreateSchema(
-          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
-            OPTIONS (endpoint = 'https://www.google.com', max_batching_rows = 10))"}));
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  std::string ddl;
+  if (GetParam() == POSTGRESQL) {
+    ddl =
+        R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS BIGINT VOLATILE LANGUAGE REMOTE
+            AS $${"endpoint": "https://www.google.com", "max_batching_rows": 10}$$)sql";
+  } else {
+    ddl =
+        R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
+            OPTIONS (endpoint = 'https://www.google.com', max_batching_rows = 10))sql";
+  }
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema,
+                       CreateSchema({ddl}, /*proto_descriptor_bytes=*/"",
+                                    /*dialect=*/GetParam(),
+                                    /*use_gsql_to_pg_translation=*/false));
 
   const Udf* udf = schema->FindUdf("udf_1");
   ASSERT_NE(udf, nullptr);
@@ -130,6 +144,7 @@ TEST_P(SchemaUpdaterTest, CreateRemoteUDF_Basic) {
   EXPECT_EQ(udf->language(), Udf::Language::REMOTE);
   EXPECT_FALSE(udf->is_remote());
   EXPECT_EQ(*udf->max_batching_rows(), 10);
+
   const absl::Span<const Udf* const> udfs = schema->udfs();
   ASSERT_EQ(udfs.size(), 1);
   EXPECT_EQ(udfs[0]->Name(), "udf_1");
@@ -142,57 +157,155 @@ TEST_P(SchemaUpdaterTest, CreateRemoteUDF_Basic) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateRemoteUDF_Error) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   // No endpoint set.
   EXPECT_THAT(
       CreateSchema(
-          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
-            OPTIONS (max_batching_rows = 10))"}),
-      ::googlesql_base::testing::StatusIs(absl::StatusCode::kInternal,
-                                  HasSubstr("udf->endpoint_.has_value()")));
-
-  // Both REMOTE and LANGUAGE REMOTE are set.
-  EXPECT_THAT(
-      CreateSchema(
-          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC REMOTE LANGUAGE REMOTE
-            OPTIONS (endpoint = 'https://www.google.com'))"}),
+          {GetParam() == POSTGRESQL
+               ? R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS BIGINT VOLATILE LANGUAGE REMOTE AS $${"max_batching_rows": 10}$$)sql"
+               : R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (max_batching_rows = 10))sql"},
+          /*proto_descriptor_bytes=*/"",
+          /*dialect=*/GetParam(),
+          /*use_gsql_to_pg_translation=*/false),
       ::googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
-          HasSubstr("Encountered 'LANGUAGE' while parsing: "
-                    "create_function_statement")));
+          HasSubstr("Missing option endpoint for function udf_1.")));
+
+  // Both REMOTE and LANGUAGE REMOTE are set. Not possible in PG.
+  if (GetParam() != POSTGRESQL) {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC REMOTE LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("Encountered 'LANGUAGE' while parsing: "
+                      "create_function_statement")));
+  }
 
   // Negative max batching size.
   EXPECT_THAT(
       CreateSchema(
-          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
-            OPTIONS (endpoint = 'https://www.google.com', max_batching_rows = -1))"}),
-      ::googlesql_base::testing::StatusIs(absl::StatusCode::kInternal,
-                                  HasSubstr("udf->max_batching_rows_ >= 0")));
+          {GetParam() == POSTGRESQL
+               ? R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS BIGINT VOLATILE LANGUAGE REMOTE AS $${"endpoint": "https://www.google.com", "max_batching_rows": -1}$$)sql"
+               : R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com', max_batching_rows = -1))sql"},
+          /*proto_descriptor_bytes=*/"",
+          /*dialect=*/GetParam(),
+          /*use_gsql_to_pg_translation=*/false),
+      ::googlesql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Invalid option value -1 for option max_batching_rows of "
+                    "function udf_1.")));
 
   // Unknown option.
   EXPECT_THAT(
       CreateSchema(
-          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
-            OPTIONS (unknown_option = 'abcd'))"}),
+          {GetParam() == POSTGRESQL
+               ? R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS BIGINT VOLATILE LANGUAGE REMOTE AS $${"unknown_option": "abcd"}$$)sql"
+               : R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (unknown_option = 'abcd'))sql"},
+          /*proto_descriptor_bytes=*/"",
+          /*dialect=*/GetParam(),
+          /*use_gsql_to_pg_translation=*/false),
       ::googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
-          HasSubstr("Invalid option unknown_option for remote UDF udf_1")));
+          HasSubstr("Invalid option unknown_option for function udf_1.")));
 
   // No determinism level set.
-  EXPECT_THAT(
-      CreateSchema(
-          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 LANGUAGE REMOTE
-            OPTIONS (unknown_option = 'abcd'))"}),
-      ::googlesql_base::testing::StatusIs(
-          absl::StatusCode::kInvalidArgument,
-          HasSubstr("Invalid option unknown_option for remote UDF udf_1")));
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS BIGINT LANGUAGE REMOTE AS $${"endpoint": "https://www.google.com"}$$)sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("Remote UDF udf_1 declaration must specify the VOLATILE "
+                      "attribute")));
+  } else {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("Remote UDF udf_1 declaration must specify the NOT "
+                      "DETERMINISTIC attribute")));
+  }
 
   // Language SQL set.
   EXPECT_THAT(
-      CreateSchema({R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 LANGUAGE SQL
-            OPTIONS (endpoint = 'https://www.google.com'))"}),
-      ::googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
-                                  HasSubstr("Syntax error: Unexpected \")\"")));
+      CreateSchema(
+          {GetParam() == POSTGRESQL
+               ? R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS BIGINT LANGUAGE SQL AS $${"endpoint": "https://www.google.com"}$$)sql"
+               : R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 LANGUAGE SQL OPTIONS (endpoint = 'https://www.google.com'))sql"},
+          /*proto_descriptor_bytes=*/"",
+          /*dialect=*/GetParam(),
+          /*use_gsql_to_pg_translation=*/false),
+      ::googlesql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("To write SQL functions, omit the LANGUAGE clause and "
+                    "write the function body using 'AS (expression)'")));
+
+  // Unsupported argument type.
+  EXPECT_THAT(
+      CreateSchema(
+          {GetParam() == POSTGRESQL
+               ? R"sql(CREATE FUNCTION udf_1(x ARRAY<TOKENLIST>) RETURNS BIGINT VOLATILE LANGUAGE REMOTE AS $${"endpoint": "https://www.google.com"}$$)sql"
+               : R"sql(CREATE FUNCTION udf_1(x ARRAY<TOKENLIST>) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
+          /*proto_descriptor_bytes=*/"",
+          /*dialect=*/GetParam(),
+          /*use_gsql_to_pg_translation=*/false),
+      ::googlesql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr(
+              "Encountered 'TOKENLIST' while parsing: function_data_type")));
+
+  // Unsupported return type.
+  EXPECT_THAT(
+      CreateSchema(
+          {GetParam() == POSTGRESQL
+               ? R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS ARRAY<TOKENLIST> VOLATILE LANGUAGE REMOTE AS $${"endpoint": "https://www.google.com"}$$)sql"
+               : R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS ARRAY<TOKENLIST> NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
+          /*proto_descriptor_bytes=*/"",
+          /*dialect=*/GetParam(),
+          /*use_gsql_to_pg_translation=*/false),
+      ::googlesql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr(
+              "Encountered 'TOKENLIST' while parsing: function_data_type")));
+
+  // Duplicate struct field names. Not possible with PG composite types.
+  if (GetParam() != POSTGRESQL) {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x STRUCT<x INT64, x INT64>) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("Remote UDF udf_1 declaration has struct with duplicate "
+                      "field names `x`.")));
+
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS STRUCT<x INT64, x INT64> NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("Remote UDF udf_1 declaration has struct with duplicate "
+                      "field names `x`.")));
+  }
 }
 
 TEST_P(SchemaUpdaterTest, CreateUDF_ParameterizedTypes) {

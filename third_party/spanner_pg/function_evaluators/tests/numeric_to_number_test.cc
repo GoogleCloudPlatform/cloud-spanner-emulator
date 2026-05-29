@@ -162,11 +162,11 @@ TEST_F(NumericToNumberTest, ParseNumberWithLocalePatterns) {
 
 TEST_F(NumericToNumberTest, DividesNumberByPowersOfTen) {
   EXPECT_THAT(NumericToNumber("99", "9V9"),
-              IsOkAndHolds(Pointee(StrEq(("9.9000000000000000")))));
+              IsOkAndHolds(Pointee(StrEq(("9.90000000000000000")))));
   EXPECT_THAT(NumericToNumber("999", "9V99"),
-              IsOkAndHolds(Pointee(StrEq(("9.9900000000000000")))));
+              IsOkAndHolds(Pointee(StrEq(("9.990000000000000000")))));
   EXPECT_THAT(NumericToNumber("9999", "9V999"),
-              IsOkAndHolds(Pointee(StrEq(("9.9990000000000000")))));
+              IsOkAndHolds(Pointee(StrEq(("9.9990000000000000000")))));
 }
 
 TEST_F(NumericToNumberTest, ParsesNumberWithStringLiterals) {

@@ -236,7 +236,7 @@ Key MaybeSetCommitTimestamp(absl::Span<const KeyColumn* const> primary_key,
 
 absl::Status CommitTimestampTracker::CheckRead(
     const Table* table, absl::Span<const Column* const> columns) const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   if (commit_ts_tables_.contains(table)) {
     return error::CannotReadPendingCommitTimestamp(
         absl::StrCat("Table ", table->Name()));
@@ -274,7 +274,7 @@ void CommitTimestampTracker::TrackTable(const Table* table, const Key& key) {
 }
 
 void CommitTimestampTracker::Track(absl::Span<const WriteOp> write_ops) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   for (auto& op : write_ops) {
     if (std::holds_alternative<InsertOp>(op)) {
       const InsertOp& insert = std::get<InsertOp>(op);

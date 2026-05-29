@@ -30,8 +30,8 @@
 #include "absl/strings/substitute.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "common/constants.h"
-#include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "googlesql/base/status_macros.h"
+#include "third_party/spanner_pg/catalog/spangres_type.h"
 
 namespace google {
 namespace spanner {

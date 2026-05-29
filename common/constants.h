@@ -42,6 +42,15 @@ constexpr char kGetTableColumnIdentityStateFunctionName[] =
 
 constexpr char kGetNextSequenceValueFunctionName[] = "get_next_sequence_value";
 
+// Name of the ai.if function.
+constexpr char kAiIfFunctionName[] = "ai.if";
+
+// Name of the ai.score function.
+constexpr char kAiScoreFunctionName[] = "ai.score";
+
+// Name of the ai.classify function.
+constexpr char kAiClassifyFunctionName[] = "ai.classify";
+
 // Name of the ml_predict_row function.
 constexpr char kMlPredictRowFunctionName[] = "ml_predict_row";
 

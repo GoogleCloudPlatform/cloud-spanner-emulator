@@ -950,10 +950,8 @@ void InformationSchemaCatalog::FillColumnsTable() {
 
       specific_kvs[kOnUpdateExpression] = NullString();
       if (column->has_on_update()) {
-        absl::string_view expression = column->expression().value();
-        absl::ConsumePrefix(&expression, "(");
-        absl::ConsumeSuffix(&expression, ")");
-        specific_kvs[kOnUpdateExpression] = String(expression);
+        specific_kvs[kOnUpdateExpression] =
+            String(column->expression().value());
       }
 
       const auto& [table_schema_part, table_name_part] =

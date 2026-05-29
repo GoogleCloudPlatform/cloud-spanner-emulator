@@ -44,9 +44,9 @@
 #include "common/errors.h"
 #include "common/feature_flags.h"
 #include "common/limits.h"
-#include "google/protobuf/descriptor.h"
 #include "googlesql/base/ret_check.h"
 #include "googlesql/base/status_macros.h"
+#include "google/protobuf/descriptor.h"
 
 namespace google {
 namespace spanner {

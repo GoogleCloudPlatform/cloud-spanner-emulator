@@ -192,6 +192,7 @@ void StripPgExpr(Expr* expr) {
       Var* var = PostgresCastNode(Var, expr);
       var->location = -1;
       var->varcollid = 0;
+      var->varnullingrels = nullptr;
       if (var->vartype == VARCHAROID) {
         var->vartype = TEXTOID;
       }
@@ -432,7 +433,9 @@ void StripPgQueryDifferences(Query* pg_query) {
     rte->coltypes = nullptr;
     rte->coltypmods = nullptr;
     rte->colcollations = nullptr;
+    rte->perminfoindex = 0;
   }
+  pg_query->rteperminfos = nullptr;
   // Ignore stmt_location:
   pg_query->stmt_location = -1;
   // Ignore differences in TargetEntry and its expressions:

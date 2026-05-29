@@ -7,7 +7,7 @@
  *	  stuff - checking the qualification and projecting the tuple
  *	  appropriately.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -55,16 +55,24 @@ ExecScanFetch(ScanState *node,
 		{
 			/*
 			 * This is a ForeignScan or CustomScan which has pushed down a
-			 * join to the remote side.  The recheck method is responsible not
-			 * only for rechecking the scan/join quals but also for storing
-			 * the correct tuple in the slot.
+			 * join to the remote side.  If it is a descendant node in the EPQ
+			 * recheck plan tree, run the recheck method function.  Otherwise,
+			 * run the access method function below.
 			 */
+			if (bms_is_member(epqstate->epqParam, node->ps.plan->extParam))
+			{
+				/*
+				 * The recheck method is responsible not only for rechecking
+				 * the scan/join quals but also for storing the correct tuple
+				 * in the slot.
+				 */
 
-			TupleTableSlot *slot = node->ss_ScanTupleSlot;
+				TupleTableSlot *slot = node->ss_ScanTupleSlot;
 
-			if (!(*recheckMtd) (node, slot))
-				ExecClearTuple(slot);	/* would not be returned by scan */
-			return slot;
+				if (!(*recheckMtd) (node, slot))
+					ExecClearTuple(slot);	/* would not be returned by scan */
+				return slot;
+			}
 		}
 		else if (epqstate->relsubs_done[scanrelid - 1])
 		{
@@ -316,7 +324,7 @@ ExecScanReScan(ScanState *node)
 
 		if (scanrelid > 0)
 			epqstate->relsubs_done[scanrelid - 1] =
-				epqstate->epqExtra->relsubs_blocked[scanrelid - 1];
+				epqstate->relsubs_blocked[scanrelid - 1];
 		else
 		{
 			Bitmapset  *relids;
@@ -324,11 +332,11 @@ ExecScanReScan(ScanState *node)
 
 			/*
 			 * If an FDW or custom scan provider has replaced the join with a
-			 * scan, there are multiple RTIs; reset the epqScanDone flag for
+			 * scan, there are multiple RTIs; reset the relsubs_done flag for
 			 * all of them.
 			 */
 			if (IsA(node->ps.plan, ForeignScan))
-				relids = ((ForeignScan *) node->ps.plan)->fs_relids;
+				relids = ((ForeignScan *) node->ps.plan)->fs_base_relids;
 			else if (IsA(node->ps.plan, CustomScan))
 				relids = ((CustomScan *) node->ps.plan)->custom_relids;
 			else
@@ -339,7 +347,7 @@ ExecScanReScan(ScanState *node)
 			{
 				Assert(rtindex > 0);
 				epqstate->relsubs_done[rtindex - 1] =
-					epqstate->epqExtra->relsubs_blocked[rtindex - 1];
+					epqstate->relsubs_blocked[rtindex - 1];
 			}
 		}
 	}

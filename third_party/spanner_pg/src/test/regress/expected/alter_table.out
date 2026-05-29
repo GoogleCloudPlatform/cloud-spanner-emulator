@@ -197,9 +197,9 @@ SELECT typname FROM pg_type WHERE oid = 'attmp_array[]'::regtype;
 (1 row)
 
 SELECT typname FROM pg_type WHERE oid = '_attmp_array[]'::regtype;
-    typname     
-----------------
- ___attmp_array
+     typname     
+-----------------
+ __attmp_array_1
 (1 row)
 
 DROP TABLE _attmp_array;
@@ -2244,7 +2244,7 @@ alter table recur1 add column f2 int;
 alter table recur1 alter column f2 type recur2; -- fails
 ERROR:  composite type recur1 cannot be made a member of itself
 -- SET STORAGE may need to add a TOAST table
-create table test_storage (a text);
+create table test_storage (a text, c text storage plain);
 select reltoastrelid <> 0 as has_toast_table
   from pg_class where oid = 'test_storage'::regclass;
  has_toast_table 
@@ -2262,7 +2262,7 @@ select reltoastrelid <> 0 as has_toast_table
  f
 (1 row)
 
-alter table test_storage alter a set storage extended; -- re-add TOAST table
+alter table test_storage alter a set storage default; -- re-add TOAST table
 select reltoastrelid <> 0 as has_toast_table
   from pg_class where oid = 'test_storage'::regclass;
  has_toast_table 
@@ -2270,6 +2270,9 @@ select reltoastrelid <> 0 as has_toast_table
  t
 (1 row)
 
+-- check STORAGE correctness
+create table test_storage_failed (a text, b int storage extended);
+ERROR:  column data type integer can only have storage PLAIN
 -- test that SET STORAGE propagates to index correctly
 create index test_storage_idx on test_storage (b, a);
 alter table test_storage alter column a set storage external;
@@ -2278,6 +2281,7 @@ alter table test_storage alter column a set storage external;
  Column |  Type   | Collation | Nullable |      Default      | Storage  | Stats target | Description 
 --------+---------+-----------+----------+-------------------+----------+--------------+-------------
  a      | text    |           |          |                   | external |              | 
+ c      | text    |           |          |                   | plain    |              | 
  b      | integer |           |          | random()::integer | plain    |              | 
 Indexes:
     "test_storage_idx" btree (b, a)
@@ -2489,8 +2493,8 @@ create view at_view_2 as select *, to_json(v1) as j from at_view_1 v1;
  id     | integer |           |          |         | plain    | 
  stuff  | text    |           |          |         | extended | 
 View definition:
- SELECT bt.id,
-    bt.stuff
+ SELECT id,
+    stuff
    FROM at_base_table bt;
 
 \d+ at_view_2
@@ -2501,8 +2505,8 @@ View definition:
  stuff  | text    |           |          |         | extended | 
  j      | json    |           |          |         | extended | 
 View definition:
- SELECT v1.id,
-    v1.stuff,
+ SELECT id,
+    stuff,
     to_json(v1.*) AS j
    FROM at_view_1 v1;
 
@@ -2528,8 +2532,8 @@ create or replace view at_view_1 as select *, 2+2 as more from at_base_table bt;
  stuff  | text    |           |          |         | extended | 
  more   | integer |           |          |         | plain    | 
 View definition:
- SELECT bt.id,
-    bt.stuff,
+ SELECT id,
+    stuff,
     2 + 2 AS more
    FROM at_base_table bt;
 
@@ -2541,8 +2545,8 @@ View definition:
  stuff  | text    |           |          |         | extended | 
  j      | json    |           |          |         | extended | 
 View definition:
- SELECT v1.id,
-    v1.stuff,
+ SELECT id,
+    stuff,
     to_json(v1.*) AS j
    FROM at_view_1 v1;
 
@@ -3458,12 +3462,15 @@ SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment F
 -- filenode function call can return NULL for a relation dropped concurrently
 -- with the call's surrounding query, so ignore a NULL mapped_oid for
 -- relations that no longer exist after all calls finish.
+-- Temporary relations are ignored, as not supported by pg_filenode_relation().
 CREATE TEMP TABLE filenode_mapping AS
 SELECT
     oid, mapped_oid, reltablespace, relfilenode, relname
 FROM pg_class,
     pg_filenode_relation(reltablespace, pg_relation_filenode(oid)) AS mapped_oid
-WHERE relkind IN ('r', 'i', 'S', 't', 'm') AND mapped_oid IS DISTINCT FROM oid;
+WHERE relkind IN ('r', 'i', 'S', 't', 'm')
+  AND relpersistence != 't'
+  AND mapped_oid IS DISTINCT FROM oid;
 SELECT m.* FROM filenode_mapping m LEFT JOIN pg_class c ON c.oid = m.oid
 WHERE c.oid IS NOT NULL OR m.mapped_oid IS NOT NULL;
  oid | mapped_oid | reltablespace | relfilenode | relname 
@@ -3848,6 +3855,10 @@ ALTER TABLE partitioned DROP COLUMN b;
 ERROR:  cannot drop column "b" because it is part of the partition key of relation "partitioned"
 ALTER TABLE partitioned ALTER COLUMN b TYPE char(5);
 ERROR:  cannot alter column "b" because it is part of the partition key of relation "partitioned"
+-- specifying storage parameters for partitioned tables is not supported
+ALTER TABLE partitioned SET (fillfactor=100);
+ERROR:  cannot specify storage parameters for a partitioned table
+HINT:  Specify storage parameters for its leaf partitions instead.
 -- partitioned table cannot participate in regular inheritance
 CREATE TABLE nonpartitioned (
 	a int,
@@ -4335,6 +4346,14 @@ Check constraints:
     "part_rp100_a_check" CHECK (a >= 123 AND a < 133 AND a IS NOT NULL)
 
 DROP TABLE range_parted2;
+-- Test that hash partitions continue to work after they're concurrently
+-- detached (bugs #18371, #19070)
+CREATE TABLE hash_parted2 (a int) PARTITION BY HASH(a);
+CREATE TABLE part_hp PARTITION OF hash_parted2 FOR VALUES WITH (MODULUS 2, REMAINDER 0);
+ALTER TABLE hash_parted2 DETACH PARTITION part_hp CONCURRENTLY;
+DROP TABLE hash_parted2;
+INSERT INTO part_hp VALUES (1);
+DROP TABLE part_hp;
 -- Check ALTER TABLE commands for partitioned tables and partitions
 -- cannot add/drop column to/from *only* the parent
 ALTER TABLE ONLY list_parted2 ADD COLUMN c int;
@@ -4575,6 +4594,21 @@ alter table attbl alter column p1 set data type bigint;
 alter table atref alter column c1 set data type bigint;
 drop table attbl, atref;
 /* End test case for bug #17409 */
+/* Test case for bug #18970 */
+create table attbl(a int);
+create table atref(b attbl check ((b).a is not null));
+alter table attbl alter column a type numeric;  -- someday this should work
+ERROR:  cannot alter table "attbl" because column "atref.b" uses its row type
+alter table atref drop constraint atref_b_check;
+create statistics atref_stat on ((b).a is not null) from atref;
+alter table attbl alter column a type numeric;  -- someday this should work
+ERROR:  cannot alter table "attbl" because column "atref.b" uses its row type
+drop statistics atref_stat;
+create index atref_idx on atref (((b).a));
+alter table attbl alter column a type numeric;  -- someday this should work
+ERROR:  cannot alter table "attbl" because column "atref.b" uses its row type
+drop table attbl, atref;
+/* End test case for bug #18970 */
 -- Test that ALTER TABLE rewrite preserves a clustered index
 -- for normal indexes and indexes on constraints.
 create table alttype_cluster (a int);

@@ -3,7 +3,7 @@
  * foreigncmds.c
  *	  foreign-data wrapper/server creation/manipulation commands
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -71,15 +71,26 @@ optionListToArray(List *options)
 	foreach(cell, options)
 	{
 		DefElem    *def = lfirst(cell);
+		const char *name;
 		const char *value;
 		Size		len;
 		text	   *t;
 
+		name = def->defname;
 		value = defGetString(def);
-		len = VARHDRSZ + strlen(def->defname) + 1 + strlen(value);
+
+		/* Insist that name not contain "=", else "a=b=c" is ambiguous */
+		if (strchr(name, '=') != NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid option name \"%s\": must not contain \"=\"",
+							name)));
+
+		len = VARHDRSZ + strlen(name) + 1 + strlen(value);
+		/* +1 leaves room for sprintf's trailing null */
 		t = palloc(len + 1);
 		SET_VARSIZE(t, len);
-		sprintf(VARDATA(t), "%s=%s", def->defname, value);
+		sprintf(VARDATA(t), "%s=%s", name, value);
 
 		astate = accumArrayResult(astate, PointerGetDatum(t),
 								  false, TEXTOID,
@@ -358,15 +369,15 @@ AlterForeignServerOwner_internal(Relation rel, HeapTuple tup, Oid newOwnerId)
 			srvId = form->oid;
 
 			/* Must be owner */
-			if (!pg_foreign_server_ownercheck(srvId, GetUserId()))
+			if (!object_ownercheck(ForeignServerRelationId, srvId, GetUserId()))
 				aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_FOREIGN_SERVER,
 							   NameStr(form->srvname));
 
 			/* Must be able to become new owner */
-			check_is_member_of_role(GetUserId(), newOwnerId);
+			check_can_set_role(GetUserId(), newOwnerId);
 
 			/* New owner must have USAGE privilege on foreign-data wrapper */
-			aclresult = pg_foreign_data_wrapper_aclcheck(form->srvfdw, newOwnerId, ACL_USAGE);
+			aclresult = object_aclcheck(ForeignDataWrapperRelationId, form->srvfdw, newOwnerId, ACL_USAGE);
 			if (aclresult != ACLCHECK_OK)
 			{
 				ForeignDataWrapper *fdw = GetForeignDataWrapper(form->srvfdw);
@@ -891,7 +902,7 @@ CreateForeignServer(CreateForeignServerStmt *stmt)
 	 */
 	fdw = GetForeignDataWrapperByName(stmt->fdwname, false);
 
-	aclresult = pg_foreign_data_wrapper_aclcheck(fdw->fdwid, ownerId, ACL_USAGE);
+	aclresult = object_aclcheck(ForeignDataWrapperRelationId, fdw->fdwid, ownerId, ACL_USAGE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, OBJECT_FDW, fdw->fdwname);
 
@@ -998,7 +1009,7 @@ AlterForeignServer(AlterForeignServerStmt *stmt)
 	/*
 	 * Only owner or a superuser can ALTER a SERVER.
 	 */
-	if (!pg_foreign_server_ownercheck(srvId, GetUserId()))
+	if (!object_ownercheck(ForeignServerRelationId, srvId, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_FOREIGN_SERVER,
 					   stmt->servername);
 
@@ -1076,13 +1087,13 @@ user_mapping_ddl_aclcheck(Oid umuserid, Oid serverid, const char *servername)
 {
 	Oid			curuserid = GetUserId();
 
-	if (!pg_foreign_server_ownercheck(serverid, curuserid))
+	if (!object_ownercheck(ForeignServerRelationId, serverid, curuserid))
 	{
 		if (umuserid == curuserid)
 		{
 			AclResult	aclresult;
 
-			aclresult = pg_foreign_server_aclcheck(serverid, curuserid, ACL_USAGE);
+			aclresult = object_aclcheck(ForeignServerRelationId, serverid, curuserid, ACL_USAGE);
 			if (aclresult != ACLCHECK_OK)
 				aclcheck_error(aclresult, OBJECT_FOREIGN_SERVER, servername);
 		}
@@ -1433,7 +1444,7 @@ CreateForeignTable(CreateForeignTableStmt *stmt, Oid relid)
 	 * get the actual FDW for option validation etc.
 	 */
 	server = GetForeignServerByName(stmt->servername, false);
-	aclresult = pg_foreign_server_aclcheck(server->serverid, ownerId, ACL_USAGE);
+	aclresult = object_aclcheck(ForeignServerRelationId, server->serverid, ownerId, ACL_USAGE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, OBJECT_FOREIGN_SERVER, server->servername);
 
@@ -1492,7 +1503,7 @@ ImportForeignSchema(ImportForeignSchemaStmt *stmt)
 
 	/* Check that the foreign server exists and that we have USAGE on it */
 	server = GetForeignServerByName(stmt->server_name, false);
-	aclresult = pg_foreign_server_aclcheck(server->serverid, GetUserId(), ACL_USAGE);
+	aclresult = object_aclcheck(ForeignServerRelationId, server->serverid, GetUserId(), ACL_USAGE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, OBJECT_FOREIGN_SERVER, server->servername);
 

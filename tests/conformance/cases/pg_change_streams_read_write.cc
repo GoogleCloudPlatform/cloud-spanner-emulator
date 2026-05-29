@@ -47,11 +47,11 @@
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 #include "tests/conformance/common/environment.h"
+#include "googlesql/base/status_macros.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/support/sync_stream.h"
 #include "nlohmann/json.hpp"
 #include "google/protobuf/json/json.h"
-#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {

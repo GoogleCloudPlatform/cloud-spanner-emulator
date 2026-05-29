@@ -50,7 +50,7 @@ static absl::StatusOr<Datum> JsonbIn(absl::string_view jsonb_in) {
   std::string jsonb_string = std::string(jsonb_in);
   Datum jsonb_in_cstring = CStringGetDatum(jsonb_string.c_str());
   return postgres_translator::CheckedNullableOidFunctionCall1(
-      F_JSONB_IN, CStringGetDatum(jsonb_in_cstring));
+      F_JSONB_IN, jsonb_in_cstring);
 }
 
 static absl::StatusOr<std::string> JsonbOut(Datum jsonb_datum) {

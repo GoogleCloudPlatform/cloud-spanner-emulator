@@ -20,8 +20,6 @@ SELECT spcoptions FROM pg_tablespace WHERE spcname = 'regress_tblspacewith';
 -- drop the tablespace so we can re-use the location
 DROP TABLESPACE regress_tblspacewith;
 
--- create a tablespace we can use
-CREATE TABLESPACE regress_tblspace LOCATION '';
 -- This returns a relative path as of an effect of allow_in_place_tablespaces,
 -- masking the tablespace OID used in the path name.
 SELECT regexp_replace(pg_tablespace_location(oid), '(pg_tblspc)/(\d+)', '\1/NNN')
@@ -225,7 +223,7 @@ CREATE TABLE testschema.part1 PARTITION OF testschema.part FOR VALUES IN (1);
 CREATE INDEX part_a_idx ON testschema.part (a) TABLESPACE regress_tblspace;
 CREATE TABLE testschema.part2 PARTITION OF testschema.part FOR VALUES IN (2);
 SELECT relname, spcname FROM pg_catalog.pg_tablespace t, pg_catalog.pg_class c
-    where c.reltablespace = t.oid AND c.relname LIKE 'part%_idx';
+    where c.reltablespace = t.oid AND c.relname LIKE 'part%_idx' ORDER BY relname;
 \d testschema.part
 \d+ testschema.part
 \d testschema.part1
@@ -397,6 +395,12 @@ DROP TABLESPACE regress_tblspace;
 ALTER INDEX testschema.part_a_idx SET TABLESPACE pg_default;
 -- Fail, not empty
 DROP TABLESPACE regress_tblspace;
+
+-- Adequate cache initialization before GRANT
+\c -
+BEGIN;
+GRANT ALL ON TABLESPACE regress_tblspace TO PUBLIC;
+ROLLBACK;
 
 CREATE ROLE regress_tablespace_user1 login;
 CREATE ROLE regress_tablespace_user2 login;

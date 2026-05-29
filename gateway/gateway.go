@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"time"
 
 	// We need this to make sure that the gateway can serialize the google.rpc.ErrorInfo proto.
@@ -52,6 +53,7 @@ type Options struct {
 	DisableQueryNullFilteredIndexCheck             bool
 	OverrideMaxDatabasesPerInstance                int
 	OverrideChangeStreamPartitionTokenAliveSeconds int
+	RemoteFunctionsHostPort                        string
 }
 
 // Gateway implements the emulator gateway server.
@@ -78,6 +80,13 @@ func (gw *Gateway) Run() {
 	}
 	if gw.opts.DisableQueryNullFilteredIndexCheck {
 		emulatorArgs = append(emulatorArgs, "--disable_query_null_filtered_index_check")
+	}
+	if gw.opts.RemoteFunctionsHostPort != "" {
+		if !strings.HasPrefix(gw.opts.RemoteFunctionsHostPort, "localhost:") {
+			log.Fatal("Flag remote_functions_host_port must be `localhost:<port>`")
+		}
+
+		emulatorArgs = append(emulatorArgs, "--remote_functions_host_port", gw.opts.RemoteFunctionsHostPort)
 	}
 	emulatorArgs = append(emulatorArgs,
 		fmt.Sprintf("--override_max_databases_per_instance=%d",

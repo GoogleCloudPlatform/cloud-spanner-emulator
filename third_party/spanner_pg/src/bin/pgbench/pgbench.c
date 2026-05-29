@@ -5,7 +5,7 @@
  * Originally written by Tatsuo Ishii and enhanced by many contributors.
  *
  * src/bin/pgbench/pgbench.c
- * Copyright (c) 2000-2022, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2023, PostgreSQL Global Development Group
  * ALL RIGHTS RESERVED;
  *
  * Permission to use, copy, modify, and distribute this software and its
@@ -27,8 +27,8 @@
  *
  */
 
-#ifdef WIN32
-#define FD_SETSIZE 1024			/* must set before winsock2.h is included */
+#if defined(WIN32) && FD_SETSIZE < 1024
+#error FD_SETSIZE needs to have been increased
 #endif
 
 #include "postgres_fe.h"
@@ -40,9 +40,7 @@
 #include <signal.h>
 #include <time.h>
 #include <sys/time.h>
-#ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>		/* for getrlimit */
-#endif
 
 /* For testing, PGBENCH_USE_SELECT can be defined to force use of that code */
 #if defined(HAVE_PPOLL) && !defined(PGBENCH_USE_SELECT)
@@ -52,9 +50,7 @@
 #endif
 #else							/* no ppoll(), so use select() */
 #define POLL_USING_SELECT
-#ifdef HAVE_SYS_SELECT_H
 #include <sys/select.h>
-#endif
 #endif
 
 #include "common/int.h"
@@ -72,6 +68,7 @@
 #include "port/pg_bitutils.h"
 #include "portability/instr_time.h"
 
+/* X/Open (XSI) requires <math.h> to provide M_PI, but core POSIX does not */
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -314,7 +311,7 @@ const char *progname;
 
 #define WSEP '@'				/* weight separator */
 
-volatile bool timer_exceeded = false;	/* flag from signal handler */
+volatile sig_atomic_t timer_exceeded = false;	/* flag from signal handler */
 
 /*
  * We don't want to allocate variables one by one; for efficiency, add a
@@ -1142,8 +1139,8 @@ getGaussianRand(pg_prng_state *state, int64 min, int64 max,
 	Assert(parameter >= MIN_GAUSSIAN_PARAM);
 
 	/*
-	 * Get user specified random number from this loop, with -parameter <
-	 * stdev <= parameter
+	 * Get normally-distributed random number in the range -parameter <= stdev
+	 * < parameter.
 	 *
 	 * This loop is executed until the number is in the expected range.
 	 *
@@ -1155,25 +1152,7 @@ getGaussianRand(pg_prng_state *state, int64 min, int64 max,
 	 */
 	do
 	{
-		/*
-		 * pg_prng_double generates [0, 1), but for the basic version of the
-		 * Box-Muller transform the two uniformly distributed random numbers
-		 * are expected to be in (0, 1] (see
-		 * https://en.wikipedia.org/wiki/Box-Muller_transform)
-		 */
-		double		rand1 = 1.0 - pg_prng_double(state);
-		double		rand2 = 1.0 - pg_prng_double(state);
-
-		/* Box-Muller basic form transform */
-		double		var_sqrt = sqrt(-2.0 * log(rand1));
-
-		stdev = var_sqrt * sin(2.0 * M_PI * rand2);
-
-		/*
-		 * we may try with cos, but there may be a bias induced if the
-		 * previous value fails the test. To be on the safe side, let us try
-		 * over.
-		 */
+		stdev = pg_prng_double_normal(state);
 	}
 	while (stdev < -parameter || stdev >= parameter);
 
@@ -1628,15 +1607,15 @@ lookupVariable(Variables *variables, char *name)
 	/* Sort if we have to */
 	if (!variables->vars_sorted)
 	{
-		qsort((void *) variables->vars, variables->nvars, sizeof(Variable),
+		qsort(variables->vars, variables->nvars, sizeof(Variable),
 			  compareVariableNames);
 		variables->vars_sorted = true;
 	}
 
 	/* Now we can search */
 	key.name = name;
-	return (Variable *) bsearch((void *) &key,
-								(void *) variables->vars,
+	return (Variable *) bsearch(&key,
+								variables->vars,
 								variables->nvars,
 								sizeof(Variable),
 								compareVariableNames);
@@ -1855,8 +1834,7 @@ putVariable(Variables *variables, const char *context, char *name,
 	/* dup then free, in case value is pointing at this variable */
 	val = pg_strdup(value);
 
-	if (var->svalue)
-		free(var->svalue);
+	free(var->svalue);
 	var->svalue = val;
 	var->value.type = PGBT_NO_VALUE;
 
@@ -1875,8 +1853,7 @@ putVariableValue(Variables *variables, const char *context, char *name,
 	if (!var)
 		return false;
 
-	if (var->svalue)
-		free(var->svalue);
+	free(var->svalue);
 	var->svalue = NULL;
 	var->value = *value;
 
@@ -2982,6 +2959,8 @@ runShellCommand(Variables *variables, char *variable, char **argv, int argc)
 
 	command[len] = '\0';
 
+	fflush(NULL);				/* needed before either system() or popen() */
+
 	/* Fast path for non-assignment case */
 	if (variable == NULL)
 	{
@@ -3009,7 +2988,7 @@ runShellCommand(Variables *variables, char *variable, char **argv, int argc)
 	}
 	if (pclose(fp) < 0)
 	{
-		pg_log_error("%s: could not close shell command", argv[0]);
+		pg_log_error("%s: could not run shell command: %m", argv[0]);
 		return false;
 	}
 
@@ -3046,7 +3025,14 @@ commandFailed(CState *st, const char *cmd, const char *message)
 static void
 commandError(CState *st, const char *message)
 {
-	Assert(sql_script[st->use_file].commands[st->command]->type == SQL_COMMAND);
+	/*
+	 * Errors should only be detected during an SQL command or the
+	 * \endpipeline meta command. Any other case triggers an assertion
+	 * failure.
+	 */
+	Assert(sql_script[st->use_file].commands[st->command]->type == SQL_COMMAND ||
+		   sql_script[st->use_file].commands[st->command]->meta == META_ENDPIPELINE);
+
 	pg_log_info("client %d got an error in command %d (SQL) of script %d; %s",
 				st->id, st->command, st->use_file, message);
 }
@@ -3334,8 +3320,22 @@ readCommandResponse(CState *st, MetaCommand meta, char *varprefix)
 				pg_log_debug("client %d pipeline ending", st->id);
 				if (PQexitPipelineMode(st->con) != 1)
 					pg_log_error("client %d failed to exit pipeline mode: %s", st->id,
-								 PQerrorMessage(st->con));
+								 PQresultErrorMessage(res));
 				break;
+
+			case PGRES_COPY_IN:
+			case PGRES_COPY_OUT:
+			case PGRES_COPY_BOTH:
+				pg_log_error("COPY is not supported in pgbench, aborting");
+
+				/*
+				 * We need to exit the copy state.  Otherwise, PQgetResult()
+				 * will always return an empty PGresult as an effect of
+				 * getCopyResult(), leading to an infinite loop in the error
+				 * cleanup done below.
+				 */
+				PQendcopy(st->con);
+				goto error;
 
 			case PGRES_NONFATAL_ERROR:
 			case PGRES_FATAL_ERROR:
@@ -3344,7 +3344,7 @@ readCommandResponse(CState *st, MetaCommand meta, char *varprefix)
 				if (canRetryError(st->estatus))
 				{
 					if (verbose_errors)
-						commandError(st, PQerrorMessage(st->con));
+						commandError(st, PQresultErrorMessage(res));
 					goto error;
 				}
 				/* fall through */
@@ -3353,7 +3353,7 @@ readCommandResponse(CState *st, MetaCommand meta, char *varprefix)
 				/* anything else is unexpected */
 				pg_log_error("client %d script %d aborted in command %d query %d: %s",
 							 st->id, st->use_file, st->command, qrynum,
-							 PQerrorMessage(st->con));
+							 PQresultErrorMessage(res));
 				goto error;
 		}
 
@@ -3480,6 +3480,8 @@ doRetry(CState *st, pg_time_usec_t *now)
 static int
 discardUntilSync(CState *st)
 {
+	bool		received_sync = false;
+
 	/* send a sync */
 	if (!PQpipelineSync(st->con))
 	{
@@ -3494,10 +3496,16 @@ discardUntilSync(CState *st)
 		PGresult   *res = PQgetResult(st->con);
 
 		if (PQresultStatus(res) == PGRES_PIPELINE_SYNC)
+			received_sync = true;
+		else if (received_sync)
 		{
-			PQclear(res);
-			res = PQgetResult(st->con);
+			/*
+			 * PGRES_PIPELINE_SYNC must be followed by another
+			 * PGRES_PIPELINE_SYNC or NULL; otherwise, assert failure.
+			 */
 			Assert(res == NULL);
+
+			PQclear(res);
 			break;
 		}
 		PQclear(res);
@@ -3565,13 +3573,12 @@ printVerboseErrorMessages(CState *st, pg_time_usec_t *now, bool is_retry)
 		resetPQExpBuffer(buf);
 
 	printfPQExpBuffer(buf, "client %d ", st->id);
-	appendPQExpBuffer(buf, "%s",
-					  (is_retry ?
-					   "repeats the transaction after the error" :
-					   "ends the failed transaction"));
+	appendPQExpBufferStr(buf, (is_retry ?
+							   "repeats the transaction after the error" :
+							   "ends the failed transaction"));
 	appendPQExpBuffer(buf, " (try %u", st->tries);
 
-	/* Print max_tries if it is not unlimitted. */
+	/* Print max_tries if it is not unlimited. */
 	if (max_tries)
 		appendPQExpBuffer(buf, "/%u", max_tries);
 
@@ -3585,7 +3592,7 @@ printVerboseErrorMessages(CState *st, pg_time_usec_t *now, bool is_retry)
 		appendPQExpBuffer(buf, ", %.3f%% of the maximum time of tries was used",
 						  (100.0 * (*now - st->txn_scheduled) / latency_limit));
 	}
-	appendPQExpBuffer(buf, ")\n");
+	appendPQExpBufferStr(buf, ")\n");
 
 	pg_log_info("%s", buf->data);
 }
@@ -3869,8 +3876,6 @@ advanceConnectionState(TState *thread, CState *st, StatsData *agg)
 				/* quickly skip commands until something to do... */
 				while (true)
 				{
-					Command    *command;
-
 					command = sql_script[st->use_file].commands[st->command];
 
 					/* cannot reach end of script in that state */
@@ -3889,8 +3894,14 @@ advanceConnectionState(TState *thread, CState *st, StatsData *agg)
 						switch (conditional_stack_peek(st->cstack))
 						{
 							case IFSTATE_FALSE:
-								if (command->meta == META_IF ||
-									command->meta == META_ELIF)
+								if (command->meta == META_IF)
+								{
+									/* nested if in skipped branch - ignore */
+									conditional_stack_push(st->cstack,
+														   IFSTATE_IGNORED);
+									st->command++;
+								}
+								else if (command->meta == META_ELIF)
 								{
 									/* we must evaluate the condition */
 									st->state = CSTATE_START_COMMAND;
@@ -3909,11 +3920,7 @@ advanceConnectionState(TState *thread, CState *st, StatsData *agg)
 									conditional_stack_pop(st->cstack);
 									if (conditional_active(st->cstack))
 										st->state = CSTATE_START_COMMAND;
-
-									/*
-									 * else state remains in
-									 * CSTATE_SKIP_COMMAND
-									 */
+									/* else state remains CSTATE_SKIP_COMMAND */
 									st->command++;
 								}
 								break;
@@ -4025,8 +4032,6 @@ advanceConnectionState(TState *thread, CState *st, StatsData *agg)
 				 */
 				if (report_per_command)
 				{
-					Command    *command;
-
 					pg_time_now_lazy(&now);
 
 					command = sql_script[st->use_file].commands[st->command];
@@ -4495,7 +4500,7 @@ executeMetaCommand(CState *st, pg_time_usec_t *now)
 }
 
 /*
- * Return the number fo failed transactions.
+ * Return the number of failed transactions.
  */
 static int64
 getFailures(const StatsData *stats)
@@ -4666,7 +4671,7 @@ processXactStats(TState *thread, CState *st, pg_time_usec_t *now,
 	double		latency = 0.0,
 				lag = 0.0;
 	bool		detailed = progress || throttle_delay || latency_limit ||
-	use_log || per_script_stats;
+		use_log || per_script_stats;
 
 	if (detailed && !skipped && st->estatus == ESTATUS_NO_ERROR)
 	{
@@ -4916,6 +4921,8 @@ initGenerateDataClientSide(PGconn *con)
 	PGresult   *res;
 	int			i;
 	int64		k;
+	int			chars = 0;
+	int			prev_chars = 0;
 	char	   *copy_statement;
 
 	/* used to track elapsed time and estimate of the remaining time */
@@ -5001,10 +5008,20 @@ initGenerateDataClientSide(PGconn *con)
 			double		elapsed_sec = PG_TIME_GET_DOUBLE(pg_time_now() - start);
 			double		remaining_sec = ((double) scale * naccounts - j) * elapsed_sec / j;
 
-			fprintf(stderr, INT64_FORMAT " of " INT64_FORMAT " tuples (%d%%) done (elapsed %.2f s, remaining %.2f s)%c",
-					j, (int64) naccounts * scale,
-					(int) (((int64) j * 100) / (naccounts * (int64) scale)),
-					elapsed_sec, remaining_sec, eol);
+			chars = fprintf(stderr, INT64_FORMAT " of " INT64_FORMAT " tuples (%d%%) done (elapsed %.2f s, remaining %.2f s)",
+							j, (int64) naccounts * scale,
+							(int) (((int64) j * 100) / (naccounts * (int64) scale)),
+							elapsed_sec, remaining_sec);
+
+			/*
+			 * If the previous progress message is longer than the current
+			 * one, add spaces to the current line to fully overwrite any
+			 * remaining characters from the previous message.
+			 */
+			if (prev_chars > chars)
+				fprintf(stderr, "%*c", prev_chars - chars, ' ');
+			fputc(eol, stderr);
+			prev_chars = chars;
 		}
 		/* let's not call the timing for each row, but only each 100 rows */
 		else if (use_quiet && (j % 100 == 0))
@@ -5015,9 +5032,19 @@ initGenerateDataClientSide(PGconn *con)
 			/* have we reached the next interval (or end)? */
 			if ((j == scale * naccounts) || (elapsed_sec >= log_interval * LOG_STEP_SECONDS))
 			{
-				fprintf(stderr, INT64_FORMAT " of " INT64_FORMAT " tuples (%d%%) done (elapsed %.2f s, remaining %.2f s)%c",
-						j, (int64) naccounts * scale,
-						(int) (((int64) j * 100) / (naccounts * (int64) scale)), elapsed_sec, remaining_sec, eol);
+				chars = fprintf(stderr, INT64_FORMAT " of " INT64_FORMAT " tuples (%d%%) done (elapsed %.2f s, remaining %.2f s)",
+								j, (int64) naccounts * scale,
+								(int) (((int64) j * 100) / (naccounts * (int64) scale)), elapsed_sec, remaining_sec);
+
+				/*
+				 * If the previous progress message is longer than the current
+				 * one, add spaces to the current line to fully overwrite any
+				 * remaining characters from the previous message.
+				 */
+				if (prev_chars > chars)
+					fprintf(stderr, "%*c", prev_chars - chars, ' ');
+				fputc(eol, stderr);
+				prev_chars = chars;
 
 				/* skip to the next interval */
 				log_interval = (int) ceil(elapsed_sec / LOG_STEP_SECONDS);
@@ -5348,7 +5375,7 @@ GetTableInfo(PGconn *con, bool scale_given)
 		pg_log_error_hint("Perhaps you need to do initialization (\"pgbench -i\") in database \"%s\".", PQdb(con));
 		exit(1);
 	}
-	else						/* PQntupes(res) == 1 */
+	else						/* PQntuples(res) == 1 */
 	{
 		/* normal case, extract partition information */
 		if (PQgetisnull(res, 0, 1))
@@ -5546,12 +5573,10 @@ static void
 free_command(Command *command)
 {
 	termPQExpBuffer(&command->lines);
-	if (command->first_line)
-		pg_free(command->first_line);
+	pg_free(command->first_line);
 	for (int i = 0; i < command->argc; i++)
 		pg_free(command->argv[i]);
-	if (command->varprefix)
-		pg_free(command->varprefix);
+	pg_free(command->varprefix);
 
 	/*
 	 * It should also free expr recursively, but this is currently not needed
@@ -6447,7 +6472,7 @@ printResults(StatsData *total,
 				StatsData  *sstats = &sql_script[i].stats;
 				int64		script_failures = getFailures(sstats);
 				int64		script_total_cnt =
-				sstats->cnt + sstats->skipped + script_failures;
+					sstats->cnt + sstats->skipped + script_failures;
 
 				printf("SQL script %d: %s\n"
 					   " - weight: %d (targets %.1f%% of total)\n"
@@ -6701,37 +6726,22 @@ main(int argc, char **argv)
 	if (!set_random_seed(getenv("PGBENCH_RANDOM_SEED")))
 		pg_fatal("error while setting random seed from PGBENCH_RANDOM_SEED environment variable");
 
-	while ((c = getopt_long(argc, argv, "iI:h:nvp:dqb:SNc:j:Crs:t:T:U:lf:D:F:M:P:R:L:", long_options, &optindex)) != -1)
+	while ((c = getopt_long(argc, argv, "b:c:CdD:f:F:h:iI:j:lL:M:nNp:P:qrR:s:St:T:U:v", long_options, &optindex)) != -1)
 	{
 		char	   *script;
 
 		switch (c)
 		{
-			case 'i':
-				is_init_mode = true;
-				break;
-			case 'I':
-				if (initialize_steps)
-					pg_free(initialize_steps);
-				initialize_steps = pg_strdup(optarg);
-				checkInitSteps(initialize_steps);
-				initialization_option_set = true;
-				break;
-			case 'h':
-				pghost = pg_strdup(optarg);
-				break;
-			case 'n':
-				is_no_vacuum = true;
-				break;
-			case 'v':
+			case 'b':
+				if (strcmp(optarg, "list") == 0)
+				{
+					listAvailableScripts();
+					exit(0);
+				}
+				weight = parseScriptWeight(optarg, &script);
+				process_builtin(findBuiltin(script), weight);
 				benchmarking_option_set = true;
-				do_vacuum_accounts = true;
-				break;
-			case 'p':
-				pgport = pg_strdup(optarg);
-				break;
-			case 'd':
-				pg_logging_increase_verbosity();
+				internal_script_used = true;
 				break;
 			case 'c':
 				benchmarking_option_set = true;
@@ -6741,11 +6751,7 @@ main(int argc, char **argv)
 					exit(1);
 				}
 #ifdef HAVE_GETRLIMIT
-#ifdef RLIMIT_NOFILE			/* most platforms use RLIMIT_NOFILE */
 				if (getrlimit(RLIMIT_NOFILE, &rlim) == -1)
-#else							/* but BSD doesn't ... */
-				if (getrlimit(RLIMIT_OFILE, &rlim) == -1)
-#endif							/* RLIMIT_NOFILE */
 					pg_fatal("getrlimit failed: %m");
 				if (rlim.rlim_cur < nclients + 3)
 				{
@@ -6755,6 +6761,50 @@ main(int argc, char **argv)
 					exit(1);
 				}
 #endif							/* HAVE_GETRLIMIT */
+				break;
+			case 'C':
+				benchmarking_option_set = true;
+				is_connect = true;
+				break;
+			case 'd':
+				pg_logging_increase_verbosity();
+				break;
+			case 'D':
+				{
+					char	   *p;
+
+					benchmarking_option_set = true;
+
+					if ((p = strchr(optarg, '=')) == NULL || p == optarg || *(p + 1) == '\0')
+						pg_fatal("invalid variable definition: \"%s\"", optarg);
+
+					*p++ = '\0';
+					if (!putVariable(&state[0].variables, "option", optarg, p))
+						exit(1);
+				}
+				break;
+			case 'f':
+				weight = parseScriptWeight(optarg, &script);
+				process_file(script, weight);
+				benchmarking_option_set = true;
+				break;
+			case 'F':
+				initialization_option_set = true;
+				if (!option_parse_int(optarg, "-F/--fillfactor", 10, 100,
+									  &fillfactor))
+					exit(1);
+				break;
+			case 'h':
+				pghost = pg_strdup(optarg);
+				break;
+			case 'i':
+				is_init_mode = true;
+				break;
+			case 'I':
+				pg_free(initialize_steps);
+				initialize_steps = pg_strdup(optarg);
+				checkInitSteps(initialize_steps);
+				initialization_option_set = true;
 				break;
 			case 'j':			/* jobs */
 				benchmarking_option_set = true;
@@ -6768,19 +6818,76 @@ main(int argc, char **argv)
 					pg_fatal("threads are not supported on this platform; use -j1");
 #endif							/* !ENABLE_THREAD_SAFETY */
 				break;
-			case 'C':
+			case 'l':
 				benchmarking_option_set = true;
-				is_connect = true;
+				use_log = true;
+				break;
+			case 'L':
+				{
+					double		limit_ms = atof(optarg);
+
+					if (limit_ms <= 0.0)
+						pg_fatal("invalid latency limit: \"%s\"", optarg);
+					benchmarking_option_set = true;
+					latency_limit = (int64) (limit_ms * 1000);
+				}
+				break;
+			case 'M':
+				benchmarking_option_set = true;
+				for (querymode = 0; querymode < NUM_QUERYMODE; querymode++)
+					if (strcmp(optarg, QUERYMODE[querymode]) == 0)
+						break;
+				if (querymode >= NUM_QUERYMODE)
+					pg_fatal("invalid query mode (-M): \"%s\"", optarg);
+				break;
+			case 'n':
+				is_no_vacuum = true;
+				break;
+			case 'N':
+				process_builtin(findBuiltin("simple-update"), 1);
+				benchmarking_option_set = true;
+				internal_script_used = true;
+				break;
+			case 'p':
+				pgport = pg_strdup(optarg);
+				break;
+			case 'P':
+				benchmarking_option_set = true;
+				if (!option_parse_int(optarg, "-P/--progress", 1, INT_MAX,
+									  &progress))
+					exit(1);
+				break;
+			case 'q':
+				initialization_option_set = true;
+				use_quiet = true;
 				break;
 			case 'r':
 				benchmarking_option_set = true;
 				report_per_command = true;
+				break;
+			case 'R':
+				{
+					/* get a double from the beginning of option value */
+					double		throttle_value = atof(optarg);
+
+					benchmarking_option_set = true;
+
+					if (throttle_value <= 0.0)
+						pg_fatal("invalid rate limit: \"%s\"", optarg);
+					/* Invert rate limit into per-transaction delay in usec */
+					throttle_delay = 1000000.0 / throttle_value;
+				}
 				break;
 			case 's':
 				scale_given = true;
 				if (!option_parse_int(optarg, "-s/--scale", 1, INT_MAX,
 									  &scale))
 					exit(1);
+				break;
+			case 'S':
+				process_builtin(findBuiltin("select-only"), 1);
+				benchmarking_option_set = true;
+				internal_script_used = true;
 				break;
 			case 't':
 				benchmarking_option_set = true;
@@ -6797,96 +6904,9 @@ main(int argc, char **argv)
 			case 'U':
 				username = pg_strdup(optarg);
 				break;
-			case 'l':
+			case 'v':
 				benchmarking_option_set = true;
-				use_log = true;
-				break;
-			case 'q':
-				initialization_option_set = true;
-				use_quiet = true;
-				break;
-			case 'b':
-				if (strcmp(optarg, "list") == 0)
-				{
-					listAvailableScripts();
-					exit(0);
-				}
-				weight = parseScriptWeight(optarg, &script);
-				process_builtin(findBuiltin(script), weight);
-				benchmarking_option_set = true;
-				internal_script_used = true;
-				break;
-			case 'S':
-				process_builtin(findBuiltin("select-only"), 1);
-				benchmarking_option_set = true;
-				internal_script_used = true;
-				break;
-			case 'N':
-				process_builtin(findBuiltin("simple-update"), 1);
-				benchmarking_option_set = true;
-				internal_script_used = true;
-				break;
-			case 'f':
-				weight = parseScriptWeight(optarg, &script);
-				process_file(script, weight);
-				benchmarking_option_set = true;
-				break;
-			case 'D':
-				{
-					char	   *p;
-
-					benchmarking_option_set = true;
-
-					if ((p = strchr(optarg, '=')) == NULL || p == optarg || *(p + 1) == '\0')
-						pg_fatal("invalid variable definition: \"%s\"", optarg);
-
-					*p++ = '\0';
-					if (!putVariable(&state[0].variables, "option", optarg, p))
-						exit(1);
-				}
-				break;
-			case 'F':
-				initialization_option_set = true;
-				if (!option_parse_int(optarg, "-F/--fillfactor", 10, 100,
-									  &fillfactor))
-					exit(1);
-				break;
-			case 'M':
-				benchmarking_option_set = true;
-				for (querymode = 0; querymode < NUM_QUERYMODE; querymode++)
-					if (strcmp(optarg, QUERYMODE[querymode]) == 0)
-						break;
-				if (querymode >= NUM_QUERYMODE)
-					pg_fatal("invalid query mode (-M): \"%s\"", optarg);
-				break;
-			case 'P':
-				benchmarking_option_set = true;
-				if (!option_parse_int(optarg, "-P/--progress", 1, INT_MAX,
-									  &progress))
-					exit(1);
-				break;
-			case 'R':
-				{
-					/* get a double from the beginning of option value */
-					double		throttle_value = atof(optarg);
-
-					benchmarking_option_set = true;
-
-					if (throttle_value <= 0.0)
-						pg_fatal("invalid rate limit: \"%s\"", optarg);
-					/* Invert rate limit into per-transaction delay in usec */
-					throttle_delay = 1000000.0 / throttle_value;
-				}
-				break;
-			case 'L':
-				{
-					double		limit_ms = atof(optarg);
-
-					if (limit_ms <= 0.0)
-						pg_fatal("invalid latency limit: \"%s\"", optarg);
-					benchmarking_option_set = true;
-					latency_limit = (int64) (limit_ms * 1000);
-				}
+				do_vacuum_accounts = true;
 				break;
 			case 1:				/* unlogged-tables */
 				initialization_option_set = true;
@@ -7597,9 +7617,9 @@ threadRun(void *arg)
 		/* progress report is made by thread 0 for all threads */
 		if (progress && thread->tid == 0)
 		{
-			pg_time_usec_t now = pg_time_now();
+			pg_time_usec_t now2 = pg_time_now();
 
-			if (now >= next_report)
+			if (now2 >= next_report)
 			{
 				/*
 				 * Horrible hack: this relies on the thread pointer we are
@@ -7607,7 +7627,7 @@ threadRun(void *arg)
 				 * entry of the threads array.  That is why this MUST be done
 				 * by thread 0 and not any other.
 				 */
-				printProgressReport(thread, thread_start, now,
+				printProgressReport(thread, thread_start, now2,
 									&last, &last_report);
 
 				/*
@@ -7617,7 +7637,7 @@ threadRun(void *arg)
 				do
 				{
 					next_report += (int64) 1000000 * progress;
-				} while (now >= next_report);
+				} while (now2 >= next_report);
 			}
 		}
 	}

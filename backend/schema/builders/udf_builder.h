@@ -114,6 +114,10 @@ class Udf::Builder {
     return *this;
   }
 
+  std::vector<const SchemaNode*> dependencies() const {
+    return instance_->dependencies_;
+  }
+
  private:
   std::unique_ptr<Udf> instance_;
 };

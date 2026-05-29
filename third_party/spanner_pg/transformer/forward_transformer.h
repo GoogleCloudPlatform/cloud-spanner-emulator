@@ -690,7 +690,9 @@ class ForwardTransformer {
   BuildGsqlOnConflictClauseForInsertDML(
       const googlesql::Table& table, const OnConflictExpr* pg_on_conflict,
       RangeTblEntry* rte_for_excluded_alias, Index insert_table_rtindex,
-      Index excluded_alias_rtindex, const VarIndexScope* target_table_scope);
+      Index excluded_alias_rtindex, const List* rteperminfos,
+      const VarIndexScope* target_table_scope);
+
 
   // Expression ================================================================
  public:

@@ -39,7 +39,7 @@ static constexpr char kExistsColumn[] = "_exists";
 }  // namespace
 
 void InMemoryStorage::RemoveExpiredVersions(Cell& cell, absl::Time timestamp) {
-  absl::MutexLock lock(&version_retention_period_mu_);
+  absl::MutexLock lock(version_retention_period_mu_);
   auto it = cell.begin();
   auto upper_bound = cell.upper_bound(timestamp - version_retention_period_);
   while (it != upper_bound) {
@@ -82,7 +82,7 @@ absl::Status InMemoryStorage::Lookup(
     absl::Time timestamp, const TableID& table_id, const Key& key,
     const std::vector<ColumnID>& column_ids,
     std::vector<googlesql::Value>* values) const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
 
   // Validate the request.
   if (!column_ids.empty() && values == nullptr) {
@@ -141,7 +141,7 @@ absl::Status InMemoryStorage::Read(
     absl::Time timestamp, const TableID& table_id, const KeyRange& key_range,
     const std::vector<ColumnID>& column_ids,
     std::unique_ptr<StorageIterator>* itr) const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
 
   // Validate the request.
   if (!key_range.IsClosedOpen()) {
@@ -190,7 +190,7 @@ absl::Status InMemoryStorage::Write(
     absl::Time timestamp, const TableID& table_id, const Key& key,
     const std::vector<ColumnID>& column_ids,
     const std::vector<googlesql::Value>& values) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
 
   // Add the table if it does not exist.
   Table& table = tables_[table_id];
@@ -216,7 +216,7 @@ absl::Status InMemoryStorage::Write(
 absl::Status InMemoryStorage::Delete(absl::Time timestamp,
                                      const TableID& table_id,
                                      const KeyRange& key_range) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
 
   if (!key_range.IsClosedOpen()) {
     return error::Internal(
@@ -267,13 +267,13 @@ absl::Status InMemoryStorage::Delete(absl::Time timestamp,
 
 void InMemoryStorage::SetVersionRetentionPeriod(
     const absl::Duration version_retention_period) {
-  absl::MutexLock lock(&version_retention_period_mu_);
+  absl::MutexLock lock(version_retention_period_mu_);
   version_retention_period_ = version_retention_period;
 }
 
 void InMemoryStorage::CleanUpDeletedTables(absl::Time timestamp) {
-  absl::MutexLock lock(&mu_);
-  absl::MutexLock version_retention_period_lock(&version_retention_period_mu_);
+  absl::MutexLock lock(mu_);
+  absl::MutexLock version_retention_period_lock(version_retention_period_mu_);
   absl::Time expiration_time = timestamp - version_retention_period_;
 
   // Remove expired dropped tables.
@@ -285,8 +285,8 @@ void InMemoryStorage::CleanUpDeletedTables(absl::Time timestamp) {
 }
 
 void InMemoryStorage::CleanUpDeletedColumns(absl::Time timestamp) {
-  absl::MutexLock lock(&mu_);
-  absl::MutexLock version_retention_period_lock(&version_retention_period_mu_);
+  absl::MutexLock lock(mu_);
+  absl::MutexLock version_retention_period_lock(version_retention_period_mu_);
   absl::Time expiration_time = timestamp - version_retention_period_;
 
   // Remove expired dropped columns.
@@ -302,14 +302,14 @@ void InMemoryStorage::CleanUpDeletedColumns(absl::Time timestamp) {
 
 void InMemoryStorage::MarkDroppedTable(absl::Time timestamp,
                                        TableID dropped_table_id) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   dropped_tables_[timestamp] = dropped_table_id;
 }
 
 void InMemoryStorage::MarkDroppedColumn(absl::Time timestamp,
                                         TableID dropped_table_id,
                                         ColumnID dropped_column_id) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   dropped_columns_[timestamp] =
       std::make_pair(dropped_table_id, dropped_column_id);
 }

@@ -4,7 +4,7 @@
  *	  Functions to convert stored expressions/querytrees back to
  *	  source text
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -51,6 +51,7 @@
 #include "optimizer/optimizer.h"
 #include "parser/parse_agg.h"
 #include "parser/parse_func.h"
+#include "parser/parse_node.h"
 #include "parser/parse_oper.h"
 #include "parser/parse_relation.h"
 #include "parser/parser.h"
@@ -294,9 +295,15 @@ static void get_func_expr(FuncExpr *expr, deparse_context *context,
 						  bool showimplicit);
 static void get_agg_expr(Aggref *aggref, deparse_context *context,
 						 Aggref *original_aggref);
+static void get_agg_expr_helper(Aggref *aggref, deparse_context *context,
+								Aggref *original_aggref, const char *funcname,
+								const char *options, bool is_json_objectagg);
 static void get_agg_combine_expr(Node *node, deparse_context *context,
 								 void *callback_arg);
 static void get_windowfunc_expr(WindowFunc *wfunc, deparse_context *context);
+static void get_windowfunc_expr_helper(WindowFunc *wfunc, deparse_context *context,
+									   const char *funcname, const char *options,
+									   bool is_json_objectagg);
 static bool get_func_sql_syntax(FuncExpr *expr, deparse_context *context);
 static void get_coercion_expr(Node *arg, deparse_context *context,
 							  Oid resulttype, int32 resulttypmod,
@@ -304,6 +311,15 @@ static void get_coercion_expr(Node *arg, deparse_context *context,
 static void get_const_expr(Const *constval, deparse_context *context,
 						   int showtype);
 static void get_const_collation(Const *constval, deparse_context *context);
+static void get_json_format(JsonFormat *format, StringInfo buf);
+static void get_json_constructor(JsonConstructorExpr *ctor,
+								 deparse_context *context, bool showimplicit);
+static void get_json_constructor_options(JsonConstructorExpr *ctor,
+										 StringInfo buf);
+static void get_json_agg_constructor(JsonConstructorExpr *ctor,
+									 deparse_context *context,
+									 const char *funcname,
+									 bool is_json_objectagg);
 // SPANGRES BEGIN
 void simple_quote_literal(StringInfo buf, const char *val);
 // SPANGRES END
@@ -712,7 +728,6 @@ pg_get_triggerdef_worker(Oid trigid, bool pretty)
 	char	   *tgname;
 	char	   *tgoldtable;
 	char	   *tgnewtable;
-	Oid			argtypes[1];	/* placeholder */
 	Datum		value;
 	bool		isnull;
 
@@ -928,9 +943,9 @@ pg_get_triggerdef_worker(Oid trigid, bool pretty)
 		appendStringInfoString(&buf, ") ");
 	}
 
-	appendStringInfo(&buf, "EXECUTE PROCEDURE %s(",
+	appendStringInfo(&buf, "EXECUTE FUNCTION %s(",
 					 generate_function_name(trigrec->tgfoid, 0,
-											NIL, argtypes,
+											NIL, NULL,
 											false, NULL, false));
 
 	if (trigrec->tgnargs > 0)
@@ -1094,7 +1109,6 @@ pg_get_indexdef_worker(Oid indexrelid, int colno,
 	Datum		indcollDatum;
 	Datum		indclassDatum;
 	Datum		indoptionDatum;
-	bool		isnull;
 	oidvector  *indcollation;
 	oidvector  *indclass;
 	int2vector *indoption;
@@ -1118,19 +1132,16 @@ pg_get_indexdef_worker(Oid indexrelid, int colno,
 	Assert(indexrelid == idxrec->indexrelid);
 
 	/* Must get indcollation, indclass, and indoption the hard way */
-	indcollDatum = SysCacheGetAttr(INDEXRELID, ht_idx,
-								   Anum_pg_index_indcollation, &isnull);
-	Assert(!isnull);
+	indcollDatum = SysCacheGetAttrNotNull(INDEXRELID, ht_idx,
+										  Anum_pg_index_indcollation);
 	indcollation = (oidvector *) DatumGetPointer(indcollDatum);
 
-	indclassDatum = SysCacheGetAttr(INDEXRELID, ht_idx,
-									Anum_pg_index_indclass, &isnull);
-	Assert(!isnull);
+	indclassDatum = SysCacheGetAttrNotNull(INDEXRELID, ht_idx,
+										   Anum_pg_index_indclass);
 	indclass = (oidvector *) DatumGetPointer(indclassDatum);
 
-	indoptionDatum = SysCacheGetAttr(INDEXRELID, ht_idx,
-									 Anum_pg_index_indoption, &isnull);
-	Assert(!isnull);
+	indoptionDatum = SysCacheGetAttrNotNull(INDEXRELID, ht_idx,
+											Anum_pg_index_indoption);
 	indoption = (int2vector *) DatumGetPointer(indoptionDatum);
 
 	/*
@@ -1161,12 +1172,10 @@ pg_get_indexdef_worker(Oid indexrelid, int colno,
 	if (!heap_attisnull(ht_idx, Anum_pg_index_indexprs, NULL))
 	{
 		Datum		exprsDatum;
-		bool		isnull;
 		char	   *exprsString;
 
-		exprsDatum = SysCacheGetAttr(INDEXRELID, ht_idx,
-									 Anum_pg_index_indexprs, &isnull);
-		Assert(!isnull);
+		exprsDatum = SysCacheGetAttrNotNull(INDEXRELID, ht_idx,
+											Anum_pg_index_indexprs);
 		exprsString = TextDatumGetCString(exprsDatum);
 		indexprs = (List *) stringToNode(exprsString);
 		pfree(exprsString);
@@ -1322,7 +1331,7 @@ pg_get_indexdef_worker(Oid indexrelid, int colno,
 		appendStringInfoChar(&buf, ')');
 
 		if (idxrec->indnullsnotdistinct)
-			appendStringInfo(&buf, " NULLS NOT DISTINCT");
+			appendStringInfoString(&buf, " NULLS NOT DISTINCT");
 
 		/*
 		 * If it has options, append "WITH (options)"
@@ -1358,13 +1367,11 @@ pg_get_indexdef_worker(Oid indexrelid, int colno,
 		{
 			Node	   *node;
 			Datum		predDatum;
-			bool		isnull;
 			char	   *predString;
 
 			/* Convert text string to node tree */
-			predDatum = SysCacheGetAttr(INDEXRELID, ht_idx,
-										Anum_pg_index_indpred, &isnull);
-			Assert(!isnull);
+			predDatum = SysCacheGetAttrNotNull(INDEXRELID, ht_idx,
+											   Anum_pg_index_indpred);
 			predString = TextDatumGetCString(predDatum);
 			node = (Node *) stringToNode(predString);
 			pfree(predString);
@@ -1473,7 +1480,6 @@ pg_get_statisticsobj_worker(Oid statextid, bool columns_only, bool missing_ok)
 	ArrayType  *arr;
 	char	   *enabled;
 	Datum		datum;
-	bool		isnull;
 	bool		ndistinct_enabled;
 	bool		dependencies_enabled;
 	bool		mcv_enabled;
@@ -1506,12 +1512,10 @@ pg_get_statisticsobj_worker(Oid statextid, bool columns_only, bool missing_ok)
 	if (has_exprs)
 	{
 		Datum		exprsDatum;
-		bool		isnull;
 		char	   *exprsString;
 
-		exprsDatum = SysCacheGetAttr(STATEXTOID, statexttup,
-									 Anum_pg_statistic_ext_stxexprs, &isnull);
-		Assert(!isnull);
+		exprsDatum = SysCacheGetAttrNotNull(STATEXTOID, statexttup,
+											Anum_pg_statistic_ext_stxexprs);
 		exprsString = TextDatumGetCString(exprsDatum);
 		exprs = (List *) stringToNode(exprsString);
 		pfree(exprsString);
@@ -1535,9 +1539,8 @@ pg_get_statisticsobj_worker(Oid statextid, bool columns_only, bool missing_ok)
 		 * Decode the stxkind column so that we know which stats types to
 		 * print.
 		 */
-		datum = SysCacheGetAttr(STATEXTOID, statexttup,
-								Anum_pg_statistic_ext_stxkind, &isnull);
-		Assert(!isnull);
+		datum = SysCacheGetAttrNotNull(STATEXTOID, statexttup,
+									   Anum_pg_statistic_ext_stxkind);
 		arr = DatumGetArrayTypeP(datum);
 		if (ARR_NDIM(arr) != 1 ||
 			ARR_HASNULL(arr) ||
@@ -1657,7 +1660,6 @@ pg_get_statisticsobjdef_expressions(PG_FUNCTION_ARGS)
 	Form_pg_statistic_ext statextrec;
 	HeapTuple	statexttup;
 	Datum		datum;
-	bool		isnull;
 	List	   *context;
 	ListCell   *lc;
 	List	   *exprs = NIL;
@@ -1685,10 +1687,8 @@ pg_get_statisticsobjdef_expressions(PG_FUNCTION_ARGS)
 	/*
 	 * Get the statistics expressions, and deparse them into text values.
 	 */
-	datum = SysCacheGetAttr(STATEXTOID, statexttup,
-							Anum_pg_statistic_ext_stxexprs, &isnull);
-
-	Assert(!isnull);
+	datum = SysCacheGetAttrNotNull(STATEXTOID, statexttup,
+								   Anum_pg_statistic_ext_stxexprs);
 	tmp = TextDatumGetCString(datum);
 	exprs = (List *) stringToNode(tmp);
 	pfree(tmp);
@@ -1722,7 +1722,7 @@ pg_get_statisticsobjdef_expressions(PG_FUNCTION_ARGS)
  *
  * Returns the partition key specification, ie, the following:
  *
- * PARTITION BY { RANGE | LIST | HASH } (column opt_collation opt_opclass [, ...])
+ * { RANGE | LIST | HASH } (column opt_collation opt_opclass [, ...])
  */
 Datum
 pg_get_partkeydef(PG_FUNCTION_ARGS)
@@ -1764,7 +1764,6 @@ pg_get_partkeydef_worker(Oid relid, int prettyFlags,
 	ListCell   *partexpr_item;
 	List	   *context;
 	Datum		datum;
-	bool		isnull;
 	StringInfoData buf;
 	int			keyno;
 	char	   *str;
@@ -1783,14 +1782,12 @@ pg_get_partkeydef_worker(Oid relid, int prettyFlags,
 	Assert(form->partrelid == relid);
 
 	/* Must get partclass and partcollation the hard way */
-	datum = SysCacheGetAttr(PARTRELID, tuple,
-							Anum_pg_partitioned_table_partclass, &isnull);
-	Assert(!isnull);
+	datum = SysCacheGetAttrNotNull(PARTRELID, tuple,
+								   Anum_pg_partitioned_table_partclass);
 	partclass = (oidvector *) DatumGetPointer(datum);
 
-	datum = SysCacheGetAttr(PARTRELID, tuple,
-							Anum_pg_partitioned_table_partcollation, &isnull);
-	Assert(!isnull);
+	datum = SysCacheGetAttrNotNull(PARTRELID, tuple,
+								   Anum_pg_partitioned_table_partcollation);
 	partcollation = (oidvector *) DatumGetPointer(datum);
 
 
@@ -1802,12 +1799,10 @@ pg_get_partkeydef_worker(Oid relid, int prettyFlags,
 	if (!heap_attisnull(tuple, Anum_pg_partitioned_table_partexprs, NULL))
 	{
 		Datum		exprsDatum;
-		bool		isnull;
 		char	   *exprsString;
 
-		exprsDatum = SysCacheGetAttr(PARTRELID, tuple,
-									 Anum_pg_partitioned_table_partexprs, &isnull);
-		Assert(!isnull);
+		exprsDatum = SysCacheGetAttrNotNull(PARTRELID, tuple,
+											Anum_pg_partitioned_table_partexprs);
 		exprsString = TextDatumGetCString(exprsDatum);
 		partexprs = (List *) stringToNode(exprsString);
 
@@ -2097,11 +2092,8 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				appendStringInfoString(&buf, "FOREIGN KEY (");
 
 				/* Fetch and build referencing-column list */
-				val = SysCacheGetAttr(CONSTROID, tup,
-									  Anum_pg_constraint_conkey, &isnull);
-				if (isnull)
-					elog(ERROR, "null conkey for constraint %u",
-						 constraintId);
+				val = SysCacheGetAttrNotNull(CONSTROID, tup,
+											 Anum_pg_constraint_conkey);
 
 				decompile_column_index_array(val, conForm->conrelid, &buf);
 
@@ -2111,11 +2103,8 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 														NIL));
 
 				/* Fetch and build referenced-column list */
-				val = SysCacheGetAttr(CONSTROID, tup,
-									  Anum_pg_constraint_confkey, &isnull);
-				if (isnull)
-					elog(ERROR, "null confkey for constraint %u",
-						 constraintId);
+				val = SysCacheGetAttrNotNull(CONSTROID, tup,
+											 Anum_pg_constraint_confkey);
 
 				decompile_column_index_array(val, conForm->confrelid, &buf);
 
@@ -2202,9 +2191,9 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 									  Anum_pg_constraint_confdelsetcols, &isnull);
 				if (!isnull)
 				{
-					appendStringInfo(&buf, " (");
+					appendStringInfoString(&buf, " (");
 					decompile_column_index_array(val, conForm->conrelid, &buf);
-					appendStringInfo(&buf, ")");
+					appendStringInfoChar(&buf, ')');
 				}
 
 				break;
@@ -2213,7 +2202,6 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 		case CONSTRAINT_UNIQUE:
 			{
 				Datum		val;
-				bool		isnull;
 				Oid			indexId;
 				int			keyatts;
 				HeapTuple	indtup;
@@ -2233,24 +2221,19 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 					((Form_pg_index) GETSTRUCT(indtup))->indnullsnotdistinct)
 					appendStringInfoString(&buf, "NULLS NOT DISTINCT ");
 
-				appendStringInfoString(&buf, "(");
+				appendStringInfoChar(&buf, '(');
 
 				/* Fetch and build target column list */
-				val = SysCacheGetAttr(CONSTROID, tup,
-									  Anum_pg_constraint_conkey, &isnull);
-				if (isnull)
-					elog(ERROR, "null conkey for constraint %u",
-						 constraintId);
+				val = SysCacheGetAttrNotNull(CONSTROID, tup,
+											 Anum_pg_constraint_conkey);
 
 				keyatts = decompile_column_index_array(val, conForm->conrelid, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
 				/* Build including column list (from pg_index.indkeys) */
-				val = SysCacheGetAttr(INDEXRELID, indtup,
-									  Anum_pg_index_indnatts, &isnull);
-				if (isnull)
-					elog(ERROR, "null indnatts for index %u", indexId);
+				val = SysCacheGetAttrNotNull(INDEXRELID, indtup,
+											 Anum_pg_index_indnatts);
 				if (DatumGetInt32(val) > keyatts)
 				{
 					Datum		cols;
@@ -2260,14 +2243,11 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 
 					appendStringInfoString(&buf, " INCLUDE (");
 
-					cols = SysCacheGetAttr(INDEXRELID, indtup,
-										   Anum_pg_index_indkey, &isnull);
-					if (isnull)
-						elog(ERROR, "null indkey for index %u", indexId);
+					cols = SysCacheGetAttrNotNull(INDEXRELID, indtup,
+												  Anum_pg_index_indkey);
 
-					deconstruct_array(DatumGetArrayTypeP(cols),
-									  INT2OID, 2, true, TYPALIGN_SHORT,
-									  &keys, NULL, &nKeys);
+					deconstruct_array_builtin(DatumGetArrayTypeP(cols), INT2OID,
+											  &keys, NULL, &nKeys);
 
 					for (j = keyatts; j < nKeys; j++)
 					{
@@ -2313,18 +2293,14 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 		case CONSTRAINT_CHECK:
 			{
 				Datum		val;
-				bool		isnull;
 				char	   *conbin;
 				char	   *consrc;
 				Node	   *expr;
 				List	   *context;
 
 				/* Fetch constraint expression in parsetree form */
-				val = SysCacheGetAttr(CONSTROID, tup,
-									  Anum_pg_constraint_conbin, &isnull);
-				if (isnull)
-					elog(ERROR, "null conbin for constraint %u",
-						 constraintId);
+				val = SysCacheGetAttrNotNull(CONSTROID, tup,
+											 Anum_pg_constraint_conbin);
 
 				conbin = TextDatumGetCString(val);
 				expr = stringToNode(conbin);
@@ -2376,23 +2352,17 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 			{
 				Oid			indexOid = conForm->conindid;
 				Datum		val;
-				bool		isnull;
 				Datum	   *elems;
 				int			nElems;
 				int			i;
 				Oid		   *operators;
 
 				/* Extract operator OIDs from the pg_constraint tuple */
-				val = SysCacheGetAttr(CONSTROID, tup,
-									  Anum_pg_constraint_conexclop,
-									  &isnull);
-				if (isnull)
-					elog(ERROR, "null conexclop for constraint %u",
-						 constraintId);
+				val = SysCacheGetAttrNotNull(CONSTROID, tup,
+											 Anum_pg_constraint_conexclop);
 
-				deconstruct_array(DatumGetArrayTypeP(val),
-								  OIDOID, sizeof(Oid), true, TYPALIGN_INT,
-								  &elems, NULL, &nElems);
+				deconstruct_array_builtin(DatumGetArrayTypeP(val), OIDOID,
+										  &elems, NULL, &nElems);
 
 				operators = (Oid *) palloc(nElems * sizeof(Oid));
 				for (i = 0; i < nElems; i++)
@@ -2446,9 +2416,8 @@ decompile_column_index_array(Datum column_index_array, Oid relId,
 	int			j;
 
 	/* Extract data from array of int16 */
-	deconstruct_array(DatumGetArrayTypeP(column_index_array),
-					  INT2OID, 2, true, TYPALIGN_SHORT,
-					  &keys, NULL, &nKeys);
+	deconstruct_array_builtin(DatumGetArrayTypeP(column_index_array), INT2OID,
+							  &keys, NULL, &nKeys);
 
 	for (j = 0; j < nKeys; j++)
 	{
@@ -2858,7 +2827,7 @@ pg_get_functiondef(PG_FUNCTION_ARGS)
 		appendStringInfo(&buf, " SUPPORT %s",
 						 generate_function_name(proc->prosupport, 1,
 												NIL, argtypes,
-												false, NULL, false));
+												false, NULL, EXPR_KIND_NONE));
 	}
 
 	if (oldlen != buf.len)
@@ -2958,9 +2927,7 @@ pg_get_functiondef(PG_FUNCTION_ARGS)
 			appendStringInfoString(&buf, ", "); /* assume prosrc isn't null */
 		}
 
-		tmp = SysCacheGetAttr(PROCOID, proctup, Anum_pg_proc_prosrc, &isnull);
-		if (isnull)
-			elog(ERROR, "null prosrc");
+		tmp = SysCacheGetAttrNotNull(PROCOID, proctup, Anum_pg_proc_prosrc);
 		prosrc = TextDatumGetCString(tmp);
 
 		/*
@@ -3383,7 +3350,6 @@ print_function_sqlbody(StringInfo buf, HeapTuple proctup)
 	char	   *argmodes;
 	deparse_namespace dpns = {0};
 	Datum		tmp;
-	bool		isnull;
 	Node	   *n;
 
 	dpns.funcname = pstrdup(NameStr(((Form_pg_proc) GETSTRUCT(proctup))->proname));
@@ -3392,8 +3358,7 @@ print_function_sqlbody(StringInfo buf, HeapTuple proctup)
 	dpns.numargs = numargs;
 	dpns.argnames = argnames;
 
-	tmp = SysCacheGetAttr(PROCOID, proctup, Anum_pg_proc_prosqlbody, &isnull);
-	Assert(!isnull);
+	tmp = SysCacheGetAttrNotNull(PROCOID, proctup, Anum_pg_proc_prosqlbody);
 	n = stringToNode(TextDatumGetCString(tmp));
 
 	if (IsA(n, List))
@@ -3456,7 +3421,7 @@ pg_get_function_sqlbody(PG_FUNCTION_ARGS)
 
 	ReleaseSysCache(proctup);
 
-	PG_RETURN_TEXT_P(cstring_to_text(buf.data));
+	PG_RETURN_TEXT_P(cstring_to_text_with_len(buf.data, buf.len));
 }
 
 
@@ -4698,14 +4663,9 @@ expand_colnames_array_to(deparse_columns *colinfo, int n)
 	if (n > colinfo->num_cols)
 	{
 		if (colinfo->colnames == NULL)
-			colinfo->colnames = (char **) palloc0(n * sizeof(char *));
+			colinfo->colnames = palloc0_array(char *, n);
 		else
-		{
-			colinfo->colnames = (char **) repalloc(colinfo->colnames,
-												   n * sizeof(char *));
-			memset(colinfo->colnames + colinfo->num_cols, 0,
-				   (n - colinfo->num_cols) * sizeof(char *));
-		}
+			colinfo->colnames = repalloc0_array(colinfo->colnames, char *, colinfo->num_cols, n);
 		colinfo->num_cols = n;
 	}
 }
@@ -5601,9 +5561,19 @@ get_select_query_def(Query *query, deparse_context *context)
 	{
 		if (query->limitOption == LIMIT_OPTION_WITH_TIES)
 		{
+			/*
+			 * The limitCount arg is a c_expr, so it needs parens. Simple
+			 * literals and function expressions would not need parens, but
+			 * unfortunately it's hard to tell if the expression will be
+			 * printed as a simple literal like 123 or as a typecast
+			 * expression, like '-123'::int4. The grammar accepts the former
+			 * without quoting, but not the latter.
+			 */
 			appendContextKeyword(context, " FETCH FIRST ",
 								 -PRETTYINDENT_STD, PRETTYINDENT_STD, 0);
+			appendStringInfoChar(buf, '(');
 			get_rule_expr(query->limitCount, context, false);
+			appendStringInfoChar(buf, ')');
 			appendStringInfoString(buf, " ROWS WITH TIES");
 		}
 		else
@@ -6042,7 +6012,8 @@ get_setop_query(Node *setOp, Query *query, deparse_context *context)
 					  subquery->sortClause ||
 					  subquery->rowMarks ||
 					  subquery->limitOffset ||
-					  subquery->limitCount);
+					  subquery->limitCount ||
+					  subquery->setOperations);
 		if (need_paren)
 			appendStringInfoChar(buf, '(');
 		get_query_def(subquery, buf, context->namespaces,
@@ -6214,7 +6185,8 @@ get_rule_sortgroupclause(Index ref, List *tlist, bool force_colno,
 		bool		need_paren = (POSTGRES_PRETTY_PAREN(context)
 								  || IsA(expr, FuncExpr)
 								  || IsA(expr, Aggref)
-								  || IsA(expr, WindowFunc));
+								  || IsA(expr, WindowFunc)
+								  || IsA(expr, JsonConstructorExpr));
 
 		if (need_paren)
 			appendStringInfoChar(context->buf, '(');
@@ -9019,12 +8991,10 @@ find_param_referent(Param *param, deparse_context *context,
 	{
 		deparse_namespace *dpns;
 		Plan	   *child_plan;
-		bool		in_same_plan_level;
 		ListCell   *lc;
 
 		dpns = (deparse_namespace *) linitial(context->namespaces);
 		child_plan = dpns->plan;
-		in_same_plan_level = true;
 
 		foreach(lc, dpns->ancestors)
 		{
@@ -9032,13 +9002,10 @@ find_param_referent(Param *param, deparse_context *context,
 			ListCell   *lc2;
 
 			/*
-			 * NestLoops transmit params to their inner child only; also, once
-			 * we've crawled up out of a subplan, this couldn't possibly be
-			 * the right match.
+			 * NestLoops transmit params to their inner child only.
 			 */
 			if (IsA(ancestor, NestLoop) &&
-				child_plan == innerPlan(ancestor) &&
-				in_same_plan_level)
+				child_plan == innerPlan(ancestor))
 			{
 				NestLoop   *nl = (NestLoop *) ancestor;
 
@@ -9096,34 +9063,14 @@ find_param_referent(Param *param, deparse_context *context,
 					}
 				}
 
-				/* We have emerged from a subplan. */
-				in_same_plan_level = false;
-
 				/* SubPlan isn't a kind of Plan, so skip the rest */
 				continue;
 			}
 
 			/*
-			 * Check to see if we're emerging from an initplan of the current
-			 * ancestor plan.  Initplans never have any parParams, so no need
-			 * to search that list, but we need to know if we should reset
-			 * in_same_plan_level.
+			 * We need not consider the ancestor's initPlan list, since
+			 * initplans never have any parParams.
 			 */
-			foreach(lc2, ((Plan *) ancestor)->initPlan)
-			{
-				SubPlan    *subplan = lfirst_node(SubPlan, lc2);
-
-				if (child_plan != (Plan *) list_nth(dpns->subplans,
-													subplan->plan_id - 1))
-					continue;
-
-				/* No parameters to be had here. */
-				Assert(subplan->parParam == NIL);
-
-				/* We have emerged from an initplan. */
-				in_same_plan_level = false;
-				break;
-			}
 
 			/* No luck, crawl up to next ancestor */
 			child_plan = (Plan *) ancestor;
@@ -9218,9 +9165,9 @@ get_parameter(Param *param, deparse_context *context)
 				 */
 				foreach(lc, context->namespaces)
 				{
-					deparse_namespace *dpns = lfirst(lc);
+					deparse_namespace *depns = lfirst(lc);
 
-					if (list_length(dpns->rtable_names) > 0)
+					if (depns->rtable_names != NIL)
 					{
 						should_qualify = true;
 						break;
@@ -9306,6 +9253,7 @@ isSimpleNode(Node *node, Node *parentNode, int prettyFlags)
 		case T_GroupingFunc:
 		case T_WindowFunc:
 		case T_FuncExpr:
+		case T_JsonConstructorExpr:
 			/* function-like: name(..) or name[..] */
 			return true;
 
@@ -9399,6 +9347,7 @@ isSimpleNode(Node *node, Node *parentNode, int prettyFlags)
 		case T_NullTest:
 		case T_BooleanTest:
 		case T_DistinctExpr:
+		case T_JsonIsPredicate:
 			switch (nodeTag(parentNode))
 			{
 				case T_FuncExpr:
@@ -9480,6 +9429,11 @@ isSimpleNode(Node *node, Node *parentNode, int prettyFlags)
 				default:
 					return false;
 			}
+
+		case T_JsonValueExpr:
+			/* maybe simple, check args */
+			return isSimpleNode((Node *) ((JsonValueExpr *) node)->raw_expr,
+								node, prettyFlags);
 
 		default:
 			break;
@@ -10489,9 +10443,16 @@ get_rule_expr(Node *node, deparse_context *context,
 					}
 				}
 				if (xexpr->op == IS_XMLSERIALIZE)
+				{
 					appendStringInfo(buf, " AS %s",
 									 format_type_with_typemod(xexpr->type,
 															  xexpr->typmod));
+					if (xexpr->indent)
+						appendStringInfoString(buf, " INDENT");
+					else
+						appendStringInfoString(buf, " NO INDENT");
+				}
+
 				if (xexpr->op == IS_DOCUMENT)
 					appendStringInfoString(buf, " IS DOCUMENT");
 				else
@@ -10746,6 +10707,55 @@ get_rule_expr(Node *node, deparse_context *context,
 							 (int) spec->strategy);
 						break;
 				}
+			}
+			break;
+
+		case T_JsonValueExpr:
+			{
+				JsonValueExpr *jve = (JsonValueExpr *) node;
+
+				get_rule_expr((Node *) jve->raw_expr, context, false);
+				get_json_format(jve->format, context->buf);
+			}
+			break;
+
+		case T_JsonConstructorExpr:
+			get_json_constructor((JsonConstructorExpr *) node, context, false);
+			break;
+
+		case T_JsonIsPredicate:
+			{
+				JsonIsPredicate *pred = (JsonIsPredicate *) node;
+
+				if (!POSTGRES_PRETTY_PAREN(context))
+					appendStringInfoChar(context->buf, '(');
+
+				get_rule_expr_paren(pred->expr, context, true, node);
+
+				appendStringInfoString(context->buf, " IS JSON");
+
+				/* TODO: handle FORMAT clause */
+
+				switch (pred->item_type)
+				{
+					case JS_TYPE_SCALAR:
+						appendStringInfoString(context->buf, " SCALAR");
+						break;
+					case JS_TYPE_ARRAY:
+						appendStringInfoString(context->buf, " ARRAY");
+						break;
+					case JS_TYPE_OBJECT:
+						appendStringInfoString(context->buf, " OBJECT");
+						break;
+					default:
+						break;
+				}
+
+				if (pred->unique_keys)
+					appendStringInfoString(context->buf, " WITH UNIQUE KEYS");
+
+				if (!POSTGRES_PRETTY_PAREN(context))
+					appendStringInfoChar(context->buf, ')');
 			}
 			break;
 
@@ -11049,10 +11059,23 @@ static void
 get_agg_expr(Aggref *aggref, deparse_context *context,
 			 Aggref *original_aggref)
 {
+	get_agg_expr_helper(aggref, context, original_aggref, NULL, NULL,
+						false);
+}
+
+/*
+ * get_agg_expr_helper		- subroutine for get_agg_expr and
+ *							get_json_agg_constructor
+ */
+static void
+get_agg_expr_helper(Aggref *aggref, deparse_context *context,
+					Aggref *original_aggref, const char *funcname,
+					const char *options, bool is_json_objectagg)
+{
 	StringInfo	buf = context->buf;
 	Oid			argtypes[FUNC_MAX_ARGS];
 	int			nargs;
-	bool		use_variadic;
+	bool		use_variadic = false;
 
 	/*
 	 * For a combining aggregate, we look up and deparse the corresponding
@@ -11082,13 +11105,14 @@ get_agg_expr(Aggref *aggref, deparse_context *context,
 	/* Extract the argument types as seen by the parser */
 	nargs = get_aggregate_argtypes(aggref, argtypes);
 
+	if (!funcname)
+		funcname = generate_function_name(aggref->aggfnoid, nargs, NIL,
+										  argtypes, aggref->aggvariadic,
+										  &use_variadic,
+										  context->inGroupBy);
+
 	/* Print the aggregate name, schema-qualified if needed */
-	appendStringInfo(buf, "%s(%s",
-					 generate_function_name(aggref->aggfnoid, nargs,
-											NIL, argtypes,
-											aggref->aggvariadic,
-											&use_variadic,
-											context->inGroupBy),
+	appendStringInfo(buf, "%s(%s", funcname,
 					 (aggref->aggdistinct != NIL) ? "DISTINCT " : "");
 
 	if (AGGKIND_IS_ORDERED_SET(aggref->aggkind))
@@ -11131,7 +11155,21 @@ get_agg_expr(Aggref *aggref, deparse_context *context,
 				if (tle->resjunk)
 					continue;
 				if (i++ > 0)
-					appendStringInfoString(buf, ", ");
+				{
+					if (is_json_objectagg)
+					{
+						/*
+						 * the ABSENT ON NULL and WITH UNIQUE args are printed
+						 * separately, so ignore them here
+						 */
+						if (i > 2)
+							break;
+
+						appendStringInfoString(buf, " : ");
+					}
+					else
+						appendStringInfoString(buf, ", ");
+				}
 				if (use_variadic && i == nargs)
 					appendStringInfoString(buf, "VARIADIC ");
 				get_rule_expr(arg, context, true);
@@ -11149,6 +11187,9 @@ get_agg_expr(Aggref *aggref, deparse_context *context,
 		get_hint_list_def(aggref->functionHints, context, /*statement=*/false);
 		/* SPANGRES END */
 	}
+
+	if (options)
+		appendStringInfoString(buf, options);
 
 	if (aggref->aggfilter != NULL)
 	{
@@ -11182,6 +11223,19 @@ get_agg_combine_expr(Node *node, deparse_context *context, void *callback_arg)
 static void
 get_windowfunc_expr(WindowFunc *wfunc, deparse_context *context)
 {
+	get_windowfunc_expr_helper(wfunc, context, NULL, NULL, false);
+}
+
+
+/*
+ * get_windowfunc_expr_helper	- subroutine for get_windowfunc_expr and
+ *								get_json_agg_constructor
+ */
+static void
+get_windowfunc_expr_helper(WindowFunc *wfunc, deparse_context *context,
+						   const char *funcname, const char *options,
+						   bool is_json_objectagg)
+{
 	StringInfo	buf = context->buf;
 	Oid			argtypes[FUNC_MAX_ARGS];
 	int			nargs;
@@ -11204,16 +11258,30 @@ get_windowfunc_expr(WindowFunc *wfunc, deparse_context *context)
 		nargs++;
 	}
 
-	appendStringInfo(buf, "%s(",
-					 generate_function_name(wfunc->winfnoid, nargs,
-											argnames, argtypes,
-											false, NULL,
-											context->inGroupBy));
+	if (!funcname)
+		funcname = generate_function_name(wfunc->winfnoid, nargs, argnames,
+										  argtypes, false, NULL,
+										  context->inGroupBy);
+
+	appendStringInfo(buf, "%s(", funcname);
+
 	/* winstar can be set only in zero-argument aggregates */
 	if (wfunc->winstar)
 		appendStringInfoChar(buf, '*');
 	else
-		get_rule_expr((Node *) wfunc->args, context, true);
+	{
+		if (is_json_objectagg)
+		{
+			get_rule_expr((Node *) linitial(wfunc->args), context, false);
+			appendStringInfoString(buf, " : ");
+			get_rule_expr((Node *) lsecond(wfunc->args), context, false);
+		}
+		else
+			get_rule_expr((Node *) wfunc->args, context, true);
+	}
+
+	if (options)
+		appendStringInfoString(buf, options);
 
 	/* SPANGRES BEGIN */
 	appendStringInfoString(buf, ")");
@@ -11482,6 +11550,10 @@ get_func_sql_syntax(FuncExpr *expr, deparse_context *context)
 			appendStringInfoChar(buf, ')');
 			return true;
 
+		case F_SYSTEM_USER:
+			appendStringInfoString(buf, "SYSTEM_USER");
+			return true;
+
 		case F_XMLEXISTS:
 			/* XMLEXISTS ... extra parens because args are c_expr */
 			appendStringInfoString(buf, "XMLEXISTS((");
@@ -11712,6 +11784,158 @@ get_const_collation(Const *constval, deparse_context *context)
 }
 
 /*
+ * get_json_format			- Parse back a JsonFormat node
+ */
+static void
+get_json_format(JsonFormat *format, StringInfo buf)
+{
+	if (format->format_type == JS_FORMAT_DEFAULT)
+		return;
+
+	appendStringInfoString(buf,
+						   format->format_type == JS_FORMAT_JSONB ?
+						   " FORMAT JSONB" : " FORMAT JSON");
+
+	if (format->encoding != JS_ENC_DEFAULT)
+	{
+		const char *encoding;
+
+		encoding =
+			format->encoding == JS_ENC_UTF16 ? "UTF16" :
+			format->encoding == JS_ENC_UTF32 ? "UTF32" : "UTF8";
+
+		appendStringInfo(buf, " ENCODING %s", encoding);
+	}
+}
+
+/*
+ * get_json_returning		- Parse back a JsonReturning structure
+ */
+static void
+get_json_returning(JsonReturning *returning, StringInfo buf,
+				   bool json_format_by_default)
+{
+	if (!OidIsValid(returning->typid))
+		return;
+
+	appendStringInfo(buf, " RETURNING %s",
+					 format_type_with_typemod(returning->typid,
+											  returning->typmod));
+
+	if (!json_format_by_default ||
+		returning->format->format_type !=
+		(returning->typid == JSONBOID ? JS_FORMAT_JSONB : JS_FORMAT_JSON))
+		get_json_format(returning->format, buf);
+}
+
+/*
+ * get_json_constructor		- Parse back a JsonConstructorExpr node
+ */
+static void
+get_json_constructor(JsonConstructorExpr *ctor, deparse_context *context,
+					 bool showimplicit)
+{
+	StringInfo	buf = context->buf;
+	const char *funcname;
+	bool		is_json_object;
+	int			curridx;
+	ListCell   *lc;
+
+	if (ctor->type == JSCTOR_JSON_OBJECTAGG)
+	{
+		get_json_agg_constructor(ctor, context, "JSON_OBJECTAGG", true);
+		return;
+	}
+	else if (ctor->type == JSCTOR_JSON_ARRAYAGG)
+	{
+		get_json_agg_constructor(ctor, context, "JSON_ARRAYAGG", false);
+		return;
+	}
+
+	switch (ctor->type)
+	{
+		case JSCTOR_JSON_OBJECT:
+			funcname = "JSON_OBJECT";
+			break;
+		case JSCTOR_JSON_ARRAY:
+			funcname = "JSON_ARRAY";
+			break;
+		default:
+			elog(ERROR, "invalid JsonConstructorType %d", ctor->type);
+	}
+
+	appendStringInfo(buf, "%s(", funcname);
+
+	is_json_object = ctor->type == JSCTOR_JSON_OBJECT;
+	foreach(lc, ctor->args)
+	{
+		curridx = foreach_current_index(lc);
+		if (curridx > 0)
+		{
+			const char *sep;
+
+			sep = (is_json_object && (curridx % 2) != 0) ? " : " : ", ";
+			appendStringInfoString(buf, sep);
+		}
+
+		get_rule_expr((Node *) lfirst(lc), context, true);
+	}
+
+	get_json_constructor_options(ctor, buf);
+	appendStringInfo(buf, ")");
+}
+
+/*
+ * Append options, if any, to the JSON constructor being deparsed
+ */
+static void
+get_json_constructor_options(JsonConstructorExpr *ctor, StringInfo buf)
+{
+	if (ctor->absent_on_null)
+	{
+		if (ctor->type == JSCTOR_JSON_OBJECT ||
+			ctor->type == JSCTOR_JSON_OBJECTAGG)
+			appendStringInfoString(buf, " ABSENT ON NULL");
+	}
+	else
+	{
+		if (ctor->type == JSCTOR_JSON_ARRAY ||
+			ctor->type == JSCTOR_JSON_ARRAYAGG)
+			appendStringInfoString(buf, " NULL ON NULL");
+	}
+
+	if (ctor->unique)
+		appendStringInfoString(buf, " WITH UNIQUE KEYS");
+
+	get_json_returning(ctor->returning, buf, true);
+}
+
+/*
+ * get_json_agg_constructor - Parse back an aggregate JsonConstructorExpr node
+ */
+static void
+get_json_agg_constructor(JsonConstructorExpr *ctor, deparse_context *context,
+						 const char *funcname, bool is_json_objectagg)
+{
+	StringInfoData options;
+
+	initStringInfo(&options);
+	get_json_constructor_options(ctor, &options);
+
+	if (IsA(ctor->func, Aggref))
+		get_agg_expr_helper((Aggref *) ctor->func, context,
+							(Aggref *) ctor->func,
+							funcname, options.data, is_json_objectagg);
+	else if (IsA(ctor->func, WindowFunc))
+		get_windowfunc_expr_helper((WindowFunc *) ctor->func, context,
+								   funcname, options.data,
+								   is_json_objectagg);
+	else
+		elog(ERROR, "invalid JsonConstructorExpr underlying node type: %d",
+			 nodeTag(ctor->func));
+}
+
+/*
  * simple_quote_literal - Format a string as a SQL literal, append to buf
  */
 void
@@ -11895,7 +12119,8 @@ get_tablefunc(TableFunc *tf, deparse_context *context, bool showimplicit)
 			if (ns_node != NULL)
 			{
 				get_rule_expr(expr, context, showimplicit);
-				appendStringInfo(buf, " AS %s", strVal(ns_node));
+				appendStringInfo(buf, " AS %s",
+								 quote_identifier(strVal(ns_node)));
 			}
 			else
 			{
@@ -12404,7 +12629,11 @@ get_rte_alias(RangeTblEntry *rte, int varno, bool use_as,
 	else if (rte->rtekind == RTE_SUBQUERY ||
 			 rte->rtekind == RTE_VALUES)
 	{
-		/* Alias is syntactically required for SUBQUERY and VALUES */
+		/*
+		 * For a subquery, always print alias.  This makes the output
+		 * SQL-spec-compliant, even though we allow such aliases to be omitted
+		 * on input.
+		 */
 		printalias = true;
 	}
 	else if (rte->rtekind == RTE_CTE)
@@ -13302,9 +13531,8 @@ get_reloptions(StringInfo buf, Datum reloptions)
 	int			noptions;
 	int			i;
 
-	deconstruct_array(DatumGetArrayTypeP(reloptions),
-					  TEXTOID, -1, false, TYPALIGN_INT,
-					  &options, NULL, &noptions);
+	deconstruct_array_builtin(DatumGetArrayTypeP(reloptions), TEXTOID,
+							  &options, NULL, &noptions);
 
 	for (i = 0; i < noptions; i++)
 	{
@@ -13400,7 +13628,7 @@ get_range_partbound_string(List *bound_datums)
 	foreach(cell, bound_datums)
 	{
 		PartitionRangeDatum *datum =
-		lfirst_node(PartitionRangeDatum, cell);
+			lfirst_node(PartitionRangeDatum, cell);
 
 		appendStringInfoString(buf, sep);
 		if (datum->kind == PARTITION_RANGE_DATUM_MINVALUE)

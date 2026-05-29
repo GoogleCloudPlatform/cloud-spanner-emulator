@@ -33,14 +33,12 @@
 
 #include <string.h>
 
-#include <algorithm>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <set>
 #include <string>
-#include <tuple>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -50,24 +48,25 @@
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"
-#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "absl/types/optional.h"
+#include "nlohmann/json.hpp"
 #include "third_party/spanner_pg/ddl/ddl_translator.h"
 #include "third_party/spanner_pg/ddl/pg_parse_tree_validator.h"
 #include "third_party/spanner_pg/ddl/translation_utils.h"
 #include "third_party/spanner_pg/interface/parser_output.h"
-#include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/util/interval_helpers.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
 #include "third_party/spanner_pg/src/include/nodes/nodes.h"
 #include "third_party/spanner_pg/src/include/nodes/parsenodes.h"
+#include "third_party/spanner_pg/src/include/nodes/pg_list.h"
+#include "third_party/spanner_pg/src/include/nodes/value.h"
 #include "google/protobuf/repeated_ptr_field.h"
 #include "re2/re2.h"
 #include "googlesql/base/ret_check.h"
@@ -407,6 +406,8 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       List* opt_options, absl::string_view function_name,
       google::spanner::emulator::backend::ddl::Function_SqlSecurity* sql_security,
       absl::optional<Function::Determinism>* determinism,
+      absl::optional<Function::Language>* language,
+      absl::optional<std::string>* as_definition,
       const TranslationOptions& options) const;
   absl::Status TranslateCreateView(const ViewStmt& view_statement,
                                    const TranslationOptions& options,
@@ -2987,6 +2988,23 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterDatabase(
       GOOGLESQL_RET_CHECK(!IsListEmpty(set_statement->args))
           << "Option value is missing.";
 
+      if (list_length(set_statement->args) != 1 && option.PGType() != T_List) {
+        return UnsupportedTranslationError(
+            absl::StrCat("Unsupported option value for <", option.PGName(),
+                         "> in <ALTER DATABASE> statement."));
+      }
+
+      if (option.PGType() == T_List) {
+        for (A_Const* arg : StructList<A_Const*>(set_statement->args)) {
+          if (arg->val.node.type != T_String) {
+            return UnsupportedTranslationError(absl::StrCat(
+                "Unsupported option value in the list for <", option.PGName(),
+                "> in <ALTER DATABASE> statement."));
+          }
+          opt->add_string_list_value(arg->val.sval.sval);
+        }
+        break;
+      }
       GOOGLESQL_ASSIGN_OR_RETURN(
           const A_Const* arg,
           (SingleItemListAsNode<A_Const, T_A_Const>)(set_statement->args));
@@ -3050,6 +3068,38 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateVacuum(
   return absl::OkStatus();
 }
 
+absl::Status ParseAsDefinitionForRemoteUdf(
+    absl::string_view as_definition,
+    google::protobuf::RepeatedPtrField<google::spanner::emulator::backend::ddl::SqlOption>* options_out) {
+  ::nlohmann::json definition =
+      ::nlohmann::json::parse(as_definition, /*cb=*/nullptr,
+                              /*allow_exceptions=*/false);
+  if (definition.is_discarded() || !definition.is_object()) {
+    return absl::InvalidArgumentError(
+        "As clause for remote function should contain a valid JSON "
+        "object.");
+  }
+
+  for (const auto& [key, value] : definition.items()) {
+    google::spanner::emulator::backend::ddl::SqlOption option;
+    option.set_name(key);
+
+    if (value.is_string() || value.is_number_integer()) {
+      // SQL and JSON representations of the value are the same.
+      option.set_sql_value(value.dump());
+    } else {
+      return absl::InvalidArgumentError(
+          absl::Substitute("Unsupported value type '$0' for option '$1' in "
+                           "CREATE FUNCTION statement.",
+                           value.type_name(), key));
+    }
+
+    options_out->Add(std::move(option));
+  }
+
+  return absl::OkStatus();
+}
+
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateFunction(
     const CreateFunctionStmt& function_statement,
     const TranslationOptions& options,
@@ -3073,15 +3123,20 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateFunction(
   google::spanner::emulator::backend::ddl::Function_SqlSecurity sql_security = google::spanner::emulator::backend::ddl::
       Function_SqlSecurity::Function_SqlSecurity_UNSPECIFIED_SQL_SECURITY;
   absl::optional<Function::Determinism> determinism = absl::nullopt;
+  absl::optional<Function::Language> language = absl::nullopt;
+  absl::optional<std::string> as_definition = absl::nullopt;
   GOOGLESQL_RETURN_IF_ERROR(PopulateFunctionOptions(
       function_statement.options, out.function_name(), &sql_security,
-      &determinism, options));
+      &determinism, &language, &as_definition, options));
   if (sql_security != google::spanner::emulator::backend::ddl::Function_SqlSecurity::
                           Function_SqlSecurity_UNSPECIFIED_SQL_SECURITY) {
     out.set_sql_security(sql_security);
   }
   if (determinism.has_value()) {
     out.set_determinism(determinism.value());
+  }
+  if (language.has_value()) {
+    out.set_language(language.value());
   }
 
   // Note that the parameter default naming convention is 1-based.
@@ -3116,19 +3171,46 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateFunction(
   const TypeName* t = function_statement.returnType;
   GOOGLESQL_ASSIGN_OR_RETURN(*out.mutable_return_typename(),
                    PgTypeNameToGoogleSqlString(*t, options));
-  absl::string_view routine_body_string =
-      function_statement.routine_body_string;
-  std::string* sql_body_origin =
-      out.mutable_sql_body_origin()->mutable_original_expression();
-  if (!RE2::FullMatch(routine_body_string, R"((?is)return\s+(.*))",
-                      sql_body_origin)) {
-    if (RE2::FullMatch(routine_body_string, R"((?i)begin\s+atomic\s+.*)")) {
+
+  // Schema will validate if options are valid for this language.
+  if (as_definition.has_value()) {
+    if (language.value_or(Function::SQL) != Function::REMOTE) {
       return UnsupportedTranslationError(
-          "<CREATE FUNCTION> statement with block SQL body is not supported.");
+          "AS clause is supported only for REMOTE functions.");
     }
-    return UnsupportedTranslationError(
-        "<CREATE FUNCTION> statement without a SQL body is not supported.");
+
+    GOOGLESQL_RETURN_IF_ERROR(ParseAsDefinitionForRemoteUdf(
+        *as_definition,
+        // TODO: Rename to options.
+        out.mutable_sql_options()
+        ));
   }
+
+  absl::string_view routine_body_string =
+      function_statement.routine_body_string == nullptr
+          ? ""
+          : function_statement.routine_body_string;
+
+  if (language.value_or(Function::SQL) == Function::SQL) {
+    std::string* sql_body_origin =
+        out.mutable_sql_body_origin()->mutable_original_expression();
+    if (!RE2::FullMatch(routine_body_string, R"((?is)return\s+(.*))",
+                        sql_body_origin)) {
+      if (RE2::FullMatch(routine_body_string, R"((?i)begin\s+atomic\s+.*)")) {
+        return UnsupportedTranslationError(
+            "<CREATE FUNCTION> statement with block SQL body is not "
+            "supported.");
+      }
+      return UnsupportedTranslationError(
+          "<CREATE FUNCTION> statement without a SQL body is not supported.");
+    }
+  } else {
+    if (!routine_body_string.empty()) {
+      return UnsupportedTranslationError(
+          "SQL body is supported only for SQL functions.");
+    }
+  }
+
   return absl::OkStatus();
 }
 
@@ -3196,6 +3278,8 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulateFunctionOptions(
     List* opt_options, absl::string_view function_name,
     google::spanner::emulator::backend::ddl::Function_SqlSecurity* sql_security,
     absl::optional<Function::Determinism>* determinism,
+    absl::optional<Function::Language>* language,
+    absl::optional<std::string>* as_definition,
     const TranslationOptions& options) const {
   absl::flat_hash_set<std::string> seen_options;
   for (DefElem* def_elem : StructList<DefElem*>(opt_options)) {
@@ -3215,8 +3299,28 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulateFunctionOptions(
     seen_options.insert(def_elem->defname);
     if (def_elem->defname ==
         internal::PostgreSQLConstants::kFunctionAsOptionName) {
-      return absl::InvalidArgumentError(absl::Substitute(
-          "Function body defined in AS clause is not supported."));
+
+      if (def_elem->arg->type != T_List) {
+        return absl::InvalidArgumentError(
+            absl::Substitute("Failed to provide valid option value for '$0' in "
+                             "CREATE FUNCTION statement.",
+                             def_elem->defname));
+      }
+
+      GOOGLESQL_ASSIGN_OR_RETURN(const List* as_list,
+                       (DowncastNode<List, T_List>(def_elem->arg)));
+
+      if (list_length(as_list) != 1) {
+        return absl::InvalidArgumentError(
+            absl::Substitute("Failed to provide valid option value for '$0' in "
+                             "CREATE FUNCTION statement. Object file and link "
+                             "symbol are not supported.",
+                             def_elem->defname));
+      }
+
+      GOOGLESQL_ASSIGN_OR_RETURN(const String* arg_value,
+                       (SingleItemListAsNode<String, T_String>)(as_list));
+      *as_definition = arg_value->sval;
     } else if (def_elem->defname ==
                internal::PostgreSQLConstants::kFunctionSecurityOptionName) {
       if (def_elem->arg->type != T_Boolean) {
@@ -3250,7 +3354,10 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulateFunctionOptions(
       if (def_elem->defname ==
           internal::PostgreSQLConstants::kFunctionLanguageOptionName) {
         if (strcmp(arg_value->sval, "sql") == 0) {
-          // Only SQL language is supported, ignore.
+          continue;
+        } else if (
+            strcmp(arg_value->sval, "remote") == 0) {
+          *language = Function::REMOTE;
           continue;
         } else {
           return absl::InvalidArgumentError(
@@ -4261,6 +4368,17 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
                        internal::ObjectTypeToString(statement->objectType));
       return ddl_translator_.UnsupportedTranslationError(absl::StrCat(
           "<ALTER ", object_name, " SET SCHEMA> is not supported"));
+      break;
+    }
+    case T_AlterObjectDependsStmt: {
+      GOOGLESQL_ASSIGN_OR_RETURN(
+          const AlterObjectDependsStmt* statement,
+          (DowncastNode<AlterObjectDependsStmt, T_AlterObjectDependsStmt>(
+              raw_statement.stmt)));
+      GOOGLESQL_ASSIGN_OR_RETURN(std::string object_name,
+                       internal::ObjectTypeToString(statement->objectType));
+      return ddl_translator_.UnsupportedTranslationError(absl::StrCat(
+          "<ALTER ", object_name, " ... DEPENDS ON> is not supported."));
       break;
     }
     default:

@@ -1,5 +1,5 @@
 
-# Copyright (c) 2021-2022, PostgreSQL Global Development Group
+# Copyright (c) 2021-2023, PostgreSQL Global Development Group
 
 # Tests for logical replication table syncing
 use strict;
@@ -149,7 +149,7 @@ $node_publisher->safe_psql('postgres', "DROP TABLE tab_rep_next");
 $node_subscriber->safe_psql('postgres', "DROP TABLE tab_rep_next");
 $node_subscriber->safe_psql('postgres', "DROP SUBSCRIPTION tap_sub");
 
-# Table tap_rep already has the same records on both publisher and subscriber
+# Table tab_rep already has the same records on both publisher and subscriber
 # at this time. Recreate the subscription which will do the initial copy of
 # the table again and fails due to unique constraint violation.
 $node_subscriber->safe_psql('postgres',

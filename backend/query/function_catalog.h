@@ -66,7 +66,7 @@ class FunctionCatalog {
   void AddPGLambdaFunctions();
   void AddSpannerFunctions();
   void AddGraphSafeToJsonSignatures();
-  void AddMlFunctions();
+  void AddMlFunctions(googlesql::TypeFactory* type_factory);
   void AddSearchFunctions(googlesql::TypeFactory* type_factory);
 
   void AddSpannerPGFunctions();

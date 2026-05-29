@@ -24,11 +24,13 @@
 #include <vector>
 
 #include "googlesql/public/builtin_function.h"
-#include "googlesql/public/builtin_function_options.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/function_signature.h"
+#include "googlesql/public/functions/json.h"
+#include "googlesql/public/json_value.h"
 #include "googlesql/public/table_valued_function.h"
 #include "googlesql/public/type.h"
+#include "googlesql/public/types/timestamp_util.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/public/value.h"
 #include "absl/container/flat_hash_map.h"
@@ -37,17 +39,23 @@
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/cord.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
+#include "absl/strings/substitute.h"
 #include "absl/types/span.h"
+#include "backend/common/case.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/ml/ml_predict_row_function.h"
 #include "backend/query/ml/ml_predict_table_valued_function.h"
+#include "backend/query/ml/model_evaluator.h"
 #include "backend/query/search/search_function_catalog.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/table.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
@@ -143,6 +151,336 @@ std::unique_ptr<googlesql::Function> BitReverseFunction(
       function_options);
 }
 
+absl::StatusOr<googlesql::Value> EvalAiIf(
+    absl::Span<const googlesql::Value> args) {
+  GOOGLESQL_RET_CHECK(args.size() == 1);
+  if (args[0].is_null()) {
+    return googlesql::Value::NullBool();
+  }
+
+  GOOGLESQL_RET_CHECK(args[0].type()->IsString());
+  googlesql::Value prompt = googlesql::values::String(args[0].string_value());
+
+  // VertexAI Schema::Type 4 is BOOLEAN.
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      googlesql::JSONValue response_schema_json,
+      googlesql::JSONValue::ParseJSONString(R"json({"type": 4})json"));
+  googlesql::Value response_schema =
+      googlesql::values::Json(std::move(response_schema_json));
+  googlesql::Value content;
+
+  GOOGLESQL_RETURN_IF_ERROR(ModelEvaluator::Predict(
+      /*model=*/ModelEvaluator::GetDefaultLlmModel().get(),
+      /*model_inputs=*/{{"prompt", &prompt}},
+      /*model_params=*/{{"response_schema", &response_schema}},
+      /*model_outputs=*/{{"content", &content}}));
+
+  if (content.is_null() || !content.type()->IsString()) {
+    return error::AiOperator_UnexpectedResponse(content.ToString());
+  }
+
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      googlesql::JSONValue response_json,
+      googlesql::JSONValue::ParseJSONString(content.string_value()),
+      _.With([](const absl::Status& s) {
+        return error::AiOperator_UnexpectedResponse(s.ToString());
+      }));
+
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      bool result,
+      googlesql::functions::ConvertJsonToBool(response_json.GetConstRef()),
+      _.With([](const absl::Status& s) {
+        return error::AiOperator_UnexpectedResponse(s.ToString());
+      }));
+
+  return googlesql::Value::Bool(result);
+}
+
+std::unique_ptr<googlesql::Function> AiIfFunction(
+    const std::string& catalog_name) {
+  googlesql::FunctionOptions function_options;
+  function_options.set_evaluator(googlesql::FunctionEvaluator(EvalAiIf));
+  function_options.set_supports_safe_error_mode(true);
+
+  return std::make_unique<googlesql::Function>(
+      kAiIfFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{
+          {googlesql::types::BoolType(),
+           {{googlesql::types::StringType(),
+             googlesql::FunctionArgumentTypeOptions().set_argument_name(
+                 "prompt", googlesql::kPositionalOrNamed)}},
+           nullptr}},
+      function_options);
+}
+
+absl::StatusOr<googlesql::Value> EvalAiScore(
+    absl::Span<const googlesql::Value> args) {
+  GOOGLESQL_RET_CHECK(args.size() == 1);
+  if (args[0].is_null()) {
+    return googlesql::Value::NullDouble();
+  }
+
+  GOOGLESQL_RET_CHECK(args[0].type()->IsString());
+  googlesql::Value prompt = googlesql::values::String(args[0].string_value());
+
+  // VertexAI Schema::Type 2 is NUMBER.
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      googlesql::JSONValue response_schema_json,
+      googlesql::JSONValue::ParseJSONString(R"json({"type": 2})json"));
+  googlesql::Value response_schema =
+      googlesql::values::Json(std::move(response_schema_json));
+  googlesql::Value content;
+
+  GOOGLESQL_RETURN_IF_ERROR(ModelEvaluator::Predict(
+      /*model=*/ModelEvaluator::GetDefaultLlmModel().get(),
+      /*model_inputs=*/{{"prompt", &prompt}},
+      /*model_params=*/{{"response_schema", &response_schema}},
+      /*model_outputs=*/{{"content", &content}}));
+
+  if (content.is_null() || !content.type()->IsString()) {
+    return error::AiOperator_UnexpectedResponse(content.ToString());
+  }
+
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      googlesql::JSONValue response_json,
+      googlesql::JSONValue::ParseJSONString(content.string_value()),
+      _.With([](const absl::Status& s) {
+        return error::AiOperator_UnexpectedResponse(s.ToString());
+      }));
+
+  GOOGLESQL_ASSIGN_OR_RETURN(double result,
+                   googlesql::functions::ConvertJsonToDouble(
+                       response_json.GetConstRef(),
+                       googlesql::functions::WideNumberMode::kRound,
+                       googlesql::ProductMode::PRODUCT_EXTERNAL),
+                   _.With([](const absl::Status& s) {
+                     return error::AiOperator_UnexpectedResponse(s.ToString());
+                   }));
+
+  return googlesql::Value::Double(result);
+}
+
+std::unique_ptr<googlesql::Function> AiScoreFunction(
+    const std::string& catalog_name) {
+  googlesql::FunctionOptions function_options;
+  function_options.set_evaluator(googlesql::FunctionEvaluator(EvalAiScore));
+  function_options.set_supports_safe_error_mode(true);
+
+  return std::make_unique<googlesql::Function>(
+      kAiScoreFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{
+          {googlesql::types::DoubleType(),
+           {{googlesql::types::StringType(),
+             googlesql::FunctionArgumentTypeOptions().set_argument_name(
+                 "prompt", googlesql::kPositionalOrNamed)}},
+           nullptr}},
+      function_options);
+}
+
+absl::StatusOr<googlesql::Value> EvalAiClassify(
+    absl::Span<const googlesql::Value> args) {
+  GOOGLESQL_RET_CHECK(args.size() == 2);
+  if (args[0].is_null() || args[1].is_null()) {
+    return googlesql::Value::NullString();
+  }
+
+  // Build the prompt.
+  std::vector<std::string> categories;
+  std::string formatted_categories;
+
+  if (args[1].type()->IsArray()) {
+    if (args[1].elements().empty()) {
+      return error::AiClassify_Categories_EmptyArray();
+    }
+
+    bool first = true;
+    for (const auto& category : args[1].elements()) {
+      absl::StrAppend(&formatted_categories, first ? "" : ", ");
+      first = false;
+
+      if (category.is_null()) {
+        return error::AiClassify_Categories_NullElement();
+      }
+
+      if (category.type()->IsString()) {
+        if (category.string_value().empty()) {
+          return error::AiClassify_Categories_EmptyLabel();
+        }
+
+        absl::StrAppend(&formatted_categories, category.string_value());
+        categories.push_back(category.string_value());
+      } else if (category.type()->IsStruct()) {
+        GOOGLESQL_RET_CHECK_EQ(category.fields().size(), 2);
+        const auto& label = category.field(0);
+        const auto& description = category.field(1);
+        GOOGLESQL_RET_CHECK(label.type()->IsString());
+        GOOGLESQL_RET_CHECK(description.type()->IsString());
+
+        if (label.is_null() || label.string_value().empty()) {
+          return error::AiClassify_Categories_EmptyLabel();
+        }
+
+        if (description.is_null() || description.string_value().empty()) {
+          return error::AiClassify_Categories_EmptyDescription();
+        }
+
+        absl::StrAppend(&formatted_categories, label.string_value(), " (",
+                        description.string_value(), ")");
+        categories.push_back(label.string_value());
+      } else {
+        GOOGLESQL_RET_CHECK_FAIL() << "Unsupported categories type: "
+                         << category.type()->DebugString();
+      }
+    }
+  } else if (args[1].type()->Equals(
+                 postgres_translator::spangres::datatypes::GetPgJsonbType())) {
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        absl::Cord categories_cord,
+        postgres_translator::spangres::datatypes::GetPgJsonbNormalizedValue(
+            args[1]));
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        googlesql::JSONValue categories_json,
+        googlesql::JSONValue::ParseJSONString(categories_cord.Flatten()));
+
+    if (!categories_json.GetConstRef().IsArray()) {
+      return error::AiClassify_Categories_NotArray();
+    }
+
+    if (categories_json.GetConstRef().GetArraySize() == 0) {
+      return error::AiClassify_Categories_EmptyArray();
+    }
+    bool first = true;
+    for (const auto& category :
+         categories_json.GetConstRef().GetArrayElements()) {
+      absl::StrAppend(&formatted_categories, first ? "" : ", ");
+      first = false;
+
+      if (!category.IsObject() || category.GetObjectSize() != 2) {
+        return error::AiClassify_Categories_NotArrayOfObjects();
+      }
+      std::optional<googlesql::JSONValueConstRef> label =
+          category.GetMemberIfExists("label");
+      std::optional<googlesql::JSONValueConstRef> description =
+          category.GetMemberIfExists("description");
+      if (!label.has_value() || !label->IsString() ||
+          !description.has_value() || !description->IsString()) {
+        return error::AiClassify_Categories_InvalidObject();
+      }
+      if (label->GetString().empty()) {
+        return error::AiClassify_Categories_EmptyLabel();
+      }
+      if (description->GetString().empty()) {
+        return error::AiClassify_Categories_EmptyDescription();
+      }
+
+      absl::StrAppend(&formatted_categories, label->GetString(), " (",
+                      description->GetString(), ")");
+      categories.push_back(label->GetString());
+    }
+
+  } else {
+    GOOGLESQL_RET_CHECK_FAIL() << "Unsupported categories type: "
+                     << args[1].type()->DebugString();
+  }
+
+  GOOGLESQL_RET_CHECK(args[0].type()->IsString());
+  googlesql::Value prompt = googlesql::values::String(absl::Substitute(
+      "Categorize the statement into one of the following: $0. Only return "
+      "the "
+      "result without any explanation. <statement>$1</statement>",
+      formatted_categories, args[0].string_value()));
+
+  // VertexAI Schema::Type 1 is STRING.
+  googlesql::JSONValue response_schema_json;
+  response_schema_json.GetRef().SetToEmptyObject();
+  response_schema_json.GetRef().GetMember("type").SetInt64(1);
+  response_schema_json.GetRef().GetMember("enum").SetToEmptyArray();
+  for (const std::string& category : categories) {
+    googlesql::JSONValue category_json;
+    category_json.GetRef().SetString(category);
+    GOOGLESQL_RETURN_IF_ERROR(
+        response_schema_json.GetRef().GetMember("enum").AppendArrayElement(
+            std::move(category_json)));
+  }
+
+  googlesql::Value response_schema =
+      googlesql::values::Json(std::move(response_schema_json));
+  googlesql::Value content;
+
+  GOOGLESQL_RETURN_IF_ERROR(ModelEvaluator::Predict(
+      /*model=*/ModelEvaluator::GetDefaultLlmModel().get(),
+      /*model_inputs=*/{{"prompt", &prompt}},
+      /*model_params=*/{{"response_schema", &response_schema}},
+      /*model_outputs=*/{{"content", &content}}));
+
+  if (content.is_null() || !content.type()->IsString()) {
+    return error::AiOperator_UnexpectedResponse(content.ToString());
+  }
+
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      googlesql::JSONValue response_json,
+      googlesql::JSONValue::ParseJSONString(content.string_value()),
+      _.With([](const absl::Status& s) {
+        return error::AiOperator_UnexpectedResponse(s.ToString());
+      }));
+
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::string result,
+      googlesql::functions::ConvertJsonToString(response_json.GetConstRef()),
+      _.With([](const absl::Status& s) {
+        return error::AiOperator_UnexpectedResponse(s.ToString());
+      }));
+
+  return googlesql::Value::String(result);
+}
+
+std::unique_ptr<googlesql::Function> AiClassifyFunction(
+    const std::string& catalog_name, googlesql::TypeFactory* type_factory) {
+  googlesql::FunctionOptions function_options;
+  function_options.set_evaluator(googlesql::FunctionEvaluator(EvalAiClassify));
+  function_options.set_supports_safe_error_mode(true);
+
+  const googlesql::StructType* categories_struct_type;
+  ABSL_CHECK_OK(type_factory->MakeStructType(  // Crash OK
+      {{"label", googlesql::types::StringType()},
+       {"description", googlesql::types::StringType()}},
+      &categories_struct_type));
+
+  const googlesql::ArrayType* categories_array_type;
+  ABSL_CHECK_OK(type_factory->MakeArrayType(categories_struct_type,  // Crash OK
+                                       &categories_array_type));
+
+  return std::make_unique<googlesql::Function>(
+      kAiClassifyFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{
+          {googlesql::types::StringType(),
+           {{googlesql::types::StringType(),
+             googlesql::FunctionArgumentTypeOptions().set_argument_name(
+                 "prompt", googlesql::kPositionalOrNamed)},
+            {googlesql::types::StringArrayType(),
+             googlesql::FunctionArgumentTypeOptions().set_argument_name(
+                 "categories", googlesql::kPositionalOrNamed)}},
+           nullptr},
+          {googlesql::types::StringType(),
+           {{googlesql::types::StringType(),
+             googlesql::FunctionArgumentTypeOptions().set_argument_name(
+                 "prompt", googlesql::kPositionalOrNamed)},
+            {categories_array_type,
+             googlesql::FunctionArgumentTypeOptions().set_argument_name(
+                 "categories", googlesql::kPositionalOrNamed)}},
+           nullptr},
+          {googlesql::types::StringType(),
+           {{googlesql::types::StringType(),
+             googlesql::FunctionArgumentTypeOptions().set_argument_name(
+                 "prompt", googlesql::kPositionalOrNamed)},
+            {postgres_translator::spangres::datatypes::GetPgJsonbType(),
+             googlesql::FunctionArgumentTypeOptions().set_argument_name(
+                 "categories", googlesql::kPositionalOrNamed)}},
+           nullptr},
+      },
+      function_options);
+}
+
 std::unique_ptr<googlesql::Function> MlPredictRowFunction(
     const std::string& catalog_name) {
   auto pg_jsonb = postgres_translator::spangres::datatypes::GetPgJsonbType();
@@ -195,7 +533,7 @@ FunctionCatalog::FunctionCatalog(googlesql::TypeFactory* type_factory,
   AddGraphSafeToJsonSignatures();
   // Add aliases for the functions.
   AddFunctionAliases();
-  AddMlFunctions();
+  AddMlFunctions(type_factory);
   AddSpannerPGFunctions();
   AddPGLambdaFunctions();
   AddSearchFunctions(type_factory);
@@ -247,9 +585,6 @@ void FunctionCatalog::AddSpannerFunctions() {
       GetNextSequenceValueFunction(catalog_name_);
   functions_[get_next_sequence_value_func->Name()] =
       std::move(get_next_sequence_value_func);
-
-  auto ml_predict_row_func = MlPredictRowFunction(catalog_name_);
-  functions_[ml_predict_row_func->Name()] = std::move(ml_predict_row_func);
 }
 
 void FunctionCatalog::AddGraphSafeToJsonSignatures() {
@@ -266,11 +601,25 @@ void FunctionCatalog::AddGraphSafeToJsonSignatures() {
   }
 }
 
-void FunctionCatalog::AddMlFunctions() {
+void FunctionCatalog::AddMlFunctions(googlesql::TypeFactory* type_factory) {
+  {
+    auto ai_if = AiIfFunction(catalog_name_);
+    functions_[ai_if->Name()] = std::move(ai_if);
+  }
+
+  {
+    auto ai_score = AiScoreFunction(catalog_name_);
+    functions_[ai_score->Name()] = std::move(ai_score);
+  }
+
+  {
+    auto ai_classify = AiClassifyFunction(catalog_name_, type_factory);
+    functions_[ai_classify->Name()] = std::move(ai_classify);
+  }
+
   {
     auto ml_predict =
         std::make_unique<MlPredictTableValuedFunction>(/*safe=*/false);
-
     table_valued_functions_.insert(
         {ml_predict->FullName(), std::move(ml_predict)});
   }
@@ -280,6 +629,11 @@ void FunctionCatalog::AddMlFunctions() {
         std::make_unique<MlPredictTableValuedFunction>(/*safe=*/true);
     table_valued_functions_.insert(
         {safe_ml_predict->FullName(), std::move(safe_ml_predict)});
+  }
+
+  {
+    auto ml_predict_row_func = MlPredictRowFunction(catalog_name_);
+    functions_[ml_predict_row_func->Name()] = std::move(ml_predict_row_func);
   }
 }
 

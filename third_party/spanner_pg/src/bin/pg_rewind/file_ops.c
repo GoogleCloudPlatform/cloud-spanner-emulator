@@ -8,7 +8,7 @@
  * do nothing if it's enabled. You should avoid accessing the target files
  * directly but if you do, make sure you honor the --dry-run mode!
  *
- * Portions Copyright (c) 2013-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2013-2023, PostgreSQL Global Development Group
  *
  *-------------------------------------------------------------------------
  */
@@ -433,7 +433,6 @@ recurse_dir(const char *datadir, const char *parentpath,
 		}
 		else if (S_ISLNK(fst.st_mode))
 		{
-#if defined(HAVE_READLINK) || defined(WIN32)
 			char		link_target[MAXPGPATH];
 			int			len;
 
@@ -456,10 +455,6 @@ recurse_dir(const char *datadir, const char *parentpath,
 			if ((parentpath && strcmp(parentpath, "pg_tblspc") == 0) ||
 				strcmp(path, "pg_wal") == 0)
 				recurse_dir(datadir, path, callback);
-#else
-			pg_fatal("\"%s\" is a symbolic link, but symbolic links are not supported on this platform",
-					 fullpath);
-#endif							/* HAVE_READLINK */
 		}
 	}
 

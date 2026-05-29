@@ -17,174 +17,194 @@
 #include "backend/query/ml/model_evaluator.h"
 
 #include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/json_value.h"
-#include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "googlesql/public/value.h"
+#include "googlesql/base/no_destructor.h"
+#include "absl/flags/flag.h"
+#include "absl/memory/memory.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "backend/common/case.h"
+#include "backend/query/queryable_model.h"
+#include "backend/query/remote_udf/remote_udf_evaluator.h"
+#include "backend/schema/catalog/model.h"
 #include "googlesql/base/ret_check.h"
 #include "googlesql/base/status_macros.h"
-#include "farmhash.h"
 
 namespace google::spanner::emulator::backend {
 
-absl::StatusOr<uint64_t> Fingerprint(const googlesql::Value& value) {
-  if (value.is_null()) {
-    return 0;
-  }
-
-  switch (value.type_kind()) {
-    case googlesql::TYPE_INT32:
-      // Integers are encoded as strings on the wire.
-      return farmhash::Fingerprint64(absl::StrCat(value.int32_value()));
-    case googlesql::TYPE_INT64:
-      // Integers are encoded as strings on the wire.
-      return farmhash::Fingerprint64(absl::StrCat(value.int64_value()));
-    case googlesql::TYPE_UINT32:
-      // Integers are encoded as strings on the wire.
-      return farmhash::Fingerprint64(absl::StrCat(value.uint32_value()));
-    case googlesql::TYPE_UINT64:
-      // Integers are encoded as strings on the wire.
-      return farmhash::Fingerprint64(absl::StrCat(value.uint64_value()));
-    case googlesql::TYPE_BOOL:
-      return farmhash::Fingerprint(value.bool_value());
-    case googlesql::TYPE_FLOAT:
-      return farmhash::Fingerprint(value.float_value());
-    case googlesql::TYPE_DOUBLE:
-      return farmhash::Fingerprint(value.double_value());
-    case googlesql::TYPE_STRING:
-      return farmhash::Fingerprint64(value.string_value());
-    case googlesql::TYPE_BYTES:
-      return farmhash::Fingerprint64(value.bytes_value());
-    case googlesql::TYPE_ARRAY: {
-      uint64_t result = 0;
-      for (const googlesql::Value& element : value.elements()) {
-        GOOGLESQL_ASSIGN_OR_RETURN(uint64_t element_hash, Fingerprint(element));
-        result += element_hash;
-      }
-      return result;
-    }
-    case googlesql::TYPE_STRUCT: {
-      uint64_t result = 0;
-      for (const googlesql::Value& field : value.fields()) {
-        GOOGLESQL_ASSIGN_OR_RETURN(uint64_t field_hash, Fingerprint(field));
-        result += field_hash;
-      }
-      return result;
-    }
-
-    default:
-      return absl::UnimplementedError(
-          absl::StrCat("ML.PREDICT function does not support inputs of type: ",
-                       value.type()->TypeName(googlesql::PRODUCT_EXTERNAL,
-                                              /*use_external_float32=*/true)));
-  }
-}
-
-absl::StatusOr<uint64_t> Fingerprint(const googlesql::JSONValueConstRef& json) {
-  if (json.IsNumber()) {
-    return farmhash::Fingerprint(json.GetDouble());
-  } else if (json.IsString()) {
-    return farmhash::Fingerprint64(json.GetString());
-  } else if (json.IsBoolean()) {
-    return farmhash::Fingerprint(json.GetBoolean());
-  } else if (json.IsNull()) {
-    return 0;
-  } else if (json.IsArray()) {
-    uint64_t result = 0;
-    for (uint64_t i = 0; i < json.GetArraySize(); ++i) {
-      GOOGLESQL_ASSIGN_OR_RETURN(uint64_t element_hash,
-                       Fingerprint(json.GetArrayElement(i)));
-      result += element_hash;
-    }
-    return result;
-  } else if (json.IsObject()) {
-    uint64_t result = 0;
-    for (const auto& [key, value] : json.GetMembers()) {
-      GOOGLESQL_ASSIGN_OR_RETURN(uint64_t field_hash, Fingerprint(value));
-      result += field_hash;
-    }
-    return result;
-  } else {
-    GOOGLESQL_RET_CHECK_FAIL() << "Unexpected JSON value type";
-  }
-}
-
-absl::StatusOr<googlesql::Value> ToValue(uint64_t fingerprint,
-                                         const googlesql::Type* type) {
-  switch (type->kind()) {
-    case googlesql::TYPE_INT32:
-      return googlesql::Value::Int32(fingerprint);
-    case googlesql::TYPE_INT64:
-      return googlesql::Value::Int64(fingerprint);
-    case googlesql::TYPE_BOOL:
-      return googlesql::Value::Bool(fingerprint % 2 == 0);
-    case googlesql::TYPE_FLOAT:
-      return googlesql::Value::Float(fingerprint);
-    case googlesql::TYPE_DOUBLE:
-      return googlesql::Value::Double(fingerprint);
-    case googlesql::TYPE_STRING:
-      return googlesql::Value::String(absl::StrCat(fingerprint));
-    case googlesql::TYPE_BYTES:
-      return googlesql::Value::Bytes(absl::StrCat(fingerprint));
-    case googlesql::TYPE_ARRAY: {
-      GOOGLESQL_ASSIGN_OR_RETURN(googlesql::Value element_value,
-                       ToValue(fingerprint, type->AsArray()->element_type()));
-      return googlesql::Value::MakeArray(type->AsArray(), {element_value});
-    }
-    case googlesql::TYPE_STRUCT: {
-      std::vector<googlesql::Value> field_values;
-      for (const googlesql::StructField& field : type->AsStruct()->fields()) {
-        GOOGLESQL_ASSIGN_OR_RETURN(googlesql::Value field_value,
-                         ToValue(fingerprint, field.type));
-        field_values.push_back(field_value);
-      }
-      return googlesql::Value::MakeStruct(type->AsStruct(), field_values);
-    }
-    default:
-      return absl::UnimplementedError(
-          absl::StrCat("ML.PREDICT function does not support outputs of type: ",
-                       type->TypeName(googlesql::PRODUCT_EXTERNAL,
-                                      /*use_external_float32=*/true)));
-  }
-}
+namespace {
 
 // Default prediction implementation. Takes a fingerprint of all model input
 // values, then fills out model output columns by casting the hash value to
 // output column type.
-absl::Status ModelEvaluator::DefaultPredict(
+absl::Status DefaultPredict(
     const googlesql::Model* model,
-    const CaseInsensitiveStringMap<const ModelColumn>& model_inputs,
-    CaseInsensitiveStringMap<ModelColumn>& model_outputs) {
-  uint64_t input_hash = 0;
+    const CaseInsensitiveStringMap<const googlesql::Value*>& model_inputs,
+    const CaseInsensitiveStringMap<const googlesql::Value*>& model_params,
+    const CaseInsensitiveStringMap<googlesql::Value*>& model_outputs) {
+  std::vector<googlesql::Value> args;
+
   for (const auto& model_input : model_inputs) {
-    GOOGLESQL_ASSIGN_OR_RETURN(uint64_t column_hash,
-                     Fingerprint(*model_input.second.value));
-    input_hash += column_hash;
+    args.push_back(*model_input.second);
   }
+  GOOGLESQL_ASSIGN_OR_RETURN(uint64_t input_fingerprint,
+                   RemoteUdfProtocol::Fingerprint(args));
 
   for (const auto& model_output : model_outputs) {
-    GOOGLESQL_ASSIGN_OR_RETURN(
-        *model_output.second.value,
-        ToValue(input_hash, model_output.second.model_column->GetType()));
+    const googlesql::Column* output_column =
+        model->FindOutputByName(model_output.first);
+    GOOGLESQL_RET_CHECK(output_column != nullptr);
+    GOOGLESQL_ASSIGN_OR_RETURN(*model_output.second,
+                     RemoteUdfProtocol::ToValue(input_fingerprint,
+                                                output_column->GetType()));
+  }
+
+  // Process fixed response schema for LLM models if provided.
+  auto rs_it = model_params.find("response_schema");
+  auto content_it = model_outputs.find("content");
+  if (rs_it != model_params.end() && content_it != model_outputs.end()) {
+    if (!rs_it->second->type()->IsJsonType() || rs_it->second->is_null()) {
+      return absl::FailedPreconditionError(
+          "Response schema must be a non-null JSON value.");
+    }
+
+    googlesql::JSONValueConstRef response_schema = rs_it->second->json_value();
+    if (!response_schema.IsObject() || !response_schema.HasMember("type") ||
+        !response_schema.GetMember("type").IsInt64()) {
+      return absl::FailedPreconditionError(absl::StrCat(
+          "Invalid response schema: ", response_schema.ToString()));
+    }
+
+    googlesql::JSONValue content;
+    if (response_schema.HasMember("enum")) {
+      auto enum_ = response_schema.GetMember("enum");
+      if (!enum_.IsArray() || enum_.GetArraySize() <= 0) {
+        return absl::FailedPreconditionError(
+            absl::StrCat("Invalid response schema: enum should be a "
+                         "non-empty array. Got: ",
+                         enum_.ToString()));
+      }
+
+      googlesql::JSONValueConstRef enum_value =
+          enum_.GetArrayElement(input_fingerprint % enum_.GetArraySize());
+      content.GetRef().Set(googlesql::JSONValue::CopyFrom(enum_value));
+    } else {
+      int64_t type = response_schema.GetMember("type").GetInt64();
+      switch (type) {
+        // STRING
+        case 1: {
+          content.GetRef().SetString(absl::StrCat(input_fingerprint));
+          break;
+        }
+        // NUMBER
+        case 2:
+          // Use integer values to avoid imprecise floats in compliance tests.
+          content.GetRef().SetInt64((input_fingerprint % 2000) - 1000);
+          break;
+        // BOOLEAN
+        case 4: {
+          GOOGLESQL_ASSIGN_OR_RETURN(auto bool_value, RemoteUdfProtocol::ToValue(
+                                                input_fingerprint,
+                                                googlesql::types::BoolType()));
+          content.GetRef().SetBoolean(bool_value.bool_value());
+          break;
+        }
+        default:
+          return absl::FailedPreconditionError(
+              absl::StrCat("Unsupported response schema type: ", type));
+      }
+    }
+    // Structured output is JSON formatted string.
+    *content_it->second =
+        googlesql::Value::String(content.GetConstRef().ToString());
   }
 
   return absl::OkStatus();
 }
 
-absl::Status ModelEvaluator::Predict(
+// Remote prediction implementation. Converts model inputs and parameters to
+// JSON, invokes the remote endpoint, and converts the JSON response to model
+// output values.
+absl::Status RemotePredict(
     const googlesql::Model* model,
-    const CaseInsensitiveStringMap<const ModelColumn>& model_inputs,
-    CaseInsensitiveStringMap<ModelColumn>& model_outputs) {
-  // Custom model prediction logic can be added here.
-  return DefaultPredict(model, model_inputs, model_outputs);
+    const CaseInsensitiveStringMap<const googlesql::Value*>& model_inputs,
+    const CaseInsensitiveStringMap<const googlesql::Value*>& model_params,
+    const CaseInsensitiveStringMap<googlesql::Value*>& model_outputs) {
+  GOOGLESQL_RET_CHECK(model->Is<QueryableModel>());
+  const QueryableModel* spanner_model = model->GetAs<QueryableModel>();
+
+  googlesql::JSONValue instance;
+  instance.GetRef().SetToEmptyObject();
+  for (const auto& model_input : model_inputs) {
+    GOOGLESQL_ASSIGN_OR_RETURN(googlesql::JSONValue json_value,
+                     RemoteUdfProtocol::ToJson(*model_input.second));
+    instance.GetRef().GetMember(model_input.first).Set(std::move(json_value));
+  }
+
+  googlesql::JSONValue parameters;
+  parameters.GetRef().SetToEmptyObject();
+  for (const auto& model_param : model_params) {
+    GOOGLESQL_ASSIGN_OR_RETURN(googlesql::JSONValue json_value,
+                     RemoteUdfProtocol::ToJson(*model_param.second));
+    parameters.GetRef().GetMember(model_param.first).Set(std::move(json_value));
+  }
+
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::string_view endpoint,
+                   spanner_model->GetFirstEndpoint());
+
+  GOOGLESQL_ASSIGN_OR_RETURN(googlesql::JSONValue response,
+                   RemoteUdfEvaluator::EvaluateRemoteFunction(
+                       endpoint, model != nullptr ? model->FullName() : "",
+                       {googlesql::Value::Json(std::move(instance)),
+                        googlesql::Value::Json(std::move(parameters))}));
+
+  googlesql::JSONValueConstRef response_ref = response.GetConstRef();
+  if (!response_ref.IsObject()) {
+    return absl::FailedPreconditionError(
+        absl::StrCat("Remote prediction should return a JSON object. Body: ",
+                     response_ref.ToString(), ". Endpoint: ", endpoint,
+                     ". Schema object name: ", model->FullName()));
+  }
+
+  // Convert JSON response to model output values.
+  for (const auto& [output_name, model_output] : model_outputs) {
+    const googlesql::Column* output_column =
+        model->FindOutputByName(output_name);
+    GOOGLESQL_RET_CHECK(output_column != nullptr);
+    const QueryableModelColumn* queryable_output_column =
+        output_column->GetAs<QueryableModelColumn>();
+    GOOGLESQL_RET_CHECK(queryable_output_column != nullptr);
+
+    // Skip response fields that do not match model output columns.
+    if (!response_ref.HasMember(output_name)) {
+      if (queryable_output_column->required()) {
+        return absl::FailedPreconditionError(absl::StrCat(
+            "Remote prediction is missing required output column: ",
+            output_name));
+      }
+
+      *model_output =
+          googlesql::Value::Null(queryable_output_column->GetType());
+      continue;
+    }
+
+    GOOGLESQL_ASSIGN_OR_RETURN(*model_output, RemoteUdfProtocol::ToValue(
+                                        response_ref.GetMember(output_name),
+                                        queryable_output_column->GetType()));
+  }
+  return absl::OkStatus();
 }
 
 // Default prediction implementation for PG. Takes a fingerprint of all model
@@ -193,18 +213,89 @@ absl::Status DefaultPgPredict(absl::string_view endpoint,
                               const googlesql::JSONValueConstRef& instance,
                               const googlesql::JSONValueConstRef& parameters,
                               googlesql::JSONValueRef prediction) {
-  GOOGLESQL_ASSIGN_OR_RETURN(uint64_t input_hash, Fingerprint(instance));
+  GOOGLESQL_ASSIGN_OR_RETURN(uint64_t input_hash,
+                   RemoteUdfProtocol::Fingerprint(instance));
   prediction.SetToEmptyObject();
   prediction.GetMember("Outcome").SetBoolean(input_hash % 2 == 0);
   return absl::OkStatus();
+}
+
+}  // namespace
+
+absl::Status ModelEvaluator::Predict(
+    const googlesql::Model* model,
+    const CaseInsensitiveStringMap<const googlesql::Value*>& model_inputs,
+    const CaseInsensitiveStringMap<const googlesql::Value*>& model_params,
+    const CaseInsensitiveStringMap<googlesql::Value*>& model_outputs) {
+  GOOGLESQL_RET_CHECK_NE(model, nullptr);
+  // Validate if all required inputs are provided.
+  for (int i = 0; i < model->NumInputs(); ++i) {
+    const QueryableModelColumn* input_column =
+        model->GetInput(i)->GetAs<QueryableModelColumn>();
+    GOOGLESQL_RET_CHECK(input_column != nullptr);
+
+    if (input_column->required() &&
+        !model_inputs.contains(input_column->Name())) {
+      return absl::FailedPreconditionError(
+          absl::StrCat("Missing input column: ", input_column->Name()));
+    }
+  }
+
+  // Validate no extra inputs are provided.
+  for (const auto& [input_name, _] : model_inputs) {
+    if (model->FindInputByName(input_name) == nullptr) {
+      return absl::FailedPreconditionError(
+          absl::StrCat("Unexpected input column: ", input_name));
+    }
+  }
+
+  if (!absl::GetFlag(FLAGS_remote_functions_host_port).empty()) {
+    return RemotePredict(model, model_inputs, model_params, model_outputs);
+  }
+
+  // Custom model prediction logic can be added here.
+
+  return DefaultPredict(model, model_inputs, model_params, model_outputs);
 }
 
 absl::Status ModelEvaluator::PgPredict(
     absl::string_view endpoint, const googlesql::JSONValueConstRef& instance,
     const googlesql::JSONValueConstRef& parameters,
     googlesql::JSONValueRef prediction) {
+  if (!absl::GetFlag(FLAGS_remote_functions_host_port).empty()) {
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        googlesql::JSONValue response,
+        RemoteUdfEvaluator::EvaluateRemoteFunction(
+            endpoint, /*schema_object_name=*/"",
+            {googlesql::Value::Json(googlesql::JSONValue::CopyFrom(instance)),
+             googlesql::Value::Json(
+                 googlesql::JSONValue::CopyFrom(parameters))}));
+    prediction.Set(std::move(response));
+    return absl::OkStatus();
+  }
+
   // Custom model prediction logic can be added here.
+
   return DefaultPgPredict(endpoint, instance, parameters, prediction);
+}
+
+std::unique_ptr<QueryableModel> ModelEvaluator::GetDefaultLlmModel() {
+  static const googlesql_base::NoDestructor<std::unique_ptr<backend::Model>>
+      kDefaultLlmModel(absl::WrapUnique(new backend::Model(
+          "default_llm_model",
+          /*is_remote=*/true,
+          /*input=*/
+          absl::Span<const backend::Model::ModelColumn>{
+              {"prompt", googlesql::types::StringType()}},
+          /*output=*/
+          absl::Span<const backend::Model::ModelColumn>{
+              {"content", googlesql::types::StringType()}},
+          /*endpoint=*/
+          R"(//aiplatform.googleapis.com/projects/tp/locations/tl/publishers/google/models/gemini-2.5-flash)",
+          /*endpoints=*/{},
+          /*default_batch_size=*/std::nullopt)));
+
+  return std::make_unique<QueryableModel>(kDefaultLlmModel->get());
 }
 
 }  // namespace google::spanner::emulator::backend

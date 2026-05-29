@@ -1,5 +1,5 @@
 
-# Copyright (c) 2021-2022, PostgreSQL Global Development Group
+# Copyright (c) 2021-2023, PostgreSQL Global Development Group
 
 # Test FSM-driven INSERT just after truncation clears FSM slots indicating
 # free space in removed blocks.

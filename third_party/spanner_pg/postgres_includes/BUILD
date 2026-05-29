@@ -103,7 +103,7 @@ cc_library(
     ],
     features = ["-use_header_modules"],  # Incompatible with -fexceptions.
     deps = [
-        "//third_party/spanner_pg/postgres_includes",
+        ":postgres_includes",
         "//third_party/spanner_pg/src/backend",
     ],
 )
@@ -111,14 +111,14 @@ cc_library(
 genrule(
     name = "generate_nodes_inc",
     srcs = [
-        "//third_party/spanner_pg/src/include:node_header",
+        "//third_party/spanner_pg/src/backend/nodes:nodetags.h",
     ],
     outs = [
         "nodes.inc",
     ],
     cmd = """\
-        sed -rn "s/^\\s+T_([A-Za-z0-9_]+),$$/NODE(\\1)/p" \
-            < $(location //third_party/spanner_pg/src/include:node_header) \
+        sed -rn "s/^\\s+T_([A-Za-z0-9_]+)\\s*=.*,$$/NODE(\\1)/p" \
+            < $(location //third_party/spanner_pg/src/backend/nodes:nodetags.h) \
             | sort > $(location nodes.inc)
     """,
 )

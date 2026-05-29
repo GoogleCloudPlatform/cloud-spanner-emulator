@@ -63,7 +63,6 @@ cc_library(
         "shm_mq.c",
         "shm_toc.c",
         "shmem.c",
-        "shmqueue.c",
         "signalfuncs.c",
         "sinval.c",
         "sinvaladt.c",

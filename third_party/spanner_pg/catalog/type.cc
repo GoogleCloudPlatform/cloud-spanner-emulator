@@ -688,14 +688,15 @@ class PostgresUuidMapping : public PostgresTypeMapping {
 
   absl::StatusOr<Const*> MakePgConst(
       const googlesql::Value& value) const override {
-    Const* pg_const;
+    GOOGLESQL_ASSIGN_OR_RETURN(void* p, CheckedPgPalloc(UUID_LEN));
+    pg_uuid_t* pg_uuid = reinterpret_cast<pg_uuid_t*>(p);
     if (value.is_null()) {
       return CheckedPgMakeConst(
           /*consttype=*/UUIDOID,
           /*consttypmod=*/-1,
           /*constcollid=*/InvalidOid,
           /*constlen=*/sizeof(Datum),
-          /*constvalue=*/UUIDPGetDatum(&pg_const),
+          /*constvalue=*/UUIDPGetDatum(pg_uuid),
           /*constisnull=*/true,
           /*constbyval=*/false);
     }

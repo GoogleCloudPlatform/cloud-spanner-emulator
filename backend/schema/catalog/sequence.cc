@@ -69,7 +69,7 @@ absl::Status Sequence::DeepClone(SchemaGraphEditor* editor,
 }
 
 absl::StatusOr<googlesql::Value> Sequence::GetNextSequenceValue() const {
-  absl::MutexLock lock(&SequenceMutex);
+  absl::MutexLock lock(SequenceMutex);
   if (!Sequence::SequenceLastValues.contains(id_)) {
     if (start_with_.has_value()) {
       Sequence::SequenceLastValues[id_] = start_with_.value();
@@ -115,7 +115,7 @@ absl::StatusOr<googlesql::Value> Sequence::GetNextSequenceValue() const {
 googlesql::Value Sequence::GetInternalSequenceState() const {
   // If no sequence value has been retrieved before, then the current state is
   // NULL.
-  absl::MutexLock lock(&SequenceMutex);
+  absl::MutexLock lock(SequenceMutex);
   if (!Sequence::SequenceLastValues.contains(id_)) {
     return googlesql::Value::NullInt64();
   }
@@ -123,7 +123,7 @@ googlesql::Value Sequence::GetInternalSequenceState() const {
 }
 
 void Sequence::ResetSequenceLastValue() const {
-  absl::MutexLock lock(&SequenceMutex);
+  absl::MutexLock lock(SequenceMutex);
   if (!Sequence::SequenceLastValues.contains(id_)) {
     return;
   }
@@ -135,7 +135,7 @@ void Sequence::ResetSequenceLastValue() const {
 }
 
 void Sequence::RemoveSequenceFromLastValuesMap() const {
-  absl::MutexLock lock(&SequenceMutex);
+  absl::MutexLock lock(SequenceMutex);
   absl::flat_hash_map<std::string, int64_t>::iterator it =
       Sequence::SequenceLastValues.find(id_);
   if (it != Sequence::SequenceLastValues.end()) {

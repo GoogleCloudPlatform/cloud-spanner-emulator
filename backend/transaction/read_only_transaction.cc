@@ -60,7 +60,7 @@ ReadOnlyTransaction::ReadOnlyTransaction(
 
 absl::Status ReadOnlyTransaction::Read(const ReadArg& read_arg,
                                        std::unique_ptr<RowCursor>* cursor) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   // Wait for any concurrent schema change or read-write transactions to commit
   // before accessing database state to perform a read.
   lock_handle_->WaitForSafeRead(read_timestamp_);

@@ -17,10 +17,12 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_QUERYABLE_UDF_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_QUERYABLE_UDF_H_
 
+#include <memory>
 #include <string>
 
 #include "googlesql/public/function.h"
 #include "googlesql/public/types/type_factory.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "backend/schema/catalog/udf.h"
 
@@ -36,17 +38,21 @@ constexpr absl::string_view kRemoteUdfGroupName = "REMOTE_UDF";
 // QueryableUdf has a reference to the backend Udf.
 class QueryableUdf : public googlesql::Function {
  public:
-  explicit QueryableUdf(const backend::Udf* backend_udf,
-                        std::string default_time_zone,
-                        googlesql::Catalog* catalog = nullptr,
-                        googlesql::TypeFactory* type_factory = nullptr);
+  // Factory method to create a QueryableUdf.
+  static absl::StatusOr<std::unique_ptr<QueryableUdf>> Create(
+      const backend::Udf* backend_udf, std::string default_time_zone,
+      googlesql::Catalog* catalog = nullptr,
+      googlesql::TypeFactory* type_factory = nullptr);
 
   const backend::Udf* wrapped_udf() const { return wrapped_udf_; }
 
  private:
-  static googlesql::FunctionOptions CreateFunctionOptions(
+  static absl::StatusOr<googlesql::FunctionOptions> CreateFunctionOptions(
       const backend::Udf* udf, std::string default_time_zone,
       googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory);
+
+  explicit QueryableUdf(const backend::Udf* backend_udf,
+                        googlesql::FunctionOptions function_options);
 
   // The underlying Udf object which backs the QueryableUdf.
   const backend::Udf* wrapped_udf_;

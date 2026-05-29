@@ -367,13 +367,21 @@ QueryableGraphNodeTableReference::QueryableGraphNodeTableReference(
         wrapped_edge_table)
     : property_graph_(property_graph),
       wrapped_node_reference_(wrapped_node_reference) {
-  const googlesql::Table* referenced_node_table;
-  absl::Status find_status = catalog->FindTable(
-      {wrapped_node_reference_->node_table_name}, &referenced_node_table);
-  if (!find_status.ok()) {
-    ABSL_LOG(FATAL) << "Data source table not found in catalog: "
-               << wrapped_node_reference_->node_table_name;
+  // The node table reference might be using an alias. Resolve it to the real
+  // table name and corresponding element table using the property graph.
+  const googlesql::GraphElementTable* element_table = nullptr;
+  std::string node_table_name = wrapped_node_reference_->node_table_name;
+  const googlesql::Table* referenced_node_table = nullptr;
+  absl::Status element_table_status =
+      property_graph_->FindElementTableByName(node_table_name, element_table);
+  if (!element_table_status.ok()) {
+    // Theoretically, element table should always exist because GoogleSQL
+    // analyzer should validate that the referenced node table exists in the
+    // property graph during DDL analysis
+    ABSL_LOG(FATAL) << "Element table not found in property graph: "
+               << node_table_name;
   }
+  referenced_node_table = element_table->GetTable();
 
   absl::Status match_status = MatchGraphTableColumnHelper(
       referenced_node_table,
@@ -384,10 +392,10 @@ QueryableGraphNodeTableReference::QueryableGraphNodeTableReference(
   }
 
   const googlesql::Table* referencing_edge_table;
-  find_status =
+  absl::Status find_status =
       catalog->FindTable({wrapped_edge_table->name()}, &referencing_edge_table);
   if (!find_status.ok()) {
-    ABSL_LOG(FATAL) << "Data source table not found in catalog: "
+    ABSL_LOG(FATAL) << "Data source edge table not found in catalog: "
                << wrapped_edge_table->name();
   }
 

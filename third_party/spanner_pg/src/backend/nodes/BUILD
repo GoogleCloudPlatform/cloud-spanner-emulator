@@ -57,11 +57,13 @@ cc_library(
         "extensible.c",
         "list.c",
         "makefuncs.c",
+        "multibitmapset.c",
         "nodeFuncs.c",
         "nodes.c",
         "outfuncs.c",
         "params.c",
         "print.c",
+        "queryjumblefuncs.c",
         "read.c",
         "readfuncs.c",
         "tidbitmap.c",
@@ -70,6 +72,19 @@ cc_library(
     copts = [
         "-D_GNU_SOURCE",
         "-fexceptions",
+    ],
+    includes = ["."],
+    textual_hdrs = [
+        "copyfuncs.funcs.c",
+        "copyfuncs.switch.c",
+        "equalfuncs.funcs.c",
+        "equalfuncs.switch.c",
+        "outfuncs.funcs.c",
+        "outfuncs.switch.c",
+        "readfuncs.funcs.c",
+        "readfuncs.switch.c",
+        "queryjumblefuncs.funcs.c",
+        "queryjumblefuncs.switch.c",
     ],
     deps = [
         "//third_party/spanner_pg/src/include",
@@ -88,5 +103,43 @@ cc_test(
         "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "node_tag_gen_include",
+    hdrs = ["nodetags.h"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":node_headers",
+    ],
+)
+
+genrule(
+    name = "node_headers",
+    srcs = [
+        "//third_party/spanner_pg/src/include:node_header_files",
+    ],
+    outs = [
+        "copyfuncs.funcs.c",
+        "copyfuncs.switch.c",
+        "equalfuncs.funcs.c",
+        "equalfuncs.switch.c",
+        "nodetags.h",
+        "outfuncs.funcs.c",
+        "outfuncs.switch.c",
+        "readfuncs.funcs.c",
+        "readfuncs.switch.c",
+        "queryjumblefuncs.funcs.c",
+        "queryjumblefuncs.switch.c",
+    ],
+    cmd = """perl -I$$(dirname $(location //third_party/spanner_pg/src/backend/catalog:perl_utils)) $(location gen_node_support.pl) --outdir $(RULEDIR) $(SRCS)""",
+    tools = [
+        "gen_node_support.pl",
+        "//third_party/spanner_pg/src/backend/catalog:perl_utils",
+    ],
+    visibility = [
+        "//:__subpackages__",
+        "//third_party/spanner_pg/postgres_includes:__pkg__",
     ],
 )

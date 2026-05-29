@@ -4,7 +4,7 @@
  *
  * Author: Magnus Hagander <magnus@hagander.net>
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		  src/bin/pg_basebackup/pg_basebackup.c
@@ -16,13 +16,11 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <limits.h>
+#include <sys/select.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <signal.h>
 #include <time.h>
-#ifdef HAVE_SYS_SELECT_H
-#include <sys/select.h>
-#endif
 #ifdef HAVE_LIBZ
 #include <zlib.h>
 #endif
@@ -343,18 +341,18 @@ tablespace_list_append(const char *arg)
 
 	/*
 	 * All tablespaces are created with absolute directories, so specifying a
-	 * non-absolute path here would just never match, possibly confusing users.
-	 * Since we don't know whether the remote side is Windows or not, and it
-	 * might be different than the local side, permit any path that could be
-	 * absolute under either set of rules.
+	 * non-absolute path here would just never match, possibly confusing
+	 * users. Since we don't know whether the remote side is Windows or not,
+	 * and it might be different than the local side, permit any path that
+	 * could be absolute under either set of rules.
 	 *
 	 * (There is little practical risk of confusion here, because someone
 	 * running entirely on Linux isn't likely to have a relative path that
 	 * begins with a backslash or something that looks like a drive
-	 * specification. If they do, and they also incorrectly believe that
-	 * a relative path is acceptable here, we'll silently fail to warn them
-	 * of their mistake, and the -T option will just not get applied, same
-	 * as if they'd specified -T for a nonexistent tablespace.)
+	 * specification. If they do, and they also incorrectly believe that a
+	 * relative path is acceptable here, we'll silently fail to warn them of
+	 * their mistake, and the -T option will just not get applied, same as if
+	 * they'd specified -T for a nonexistent tablespace.)
 	 */
 	if (!is_nonwindows_absolute_path(cell->old_dir) &&
 		!is_windows_absolute_path(cell->old_dir))
@@ -457,7 +455,7 @@ reached_end_position(XLogRecPtr segendpos, uint32 timeline,
 	{
 #ifndef WIN32
 		fd_set		fds;
-		struct timeval tv;
+		struct timeval tv = {0};
 		int			r;
 
 		/*
@@ -467,16 +465,13 @@ reached_end_position(XLogRecPtr segendpos, uint32 timeline,
 		FD_ZERO(&fds);
 		FD_SET(bgpipe[0], &fds);
 
-		MemSet(&tv, 0, sizeof(tv));
-
 		r = select(bgpipe[0] + 1, &fds, NULL, NULL, &tv);
 		if (r == 1)
 		{
-			char		xlogend[64];
+			char		xlogend[64] = {0};
 			uint32		hi,
 						lo;
 
-			MemSet(xlogend, 0, sizeof(xlogend));
 			r = read(bgpipe[0], xlogend, sizeof(xlogend) - 1);
 			if (r < 0)
 				pg_fatal("could not read from ready pipe: %m");
@@ -538,11 +533,10 @@ typedef struct
 static int
 LogStreamerMain(logstreamer_param *param)
 {
-	StreamCtl	stream;
+	StreamCtl	stream = {0};
 
 	in_log_streamer = true;
 
-	MemSet(&stream, 0, sizeof(stream));
 	stream.startpos = param->startptr;
 	stream.timeline = param->timeline;
 	stream.sysidentifier = param->sysidentifier;
@@ -586,7 +580,7 @@ LogStreamerMain(logstreamer_param *param)
 		return 1;
 	}
 
-	if (!stream.walmethod->finish())
+	if (!stream.walmethod->ops->finish(stream.walmethod))
 	{
 		pg_log_error("could not finish writing WAL files: %m");
 #ifdef WIN32
@@ -597,11 +591,7 @@ LogStreamerMain(logstreamer_param *param)
 
 	PQfinish(param->bgconn);
 
-	if (format == 'p')
-		FreeWalDirectoryMethod();
-	else
-		FreeWalTarMethod();
-	pg_free(stream.walmethod);
+	stream.walmethod->ops->free(stream.walmethod);
 
 	return 0;
 }
@@ -778,8 +768,7 @@ progress_update_filename(const char *filename)
 	/* We needn't maintain this variable if not doing verbose reports. */
 	if (showprogress && verbose)
 	{
-		if (progress_filename)
-			free(progress_filename);
+		free(progress_filename);
 		if (filename)
 			progress_filename = pg_strdup(filename);
 		else
@@ -968,27 +957,12 @@ parse_max_rate(char *src)
  * at a later stage.
  */
 static void
-parse_compress_options(char *option, char **algorithm, char **detail,
-					   CompressionLocation *locationres)
+backup_parse_compress_options(char *option, char **algorithm, char **detail,
+							  CompressionLocation *locationres)
 {
-	char	   *sep;
-	char	   *endp;
-
 	/*
-	 * Check whether the compression specification consists of a bare integer.
-	 *
-	 * If so, for backward compatibility, assume gzip.
+	 * Strip off any "client-" or "server-" prefix, calculating the location.
 	 */
-	(void) strtol(option, &endp, 10);
-	if (*endp == '\0')
-	{
-		*locationres = COMPRESS_LOCATION_UNSPECIFIED;
-		*algorithm = pstrdup("gzip");
-		*detail = pstrdup(option);
-		return;
-	}
-
-	/* Strip off any "client-" or "server-" prefix. */
 	if (strncmp(option, "server-", 7) == 0)
 	{
 		*locationres = COMPRESS_LOCATION_SERVER;
@@ -1002,27 +976,8 @@ parse_compress_options(char *option, char **algorithm, char **detail,
 	else
 		*locationres = COMPRESS_LOCATION_UNSPECIFIED;
 
-	/*
-	 * Check whether there is a compression detail following the algorithm
-	 * name.
-	 */
-	sep = strchr(option, ':');
-	if (sep == NULL)
-	{
-		*algorithm = pstrdup(option);
-		*detail = NULL;
-	}
-	else
-	{
-		char	   *alg;
-
-		alg = palloc((sep - option) + 1);
-		memcpy(alg, option, sep - option);
-		alg[sep - option] = '\0';
-
-		*algorithm = alg;
-		*detail = pstrdup(sep + 1);
-	}
+	/* fallback to the common parsing for the algorithm and detail */
+	parse_compress_options(option, algorithm, detail);
 }
 
 /*
@@ -1168,9 +1123,17 @@ CreateBackupStreamer(char *archive_name, char *spclocation,
 		 * other tablespaces will be written to the directory where they're
 		 * located on the server, after applying any user-specified tablespace
 		 * mappings.
+		 *
+		 * In the case of an in-place tablespace, spclocation will be a
+		 * relative path. We just convert it to an absolute path by prepending
+		 * basedir.
 		 */
-		directory = spclocation == NULL ? basedir
-			: get_tablespace_mapping(spclocation);
+		if (spclocation == NULL)
+			directory = basedir;
+		else if (!is_absolute_path(spclocation))
+			directory = psprintf("%s/%s", basedir, spclocation);
+		else
+			directory = get_tablespace_mapping(spclocation);
 		streamer = bbstreamer_extractor_new(directory,
 											get_tablespace_mapping,
 											progress_update_filename);
@@ -1771,7 +1734,7 @@ BaseBackup(char *compression_algorithm, char *compression_detail,
 	char	   *basebkp;
 	int			i;
 	char		xlogstart[64];
-	char		xlogend[64];
+	char		xlogend[64] = {0};
 	int			minServerMajor,
 				maxServerMajor;
 	int			serverVersion,
@@ -1965,7 +1928,6 @@ BaseBackup(char *compression_algorithm, char *compression_detail,
 	else
 		starttli = latesttli;
 	PQclear(res);
-	MemSet(xlogend, 0, sizeof(xlogend));
 
 	if (verbose && includewal != NO_WAL)
 		pg_log_info("write-ahead log start point: %s on timeline %u",
@@ -2002,7 +1964,15 @@ BaseBackup(char *compression_algorithm, char *compression_detail,
 		 */
 		if (backup_target == NULL && format == 'p' && !PQgetisnull(res, i, 1))
 		{
-			char	   *path = unconstify(char *, get_tablespace_mapping(PQgetvalue(res, i, 1)));
+			char	   *path = PQgetvalue(res, i, 1);
+
+			if (is_absolute_path(path))
+				path = unconstify(char *, get_tablespace_mapping(path));
+			else
+			{
+				/* This is an in-place tablespace, so prepend basedir. */
+				path = psprintf("%s/%s", basedir, path);
+			}
 
 			verify_dir_is_empty_or_create(path, &made_tablespace_dirs, &found_tablespace_dirs);
 		}
@@ -2062,8 +2032,9 @@ BaseBackup(char *compression_algorithm, char *compression_detail,
 			 * If we write the data out to a tar file, it will be named
 			 * base.tar if it's the main data directory or <tablespaceoid>.tar
 			 * if it's for another tablespace. CreateBackupStreamer() will
-			 * arrange to add .gz to the archive name if pg_basebackup is
-			 * performing compression.
+			 * arrange to add an extension to the archive name if
+			 * pg_basebackup is performing compression, depending on the
+			 * compression type.
 			 */
 			if (PQgetisnull(res, i, 0))
 			{
@@ -2342,13 +2313,25 @@ main(int argc, char **argv)
 
 	atexit(cleanup_directories_atexit);
 
-	while ((c = getopt_long(argc, argv, "CD:F:r:RS:t:T:X:l:nNzZ:d:c:h:p:U:s:wWkvP",
+	while ((c = getopt_long(argc, argv, "c:Cd:D:F:h:l:nNp:Pr:Rs:S:t:T:U:vwWX:zZ:",
 							long_options, &option_index)) != -1)
 	{
 		switch (c)
 		{
+			case 'c':
+				if (pg_strcasecmp(optarg, "fast") == 0)
+					fastcheckpoint = true;
+				else if (pg_strcasecmp(optarg, "spread") == 0)
+					fastcheckpoint = false;
+				else
+					pg_fatal("invalid checkpoint argument \"%s\", must be \"fast\" or \"spread\"",
+							 optarg);
+				break;
 			case 'C':
 				create_slot = true;
+				break;
+			case 'd':
+				connection_string = pg_strdup(optarg);
 				break;
 			case 'D':
 				basedir = pg_strdup(optarg);
@@ -2362,11 +2345,36 @@ main(int argc, char **argv)
 					pg_fatal("invalid output format \"%s\", must be \"plain\" or \"tar\"",
 							 optarg);
 				break;
+			case 'h':
+				dbhost = pg_strdup(optarg);
+				break;
+			case 'l':
+				label = pg_strdup(optarg);
+				break;
+			case 'n':
+				noclean = true;
+				break;
+			case 'N':
+				do_sync = false;
+				break;
+			case 'p':
+				dbport = pg_strdup(optarg);
+				break;
+			case 'P':
+				showprogress = true;
+				break;
 			case 'r':
 				maxrate = parse_max_rate(optarg);
 				break;
 			case 'R':
 				writerecoveryconf = true;
+				break;
+			case 's':
+				if (!option_parse_int(optarg, "-s/--status-interval", 0,
+									  INT_MAX / 1000,
+									  &standby_message_timeout))
+					exit(1);
+				standby_message_timeout *= 1000;
 				break;
 			case 'S':
 
@@ -2377,14 +2385,23 @@ main(int argc, char **argv)
 				replication_slot = pg_strdup(optarg);
 				temp_replication_slot = false;
 				break;
-			case 2:
-				no_slot = true;
-				break;
 			case 't':
 				backup_target = pg_strdup(optarg);
 				break;
 			case 'T':
 				tablespace_list_append(optarg);
+				break;
+			case 'U':
+				dbuser = pg_strdup(optarg);
+				break;
+			case 'v':
+				verbose++;
+				break;
+			case 'w':
+				dbgetpassword = -1;
+				break;
+			case 'W':
+				dbgetpassword = 1;
 				break;
 			case 'X':
 				if (strcmp(optarg, "n") == 0 ||
@@ -2406,66 +2423,20 @@ main(int argc, char **argv)
 					pg_fatal("invalid wal-method option \"%s\", must be \"fetch\", \"stream\", or \"none\"",
 							 optarg);
 				break;
-			case 1:
-				xlog_dir = pg_strdup(optarg);
-				break;
-			case 'l':
-				label = pg_strdup(optarg);
-				break;
-			case 'n':
-				noclean = true;
-				break;
-			case 'N':
-				do_sync = false;
-				break;
 			case 'z':
 				compression_algorithm = "gzip";
 				compression_detail = NULL;
 				compressloc = COMPRESS_LOCATION_UNSPECIFIED;
 				break;
 			case 'Z':
-				parse_compress_options(optarg, &compression_algorithm,
-									   &compression_detail, &compressloc);
+				backup_parse_compress_options(optarg, &compression_algorithm,
+											  &compression_detail, &compressloc);
 				break;
-			case 'c':
-				if (pg_strcasecmp(optarg, "fast") == 0)
-					fastcheckpoint = true;
-				else if (pg_strcasecmp(optarg, "spread") == 0)
-					fastcheckpoint = false;
-				else
-					pg_fatal("invalid checkpoint argument \"%s\", must be \"fast\" or \"spread\"",
-							 optarg);
+			case 1:
+				xlog_dir = pg_strdup(optarg);
 				break;
-			case 'd':
-				connection_string = pg_strdup(optarg);
-				break;
-			case 'h':
-				dbhost = pg_strdup(optarg);
-				break;
-			case 'p':
-				dbport = pg_strdup(optarg);
-				break;
-			case 'U':
-				dbuser = pg_strdup(optarg);
-				break;
-			case 'w':
-				dbgetpassword = -1;
-				break;
-			case 'W':
-				dbgetpassword = 1;
-				break;
-			case 's':
-				if (!option_parse_int(optarg, "-s/--status-interval", 0,
-									  INT_MAX / 1000,
-									  &standby_message_timeout))
-					exit(1);
-				standby_message_timeout *= 1000;
-				break;
-			case 'v':
-				verbose++;
-				break;
-			case 'P':
-				showprogress = true;
+			case 2:
+				no_slot = true;
 				break;
 			case 3:
 				verify_checksums = false;
@@ -2780,12 +2751,8 @@ main(int argc, char **argv)
 						   PQserverVersion(conn) < MINIMUM_VERSION_FOR_PG_WAL ?
 						   "pg_xlog" : "pg_wal");
 
-#ifdef HAVE_SYMLINK
 		if (symlink(xlog_dir, linkloc) != 0)
 			pg_fatal("could not create symbolic link \"%s\": %m", linkloc);
-#else
-		pg_fatal("symlinks are not supported on this platform");
-#endif
 		free(linkloc);
 	}
 

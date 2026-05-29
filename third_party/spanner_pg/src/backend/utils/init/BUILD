@@ -54,6 +54,7 @@ cc_library(
         "globals.c",
         "miscinit.c",
         "postinit.c",
+        "usercontext.c",
     ],
     copts = [
         "-D_GNU_SOURCE",

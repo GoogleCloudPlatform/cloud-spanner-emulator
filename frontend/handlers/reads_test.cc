@@ -501,6 +501,163 @@ TEST_F(ReadApiTest, CannotReadUsingInvalidTransaction) {
               StatusIs(absl::StatusCode::kNotFound));
 }
 
+TEST_F(ReadApiTest, ReadDataBoostEnabledMissingPartitionTokenFails) {
+  spanner_api::ReadRequest request = PARSE_TEXT_PROTO(R"pb(
+    transaction { single_use { read_only { strong: true } } }
+    table: "test_table"
+    columns: "int64_col"
+    key_set { all: true }
+    data_boost_enabled: true
+  )pb");
+  request.set_session(test_session_uri_);
+
+  spanner_api::ResultSet response;
+  EXPECT_THAT(Read(request, &response),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Data Boost is only valid for partitioned queries or "
+                       "reads, and requires a partition token."));
+}
+
+TEST_F(ReadApiTest, StreamingReadDataBoostEnabledMissingPartitionTokenFails) {
+  spanner_api::ReadRequest request = PARSE_TEXT_PROTO(R"pb(
+    transaction { single_use { read_only { strong: true } } }
+    table: "test_table"
+    columns: "int64_col"
+    key_set { all: true }
+    data_boost_enabled: true
+  )pb");
+  request.set_session(test_session_uri_);
+
+  std::vector<spanner_api::PartialResultSet> response;
+  EXPECT_THAT(StreamingRead(request, &response),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Data Boost is only valid for partitioned queries or "
+                       "reads, and requires a partition token."));
+}
+
+TEST_F(ReadApiTest, ReadDataBoostEnabledWithPartitionTokenSucceeds) {
+  spanner_api::PartitionReadRequest partition_request;
+  partition_request.set_session(test_session_uri_);
+  partition_request.mutable_transaction()
+      ->mutable_begin()
+      ->mutable_read_only()
+      ->set_strong(true);
+  partition_request.set_table("test_table");
+  partition_request.add_columns("int64_col");
+  partition_request.mutable_key_set()->set_all(true);
+
+  spanner_api::PartitionResponse partition_response;
+  GOOGLESQL_ASSERT_OK(PartitionRead(partition_request, &partition_response));
+  ASSERT_GT(partition_response.partitions().size(), 0);
+
+  // The emulator returns an empty partition and a full partition. To be robust
+  // against future changes in the number or order of partitions, we iterate
+  // over all partitions and use the first one that returns rows when executed.
+  std::string valid_token;
+  for (const auto& partition : partition_response.partitions()) {
+    spanner_api::ReadRequest test_request;
+    test_request.set_session(test_session_uri_);
+    test_request.mutable_transaction()->set_id(
+        partition_response.transaction().id());
+    test_request.set_table("test_table");
+    test_request.add_columns("int64_col");
+    test_request.mutable_key_set()->set_all(true);
+    test_request.set_partition_token(partition.partition_token());
+
+    spanner_api::ResultSet test_response;
+    if (Read(test_request, &test_response).ok() &&
+        test_response.rows_size() > 0) {
+      valid_token = partition.partition_token();
+      break;
+    }
+  }
+  ASSERT_FALSE(valid_token.empty()) << "No non-empty partition found";
+
+  spanner_api::ReadRequest request;
+  request.set_session(test_session_uri_);
+  request.mutable_transaction()->set_id(partition_response.transaction().id());
+  request.set_table("test_table");
+  request.add_columns("int64_col");
+  request.mutable_key_set()->set_all(true);
+  request.set_partition_token(valid_token);
+  request.set_data_boost_enabled(true);
+
+  spanner_api::ResultSet response;
+  GOOGLESQL_EXPECT_OK(Read(request, &response));
+  EXPECT_THAT(response, test::proto::Partially(test::EqualsProto(
+                            R"pb(
+                              rows { values { string_value: "1" } }
+                              rows { values { string_value: "2" } }
+                              rows { values { string_value: "3" } }
+                            )pb")));
+}
+
+TEST_F(ReadApiTest, StreamingReadDataBoostEnabledWithPartitionTokenSucceeds) {
+  spanner_api::PartitionReadRequest partition_request;
+  partition_request.set_session(test_session_uri_);
+  partition_request.mutable_transaction()
+      ->mutable_begin()
+      ->mutable_read_only()
+      ->set_strong(true);
+  partition_request.set_table("test_table");
+  partition_request.add_columns("int64_col");
+  partition_request.mutable_key_set()->set_all(true);
+
+  spanner_api::PartitionResponse partition_response;
+  GOOGLESQL_ASSERT_OK(PartitionRead(partition_request, &partition_response));
+  ASSERT_GT(partition_response.partitions().size(), 0);
+
+  // The emulator returns an empty partition and a full partition. To be robust
+  // against future changes in the number or order of partitions, we iterate
+  // over all partitions and use the first one that returns rows when executed.
+  std::string valid_token;
+  for (const auto& partition : partition_response.partitions()) {
+    spanner_api::ReadRequest test_request;
+    test_request.set_session(test_session_uri_);
+    test_request.mutable_transaction()->set_id(
+        partition_response.transaction().id());
+    test_request.set_table("test_table");
+    test_request.add_columns("int64_col");
+    test_request.mutable_key_set()->set_all(true);
+    test_request.set_partition_token(partition.partition_token());
+
+    std::vector<spanner_api::PartialResultSet> test_response;
+    if (StreamingRead(test_request, &test_response).ok()) {
+      bool has_rows = false;
+      for (const auto& r : test_response) {
+        if (r.values_size() > 0) {
+          has_rows = true;
+          break;
+        }
+      }
+      if (has_rows) {
+        valid_token = partition.partition_token();
+        break;
+      }
+    }
+  }
+  ASSERT_FALSE(valid_token.empty()) << "No non-empty partition found";
+
+  spanner_api::ReadRequest request;
+  request.set_session(test_session_uri_);
+  request.mutable_transaction()->set_id(partition_response.transaction().id());
+  request.set_table("test_table");
+  request.add_columns("int64_col");
+  request.mutable_key_set()->set_all(true);
+  request.set_partition_token(valid_token);
+  request.set_data_boost_enabled(true);
+
+  std::vector<spanner_api::PartialResultSet> response;
+  GOOGLESQL_EXPECT_OK(StreamingRead(request, &response));
+  EXPECT_THAT(response,
+              ElementsAre(test::proto::Partially(test::EqualsProto(
+                  R"pb(
+                    values { string_value: "1" }
+                    values { string_value: "2" }
+                    values { string_value: "3" }
+                  )pb"))));
+}
+
 }  // namespace
 
 }  // namespace frontend

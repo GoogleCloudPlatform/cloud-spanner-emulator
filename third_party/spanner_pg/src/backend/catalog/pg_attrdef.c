@@ -3,7 +3,7 @@
  * pg_attrdef.c
  *	  routines to support manipulation of the pg_attrdef relation
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -111,18 +111,21 @@ StoreAttrDefault(Relation rel, AttrNumber attnum,
 		Expr	   *expr2 = (Expr *) expr;
 		EState	   *estate = NULL;
 		ExprContext *econtext;
-		Datum		valuesAtt[Natts_pg_attribute];
-		bool		nullsAtt[Natts_pg_attribute];
-		bool		replacesAtt[Natts_pg_attribute];
+		Datum		valuesAtt[Natts_pg_attribute] = {0};
+		bool		nullsAtt[Natts_pg_attribute] = {0};
+		bool		replacesAtt[Natts_pg_attribute] = {0};
 		Datum		missingval = (Datum) 0;
 		bool		missingIsNull = true;
 
-		MemSet(valuesAtt, 0, sizeof(valuesAtt));
-		MemSet(nullsAtt, false, sizeof(nullsAtt));
-		MemSet(replacesAtt, false, sizeof(replacesAtt));
 		valuesAtt[Anum_pg_attribute_atthasdef - 1] = true;
 		replacesAtt[Anum_pg_attribute_atthasdef - 1] = true;
 
+		/*
+		 * Note: this code is dead so far as core Postgres is concerned,
+		 * because no caller passes add_column_mode = true anymore.  We keep
+		 * it in back branches on the slight chance that some extension is
+		 * depending on it.
+		 */
 		if (rel->rd_rel->relkind == RELKIND_RELATION && add_column_mode &&
 			!attgenerated)
 		{
@@ -334,7 +337,7 @@ RemoveAttrDefaultById(Oid attrdefId)
 
 /*
  * Get the pg_attrdef OID of the default expression for a column
- * identified by relation OID and and column number.
+ * identified by relation OID and column number.
  *
  * Returns InvalidOid if there is no such pg_attrdef entry.
  */

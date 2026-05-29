@@ -59,7 +59,7 @@ cc_library(
         "partcache.c",
         "plancache.c",
         "relcache.c",
-        "relfilenodemap.c",
+        "relfilenumbermap.c",
         "relmapper.c",
         "spccache.c",
         "syscache.c",
