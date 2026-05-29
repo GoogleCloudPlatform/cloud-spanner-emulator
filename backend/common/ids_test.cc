@@ -44,7 +44,7 @@ TEST(UniqueIdGeneratorTest, basic) {
   for (int i = 0; i < 100; ++i) {
     threads.emplace_back([&id_generator, &mu, &id_set]() {
       std::string id = id_generator.NextId("my-table");
-      absl::MutexLock lock(&mu);
+      absl::MutexLock lock(mu);
       id_set.insert(id);
     });
   }

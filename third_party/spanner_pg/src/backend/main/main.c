@@ -9,7 +9,7 @@
  * proper FooMain() routine for the incarnation.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -30,13 +30,9 @@
 #include <sys/param.h>
 #endif
 
-#if defined(_M_AMD64) && _MSC_VER == 1800
-#include <math.h>
-#include <versionhelpers.h>
-#endif
-
 #include "bootstrap/bootstrap.h"
 #include "common/username.h"
+#include "miscadmin.h"
 #include "port/atomics.h"
 #include "postmaster/postmaster.h"
 #include "storage/spin.h"
@@ -48,6 +44,7 @@
 
 
 const char *progname;
+static bool reached_main = false;
 
 
 static void startup_hacks(const char *progname);
@@ -64,11 +61,13 @@ main(int argc, char *argv[])
 {
 	bool		do_check_root = true;
 
+	reached_main = true;
+
 	/*
 	 * If supported on the current platform, set up a handler to be called if
 	 * the backend/postmaster crashes with a fatal signal or exception.
 	 */
-#if defined(WIN32) && defined(HAVE_MINIDUMP_TYPE)
+#if defined(WIN32)
 	pgwin32_install_crashdump_handler();
 #endif
 
@@ -99,6 +98,7 @@ main(int argc, char *argv[])
 	 * localization of messages may not work right away, and messages won't go
 	 * anywhere but stderr until GUC settings get loaded.
 	 */
+	MyProcPid = getpid();
 	MemoryContextInit();
 
 	/*
@@ -138,8 +138,6 @@ main(int argc, char *argv[])
 	 * variables installed by pg_perm_setlocale have force.
 	 */
 	unsetenv("LC_ALL");
-
-	check_strxfrm_bug();
 
 	/*
 	 * Catch standard options before doing much else, in particular before we
@@ -290,23 +288,6 @@ startup_hacks(const char *progname)
 		_CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
 		_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
 		_CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
-
-#if defined(_M_AMD64) && _MSC_VER == 1800
-
-		/*----------
-		 * Avoid crashing in certain floating-point operations if we were
-		 * compiled for x64 with MS Visual Studio 2013 and are running on
-		 * Windows prior to 7/2008R2 SP1 on an AVX2-capable CPU.
-		 *
-		 * Ref: https://connect.microsoft.com/VisualStudio/feedback/details/811093/visual-studio-2013-rtm-c-x64-code-generation-bug-for-avx2-instructions
-		 *----------
-		 */
-		if (!IsWindows7SP1OrGreater())
-		{
-			_set_FMA3_enable(0);
-		}
-#endif							/* defined(_M_AMD64) && _MSC_VER == 1800 */
-
 	}
 #endif							/* WIN32 */
 
@@ -358,7 +339,7 @@ help(const char *progname)
 	printf(_("  -e                 use European date input format (DMY)\n"));
 	printf(_("  -F                 turn fsync off\n"));
 	printf(_("  -h HOSTNAME        host name or IP address to listen on\n"));
-	printf(_("  -i                 enable TCP/IP connections\n"));
+	printf(_("  -i                 enable TCP/IP connections (deprecated)\n"));
 	printf(_("  -k DIRECTORY       Unix-domain socket location\n"));
 #ifdef USE_SSL
 	printf(_("  -l                 enable SSL connections\n"));
@@ -374,11 +355,10 @@ help(const char *progname)
 
 	printf(_("\nDeveloper options:\n"));
 	printf(_("  -f s|i|o|b|t|n|m|h forbid use of some plan types\n"));
-	printf(_("  -n                 do not reinitialize shared memory after abnormal exit\n"));
 	printf(_("  -O                 allow system table structure changes\n"));
 	printf(_("  -P                 disable system indexes\n"));
 	printf(_("  -t pa|pl|ex        show timings after each query\n"));
-	printf(_("  -T                 send SIGSTOP to all backend processes if one dies\n"));
+	printf(_("  -T                 send SIGABRT to all backend processes if one dies\n"));
 	printf(_("  -W NUM             wait NUM seconds to allow attach from a debugger\n"));
 
 	printf(_("\nOptions for single-user mode:\n"));
@@ -442,4 +422,40 @@ check_root(const char *progname)
 		exit(1);
 	}
 #endif							/* WIN32 */
+}
+
+/*
+ * At least on linux, set_ps_display() breaks /proc/$pid/environ. The
+ * sanitizer library uses /proc/$pid/environ to implement getenv() as it wants
+ * to work independent of libc. Depending on which sanitizers are enabled,
+ * the sanitizer library may not get initialized until after we've called
+ * set_ps_display(), preventing the sanitizer from seeing environment-supplied
+ * options.
+ *
+ * We can work around that by defining __ubsan_default_options, a weak symbol
+ * libsanitizer uses to get defaults from the application, and return
+ * getenv("UBSAN_OPTIONS"). But only if main already was reached, so that we
+ * don't end up relying on a not-yet-working getenv().
+ *
+ * On the other hand, with different sanitizers enabled, libsanitizer can
+ * call this so early that it's not fully initialized itself, resulting in
+ * recursion and a core dump within libsanitizer.  To prevent that, ensure
+ * that this function is built without any sanitizer callbacks in it.
+ *
+ * As this function won't get called when not running a sanitizer, it doesn't
+ * seem necessary to only compile it conditionally.
+ */
+const char *__ubsan_default_options(void);
+
+#if __has_attribute(disable_sanitizer_instrumentation)
+__attribute__((disable_sanitizer_instrumentation))
+#endif
+const char *
+__ubsan_default_options(void)
+{
+	/* don't call libc before it's guaranteed to be initialized */
+	if (!reached_main)
+		return "";
+
+	return getenv("UBSAN_OPTIONS");
 }

@@ -3,7 +3,7 @@
  * nodeModifyTable.c
  *	  routines to handle ModifyTable nodes.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -64,6 +64,7 @@
 #include "nodes/nodeFuncs.h"
 #include "optimizer/optimizer.h"
 #include "rewrite/rewriteHandler.h"
+#include "rewrite/rewriteManip.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
 #include "utils/builtins.h"
@@ -118,8 +119,8 @@ typedef struct ModifyTableContext
 typedef struct UpdateContext
 {
 	bool		updated;		/* did UPDATE actually occur? */
-	bool		updateIndexes;	/* index update required? */
 	bool		crossPartUpdate;	/* was it a cross-partition update? */
+	TU_UpdateIndexes updateIndexes; /* Which index updates are required? */
 
 	/*
 	 * Lock mode to acquire on the latest tuple version before performing
@@ -207,19 +208,10 @@ ExecCheckPlanOutput(Relation resultRel, List *targetList)
 		attr = TupleDescAttr(resultDesc, attno);
 		attno++;
 
-		if (!attr->attisdropped)
-		{
-			/* Normal case: demand type match */
-			if (exprType((Node *) tle->expr) != attr->atttypid)
-				ereport(ERROR,
-						(errcode(ERRCODE_DATATYPE_MISMATCH),
-						 errmsg("table row type and query-specified row type do not match"),
-						 errdetail("Table has type %s at ordinal position %d, but query expects %s.",
-								   format_type_be(attr->atttypid),
-								   attno,
-								   format_type_be(exprType((Node *) tle->expr)))));
-		}
-		else
+		/*
+		 * Special cases here should match planner's expand_insert_targetlist.
+		 */
+		if (attr->attisdropped)
 		{
 			/*
 			 * For a dropped column, we can't check atttypid (it's likely 0).
@@ -233,6 +225,35 @@ ExecCheckPlanOutput(Relation resultRel, List *targetList)
 						 errmsg("table row type and query-specified row type do not match"),
 						 errdetail("Query provides a value for a dropped column at ordinal position %d.",
 								   attno)));
+		}
+		else if (attr->attgenerated)
+		{
+			/*
+			 * For a generated column, the planner will have inserted a null
+			 * of the column's base type (to avoid possibly failing on domain
+			 * not-null constraints).  It doesn't seem worth insisting on that
+			 * exact type though, since a null value is type-independent.  As
+			 * above, just insist on *some* NULL constant.
+			 */
+			if (!IsA(tle->expr, Const) ||
+				!((Const *) tle->expr)->constisnull)
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("table row type and query-specified row type do not match"),
+						 errdetail("Query provides a value for a generated column at ordinal position %d.",
+								   attno)));
+		}
+		else
+		{
+			/* Normal case: demand type match */
+			if (exprType((Node *) tle->expr) != attr->atttypid)
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("table row type and query-specified row type do not match"),
+						 errdetail("Table has type %s at ordinal position %d, but query expects %s.",
+								   format_type_be(attr->atttypid),
+								   attno,
+								   format_type_be(exprType((Node *) tle->expr)))));
 		}
 	}
 	if (attno != resultDesc->natts)
@@ -341,11 +362,14 @@ ExecCheckTIDVisible(EState *estate,
 /*
  * Initialize to compute stored generated columns for a tuple
  *
- * This fills the resultRelInfo's ri_GeneratedExprs field and makes an
- * associated ResultRelInfoExtra struct to hold ri_extraUpdatedCols.
- * (Currently, ri_extraUpdatedCols is consulted only in UPDATE, but we
- * must fill it in other cases too, since for example cmdtype might be
- * MERGE yet an UPDATE might happen later.)
+ * This fills the resultRelInfo's ri_GeneratedExprsI/ri_NumGeneratedNeededI
+ * or ri_GeneratedExprsU/ri_NumGeneratedNeededU fields, depending on cmdtype.
+ * If cmdType == CMD_UPDATE, the ri_extraUpdatedCols field is filled too.
+ *
+ * Note: usually, a given query would need only one of ri_GeneratedExprsI and
+ * ri_GeneratedExprsU per result rel; but MERGE can need both, and so can
+ * cross-partition UPDATEs, since a partition might be the target of both
+ * UPDATE and INSERT actions.
  */
 void
 ExecInitStoredGenerated(ResultRelInfo *resultRelInfo,
@@ -355,12 +379,10 @@ ExecInitStoredGenerated(ResultRelInfo *resultRelInfo,
 	Relation	rel = resultRelInfo->ri_RelationDesc;
 	TupleDesc	tupdesc = RelationGetDescr(rel);
 	int			natts = tupdesc->natts;
+	ExprState **ri_GeneratedExprs;
+	int			ri_NumGeneratedNeeded;
 	Bitmapset  *updatedCols;
-	ResultRelInfoExtra *rextra;
 	MemoryContext oldContext;
-
-	/* Don't call twice */
-	Assert(resultRelInfo->ri_GeneratedExprs == NULL);
 
 	/* Nothing to do if no generated columns */
 	if (!(tupdesc->constr && tupdesc->constr->has_generated_stored))
@@ -384,15 +406,8 @@ ExecInitStoredGenerated(ResultRelInfo *resultRelInfo,
 	 */
 	oldContext = MemoryContextSwitchTo(estate->es_query_cxt);
 
-	resultRelInfo->ri_GeneratedExprs =
-		(ExprState **) palloc0(natts * sizeof(ExprState *));
-	resultRelInfo->ri_NumGeneratedNeeded = 0;
-
-	rextra = palloc_object(ResultRelInfoExtra);
-	rextra->rinfo = resultRelInfo;
-	rextra->ri_extraUpdatedCols = NULL;
-	estate->es_resultrelinfo_extra = lappend(estate->es_resultrelinfo_extra,
-											 rextra);
+	ri_GeneratedExprs = (ExprState **) palloc0(natts * sizeof(ExprState *));
+	ri_NumGeneratedNeeded = 0;
 
 	for (int i = 0; i < natts; i++)
 	{
@@ -421,14 +436,33 @@ ExecInitStoredGenerated(ResultRelInfo *resultRelInfo,
 			}
 
 			/* No luck, so prepare the expression for execution */
-			resultRelInfo->ri_GeneratedExprs[i] = ExecPrepareExpr(expr, estate);
-			resultRelInfo->ri_NumGeneratedNeeded++;
+			ri_GeneratedExprs[i] = ExecPrepareExpr(expr, estate);
+			ri_NumGeneratedNeeded++;
 
-			/* And mark this column in rextra->ri_extraUpdatedCols */
-			rextra->ri_extraUpdatedCols =
-				bms_add_member(rextra->ri_extraUpdatedCols,
-							   i + 1 - FirstLowInvalidHeapAttributeNumber);
+			/* If UPDATE, mark column in resultRelInfo->ri_extraUpdatedCols */
+			if (cmdtype == CMD_UPDATE)
+				resultRelInfo->ri_extraUpdatedCols =
+					bms_add_member(resultRelInfo->ri_extraUpdatedCols,
+								   i + 1 - FirstLowInvalidHeapAttributeNumber);
 		}
+	}
+
+	/* Save in appropriate set of fields */
+	if (cmdtype == CMD_UPDATE)
+	{
+		/* Don't call twice */
+		Assert(resultRelInfo->ri_GeneratedExprsU == NULL);
+
+		resultRelInfo->ri_GeneratedExprsU = ri_GeneratedExprs;
+		resultRelInfo->ri_NumGeneratedNeededU = ri_NumGeneratedNeeded;
+	}
+	else
+	{
+		/* Don't call twice */
+		Assert(resultRelInfo->ri_GeneratedExprsI == NULL);
+
+		resultRelInfo->ri_GeneratedExprsI = ri_GeneratedExprs;
+		resultRelInfo->ri_NumGeneratedNeededI = ri_NumGeneratedNeeded;
 	}
 
 	MemoryContextSwitchTo(oldContext);
@@ -446,6 +480,7 @@ ExecComputeStoredGenerated(ResultRelInfo *resultRelInfo,
 	TupleDesc	tupdesc = RelationGetDescr(rel);
 	int			natts = tupdesc->natts;
 	ExprContext *econtext = GetPerTupleExprContext(estate);
+	ExprState **ri_GeneratedExprs;
 	MemoryContext oldContext;
 	Datum	   *values;
 	bool	   *nulls;
@@ -454,20 +489,25 @@ ExecComputeStoredGenerated(ResultRelInfo *resultRelInfo,
 	Assert(tupdesc->constr && tupdesc->constr->has_generated_stored);
 
 	/*
-	 * For relations named directly in the query, ExecInitStoredGenerated
-	 * should have been called already; but this might not have happened yet
-	 * for a partition child rel.  Also, it's convenient for outside callers
-	 * to not have to call ExecInitStoredGenerated explicitly.
+	 * Initialize the expressions if we didn't already, and check whether we
+	 * can exit early because nothing needs to be computed.
 	 */
-	if (resultRelInfo->ri_GeneratedExprs == NULL)
-		ExecInitStoredGenerated(resultRelInfo, estate, cmdtype);
-
-	/*
-	 * If no generated columns have been affected by this change, then skip
-	 * the rest.
-	 */
-	if (resultRelInfo->ri_NumGeneratedNeeded == 0)
-		return;
+	if (cmdtype == CMD_UPDATE)
+	{
+		if (resultRelInfo->ri_GeneratedExprsU == NULL)
+			ExecInitStoredGenerated(resultRelInfo, estate, cmdtype);
+		if (resultRelInfo->ri_NumGeneratedNeededU == 0)
+			return;
+		ri_GeneratedExprs = resultRelInfo->ri_GeneratedExprsU;
+	}
+	else
+	{
+		if (resultRelInfo->ri_GeneratedExprsI == NULL)
+			ExecInitStoredGenerated(resultRelInfo, estate, cmdtype);
+		/* Early exit is impossible given the prior Assert */
+		Assert(resultRelInfo->ri_NumGeneratedNeededI > 0);
+		ri_GeneratedExprs = resultRelInfo->ri_GeneratedExprsI;
+	}
 
 	oldContext = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 
@@ -481,7 +521,7 @@ ExecComputeStoredGenerated(ResultRelInfo *resultRelInfo,
 	{
 		Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
 
-		if (resultRelInfo->ri_GeneratedExprs[i])
+		if (ri_GeneratedExprs[i])
 		{
 			Datum		val;
 			bool		isnull;
@@ -490,7 +530,7 @@ ExecComputeStoredGenerated(ResultRelInfo *resultRelInfo,
 
 			econtext->ecxt_scantuple = slot;
 
-			val = ExecEvalExpr(resultRelInfo->ri_GeneratedExprs[i], econtext, &isnull);
+			val = ExecEvalExpr(ri_GeneratedExprs[i], econtext, &isnull);
 
 			/*
 			 * We must make a copy of val as we have no guarantees about where
@@ -729,7 +769,7 @@ ExecGetUpdateNewTuple(ResultRelInfo *relinfo,
  *
  *		Returns RETURNING result if any, otherwise NULL.
  *		*inserted_tuple is the tuple that's effectively inserted;
- *		*inserted_destrel is the relation where it was inserted.
+ *		*insert_destrel is the relation where it was inserted.
  *		These are only set on success.
  *
  *		This may change the currently active tuple conversion map in
@@ -870,7 +910,7 @@ ExecInsert(ModifyTableContext *context,
 			{
 				TupleDesc	tdesc = CreateTupleDescCopy(slot->tts_tupleDescriptor);
 				TupleDesc	plan_tdesc =
-				CreateTupleDescCopy(planSlot->tts_tupleDescriptor);
+					CreateTupleDescCopy(planSlot->tts_tupleDescriptor);
 
 				resultRelInfo->ri_Slots[resultRelInfo->ri_NumSlots] =
 					MakeSingleTupleTableSlot(tdesc, slot->tts_ops);
@@ -892,7 +932,7 @@ ExecInsert(ModifyTableContext *context,
 			 * If these are the first tuples stored in the buffers, add the
 			 * target rel and the mtstate to the
 			 * es_insert_pending_result_relations and
-			 * es_insert_pending_modifytables lists respectively, execpt in
+			 * es_insert_pending_modifytables lists respectively, except in
 			 * the case where flushing was done above, in which case they
 			 * would already have been added to the lists, so no need to do
 			 * this.
@@ -1087,7 +1127,8 @@ ExecInsert(ModifyTableContext *context,
 			recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
 												   slot, estate, false, true,
 												   &specConflict,
-												   arbiterIndexes);
+												   arbiterIndexes,
+												   false);
 
 			/* adjust the tuple's state accordingly */
 			table_tuple_complete_speculative(resultRelationDesc, slot,
@@ -1126,7 +1167,8 @@ ExecInsert(ModifyTableContext *context,
 			if (resultRelInfo->ri_NumIndices > 0)
 				recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
 													   slot, estate, false,
-													   false, NULL, NIL);
+													   false, NULL, NIL,
+													   false);
 		}
 	}
 
@@ -1309,9 +1351,9 @@ ExecDeletePrologue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 		if (context->estate->es_insert_pending_result_relations != NIL)
 			ExecPendingInserts(context->estate);
 
-		return ExecBRDeleteTriggersNew(context->estate, context->epqstate,
-									   resultRelInfo, tupleid, oldtuple,
-									   epqreturnslot, result, &context->tmfd);
+		return ExecBRDeleteTriggers(context->estate, context->epqstate,
+									resultRelInfo, tupleid, oldtuple,
+									epqreturnslot, result, &context->tmfd);
 	}
 
 	return true;
@@ -1481,7 +1523,7 @@ ExecDelete(ModifyTableContext *context,
 		 * special-case behavior needed for referential integrity updates in
 		 * transaction-snapshot mode transactions.
 		 */
-ldelete:;
+ldelete:
 		result = ExecDeleteAct(context, resultRelInfo, tupleid, changingPart);
 
 		if (tmresult)
@@ -1907,9 +1949,9 @@ ExecUpdatePrologue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 		if (context->estate->es_insert_pending_result_relations != NIL)
 			ExecPendingInserts(context->estate);
 
-		return ExecBRUpdateTriggersNew(context->estate, context->epqstate,
-									   resultRelInfo, tupleid, oldtuple, slot,
-									   result, &context->tmfd);
+		return ExecBRUpdateTriggers(context->estate, context->epqstate,
+									resultRelInfo, tupleid, oldtuple, slot,
+									result, &context->tmfd);
 	}
 
 	return true;
@@ -1955,9 +1997,6 @@ ExecUpdatePrepareSlot(ResultRelInfo *resultRelInfo,
  * caller is also in charge of doing EvalPlanQual if the tuple is found to
  * be concurrently updated.  However, in case of a cross-partition update,
  * this routine does it.
- *
- * Caller is in charge of doing EvalPlanQual as necessary, and of keeping
- * indexes current for the update.
  */
 static TM_Result
 ExecUpdateAct(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
@@ -2122,11 +2161,12 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 	List	   *recheckIndexes = NIL;
 
 	/* insert index entries for tuple if necessary */
-	if (resultRelInfo->ri_NumIndices > 0 && updateCxt->updateIndexes)
+	if (resultRelInfo->ri_NumIndices > 0 && (updateCxt->updateIndexes != TU_None))
 		recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
 											   slot, context->estate,
 											   true, false,
-											   NULL, NIL);
+											   NULL, NIL,
+											   (updateCxt->updateIndexes == TU_Summarizing));
 
 	/* AFTER ROW UPDATE Triggers */
 	ExecARUpdateTriggers(context->estate, resultRelInfo,
@@ -2839,7 +2879,7 @@ ExecMergeMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 	econtext->ecxt_innertuple = context->planSlot;
 	econtext->ecxt_outertuple = NULL;
 
-lmerge_matched:;
+lmerge_matched:
 
 	if (resultRelInfo->ri_needLockTagTuple)
 	{
@@ -3106,7 +3146,7 @@ lmerge_matched:;
 							 * the tuple moved, and setting our current
 							 * resultRelInfo to that.
 							 */
-							if (ItemPointerIndicatesMovedPartitions(&context->tmfd.ctid))
+							if (ItemPointerIndicatesMovedPartitions(tupleid))
 								ereport(ERROR,
 										(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 										 errmsg("tuple to be deleted was already moved to another partition due to concurrent update")));
@@ -3118,14 +3158,14 @@ lmerge_matched:;
 							 * that the first qualifying WHEN MATCHED action
 							 * is executed.
 							 *
-							 * Update tupleid to that of the new tuple, for
-							 * the refetch we do at the top.
+							 * tupleid has been updated to that of the new
+							 * tuple, as required for the refetch we do at the
+							 * top.
 							 */
 							if (resultRelInfo->ri_needLockTagTuple)
 								UnlockTuple(resultRelInfo->ri_RelationDesc,
 											&lockedtid,
 											InplaceUpdateTupleLock);
-							ItemPointerCopy(&context->tmfd.ctid, tupleid);
 							goto lmerge_matched;
 
 						case TM_Deleted:
@@ -3355,6 +3395,7 @@ ExecInitMerge(ModifyTableState *mtstate, EState *estate)
 			switch (action->commandType)
 			{
 				case CMD_INSERT:
+					/* INSERT actions always use rootRelInfo */
 					ExecCheckPlanOutput(rootRelInfo->ri_RelationDesc,
 										action->targetList);
 
@@ -3394,9 +3435,23 @@ ExecInitMerge(ModifyTableState *mtstate, EState *estate)
 					}
 					else
 					{
-						/* not partitioned? use the stock relation and slot */
-						tgtslot = resultRelInfo->ri_newTupleSlot;
-						tgtdesc = RelationGetDescr(resultRelInfo->ri_RelationDesc);
+						/*
+						 * If the MERGE targets an inherited table, we insert
+						 * into the root table, so we must initialize its
+						 * "new" tuple slot, if not already done, and use its
+						 * relation descriptor for the projection.
+						 *
+						 * For non-inherited tables, rootRelInfo and
+						 * resultRelInfo are the same, and the "new" tuple
+						 * slot will already have been initialized.
+						 */
+						if (rootRelInfo->ri_newTupleSlot == NULL)
+							rootRelInfo->ri_newTupleSlot =
+								table_slot_create(rootRelInfo->ri_RelationDesc,
+												  &estate->es_tupleTable);
+
+						tgtslot = rootRelInfo->ri_newTupleSlot;
+						tgtdesc = RelationGetDescr(rootRelInfo->ri_RelationDesc);
 					}
 
 					action_state->mas_proj =
@@ -3424,10 +3479,81 @@ ExecInitMerge(ModifyTableState *mtstate, EState *estate)
 				case CMD_NOTHING:
 					break;
 				default:
-					elog(ERROR, "unknown operation");
+					elog(ERROR, "unknown action in MERGE WHEN clause");
 					break;
 			}
 		}
+	}
+
+	/*
+	 * If the MERGE targets an inherited table, any INSERT actions will use
+	 * rootRelInfo, and rootRelInfo will not be in the resultRelInfo array.
+	 * Therefore we must initialize its WITH CHECK OPTION constraints, as
+	 * ExecInitModifyTable did for the resultRelInfo entries, but there should
+	 * be nothing to do for RETURNING, since MERGE does not support RETURNING.
+	 *
+	 * Note that the planner does not build a withCheckOptionList for the root
+	 * relation, but as in ExecInitPartitionInfo, we can use the first
+	 * resultRelInfo entry as a reference to calculate the attno's for the
+	 * root table.
+	 */
+	if (rootRelInfo != mtstate->resultRelInfo &&
+		rootRelInfo->ri_RelationDesc->rd_rel->relkind != RELKIND_PARTITIONED_TABLE &&
+		(mtstate->mt_merge_subcommands & MERGE_INSERT) != 0)
+	{
+		Relation	rootRelation = rootRelInfo->ri_RelationDesc;
+		Relation	firstResultRel = mtstate->resultRelInfo[0].ri_RelationDesc;
+
+		if (node->withCheckOptionLists != NIL)
+		{
+			List	   *wcoList;
+			List	   *wcoExprs = NIL;
+
+			/* There should be as many WCO lists as result rels */
+			Assert(list_length(node->withCheckOptionLists) ==
+				   list_length(node->resultRelations));
+
+			/*
+			 * Use the first WCO list as a reference. In the most common case,
+			 * this will be for the same relation as rootRelInfo, and so there
+			 * will be no need to adjust its attno's.
+			 */
+			wcoList = linitial(node->withCheckOptionLists);
+			if (rootRelation != firstResultRel)
+			{
+				int			firstVarno = mtstate->resultRelInfo[0].ri_RangeTableIndex;
+				AttrMap    *part_attmap;
+				bool		found_whole_row;
+
+				/* Convert any Vars in it to contain the root's attno's */
+				part_attmap =
+					build_attrmap_by_name(RelationGetDescr(rootRelation),
+										  RelationGetDescr(firstResultRel),
+										  false);
+
+				wcoList = (List *)
+					map_variable_attnos((Node *) wcoList,
+										firstVarno, 0,
+										part_attmap,
+										RelationGetForm(rootRelation)->reltype,
+										&found_whole_row);
+			}
+
+			foreach(lc, wcoList)
+			{
+				WithCheckOption *wco = lfirst_node(WithCheckOption, lc);
+				ExprState  *wcoExpr = ExecInitQual(castNode(List, wco->qual),
+												   &mtstate->ps);
+
+				wcoExprs = lappend(wcoExprs, wcoExpr);
+			}
+
+			rootRelInfo->ri_WithCheckOptions = wcoList;
+			rootRelInfo->ri_WithCheckOptionExprs = wcoExprs;
+		}
+
+		/* MERGE does not support RETURNING */
+		Assert(node->returningLists == NIL);
 	}
 }
 
@@ -3609,7 +3735,7 @@ ExecPrepareTupleRouting(ModifyTableState *mtstate,
 	/*
 	 * Convert the tuple, if necessary.
 	 */
-	map = partrel->ri_RootToPartitionMap;
+	map = ExecGetRootToChildMap(partrel, estate);
 	if (map != NULL)
 	{
 		TupleTableSlot *new_slot = partrel->ri_PartitionTupleSlot;
@@ -4092,8 +4218,8 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 	}
 
 	/* set up epqstate with dummy subplan data for the moment */
-	EvalPlanQualInitExt(&mtstate->mt_epqstate, estate, NULL, NIL,
-						node->epqParam, node->resultRelations);
+	EvalPlanQualInit(&mtstate->mt_epqstate, estate, NULL, NIL,
+					 node->epqParam, node->resultRelations);
 	mtstate->fireBSTriggers = true;
 
 	/*
@@ -4114,6 +4240,10 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 	foreach(l, node->resultRelations)
 	{
 		Index		resultRelation = lfirst_int(l);
+		List	   *mergeActions = NIL;
+
+		if (node->mergeActionLists)
+			mergeActions = list_nth(node->mergeActionLists, i);
 
 		if (resultRelInfo != mtstate->rootResultRelInfo)
 		{
@@ -4135,7 +4265,8 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		/*
 		 * Verify result relation is a valid target for the current operation
 		 */
-		CheckValidResultRel(resultRelInfo, operation);
+		CheckValidResultRelNew(resultRelInfo, operation,
+							   node->onConflictAction, mergeActions);
 
 		resultRelInfo++;
 		i++;
@@ -4221,18 +4352,6 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 					elog(ERROR, "could not find junk wholerow column");
 			}
 		}
-
-		/*
-		 * For INSERT/UPDATE/MERGE, prepare to evaluate any generated columns.
-		 * We must do this now, even if we never insert or update any rows, to
-		 * cover the case where a MERGE does some UPDATE operations and later
-		 * some INSERTs.  We'll need ri_GeneratedExprs to cover all generated
-		 * columns, so we force it now.  (It might be sufficient to do this
-		 * only for operation == CMD_MERGE, but we'll avoid changing the data
-		 * structure definition in back branches.)
-		 */
-		if (operation == CMD_INSERT || operation == CMD_UPDATE || operation == CMD_MERGE)
-			ExecInitStoredGenerated(resultRelInfo, estate, operation);
 	}
 
 	/*

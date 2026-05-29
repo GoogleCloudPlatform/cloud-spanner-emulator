@@ -4,7 +4,7 @@
  *	  Utility and convenience functions for fmgr functions that return
  *	  sets and/or composite types, or deal with VARIADIC inputs.
  *
- * Copyright (c) 2002-2022, PostgreSQL Global Development Group
+ * Copyright (c) 2002-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/utils/fmgr/funcapi.c
@@ -53,15 +53,6 @@ static bool resolve_polymorphic_tupdesc(TupleDesc tupdesc,
 
 static TypeFuncClass get_type_func_class(Oid typid, Oid *base_typeid);
 
-
-/*
- * Compatibility function for v15.
- */
-void
-SetSingleFuncCall(FunctionCallInfo fcinfo, bits32 flags)
-{
-	InitMaterializedSRF(fcinfo, flags);
-}
 
 /*
  * InitMaterializedSRF
@@ -1437,9 +1428,8 @@ get_func_arg_info(HeapTuple procTup,
 		*p_argnames = NULL;
 	else
 	{
-		deconstruct_array(DatumGetArrayTypeP(proargnames),
-						  TEXTOID, -1, false, TYPALIGN_INT,
-						  &elems, NULL, &nelems);
+		deconstruct_array_builtin(DatumGetArrayTypeP(proargnames), TEXTOID,
+								  &elems, NULL, &nelems);
 		if (nelems != numargs)	/* should not happen */
 			elog(ERROR, "proargnames must have the same number of elements as the function has arguments");
 		*p_argnames = (char **) palloc(sizeof(char *) * numargs);
@@ -1553,8 +1543,7 @@ get_func_input_arg_names(Datum proargnames, Datum proargmodes,
 		ARR_HASNULL(arr) ||
 		ARR_ELEMTYPE(arr) != TEXTOID)
 		elog(ERROR, "proargnames is not a 1-D text array or it contains nulls");
-	deconstruct_array(arr, TEXTOID, -1, false, TYPALIGN_INT,
-					  &argnames, NULL, &numargs);
+	deconstruct_array_builtin(arr, TEXTOID, &argnames, NULL, &numargs);
 	if (proargmodes != PointerGetDatum(NULL))
 	{
 		arr = DatumGetArrayTypeP(proargmodes);	/* ensure not toasted */
@@ -1650,14 +1639,10 @@ build_function_result_tupdesc_t(HeapTuple procTuple)
 		return NULL;
 
 	/* Get the data out of the tuple */
-	proallargtypes = SysCacheGetAttr(PROCOID, procTuple,
-									 Anum_pg_proc_proallargtypes,
-									 &isnull);
-	Assert(!isnull);
-	proargmodes = SysCacheGetAttr(PROCOID, procTuple,
-								  Anum_pg_proc_proargmodes,
-								  &isnull);
-	Assert(!isnull);
+	proallargtypes = SysCacheGetAttrNotNull(PROCOID, procTuple,
+											Anum_pg_proc_proallargtypes);
+	proargmodes = SysCacheGetAttrNotNull(PROCOID, procTuple,
+										 Anum_pg_proc_proargmodes);
 	proargnames = SysCacheGetAttr(PROCOID, procTuple,
 								  Anum_pg_proc_proargnames,
 								  &isnull);
@@ -1734,8 +1719,7 @@ build_function_result_tupdesc_d(char prokind,
 			ARR_ELEMTYPE(arr) != TEXTOID)
 			elog(ERROR, "proargnames is not a 1-D text array of length %d or it contains nulls",
 				 numargs);
-		deconstruct_array(arr, TEXTOID, -1, false, TYPALIGN_INT,
-						  &argnames, NULL, &nargnames);
+		deconstruct_array_builtin(arr, TEXTOID, &argnames, NULL, &nargnames);
 		Assert(nargnames == numargs);
 	}
 
@@ -1810,7 +1794,7 @@ RelationNameGetTupleDesc(const char *relname)
 	List	   *relname_list;
 
 	/* Open relation and copy the tuple description */
-	relname_list = stringToQualifiedNameList(relname);
+	relname_list = stringToQualifiedNameList(relname, NULL);
 	relvar = makeRangeVarFromNameList(relname_list);
 	rel = relation_openrv(relvar, AccessShareLock);
 	tupdesc = CreateTupleDescCopy(RelationGetDescr(rel));

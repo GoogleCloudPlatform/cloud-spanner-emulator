@@ -163,7 +163,7 @@ cc_library(
     ],
     deps = [
         "//third_party/spanner_pg/interface:memory_reservation_manager",
-        "@com_google_googlesql//googlesql/base",
+        "//third_party/spanner_pg/util:integral_types",
     ],
 )
 
@@ -212,9 +212,10 @@ cc_test(
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "//third_party/spanner_pg/src/spangres:memory",
+        "//third_party/spanner_pg/util:integral_types",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/types:optional",
-        "@com_google_googlesql//googlesql/base",
+        "@com_google_googlesql//googlesql/base:logging",
         "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
@@ -237,12 +238,12 @@ cc_library(
     deps = [
         ":error_shim",
         "//third_party/spanner_pg/postgres_includes",
+        "//third_party/spanner_pg/util:integral_types",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/utility",
-        "@com_google_googlesql//googlesql/base",
         "@com_google_googlesql//googlesql/base:logging",
         "@com_google_googlesql//googlesql/base:ret_check",
     ],

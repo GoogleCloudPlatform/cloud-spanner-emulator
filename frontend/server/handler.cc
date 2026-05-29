@@ -39,7 +39,7 @@ class HandlerRegistry {
  public:
   // Adds a handler to the registry.
   void AddHandler(std::unique_ptr<GRPCHandlerBase> handler) {
-    absl::MutexLock lock(&mu_);
+    absl::MutexLock lock(mu_);
     handler_map_[handler->service_name() + "." + handler->method_name()] =
         std::move(handler);
   }
@@ -47,7 +47,7 @@ class HandlerRegistry {
   // Retrieves a handler from the registry.
   GRPCHandlerBase* GetHandler(const std::string& service_name,
                               const std::string& method_name) {
-    absl::MutexLock lock(&mu_);
+    absl::MutexLock lock(mu_);
     auto itr = handler_map_.find(service_name + "." + method_name);
     if (itr == handler_map_.end()) {
       return nullptr;

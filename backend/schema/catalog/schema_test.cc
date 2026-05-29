@@ -22,7 +22,9 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
+#include "googlesql/public/function_signature.h"
 #include "googlesql/public/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "googlesql/base/testing/status_matchers.h"
@@ -877,9 +879,15 @@ TEST_F(SchemaTest, UdfBuilder) {
   Udf::Builder udf_builder_remote;
   udf_builder_remote.set_name("udf_remote");
   udf_builder_remote.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote.set_determinism_level(Udf::NOT_DETERMINISTIC_VOLATILE);
   udf_builder_remote.set_language(Udf::Language::REMOTE);
   udf_builder_remote.set_endpoint("https://www.google.com");
   udf_builder_remote.set_max_batching_rows(10);
+  udf_builder_remote.set_signature(
+      std::make_unique<googlesql::FunctionSignature>(
+          googlesql::types::Int64Type(),
+          std::vector<googlesql::FunctionArgumentType>{},
+          /*context_ptr=*/nullptr));
   auto udf_remote = udf_builder_remote.build();
   GOOGLESQL_EXPECT_OK(udf_remote->Validate(&context_));
   EXPECT_EQ(udf_remote->Name(), "udf_remote");
@@ -891,9 +899,16 @@ TEST_F(SchemaTest, UdfBuilder) {
   Udf::Builder udf_builder_remote_is_remote;
   udf_builder_remote_is_remote.set_name("udf_remote");
   udf_builder_remote_is_remote.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_is_remote.set_determinism_level(
+      Udf::NOT_DETERMINISTIC_VOLATILE);
   udf_builder_remote_is_remote.set_is_remote(true);
   udf_builder_remote_is_remote.set_endpoint("https://www.google.com");
   udf_builder_remote_is_remote.set_max_batching_rows(10);
+  udf_builder_remote_is_remote.set_signature(
+      std::make_unique<googlesql::FunctionSignature>(
+          googlesql::types::Int64Type(),
+          std::vector<googlesql::FunctionArgumentType>{},
+          /*context_ptr=*/nullptr));
   auto udf_remote_is_remote = udf_builder_remote_is_remote.build();
   GOOGLESQL_EXPECT_OK(udf_remote_is_remote->Validate(&context_));
   EXPECT_EQ(udf_remote_is_remote->Name(), "udf_remote");
@@ -902,15 +917,41 @@ TEST_F(SchemaTest, UdfBuilder) {
   EXPECT_EQ(*udf_remote_is_remote->endpoint(), "https://www.google.com");
   EXPECT_EQ(*udf_remote_is_remote->max_batching_rows(), 10);
 
+  // Remote UDF no determinism level
+  Udf::Builder udf_builder_remote_no_determinism;
+  udf_builder_remote_no_determinism.set_name("udf_remote");
+  udf_builder_remote_no_determinism.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_no_determinism.set_language(Udf::Language::REMOTE);
+  udf_builder_remote_no_determinism.set_endpoint("https://www.google.com");
+  udf_builder_remote_no_determinism.set_max_batching_rows(10);
+  udf_builder_remote_no_determinism.set_signature(
+      std::make_unique<googlesql::FunctionSignature>(
+          googlesql::types::Int64Type(),
+          std::vector<googlesql::FunctionArgumentType>{},
+          /*context_ptr=*/nullptr));
+  auto udf_remote_no_determinism = udf_builder_remote_no_determinism.build();
+  EXPECT_THAT(udf_remote_no_determinism->Validate(&context_),
+              StatusIs(StatusCode::kInvalidArgument,
+                       testing::HasSubstr(
+                           "must specify the NOT DETERMINISTIC attribute")));
+
   // Remote UDF with SQL body (should fail validation)
   Udf::Builder udf_builder_remote_with_sql_body;
   udf_builder_remote_with_sql_body.set_name("udf_remote_with_sql_body");
   udf_builder_remote_with_sql_body.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_with_sql_body.set_determinism_level(
+      Udf::NOT_DETERMINISTIC_VOLATILE);
   udf_builder_remote_with_sql_body.set_language(Udf::Language::REMOTE);
   udf_builder_remote_with_sql_body.set_endpoint("https://www.google.com");
   udf_builder_remote_with_sql_body.set_sql_body(
       "CREATE FUNCTION udf_remote_with_sql_body(a INT64) RETURNS INT64 AS (a "
       "+ 1)");
+  udf_builder_remote_with_sql_body.set_signature(
+      std::make_unique<googlesql::FunctionSignature>(
+          googlesql::types::Int64Type(),
+          std::vector<googlesql::FunctionArgumentType>{
+              {googlesql::types::Int64Type()}},
+          /*context_ptr=*/nullptr));
   auto udf_remote_with_sql_body = udf_builder_remote_with_sql_body.build();
   EXPECT_THAT(
       udf_remote_with_sql_body->Validate(&context_),
@@ -920,11 +961,21 @@ TEST_F(SchemaTest, UdfBuilder) {
   Udf::Builder udf_builder_remote_no_endpoint;
   udf_builder_remote_no_endpoint.set_name("udf_remote_no_endpoint");
   udf_builder_remote_no_endpoint.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_no_endpoint.set_determinism_level(
+      Udf::NOT_DETERMINISTIC_VOLATILE);
   udf_builder_remote_no_endpoint.set_language(Udf::Language::REMOTE);
+  udf_builder_remote_no_endpoint.set_signature(
+      std::make_unique<googlesql::FunctionSignature>(
+          googlesql::types::Int64Type(),
+          std::vector<googlesql::FunctionArgumentType>{},
+          /*context_ptr=*/nullptr));
   auto udf_remote_no_endpoint = udf_builder_remote_no_endpoint.build();
-  EXPECT_THAT(udf_remote_no_endpoint->Validate(&context_),
-              StatusIs(StatusCode::kInternal,
-                       testing::HasSubstr("udf->endpoint_.has_value()")));
+  EXPECT_THAT(
+      udf_remote_no_endpoint->Validate(&context_),
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          testing::HasSubstr(
+              R"(Missing option endpoint for function udf_remote_no_endpoint.)")));
 
   // Remote UDF with negative max batching size (should fail validation)
   Udf::Builder udf_builder_remote_negative_max_batching_rows;
@@ -932,25 +983,42 @@ TEST_F(SchemaTest, UdfBuilder) {
       "udf_remote_negative_max_batching_rows");
   udf_builder_remote_negative_max_batching_rows.set_sql_security(
       Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_negative_max_batching_rows.set_determinism_level(
+      Udf::NOT_DETERMINISTIC_VOLATILE);
   udf_builder_remote_negative_max_batching_rows.set_language(
       Udf::Language::REMOTE);
   udf_builder_remote_negative_max_batching_rows.set_endpoint(
       "https://www.google.com");
   udf_builder_remote_negative_max_batching_rows.set_max_batching_rows(-1);
+  udf_builder_remote_negative_max_batching_rows.set_signature(
+      std::make_unique<googlesql::FunctionSignature>(
+          googlesql::types::Int64Type(),
+          std::vector<googlesql::FunctionArgumentType>{},
+          /*context_ptr=*/nullptr));
   auto udf_remote_negative_max_batching_rows =
       udf_builder_remote_negative_max_batching_rows.build();
-  EXPECT_THAT(udf_remote_negative_max_batching_rows->Validate(&context_),
-              StatusIs(StatusCode::kInternal,
-                       testing::HasSubstr("udf->max_batching_rows_ >= 0")));
+  EXPECT_THAT(
+      udf_remote_negative_max_batching_rows->Validate(&context_),
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          testing::HasSubstr(
+              R"(Invalid option value -1 for option max_batching_rows of function udf_remote_negative_max_batching_rows.)")));
 
   // Remote UDF with Language SQL (should fail validation)
   Udf::Builder udf_builder_remote_with_language_sql;
   udf_builder_remote_with_language_sql.set_name("udf_remote_with_language_sql");
   udf_builder_remote_with_language_sql.set_sql_security(
       Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_with_language_sql.set_determinism_level(
+      Udf::NOT_DETERMINISTIC_VOLATILE);
   udf_builder_remote_with_language_sql.set_is_remote(true);
   udf_builder_remote_with_language_sql.set_language(Udf::Language::SQL);
   udf_builder_remote_with_language_sql.set_endpoint("https://www.google.com");
+  udf_builder_remote_with_language_sql.set_signature(
+      std::make_unique<googlesql::FunctionSignature>(
+          googlesql::types::Int64Type(),
+          std::vector<googlesql::FunctionArgumentType>{},
+          /*context_ptr=*/nullptr));
   auto udf_remote_with_language_sql =
       udf_builder_remote_with_language_sql.build();
   EXPECT_THAT(
@@ -958,6 +1026,19 @@ TEST_F(SchemaTest, UdfBuilder) {
       StatusIs(StatusCode::kInternal,
                testing::HasSubstr(
                    "udf->language() == Udf::Language::LANGUAGE_UNSPECIFIED")));
+
+  // Remote UDF without signature.
+  Udf::Builder udf_builder_remote_no_signature;
+  udf_builder_remote_no_signature.set_name("udf_remote");
+  udf_builder_remote_no_signature.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_no_signature.set_determinism_level(
+      Udf::NOT_DETERMINISTIC_VOLATILE);
+  udf_builder_remote_no_signature.set_language(Udf::Language::REMOTE);
+  udf_builder_remote_no_signature.set_endpoint("https://www.google.com");
+  auto udf_remote_no_signature = udf_builder_remote_no_signature.build();
+  EXPECT_THAT(
+      udf_remote_no_signature->Validate(&context_),
+      StatusIs(StatusCode::kInternal, testing::HasSubstr("RET_CHECK failure")));
 
   // UDF with name starting with a number, invalid even when quoted.
   Udf::Builder udf_builder_number_start;

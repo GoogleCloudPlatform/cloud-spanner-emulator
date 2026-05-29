@@ -20,7 +20,7 @@
  * Future versions may support iterators and incremental resizing; for now
  * the implementation is minimalist.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -167,7 +167,7 @@ struct dshash_table
 
 static void delete_item(dshash_table *hash_table,
 						dshash_table_item *item);
-static void resize(dshash_table *hash_table, size_t new_size);
+static void resize(dshash_table *hash_table, size_t new_size_log2);
 static inline void ensure_valid_bucket_pointers(dshash_table *hash_table);
 static inline dshash_table_item *find_in_bucket(dshash_table *hash_table,
 												const void *key,
@@ -844,8 +844,10 @@ resize(dshash_table *hash_table, size_t new_size_log2)
 	Assert(new_size_log2 == hash_table->control->size_log2 + 1);
 
 	/* Allocate the space for the new table. */
-	new_buckets_shared = dsa_allocate0(hash_table->area,
-									   sizeof(dsa_pointer) * new_size);
+	new_buckets_shared =
+		dsa_allocate_extended(hash_table->area,
+							  sizeof(dsa_pointer) * new_size,
+							  DSA_ALLOC_HUGE | DSA_ALLOC_ZERO);
 	new_buckets = dsa_get_address(hash_table->area, new_buckets_shared);
 
 	/*

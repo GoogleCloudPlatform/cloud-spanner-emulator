@@ -37,7 +37,9 @@ setup
  CREATE TABLE parttbl (a int, b int, c int,
    d int GENERATED ALWAYS AS (a + b) STORED) PARTITION BY LIST (a);
  CREATE TABLE parttbl1 PARTITION OF parttbl FOR VALUES IN (1);
- CREATE TABLE parttbl2 PARTITION OF parttbl FOR VALUES IN (2);
+ CREATE TABLE parttbl2 PARTITION OF parttbl
+   (d WITH OPTIONS GENERATED ALWAYS AS (a + b + 1000) STORED)
+   FOR VALUES IN (2);
  INSERT INTO parttbl VALUES (1, 1, 1), (2, 2, 2);
 
  CREATE TABLE another_parttbl (a int, b int, c int) PARTITION BY LIST (a);
@@ -94,6 +96,10 @@ step upsert1	{
 	INSERT INTO accounts SELECT 'savings', 500
 	  WHERE NOT EXISTS (SELECT 1 FROM upsert);
 }
+
+# Tests for Tid / Tid Range Scan
+step tid1 { UPDATE accounts SET balance = balance + 100 WHERE ctid = '(0,1)' RETURNING accountid, balance; }
+step tidrange1 { UPDATE accounts SET balance = balance + 100 WHERE ctid BETWEEN '(0,1)' AND '(0,1)' RETURNING accountid, balance; }
 
 # tests with table p check inheritance cases:
 # readp1/writep1/readp2 tests a bug where nodeLockRows did the wrong thing
@@ -236,6 +242,11 @@ step updateforcip3	{
 }
 step wrtwcte	{ UPDATE table_a SET value = 'tableAValue2' WHERE id = 1; }
 step wrjt	{ UPDATE jointest SET data = 42 WHERE id = 7; }
+
+step tid2 { UPDATE accounts SET balance = balance + 200 WHERE ctid = '(0,1)' RETURNING accountid, balance; }
+step tidrange2 { UPDATE accounts SET balance = balance + 200 WHERE ctid BETWEEN '(0,1)' AND '(0,1)' RETURNING accountid, balance; }
+# here, recheck succeeds; (0,3) is the id that step tid1 will assign
+step tidsucceed2 { UPDATE accounts SET balance = balance + 200 WHERE ctid = '(0,1)' OR ctid = '(0,3)' RETURNING accountid, balance; }
 
 step conditionalpartupdate	{
 	update parttbl set c = -c where b < 10;
@@ -386,6 +397,11 @@ permutation wrtwcte readwcte c1 c2
 permutation wrjt selectjoinforupdate c2 c1
 permutation wrjt selectresultforupdate c2 c1
 permutation wrtwcte multireadwcte c1 c2
+permutation tid1 tid2 c1 c2 read
+permutation tid1 tidsucceed2 c1 c2 read
+permutation tidrange1 tidrange2 c1 c2 read
+# test that a rollback on s1 has s2 perform the update on the original row
+permutation tid1 tid2 r1 c2 read
 
 permutation simplepartupdate conditionalpartupdate c1 c2 read_part
 permutation simplepartupdate complexpartupdate c1 c2 read_part

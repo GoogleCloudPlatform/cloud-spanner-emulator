@@ -52,6 +52,7 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
+class AiCatalog;
 class NetCatalog;
 class PGFunctionCatalog;
 
@@ -76,6 +77,7 @@ class Catalog : public googlesql::EnumerableCatalog {
   }
 
  private:
+  friend class AiCatalog;
   friend class NetCatalog;
   friend class PGFunctionCatalog;
 
@@ -148,6 +150,9 @@ class Catalog : public googlesql::EnumerableCatalog {
   // Returns the NET catalog.
   googlesql::Catalog* GetNetFunctionsCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
 
+  // Returns the AI catalog.
+  googlesql::Catalog* GetAiFunctionsCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
+
   // Returns the PG functions catalog.
   googlesql::Catalog* GetPGFunctionsCatalog() const ABSL_LOCKS_EXCLUDED(mu_);
 
@@ -217,6 +222,9 @@ class Catalog : public googlesql::EnumerableCatalog {
 
   // Sub-catalog for resolving NET function lookup.
   mutable std::unique_ptr<googlesql::Catalog> net_catalog_ ABSL_GUARDED_BY(mu_);
+
+  // Sub-catalog for resolving AI function lookup.
+  mutable std::unique_ptr<googlesql::Catalog> ai_catalog_ ABSL_GUARDED_BY(mu_);
 
   // Sub-catalog for resolving PG function lookup.
   mutable std::unique_ptr<googlesql::Catalog> pg_function_catalog_

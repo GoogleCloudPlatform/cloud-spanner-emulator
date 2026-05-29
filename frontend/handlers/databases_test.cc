@@ -592,7 +592,7 @@ TEST_F(DatabaseApiTest, CreateSameNameSequencesInTwoDatabases) {
   GOOGLESQL_ASSERT_OK(Commit(GenerateSequenceTableInsert(session_2), &commit_response));
 
   {
-    absl::MutexLock lock(&Sequence::SequenceMutex);
+    absl::MutexLock lock(Sequence::SequenceMutex);
     ASSERT_EQ(Sequence::SequenceLastValues.size(), 2);
   }
 }

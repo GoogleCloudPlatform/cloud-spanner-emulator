@@ -7120,7 +7120,6 @@ TEST(UserDefinedFunction, CreateFunctionBasic) {
                   param { name: "x" param_typename: "INT64" }
                   return_typename: "INT64"
                   sql_body: "x+1"
-                  language: SQL
                 }
               )pb"));
 }
@@ -7130,12 +7129,11 @@ TEST(UserDefinedFunction, CreateFunctionRemote) {
   flags.enable_user_defined_functions = true;
   test::ScopedEmulatorFeatureFlagsSetter setter(flags);
   // LANGUAGE REMOTE case
-  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
-      auto statement,
-      ParseDDLStatement(
-          "CREATE FUNCTION rudf_identity_func(x INT64) RETURNS "
-          "INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS "
-          "(endpoint = 'https://google.com', max_batching_rows = 456)"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto statement, ParseDDLStatement(R"sql(
+      CREATE FUNCTION rudf_identity_func(x INT64)
+      RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
+      OPTIONS (endpoint = 'https://google.com', max_batching_rows = 456)
+      )sql"));
   EXPECT_THAT(
       statement, test::EqualsProto(R"pb(
         create_function {
@@ -7144,18 +7142,20 @@ TEST(UserDefinedFunction, CreateFunctionRemote) {
           param { name: "x" param_typename: "INT64" }
           return_typename: "INT64"
           language: REMOTE
+          determinism: NOT_DETERMINISTIC_VOLATILE
           options { option_name: "endpoint" string_value: "https://google.com" }
           options { option_name: "max_batching_rows" int64_value: 456 }
+          sql_options { name: "endpoint" sql_value: "\'https://google.com\'" }
+          sql_options { name: "max_batching_rows" sql_value: "456" }
         }
       )pb"));
 
   // REMOTE case
-  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
-      statement,
-      ParseDDLStatement(
-          "CREATE FUNCTION rudf_identity_func(x INT64) RETURNS "
-          "INT64 NOT DETERMINISTIC REMOTE OPTIONS "
-          "(endpoint = 'https://google.com', max_batching_rows = 456)"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(statement, ParseDDLStatement(R"sql(
+      CREATE FUNCTION rudf_identity_func(x INT64) RETURNS INT64
+      NOT DETERMINISTIC REMOTE
+      OPTIONS (endpoint = 'https://google.com', max_batching_rows = 456)
+      )sql"));
   EXPECT_THAT(
       statement, test::EqualsProto(R"pb(
         create_function {
@@ -7163,11 +7163,46 @@ TEST(UserDefinedFunction, CreateFunctionRemote) {
           function_kind: FUNCTION
           param { name: "x" param_typename: "INT64" }
           return_typename: "INT64"
+          determinism: NOT_DETERMINISTIC_VOLATILE
           is_remote: true
           options { option_name: "endpoint" string_value: "https://google.com" }
           options { option_name: "max_batching_rows" int64_value: 456 }
+          sql_options { name: "endpoint" sql_value: "\'https://google.com\'" }
+          sql_options { name: "max_batching_rows" sql_value: "456" }
         }
       )pb"));
+
+  // Both
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(statement, ParseDDLStatement(R"sql(
+      CREATE FUNCTION rudf_identity_func(x INT64) RETURNS INT64
+      NOT DETERMINISTIC LANGUAGE REMOTE REMOTE
+      OPTIONS (endpoint = 'https://google.com', max_batching_rows = 456)
+      )sql"));
+  EXPECT_THAT(
+      statement, test::EqualsProto(R"pb(
+        create_function {
+          function_name: "rudf_identity_func"
+          function_kind: FUNCTION
+          param { name: "x" param_typename: "INT64" }
+          return_typename: "INT64"
+          determinism: NOT_DETERMINISTIC_VOLATILE
+          is_remote: true
+          language: REMOTE
+          options { option_name: "endpoint" string_value: "https://google.com" }
+          options { option_name: "max_batching_rows" int64_value: 456 }
+          sql_options { name: "endpoint" sql_value: "\'https://google.com\'" }
+          sql_options { name: "max_batching_rows" sql_value: "456" }
+        }
+      )pb"));
+
+  // LANGUAGE INVALID case
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+      CREATE FUNCTION rudf_identity_func(x INT64)
+      RETURNS INT64 NOT DETERMINISTIC LANGUAGE INVALID
+      )sql"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Encountered 'INVALID' while parsing: "
+                                 "create_function_statement")));
 }
 
 TEST(UserDefinedFunction, ParameterizedTypes) {
@@ -7187,7 +7222,6 @@ TEST(UserDefinedFunction, ParameterizedTypes) {
                   param { name: "a" param_typename: "STRING(10)" }
                   return_typename: "STRING(MAX)"
                   sql_body: "NULL"
-                  language: SQL
                 }
               )pb"));
 
@@ -7203,7 +7237,6 @@ TEST(UserDefinedFunction, ParameterizedTypes) {
                   param { name: "a" param_typename: "STRING" }
                   return_typename: "STRING(10)"
                   sql_body: "NULL"
-                  language: SQL
                 }
               )pb"));
 
@@ -7219,7 +7252,6 @@ TEST(UserDefinedFunction, ParameterizedTypes) {
                   param { name: "a" param_typename: "ARRAY<STRING>" }
                   return_typename: "STRING"
                   sql_body: "NULL"
-                  language: SQL
                 }
               )pb"));
 
@@ -7235,7 +7267,6 @@ TEST(UserDefinedFunction, ParameterizedTypes) {
                   param { name: "a" param_typename: "STRING" }
                   return_typename: "ARRAY<STRING>"
                   sql_body: "NULL"
-                  language: SQL
                 }
               )pb"));
 
@@ -7251,7 +7282,6 @@ TEST(UserDefinedFunction, ParameterizedTypes) {
                   param { name: "a" param_typename: "ARRAY<STRING(10)>" }
                   return_typename: "STRING"
                   sql_body: "NULL"
-                  language: SQL
                 }
               )pb"));
 
@@ -7267,7 +7297,6 @@ TEST(UserDefinedFunction, ParameterizedTypes) {
                   param { name: "a" param_typename: "STRING" }
                   return_typename: "ARRAY<STRING(10)>"
                   sql_body: "a"
-                  language: SQL
                 }
               )pb"));
 }
@@ -7319,8 +7348,7 @@ TEST(UserDefinedFunction, CreateFunctionWithInvalidDeterminism) {
           "(GENERATE_UUID())"),
       StatusIs(
           StatusCode::kInvalidArgument,
-          HasSubstr(
-              "DETERMINISM clause is not supported for remote functions")));
+          HasSubstr("DETERMINISM clause is not supported for SQL functions")));
 
   EXPECT_THAT(
       ParseDDLStatement("CREATE FUNCTION foo() RETURNS STRING VOLATILE AS "
@@ -7352,7 +7380,6 @@ TEST(UserDefinedFunction, CreateFunctionLowercase) {
                   param { name: "x" param_typename: "INT64" }
                   return_typename: "INT64"
                   sql_body: "x+1"
-                  language: SQL
                 }
               )pb"));
 }
@@ -7376,7 +7403,6 @@ TEST(UserDefinedFunction, CreateFunctionComplexExpression) {
                   param { name: "z" param_typename: "INT64" }
                   return_typename: "INT64"
                   sql_body: "x + y + (z / x)"
-                  language: SQL
                 }
               )pb"));
 }
@@ -7396,7 +7422,6 @@ TEST(UserDefinedFunction, CreateFunctionWithNoParams) {
                   return_typename: "INT64"
                   sql_security: INVOKER
                   sql_body: "1"
-                  language: SQL
                 }
               )pb"));
 }
@@ -7416,7 +7441,6 @@ TEST(UserDefinedFunction, CreateFunctionWithNoSqlSecurity) {
                   param { name: "x" param_typename: "INT64" }
                   return_typename: "INT64"
                   sql_body: "x+1"
-                  language: SQL
                 }
               )pb"));
 }
@@ -7434,7 +7458,6 @@ TEST(UserDefinedFunction, CreateFunctionWithNoReturns) {
                   function_kind: FUNCTION
                   param { name: "x" param_typename: "INT64" }
                   sql_body: "x+1"
-                  language: SQL
                 }
               )pb"));
 }
@@ -7497,7 +7520,6 @@ TEST(UserDefinedFunction, CreateOrReplaceFunction) {
                   param { name: "x" param_typename: "INT64" }
                   return_typename: "INT64"
                   sql_body: "x+1"
-                  language: SQL
                 }
               )pb"));
 }
@@ -7518,7 +7540,6 @@ TEST(UserDefinedFunction, CreateFunctionWithScalarSubquery) {
                   param { name: "x" param_typename: "INT64" }
                   return_typename: "INT64"
                   sql_body: "(SELECT 1) + x"
-                  language: SQL
                 }
               )pb"));
 }
@@ -7540,7 +7561,6 @@ TEST(UserDefinedFunction, CreateFunctionWithDefaultsPositional) {
                   param { name: "x" param_typename: "INT64" default_value: "1" }
                   return_typename: "INT64"
                   sql_body: "x+1"
-                  language: SQL
                 }
               )pb"));
 
@@ -7558,7 +7578,6 @@ TEST(UserDefinedFunction, CreateFunctionWithDefaultsPositional) {
                   param { name: "y" param_typename: "INT64" default_value: "2" }
                   return_typename: "INT64"
                   sql_body: "x+1"
-                  language: SQL
                 }
               )pb"));
 
@@ -7637,7 +7656,6 @@ CREATE FUNCTION udf_many_literals(
                   }
                   return_typename: "INT64"
                   sql_body: "param_int64 + 1"
-                  language: SQL
                 }
               )pb"));
 }
@@ -7696,7 +7714,6 @@ CREATE FUNCTION udf_array_literals(
                   }
                   return_typename: "INT64"
                   sql_body: "ARRAY_LENGTH(param_int_array)"
-                  language: SQL
                 }
               )pb"));
 }

@@ -38,7 +38,7 @@ Clock::Clock()
     : last_system_time_(NowMicros()), last_dispensed_time_(last_system_time_) {}
 
 absl::Time Clock::Now() {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
 
   absl::Time now = NowMicros();
   absl::Time next_dispensed_time =

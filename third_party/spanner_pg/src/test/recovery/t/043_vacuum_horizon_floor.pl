@@ -1,9 +1,16 @@
+# Copyright (c) 2025, PostgreSQL Global Development Group
+#
+# Test that vacuum prunes away all dead tuples killed before OldestXmin
+#
+# This test creates a table on a primary, updates the table to generate dead
+# tuples for vacuum, and then, during the vacuum, uses the replica to force
+# GlobalVisState->maybe_needed on the primary to move backwards and precede
+# the value of OldestXmin set at the beginning of vacuuming the table.
+
 use strict;
 use warnings;
 use PostgreSQL::Test::Cluster;
 use Test::More;
-
-# Test that vacuum prunes away all dead tuples killed before OldestXmin
 
 # Set up nodes
 my $node_primary = PostgreSQL::Test::Cluster->new('primary');
@@ -82,7 +89,7 @@ $node_primary->wait_for_catchup($node_replica, 'replay', $primary_lsn);
 
 # Test that the WAL receiver is up and running.
 $node_replica->poll_query_until($test_db, qq[
-	select exists (select * from pg_stat_wal_receiver);] , 't');
+	SELECT EXISTS (SELECT * FROM pg_stat_wal_receiver);] , 't');
 
 # Set primary_conninfo to something invalid on the replica and reload the
 # config. Once the config is reloaded, the startup process will force the WAL
@@ -95,7 +102,7 @@ $node_replica->safe_psql($test_db, qq[
 
 # Wait until the WAL receiver has shut down and been unable to start up again.
 $node_replica->poll_query_until($test_db, qq[
-	select exists (select * from pg_stat_wal_receiver);] , 'f');
+	SELECT EXISTS (SELECT * FROM pg_stat_wal_receiver);] , 'f');
 
 # Now insert and update a tuple which will be visible to the vacuum on the
 # primary but which will have xmax newer than the oldest xmin on the standby
@@ -138,8 +145,12 @@ my $vacuum_pid = $psql_primaryA->query_safe("SELECT pg_backend_pid();");
 # Now start a VACUUM FREEZE on the primary. It will call vacuum_get_cutoffs()
 # and establish values of OldestXmin and GlobalVisState which are newer than
 # all of our dead tuples. Then it will be unable to get a cleanup lock to
-# start pruning, so it will hang. We use VACUUM FREEZE because it will wait
-# for a cleanup lock instead of skipping the page pinned by the cursor.
+# start pruning, so it will hang.
+#
+# We use VACUUM FREEZE because it will wait for a cleanup lock instead of
+# skipping the page pinned by the cursor. Note that works because the target
+# tuple's xmax precedes OldestXmin which ensures that lazy_scan_noprune() will
+# return false and we will wait for the cleanup lock.
 $psql_primaryA->{stdin} .= qq[
 		VACUUM (VERBOSE, FREEZE) $table1;
 		\\echo VACUUM
@@ -162,7 +173,7 @@ $node_primary->poll_query_until($test_db,
 
 # Ensure the WAL receiver is still not active on the replica.
 $node_replica->poll_query_until($test_db, qq[
-	select exists (select * from pg_stat_wal_receiver);] , 'f');
+	SELECT EXISTS (SELECT * FROM pg_stat_wal_receiver);] , 'f');
 
 # Allow the WAL receiver connection to re-establish.
 $node_replica->safe_psql(
@@ -173,14 +184,14 @@ $node_replica->safe_psql(
 
 # Ensure the new WAL receiver has connected.
 $node_replica->poll_query_until($test_db, qq[
-	select exists (select * from pg_stat_wal_receiver);] , 't');
+	SELECT EXISTS (SELECT * FROM pg_stat_wal_receiver);] , 't');
 
 # Once the WAL sender is shown on the primary, the replica should have
 # connected with the primary and pushed the horizon backward. Primary Session
 # A won't see that until the VACUUM FREEZE proceeds and does its first round
 # of index vacuuming.
 $node_primary->poll_query_until($test_db, qq[
-	select exists (select * from pg_stat_replication);] , 't');
+	SELECT EXISTS (SELECT * FROM pg_stat_replication);] , 't');
 
 # Move the cursor forward to the next 1. We inserted the 1 much later, so
 # advancing the cursor should allow vacuum to proceed vacuuming most pages of

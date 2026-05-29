@@ -54,6 +54,7 @@ cc_library(
     name = "bootstrap",
     srcs = [
         "bootparse.c",
+        "bootscanner.c",
         "bootstrap.c",
     ],
     copts = [
@@ -64,7 +65,6 @@ cc_library(
         ".",
     ],
     textual_hdrs = [
-        "bootscanner.c",
         "bootparse.h",
     ],
     deps = [

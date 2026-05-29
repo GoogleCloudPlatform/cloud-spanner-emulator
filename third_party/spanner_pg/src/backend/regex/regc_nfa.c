@@ -143,11 +143,7 @@ newstate(struct nfa *nfa)
 	 * compilation, since no code path will go very long without making a new
 	 * state or arc.
 	 */
-	if (CANCEL_REQUESTED(nfa->v->re))
-	{
-		NERR(REG_CANCEL);
-		return NULL;
-	}
+	INTERRUPT(nfa->v->re);
 
 	/* first, recycle anything that's on the freelist */
 	if (nfa->freestates != NULL)
@@ -297,11 +293,7 @@ newarc(struct nfa *nfa,
 	 * compilation, since no code path will go very long without making a new
 	 * state or arc.
 	 */
-	if (CANCEL_REQUESTED(nfa->v->re))
-	{
-		NERR(REG_CANCEL);
-		return;
-	}
+	INTERRUPT(nfa->v->re);
 
 	/* check for duplicate arc, using whichever chain is shorter */
 	if (from->nouts <= to->nins)
@@ -825,11 +817,7 @@ moveins(struct nfa *nfa,
 		 * Because we bypass newarc() in this code path, we'd better include a
 		 * cancel check.
 		 */
-		if (CANCEL_REQUESTED(nfa->v->re))
-		{
-			NERR(REG_CANCEL);
-			return;
-		}
+		INTERRUPT(nfa->v->re);
 
 		sortins(nfa, oldState);
 		sortins(nfa, newState);
@@ -929,11 +917,7 @@ copyins(struct nfa *nfa,
 		 * Because we bypass newarc() in this code path, we'd better include a
 		 * cancel check.
 		 */
-		if (CANCEL_REQUESTED(nfa->v->re))
-		{
-			NERR(REG_CANCEL);
-			return;
-		}
+		INTERRUPT(nfa->v->re);
 
 		sortins(nfa, oldState);
 		sortins(nfa, newState);
@@ -1000,11 +984,7 @@ mergeins(struct nfa *nfa,
 	 * Because we bypass newarc() in this code path, we'd better include a
 	 * cancel check.
 	 */
-	if (CANCEL_REQUESTED(nfa->v->re))
-	{
-		NERR(REG_CANCEL);
-		return;
-	}
+	INTERRUPT(nfa->v->re);
 
 	/* Sort existing inarcs as well as proposed new ones */
 	sortins(nfa, s);
@@ -1125,11 +1105,7 @@ moveouts(struct nfa *nfa,
 		 * Because we bypass newarc() in this code path, we'd better include a
 		 * cancel check.
 		 */
-		if (CANCEL_REQUESTED(nfa->v->re))
-		{
-			NERR(REG_CANCEL);
-			return;
-		}
+		INTERRUPT(nfa->v->re);
 
 		sortouts(nfa, oldState);
 		sortouts(nfa, newState);
@@ -1226,11 +1202,7 @@ copyouts(struct nfa *nfa,
 		 * Because we bypass newarc() in this code path, we'd better include a
 		 * cancel check.
 		 */
-		if (CANCEL_REQUESTED(nfa->v->re))
-		{
-			NERR(REG_CANCEL);
-			return;
-		}
+		INTERRUPT(nfa->v->re);
 
 		sortouts(nfa, oldState);
 		sortouts(nfa, newState);
@@ -1504,6 +1476,7 @@ removetraverse_SPANGRES_WRAPPED(struct nfa *nfa,
 		{
 			case PLAIN:
 			case EMPTY:
+			case CANTMATCH:
 				/* nothing to do */
 				break;
 			case AHEAD:
@@ -1643,6 +1616,12 @@ optimize(struct nfa *nfa,
 	if (verbose)
 		fprintf(f, "\ninitial cleanup:\n");
 #endif
+	/* If we have any CANTMATCH arcs, drop them; but this is uncommon */
+	if (nfa->flags & HASCANTMATCH)
+	{
+		removecantmatch(nfa);
+		nfa->flags &= ~HASCANTMATCH;
+	}
 	cleanup(nfa);				/* may simplify situation */
 #ifdef REG_DEBUG
 	if (verbose)
@@ -2973,6 +2952,34 @@ clonesuccessorstates_SPANGRES_WRAPPED(struct nfa *nfa,
 }
 
 /*
+ * removecantmatch - remove CANTMATCH arcs, which are no longer useful
+ * once we are done with the parsing phase.  (We need them only to
+ * preserve connectedness of NFA subgraphs during parsing.)
+ */
+static void
+removecantmatch(struct nfa *nfa)
+{
+	struct state *s;
+
+	for (s = nfa->states; s != NULL; s = s->next)
+	{
+		struct arc *a;
+		struct arc *nexta;
+
+		for (a = s->outs; a != NULL; a = nexta)
+		{
+			nexta = a->outchain;
+			if (a->type == CANTMATCH)
+			{
+				freearc(nfa, a);
+				if (NISERR())
+					return;
+			}
+		}
+	}
+}
+
+/*
  * cleanup - clean up NFA after optimizations
  */
 static void
@@ -3310,11 +3317,7 @@ checkmatchall_recurse_SPANGRES_WRAPPED(struct nfa *nfa, struct state *s, bool **
 		return false;
 
 	/* In case the search takes a long time, check for cancel */
-	if (CANCEL_REQUESTED(nfa->v->re))
-	{
-		NERR(REG_CANCEL);
-		return false;
-	}
+	INTERRUPT(nfa->v->re);
 
 	/* Create a haspath array for this state */
 	haspath = (bool *) MALLOC((DUPINF + 2) * sizeof(bool));
@@ -3687,6 +3690,8 @@ dumpnfa(struct nfa *nfa,
 		fprintf(f, ", eol [%ld]", (long) nfa->eos[1]);
 	if (nfa->flags & HASLACONS)
 		fprintf(f, ", haslacons");
+	if (nfa->flags & HASCANTMATCH)
+		fprintf(f, ", hascantmatch");
 	if (nfa->flags & MATCHALL)
 	{
 		fprintf(f, ", minmatchall %d", nfa->minmatchall);
@@ -3808,6 +3813,9 @@ dumparc(struct arc *a,
 			fprintf(f, "%c%d", a->type, (int) a->co);
 			break;
 		case EMPTY:
+			break;
+		case CANTMATCH:
+			fprintf(f, "X");
 			break;
 		default:
 			fprintf(f, "0x%x/0%lo", a->type, (long) a->co);

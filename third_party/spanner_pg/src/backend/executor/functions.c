@@ -3,7 +3,7 @@
  * functions.c
  *	  Execution of SQL-language functions
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -317,12 +317,10 @@ sql_fn_post_column_ref(ParseState *pstate, ColumnRef *cref, Node *var)
 		nnames--;
 
 	field1 = (Node *) linitial(cref->fields);
-	Assert(IsA(field1, String));
 	name1 = strVal(field1);
 	if (nnames > 1)
 	{
 		subfield = (Node *) lsecond(cref->fields);
-		Assert(IsA(subfield, String));
 		name2 = strVal(subfield);
 	}
 
@@ -493,6 +491,7 @@ init_execution_state(List *queryTree_list,
 				stmt->utilityStmt = queryTree->utilityStmt;
 				stmt->stmt_location = queryTree->stmt_location;
 				stmt->stmt_len = queryTree->stmt_len;
+				stmt->queryId = queryTree->queryId;
 			}
 			else
 				stmt = pg_plan_query(queryTree,
@@ -661,12 +660,7 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK)
 	/*
 	 * And of course we need the function body text.
 	 */
-	tmp = SysCacheGetAttr(PROCOID,
-						  procedureTuple,
-						  Anum_pg_proc_prosrc,
-						  &isNull);
-	if (isNull)
-		elog(ERROR, "null prosrc for function %u", foid);
+	tmp = SysCacheGetAttrNotNull(PROCOID, procedureTuple, Anum_pg_proc_prosrc);
 	fcache->src = TextDatumGetCString(tmp);
 
 	/* If we have prosqlbody, pay attention to that not prosrc. */

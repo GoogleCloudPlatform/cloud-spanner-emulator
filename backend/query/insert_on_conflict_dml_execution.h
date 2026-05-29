@@ -61,6 +61,8 @@ class InsertOnConflictDoUpdateRewriter
 
   absl::Status VisitResolvedColumnRef(
       const googlesql::ResolvedColumnRef* node) override;
+  absl::Status VisitResolvedSubqueryExpr(
+      const googlesql::ResolvedSubqueryExpr* node) override;
 
  private:
   // Map of column id(s) of columns referenced from the insert row (i.e. of the

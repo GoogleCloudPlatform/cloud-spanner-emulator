@@ -131,6 +131,7 @@ cc_library(
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
         "@com_google_googlesql//googlesql/base:no_destructor",
         "@com_google_googlesql//googlesql/base:ret_check",
+        "@com_google_googlesql//googlesql/base:status",
         "@com_google_googletest//:gtest",
         "@com_google_protobuf//:cc_wkt_protos",
         "@com_google_protobuf//:protobuf",

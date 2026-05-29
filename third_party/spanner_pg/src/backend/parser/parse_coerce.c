@@ -3,7 +3,7 @@
  * parse_coerce.c
  *		handle type coercions/conversions for parser
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -1251,6 +1251,43 @@ coerce_to_specific_type(ParseState *pstate, Node *node,
 	return coerce_to_specific_type_typmod(pstate, node,
 										  targetTypeId, -1,
 										  constructName);
+}
+
+/*
+ * coerce_null_to_domain()
+ *		Build a NULL constant, then wrap it in CoerceToDomain
+ *		if the desired type is a domain type.  This allows any
+ *		NOT NULL domain constraint to be enforced at runtime.
+ */
+Node *
+coerce_null_to_domain(Oid typid, int32 typmod, Oid collation,
+					  int typlen, bool typbyval)
+{
+	Node	   *result;
+	Oid			baseTypeId;
+	int32		baseTypeMod = typmod;
+
+	/*
+	 * The constant must appear to have the domain's base type/typmod, else
+	 * coerce_to_domain() will apply a length coercion which is useless.
+	 */
+	baseTypeId = getBaseTypeAndTypmod(typid, &baseTypeMod);
+	result = (Node *) makeConst(baseTypeId,
+								baseTypeMod,
+								collation,
+								typlen,
+								(Datum) 0,
+								true,	/* isnull */
+								typbyval);
+	if (typid != baseTypeId)
+		result = coerce_to_domain(result,
+								  baseTypeId, baseTypeMod,
+								  typid,
+								  COERCION_IMPLICIT,
+								  COERCE_IMPLICIT_CAST,
+								  -1,
+								  false);
+	return result;
 }
 
 /*
@@ -2983,11 +3020,29 @@ IsPreferredType(TYPCATEGORY category, Oid type)
 bool
 IsBinaryCoercible(Oid srctype, Oid targettype)
 {
+	Oid			castoid;
+
+	return IsBinaryCoercibleWithCast(srctype, targettype, &castoid);
+}
+
+/* IsBinaryCoercibleWithCast()
+ *		Check if srctype is binary-coercible to targettype.
+ *
+ * This variant also returns the OID of the pg_cast entry if one is involved.
+ * *castoid is set to InvalidOid if no binary-coercible cast exists, or if
+ * there is a hard-wired rule for it rather than a pg_cast entry.
+ */
+bool
+IsBinaryCoercibleWithCast(Oid srctype, Oid targettype,
+						  Oid *castoid)
+{
 	// SPANGRES BEGIN
 	// HeapTuple	tuple;
 	const FormData_pg_cast* castForm;
 	// SPANGRES END
 	bool		result;
+
+	*castoid = InvalidOid;
 
 	/* Fast path if same type */
 	if (srctype == targettype)
@@ -3053,6 +3108,9 @@ IsBinaryCoercible(Oid srctype, Oid targettype)
 
 	result = (castForm->castmethod == COERCION_METHOD_BINARY &&
 			  castForm->castcontext == COERCION_CODE_IMPLICIT);
+
+	if (result)
+		*castoid = castForm->oid;
 	// SPANGRES END
 
 	return result;

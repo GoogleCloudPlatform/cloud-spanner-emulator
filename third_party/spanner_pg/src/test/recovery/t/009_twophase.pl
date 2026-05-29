@@ -1,5 +1,5 @@
 
-# Copyright (c) 2021-2022, PostgreSQL Global Development Group
+# Copyright (c) 2021-2023, PostgreSQL Global Development Group
 
 # Tests dedicated to two-phase commit in recovery
 use strict;
@@ -10,7 +10,7 @@ use PostgreSQL::Test::Utils;
 use Test::More;
 
 my $psql_out = '';
-my $psql_rc  = '';
+my $psql_rc = '';
 
 sub configure_and_reload
 {
@@ -49,7 +49,7 @@ $node_paris->start;
 
 # Switch to synchronous replication in both directions
 configure_and_reload($node_london, "synchronous_standby_names = 'paris'");
-configure_and_reload($node_paris,  "synchronous_standby_names = 'london'");
+configure_and_reload($node_paris, "synchronous_standby_names = 'london'");
 
 # Set up nonce names for current primary and standby nodes
 note "Initially, london is primary and paris is standby";
@@ -315,6 +315,7 @@ $cur_primary->psql('postgres', "COMMIT PREPARED 'xact_009_12'");
 
 $cur_primary->psql(
 	'postgres', "
+	SET synchronous_commit='remote_apply'; -- To ensure the standby is caught up
 	CREATE TABLE t_009_tbl_standby_mvcc (id int, msg text);
 	BEGIN;
 	INSERT INTO t_009_tbl_standby_mvcc VALUES (1, 'issued to ${cur_primary_name}');

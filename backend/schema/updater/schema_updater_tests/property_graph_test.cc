@@ -227,6 +227,55 @@ TEST_P(SchemaUpdaterTest, CreatePropertyGraphBasic) {
                             {{"AccountID", "AccountID"}});
 }
 
+TEST_P(SchemaUpdaterTest, CreatePropertyGraphWithNodeAlias) {
+  if (GetParam() == POSTGRESQL) {
+    return;
+  }
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"(
+        CREATE TABLE nodes (
+          id INT64 NOT NULL,
+        ) PRIMARY KEY(id))",
+                                        R"(
+        CREATE TABLE edges (
+          id INT64 NOT NULL,
+          from_id INT64 NOT NULL,
+          to_id INT64 NOT NULL,
+        ) PRIMARY KEY(id))",
+                                        R"(
+        CREATE PROPERTY GRAPH test_graph
+          NODE TABLES (nodes AS n)
+          EDGE TABLES (edges AS e KEY (from_id, to_id)
+            SOURCE KEY (from_id) REFERENCES n
+            DESTINATION KEY (to_id) REFERENCES n))"}));
+
+  const PropertyGraph* graph = schema->FindPropertyGraph("test_graph");
+  ASSERT_NE(graph, nullptr);
+  EXPECT_EQ(graph->Name(), "test_graph");
+
+  EXPECT_EQ(graph->NodeTables().size(), 1);
+  EXPECT_EQ(graph->EdgeTables().size(), 1);
+
+  ValidateGraphElementTable(graph->NodeTables().at(0),
+                            /*expected_name=*/"nodes",
+                            /*expected_alias=*/"n",
+                            /*expected_key_column_names=*/{"id"},
+                            /*expected_property_definitions=*/
+                            {{"id", "id"}});
+
+  ValidateGraphElementTable(
+      graph->EdgeTables().at(0),
+      /*expected_name=*/"edges",
+      /*expected_alias=*/"e",
+      /*expected_key_column_names=*/{"from_id", "to_id"},
+      /*expected_property_definitions=*/
+      {{"id", "id"}, {"from_id", "from_id"}, {"to_id", "to_id"}},
+      /*expected_source_node_reference=*/
+      {"n", {"id"}, {"from_id"}},
+      /*expected_target_node_reference=*/
+      {"n", {"id"}, {"to_id"}});
+}
+
 TEST_P(SchemaUpdaterTest, CreatePropertyGraphMultiNodeAndEdge) {
   if (GetParam() == POSTGRESQL) {
     return;

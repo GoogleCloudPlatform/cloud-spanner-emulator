@@ -1903,6 +1903,51 @@ absl::Status MlPredictRow_Args_NoInstances() {
                       "must contain 'instances'");
 }
 
+absl::Status AiClassify_Categories_NotArray() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "The categories argument to AI.CLASSIFY function must be an array.");
+}
+
+absl::Status AiClassify_Categories_EmptyArray() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "The categories argument to AI.CLASSIFY function must not be an empty "
+      "array.");
+}
+
+absl::Status AiClassify_Categories_NotArrayOfObjects() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "The categories argument to AI.CLASSIFY function must be "
+                      "an array of objects.");
+}
+
+absl::Status AiClassify_Categories_NullElement() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "The categories argument to AI.CLASSIFY function must not contain NULL "
+      "elements.");
+}
+
+absl::Status AiClassify_Categories_InvalidObject() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "Each category passed to AI.CLASSIFY function must have "
+                      "exactly two string fields: 'label' and 'description'.");
+}
+
+absl::Status AiClassify_Categories_EmptyLabel() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "Each category passed to AI.CLASSIFY function must have "
+                      "non empty label.");
+}
+
+absl::Status AiClassify_Categories_EmptyDescription() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "Each category passed to AI.CLASSIFY function must have non empty "
+      "description.");
+}
+
 absl::Status EmptyStruct() {
   return absl::Status(absl::StatusCode::kFailedPrecondition,
                       "Empty STRUCT is not allowed.");
@@ -1992,6 +2037,13 @@ absl::Status ModelColumnDefault(absl::string_view model_name,
       absl::Substitute("Default values are not supported in models. "
                        " Used in Model $0 column $1.",
                        model_name, column_name));
+}
+
+absl::Status AiOperator_UnexpectedResponse(absl::string_view response) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Unexpected response from VertexAI endpoint: $0.",
+                       response));
 }
 
 absl::Status IndexInterleaveTableNotFound(absl::string_view index_name,
@@ -3507,6 +3559,13 @@ absl::Status InvalidPartitionedQueryMode() {
       "with partitioned queries.");
 }
 
+absl::Status DataBoostRequiresPartitionToken() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "Data Boost is only valid for partitioned queries or reads, and requires "
+      "a partition token.");
+}
+
 absl::Status RowDeletionPolicyDoesNotExist(absl::string_view table_name) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
@@ -4163,12 +4222,26 @@ absl::Status FunctionDefinerSecurityError(absl::string_view function_name) {
           "Function `$0` uses unsupported SQL SECURITY DEFINER clause.",
           function_name));
 }
+absl::Status MissingOptionForFunction(absl::string_view option_name,
+                                      absl::string_view function_name) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("Missing option $0 for function $1.",
+                                       option_name, function_name));
+}
 
 absl::Status InvalidOptionForFunction(absl::string_view option_name,
                                       absl::string_view function_name) {
   return absl::Status(absl::StatusCode::kInvalidArgument,
-                      absl::Substitute("Invalid option $0 for remote UDF $1.",
+                      absl::Substitute("Invalid option $0 for function $1.",
                                        option_name, function_name));
+}
+
+absl::Status InvalidOptionValueForFunction(absl::string_view option_name,
+                                           absl::string_view function_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Invalid option value for option $0 of function $1.",
+                       option_name, function_name));
 }
 
 absl::Status InvalidOptionValueForFunction(absl::string_view option_value,
@@ -4176,9 +4249,32 @@ absl::Status InvalidOptionValueForFunction(absl::string_view option_value,
                                            absl::string_view function_name) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
-      absl::Substitute(
-          "Invalid option value $0 for option $1 of remote UDF $2.",
-          option_value, option_name, function_name));
+      absl::Substitute("Invalid option value $0 for option $1 of function $2.",
+                       option_value, option_name, function_name));
+}
+
+absl::Status UnsupportedTypeInRemoteFunction(absl::string_view function_name,
+                                             absl::string_view type_name) {
+  return absl::Status(absl::StatusCode::kUnimplemented,
+                      absl::Substitute("Remote UDF $0 has unsupported type $1.",
+                                       function_name, type_name));
+}
+
+absl::Status DuplicateStructFieldNamesInRemoteFunction(
+    absl::string_view function_name, absl::string_view field_name) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("Remote UDF $0 declaration has struct "
+                                       "with duplicate field names `$1`.",
+                                       function_name, field_name));
+}
+
+absl::Status RemoteUdfMustBeNotDeterministic(absl::string_view function_name,
+                                             absl::string_view determinism) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Remote UDF $0 declaration must specify the "
+                       "$1 attribute.",
+                       function_name, determinism));
 }
 
 absl::Status FunctionReplaceError(absl::string_view function_name,

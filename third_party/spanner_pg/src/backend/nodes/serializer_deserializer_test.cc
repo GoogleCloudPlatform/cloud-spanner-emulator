@@ -353,7 +353,7 @@ TEST_F(SerializationDeserializationTest, PartitionSpec) {
   PartitionSpec* partition_spec = makeNode(PartitionSpec);
   partition_spec->location = 99;
   partition_spec->partParams = list_make1(PlaceHolderNode());
-  partition_spec->strategy = pstrdup("test_strategy");
+  partition_spec->strategy = PartitionStrategy::PARTITION_STRATEGY_LIST;
 
   EXPECT_THAT(partition_spec, CanSerializeAndDeserialize());
 }
@@ -502,7 +502,7 @@ TEST_F(SerializationDeserializationTest, IndexStmt) {
   index_stmt->excludeOpNames = list_make1(PlaceHolderNode());
   index_stmt->idxcomment = pstrdup("placeholder comment");
   index_stmt->indexOid = 124;
-  index_stmt->oldNode = 125;
+  index_stmt->oldNumber = 125;
   index_stmt->unique = true;
   index_stmt->nulls_not_distinct = true;
   index_stmt->primary = true;
@@ -1006,7 +1006,6 @@ TEST_F(SerializationDeserializationTest, GrantRoleStmt) {
   grant_role_stmt->granted_roles = list_make1(PlaceHolderNode());
   grant_role_stmt->grantee_roles = list_make1(PlaceHolderNode());
   grant_role_stmt->is_grant = true;
-  grant_role_stmt->admin_opt = true;
   grant_role_stmt->grantor = makeNode(RoleSpec);
   grant_role_stmt->behavior = DROP_RESTRICT;
   EXPECT_THAT(grant_role_stmt, CanSerializeAndDeserialize());

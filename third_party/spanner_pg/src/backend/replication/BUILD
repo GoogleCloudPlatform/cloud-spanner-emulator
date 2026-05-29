@@ -54,10 +54,12 @@ cc_library(
     name = "replication",
     srcs = [
         "repl_gram.c",
+        "repl_scanner.c",
         "slot.c",
         "slotfuncs.c",
         "syncrep.c",
         "syncrep_gram.c",
+        "syncrep_scanner.c",
         "walreceiver.c",
         "walreceiverfuncs.c",
         "walsender.c",
@@ -70,8 +72,6 @@ cc_library(
         ".",
     ],
     textual_hdrs = [
-        "repl_scanner.c",
-        "syncrep_scanner.c",
         "repl_gram.h",
         "syncrep_gram.h",
     ],

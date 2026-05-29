@@ -41,9 +41,9 @@
 #include "tests/common/file_based_test_runner.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
-#include "re2/re2.h"
 #include "googlesql/base/ret_check.h"
 #include "googlesql/base/status_macros.h"
+#include "re2/re2.h"
 
 namespace google {
 namespace spanner {

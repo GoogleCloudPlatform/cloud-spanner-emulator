@@ -24,9 +24,12 @@
 
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/types/type.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/schema.h"
+#include "googlesql/base/ret_check.h"
 
 namespace google {
 namespace spanner {
@@ -90,6 +93,20 @@ class QueryableModel : public googlesql::Model {
       }
     }
     return nullptr;
+  }
+
+  // Returns the first endpoint for the model.
+  // In the real implementation, we fail-over between endpoints in case of
+  // errors. In emulator however, all endpoints are either evaluated locally or
+  // connect to the same server, so there is no need for fail-over.
+  absl::StatusOr<absl::string_view> GetFirstEndpoint() const {
+    if (wrapped_model_->endpoint().has_value()) {
+      return wrapped_model_->endpoint().value();
+    }
+    if (!wrapped_model_->endpoints().empty()) {
+      return wrapped_model_->endpoints()[0];
+    }
+    GOOGLESQL_RET_CHECK_FAIL() << "No endpoint found for model";
   }
 
  private:

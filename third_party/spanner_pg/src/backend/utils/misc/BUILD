@@ -50,14 +50,18 @@ licenses(["restricted"])
 cc_library(
     name = "misc",
     srcs = [
+        "conffiles.c",
         "guc.c",
+        "guc-file.c",
+        "guc_funcs.c",
+        "guc_internal.h",
+        "guc_tables.c",
         "help_config.c",
         "pg_config.c",
         "pg_controldata.c",
         "pg_rusage.c",
         "ps_status.c",
         "queryenvironment.c",
-        "queryjumble.c",
         "rls.c",
         "sampling.c",
         "superuser.c",
@@ -70,9 +74,6 @@ cc_library(
     ],
     includes = [
         ".",
-    ],
-    textual_hdrs = [
-        "guc-file.c",
     ],
     deps = [
         "//third_party/spanner_pg/src/include",

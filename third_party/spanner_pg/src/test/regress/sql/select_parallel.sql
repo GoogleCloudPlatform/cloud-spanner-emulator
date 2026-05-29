@@ -344,7 +344,7 @@ reset parallel_leader_participation;
 reset max_parallel_workers;
 
 SAVEPOINT settings;
-SET LOCAL force_parallel_mode = 1;
+SET LOCAL debug_parallel_query = 1;
 explain (costs off)
   select stringu1::int2 from tenk1 where unique1 = 1;
 ROLLBACK TO SAVEPOINT settings;
@@ -364,7 +364,7 @@ BEGIN
 END;
 $$;
 SAVEPOINT settings;
-SET LOCAL force_parallel_mode = 1;
+SET LOCAL debug_parallel_query = 1;
 SELECT make_record(x) FROM (SELECT generate_series(1, 5) x) ss ORDER BY x;
 ROLLBACK TO SAVEPOINT settings;
 DROP function make_record(n int);
@@ -375,9 +375,9 @@ create role regress_parallel_worker;
 set role regress_parallel_worker;
 reset session authorization;
 drop role regress_parallel_worker;
-set force_parallel_mode = 1;
+set debug_parallel_query = 1;
 select count(*) from tenk1;
-reset force_parallel_mode;
+reset debug_parallel_query;
 reset role;
 
 -- Window function calculation can't be pushed to workers.
@@ -393,14 +393,14 @@ explain (costs off)
 
 -- to increase the parallel query test coverage
 SAVEPOINT settings;
-SET LOCAL force_parallel_mode = 1;
+SET LOCAL debug_parallel_query = 1;
 EXPLAIN (analyze, timing off, summary off, costs off) SELECT * FROM tenk1;
 ROLLBACK TO SAVEPOINT settings;
 
 -- provoke error in worker
 -- (make the error message long enough to require multiple bufferloads)
 SAVEPOINT settings;
-SET LOCAL force_parallel_mode = 1;
+SET LOCAL debug_parallel_query = 1;
 select (stringu1 || repeat('abcd', 5000))::int2 from tenk1 where unique1 = 1;
 ROLLBACK TO SAVEPOINT settings;
 
@@ -474,13 +474,13 @@ create function set_role_and_error(int) returns int as
   $$ select 1 / $1 $$ language sql parallel safe
   set role = regress_parallel_worker;
 
-set force_parallel_mode = 0;
+set debug_parallel_query = 0;
 select set_and_report_role();
 select set_role_and_error(0);
-set force_parallel_mode = 1;
+set debug_parallel_query = 1;
 select set_and_report_role();
 select set_role_and_error(0);
-reset force_parallel_mode;
+reset debug_parallel_query;
 
 drop function set_and_report_role();
 drop function set_role_and_error(int);
@@ -512,7 +512,7 @@ CREATE UNIQUE INDEX parallel_hang_idx
 					ON parallel_hang
 					USING btree (i int4_custom_ops);
 
-SET force_parallel_mode = on;
+SET debug_parallel_query = on;
 DELETE FROM parallel_hang WHERE 380 <= i AND i <= 420;
 
 ROLLBACK;

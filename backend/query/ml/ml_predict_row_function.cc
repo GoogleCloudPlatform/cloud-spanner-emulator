@@ -219,6 +219,7 @@ absl::StatusOr<googlesql::Value> EvalMlPredictRow(
   // Validate args parameter and extract instances.
   std::vector<JSONValue> instances;
   JSONValue parameters;
+  parameters.GetRef().SetToEmptyObject();
   if (args[1].is_null()) {
     return error::MlPredictRow_Argument_Null(kMlPredictRowParamArgs);
   } else if (args[1].type()->Equals(GetPgJsonbType())) {

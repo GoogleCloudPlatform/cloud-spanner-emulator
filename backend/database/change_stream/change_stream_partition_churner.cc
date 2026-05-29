@@ -114,7 +114,7 @@ void ChangeStreamPartitionChurner::ClearChurningThread(
 }
 
 void ChangeStreamPartitionChurner::ClearAllChurningThreads() {
-  absl::MutexLock l(&mu_);
+  absl::MutexLock l(mu_);
   churn_threads_.clear();
 }
 
@@ -122,7 +122,7 @@ void ChangeStreamPartitionChurner::PeriodicChurnPartitions(
     absl::string_view change_stream_name, ChurningThread* churning_thread) {
   while (true) {
     {
-      absl::MutexLock l(&churning_thread->mu);
+      absl::MutexLock l(churning_thread->mu);
       churning_thread->mu.AwaitWithTimeout(
           absl::Condition(&churning_thread->stop_thread),
           absl::GetFlag(FLAGS_change_stream_churn_thread_sleep_interval));
@@ -331,7 +331,7 @@ absl::Status ChangeStreamPartitionChurner::MergePartition(
 
 void ChangeStreamPartitionChurner::Update(const Schema* schema) {
   // Iterate through the change streams in the schema.
-  absl::MutexLock l(&mu_);
+  absl::MutexLock l(mu_);
   absl::flat_hash_set<std::string> change_stream_names;
   for (const auto& [change_stream_name, churn_thread] : churn_threads_) {
     change_stream_names.insert(change_stream_name);
@@ -353,7 +353,7 @@ void ChangeStreamPartitionChurner::Update(const Schema* schema) {
 }
 
 int ChangeStreamPartitionChurner::GetNumThreads() {
-  absl::MutexLock l(&mu_);
+  absl::MutexLock l(mu_);
   return churn_threads_.size();
 }
 

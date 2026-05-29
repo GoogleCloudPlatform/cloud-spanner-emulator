@@ -212,6 +212,8 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
       const google::spanner::emulator::backend::ddl::Analyze& statement) const;
   absl::StatusOr<std::string> PrintSQLSecurityType(
       google::spanner::emulator::backend::ddl::Function::SqlSecurity sql_security) const;
+  absl::StatusOr<std::string> PrintLanguageType(
+      google::spanner::emulator::backend::ddl::Function::Language language) const;
   absl::StatusOr<std::string> PrintSQLSecurityTypeForView(
       google::spanner::emulator::backend::ddl::Function::SqlSecurity sql_security) const;
   absl::StatusOr<std::string> PrintSpannerType(
@@ -1488,6 +1490,16 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintSQLSecurityType(
                    << static_cast<int64_t>(sql_security);
 }
 
+absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintLanguageType(
+    google::spanner::emulator::backend::ddl::Function::Language language) const {
+  switch (language) {
+    case google::spanner::emulator::backend::ddl::Function::SQL:
+      return "SQL";
+    case google::spanner::emulator::backend::ddl::Function::REMOTE:
+      return "REMOTE";
+  }
+}
+
 absl::StatusOr<std::string>
 SpangresSchemaPrinterImpl::PrintSQLSecurityTypeForView(
     google::spanner::emulator::backend::ddl::Function::SqlSecurity sql_security) const {
@@ -1528,18 +1540,12 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateFunction(
           with_clause, statement.sql_body_origin().original_expression());
     }
     case google::spanner::emulator::backend::ddl::Function_Kind::Function_Kind_FUNCTION: {
-      GOOGLESQL_RET_CHECK(statement.has_sql_body_origin())
-          << "SQL body origin is required for function: "
-          << statement.function_name();
-      std::string function_template =
-          statement.is_or_replace() ? "CREATE OR REPLACE" : "CREATE";
-      function_template += " FUNCTION $0($1) RETURNS $2$3$4 RETURN $5";
-
       std::vector<std::string> parameters;
       for (const auto& param : statement.param()) {
-        std::string param_name = IsUdfParameterNameReserved(param.name())
-                                     ? ""
-                                     : absl::StrCat(param.name(), " ");
+        std::string param_name =
+            IsUdfParameterNameReserved(param.name())
+                ? ""
+                : absl::StrCat(QuoteIdentifier(param.name()), " ");
         GOOGLESQL_ASSIGN_OR_RETURN(std::string param_type,
                          PrintSpannerType(param.param_typename()));
         std::string default_expression =
@@ -1553,6 +1559,12 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateFunction(
 
       GOOGLESQL_ASSIGN_OR_RETURN(std::string return_type,
                        PrintSpannerType(statement.return_typename()));
+      std::string language = "";
+      if (statement.has_language()) {
+        GOOGLESQL_ASSIGN_OR_RETURN(language, PrintLanguageType(statement.language()));
+        language = " LANGUAGE " + language;
+      }
+
       std::string security_type = "";
       if (statement.has_sql_security() &&
           statement.sql_security() !=
@@ -1567,11 +1579,39 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateFunction(
         volatility_type = " " + volatility_type;
       }
 
+      std::string as_definition = "";
+      if (!statement.options().empty()) {
+        absl::StrAppend(&as_definition, " AS $${");
+        bool first = true;
+
+        for (const auto& option :
+             statement.sql_options()
+        ) {
+          // Currently only strings and numbers are supported, so sql_value
+          // format is equivalent to JSON and no extra formatting is needed.
+          absl::StrAppend(&as_definition, first ? "" : ",", " \"");
+          first = false;
+          absl::StrAppend(&as_definition, option.name(),
+                          "\": ", option.sql_value());
+        }
+
+        absl::StrAppend(&as_definition, " }$$");
+      }
+
+      std::string sql_body = "";
+      if (statement.has_sql_body_origin()) {
+        sql_body = absl::StrCat(
+            " RETURN ", statement.sql_body_origin().original_expression());
+      }
+
+      std::string function_template =
+          statement.is_or_replace() ? "CREATE OR REPLACE" : "CREATE";
+      function_template += " FUNCTION $0($1) RETURNS $2$3$4$5$6$7";
       return Substitute(function_template,
                         QuoteQualifiedIdentifier(statement.function_name()),
-                        absl::StrJoin(parameters, ", "), return_type,
-                        volatility_type, security_type,
-                        statement.sql_body_origin().original_expression());
+                        absl::StrJoin(parameters, ", "), return_type, language,
+                        volatility_type, security_type, as_definition,
+                        sql_body);
     }
     case google::spanner::emulator::backend::ddl::Function_Kind::Function_Kind_INVALID_KIND:
       GOOGLESQL_RET_CHECK_FAIL()
@@ -2007,6 +2047,13 @@ SpangresSchemaPrinterImpl::PrintAlterDatabaseSetOptions(
         value = QuoteStringLiteral(option.string_value());
       } else if (option.has_int64_value()) {
         value = std::to_string(option.int64_value());
+      } else if (!option.string_list_value().empty()) {
+        std::vector<std::string> option_list_value;
+        option_list_value.reserve(option.string_list_value().size());
+        for (const std::string& v : option.string_list_value()) {
+          option_list_value.push_back(QuoteStringLiteral(v));
+        }
+        value = absl::StrJoin(option_list_value, ", ");
       } else {
         GOOGLESQL_RET_CHECK_FAIL();
       }

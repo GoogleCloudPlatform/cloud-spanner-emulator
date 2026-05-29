@@ -29,8 +29,8 @@
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/table.h"
-#include "absl/status/status.h"
 #include "googlesql/base/status_macros.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

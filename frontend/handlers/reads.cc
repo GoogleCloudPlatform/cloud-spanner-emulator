@@ -28,8 +28,8 @@
 #include "frontend/entities/session.h"
 #include "frontend/entities/transaction.h"
 #include "frontend/server/handler.h"
-#include "absl/status/status.h"
 #include "googlesql/base/status_macros.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {
@@ -78,6 +78,11 @@ absl::Status Read(RequestContext* ctx, const spanner_api::ReadRequest* request,
 
   // Wrap all operations on this transaction so they are atomic .
   return txn->GuardedCall(Transaction::OpType::kRead, [&]() -> absl::Status {
+    if (request->data_boost_enabled()) {
+      if (request->partition_token().empty()) {
+        return error::DataBoostRequiresPartitionToken();
+      }
+    }
     // Cannot read after commit, rollback, or non-recoverable error.
     if (txn->IsInvalid()) {
       return error::CannotUseTransactionAfterConstraintError();
@@ -146,6 +151,11 @@ absl::Status StreamingRead(
 
   // Wrap all operations on this transaction so they are atomic.
   return txn->GuardedCall(Transaction::OpType::kRead, [&]() -> absl::Status {
+    if (request->data_boost_enabled()) {
+      if (request->partition_token().empty()) {
+        return error::DataBoostRequiresPartitionToken();
+      }
+    }
     // Cannot read after commit, rollback, or non-recoverable error.
     if (txn->IsInvalid()) {
       return error::CannotUseTransactionAfterConstraintError();

@@ -105,6 +105,37 @@ class NetCatalog : public googlesql::Catalog {
   backend::Catalog* root_catalog_;
 };
 
+// A sub-catalog used for resolving AI function lookups.
+class AiCatalog : public googlesql::Catalog {
+ public:
+  explicit AiCatalog(backend::Catalog* root_catalog)
+      : root_catalog_(root_catalog) {}
+  static constexpr char kName[] = "AI";
+
+  std::string FullName() const final {
+    std::string name = root_catalog_->FullName();
+    if (name.empty()) {
+      return kName;
+    }
+    absl::StrAppend(&name, kName);
+    return name;
+  }
+
+  // Implementation of the googlesql::Catalog interface.
+  absl::Status GetFunction(const std::string& name,
+                           const googlesql::Function** function,
+                           const FindOptions& options) final {
+    // The list of all functions is maintained in the root catalog in the
+    // form of their fully-qualified names. Just prefix the function name
+    // with the name of 'this' catalog and delegate the request to parent.
+    return root_catalog_->GetFunction(absl::StrJoin({FullName(), name}, "."),
+                                      function, options);
+  }
+
+ private:
+  backend::Catalog* root_catalog_;
+};
+
 // A sub-catalog used for resolving PG function lookups from GSQL queries.
 // Required for supporting check constraints as PG queries are translated to
 // GSQL queries before storing in the DDL statement.
@@ -180,17 +211,22 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
 
   for (const auto* udf : schema->udfs()) {
     std::string udf_name = udf->Name();
+    auto queryable_udf = QueryableUdf::Create(udf, schema->default_time_zone(),
+                                              this, type_factory);
+    if (!queryable_udf.ok()) {
+      ABSL_LOG(ERROR) << "Skipping UDF: " << udf_name
+                 << " due to a failure: " << queryable_udf.status().message();
+      continue;
+    }
+
     if (SDLObjectName::IsFullyQualifiedName(udf_name)) {
       const auto [schema_part, name_part] =
           SDLObjectName::SplitSchemaName(udf_name);
-      absl::Status status = AddObjectToNamedSchema(
-          std::string(schema_part),
-          std::make_unique<QueryableUdf>(udf, schema->default_time_zone(), this,
-                                         type_factory));
+      absl::Status status = AddObjectToNamedSchema(std::string(schema_part),
+                                                   *std::move(queryable_udf));
       LOG_IF(ERROR, !status.ok()) << status.message();
     } else {
-      udfs_[udf->Name()] = std::make_unique<QueryableUdf>(
-          udf, schema->default_time_zone(), this, type_factory);
+      udfs_[udf->Name()] = *std::move(queryable_udf);
     }
   }
 
@@ -356,6 +392,8 @@ absl::Status Catalog::GetCatalog(const std::string& name,
     *catalog = GetSpannerSysCatalog();
   } else if (absl::EqualsIgnoreCase(name, NetCatalog::kName)) {
     *catalog = GetNetFunctionsCatalog();
+  } else if (absl::EqualsIgnoreCase(name, AiCatalog::kName)) {
+    *catalog = GetAiFunctionsCatalog();
   } else if (absl::EqualsIgnoreCase(name, PGFunctionCatalog::kName)) {
     *catalog = GetPGFunctionsCatalog();
   } else if (absl::EqualsIgnoreCase(name,
@@ -479,6 +517,7 @@ absl::Status Catalog::GetCatalogs(
   output->insert(GetInformationSchemaCatalog());
   output->insert(GetSpannerSysCatalog());
   output->insert(GetNetFunctionsCatalog());
+  output->insert(GetAiFunctionsCatalog());
   GOOGLESQL_RETURN_IF_ERROR(GetNamedSchemas(output));
 
   return absl::OkStatus();
@@ -547,7 +586,7 @@ absl::Status Catalog::GetTableValuedFunctions(
 }
 
 googlesql::Catalog* Catalog::GetInformationSchemaCatalog() const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   auto spanner_sys_catalog = GetSpannerSysCatalogWithoutLocks();
   if (!information_schema_catalog_) {
     information_schema_catalog_ = std::make_unique<InformationSchemaCatalog>(
@@ -557,7 +596,7 @@ googlesql::Catalog* Catalog::GetInformationSchemaCatalog() const {
 }
 
 SpannerSysCatalog* Catalog::GetSpannerSysCatalog() const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   return GetSpannerSysCatalogWithoutLocks();
 }
 
@@ -569,7 +608,7 @@ SpannerSysCatalog* Catalog::GetSpannerSysCatalogWithoutLocks() const {
 }
 
 googlesql::Catalog* Catalog::GetPGInformationSchemaCatalog() const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   auto spanner_sys_catalog = GetSpannerSysCatalogWithoutLocks();
   if (!pg_information_schema_catalog_) {
     pg_information_schema_catalog_ = std::make_unique<InformationSchemaCatalog>(
@@ -579,15 +618,23 @@ googlesql::Catalog* Catalog::GetPGInformationSchemaCatalog() const {
 }
 
 googlesql::Catalog* Catalog::GetNetFunctionsCatalog() const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   if (!net_catalog_) {
     net_catalog_ = std::make_unique<NetCatalog>(const_cast<Catalog*>(this));
   }
   return net_catalog_.get();
 }
 
+googlesql::Catalog* Catalog::GetAiFunctionsCatalog() const {
+  absl::MutexLock lock(mu_);
+  if (!ai_catalog_) {
+    ai_catalog_ = std::make_unique<AiCatalog>(const_cast<Catalog*>(this));
+  }
+  return ai_catalog_.get();
+}
+
 googlesql::Catalog* Catalog::GetPGFunctionsCatalog() const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   if (!pg_function_catalog_) {
     pg_function_catalog_ =
         std::make_unique<PGFunctionCatalog>(const_cast<Catalog*>(this));
@@ -596,7 +643,7 @@ googlesql::Catalog* Catalog::GetPGFunctionsCatalog() const {
 }
 
 googlesql::Catalog* Catalog::GetPGCatalog() const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   if (schema_->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
     if (!pg_catalog_) {
       pg_catalog_ =

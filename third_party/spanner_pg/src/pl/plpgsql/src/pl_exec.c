@@ -3,7 +3,7 @@
  * pl_exec.c		- Executor for the PL/pgSQL
  *			  procedural language
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -385,7 +385,7 @@ static ParamListInfo setup_param_list(PLpgSQL_execstate *estate,
 									  PLpgSQL_expr *expr);
 static ParamExternData *plpgsql_param_fetch(ParamListInfo params,
 											int paramid, bool speculative,
-											ParamExternData *workspace);
+											ParamExternData *prm);
 static void plpgsql_param_compile(ParamListInfo params, Param *param,
 								  ExprState *state,
 								  Datum *resv, bool *resnull);
@@ -2421,6 +2421,12 @@ exec_stmt_getdiag(PLpgSQL_execstate *estate, PLpgSQL_stmt_getdiag *stmt)
 				exec_assign_value(estate, var,
 								  UInt64GetDatum(estate->eval_processed),
 								  false, INT8OID, -1);
+				break;
+
+			case PLPGSQL_GETDIAG_ROUTINE_OID:
+				exec_assign_value(estate, var,
+								  ObjectIdGetDatum(estate->func->fn_oid),
+								  false, OIDOID, -1);
 				break;
 
 			case PLPGSQL_GETDIAG_ERROR_CONTEXT:
@@ -5703,7 +5709,7 @@ exec_eval_expr(PLpgSQL_execstate *estate,
 	/*
 	 * Else do it the hard way via exec_run_select
 	 */
-	rc = exec_run_select(estate, expr, 2, NULL);
+	rc = exec_run_select(estate, expr, 0, NULL);
 	if (rc != SPI_OK_SELECT)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
@@ -5757,6 +5763,10 @@ exec_eval_expr(PLpgSQL_execstate *estate,
 
 /* ----------
  * exec_run_select			Execute a select query
+ *
+ * Note: passing maxtuples different from 0 ("return all tuples") is
+ * deprecated because it will prevent parallel execution of the query.
+ * However, we retain the parameter in case we need it someday.
  * ----------
  */
 static int
@@ -6265,12 +6275,9 @@ setup_param_list(PLpgSQL_execstate *estate, PLpgSQL_expr *expr)
 	Assert(expr->plan != NULL);
 
 	/*
-	 * We only need a ParamListInfo if the expression has parameters.  In
-	 * principle we should test with bms_is_empty(), but we use a not-null
-	 * test because it's faster.  In current usage bits are never removed from
-	 * expr->paramnos, only added, so this test is correct anyway.
+	 * We only need a ParamListInfo if the expression has parameters.
 	 */
-	if (expr->paramnos)
+	if (!bms_is_empty(expr->paramnos))
 	{
 		/* Use the common ParamListInfo */
 		paramLI = estate->paramLI;
@@ -7801,7 +7808,7 @@ get_cast_hashentry(PLpgSQL_execstate *estate,
 	cast_key.srctypmod = srctypmod;
 	cast_key.dsttypmod = dsttypmod;
 	cast_entry = (plpgsql_CastHashEntry *) hash_search(estate->cast_hash,
-													   (void *) &cast_key,
+													   &cast_key,
 													   HASH_ENTER, &found);
 	if (!found)					/* initialize if new entry */
 	{
@@ -8135,11 +8142,13 @@ exec_save_simple_expr(PLpgSQL_expr *expr, CachedPlan *cplan)
 
 	/*
 	 * Ordinarily, the plan node should be a simple Result.  However, if
-	 * force_parallel_mode is on, the planner might've stuck a Gather node
-	 * atop that.  The simplest way to deal with this is to look through the
-	 * Gather node.  The Gather node's tlist would normally contain a Var
-	 * referencing the child node's output, but it could also be a Param, or
-	 * it could be a Const that setrefs.c copied as-is.
+	 * debug_parallel_query is on, the planner might've stuck a Gather node
+	 * atop that; and/or if this plan is for a scrollable cursor, the planner
+	 * might've stuck a Material node atop it.  The simplest way to deal with
+	 * this is to look through the Gather and/or Material nodes.  The upper
+	 * node's tlist would normally contain a Var referencing the child node's
+	 * output, but it could also be a Param, or it could be a Const that
+	 * setrefs.c copied as-is.
 	 */
 	plan = stmt->planTree;
 	for (;;)
@@ -8157,7 +8166,7 @@ exec_save_simple_expr(PLpgSQL_expr *expr, CachedPlan *cplan)
 				   ((Result *) plan)->resconstantqual == NULL);
 			break;
 		}
-		else if (IsA(plan, Gather))
+		else if (IsA(plan, Gather) || IsA(plan, Material))
 		{
 			Assert(plan->lefttree != NULL &&
 				   plan->righttree == NULL &&

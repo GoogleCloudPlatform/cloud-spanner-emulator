@@ -58,7 +58,8 @@ const std::vector<std::string> SpangresUserCatalog::GetCatalogPathForTable(
 
 bool SpangresUserCatalog::IsUserDefinedFunction(
     const googlesql::Function* udf) const {
-  return udf->GetGroup() == google::spanner::emulator::backend::kSqlUdfGroup;
+  return udf->GetGroup() == google::spanner::emulator::backend::kSqlUdfGroup ||
+    udf->GetGroup() == google::spanner::emulator::backend::kRemoteUdfGroupName;
 }
 
 absl::StatusOr<std::vector<absl::string_view>>

@@ -60,8 +60,8 @@ SimpleNode* GetParseResult() {
   return dynamic_cast<SimpleNode*>(result);
 }
 
-SimpleNode* ParseSearchQuery() {
-  search_query();
+SimpleNode* ParseRQuery() {
+  rquery();
   return GetParseResult();
 }
 

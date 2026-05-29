@@ -230,7 +230,7 @@ void ActionRegistry::BuildActionRegistry() {
 void ActionManager::AddActionsForSchema(const Schema* schema,
                                         const FunctionCatalog* function_catalog,
                                         googlesql::TypeFactory* type_factory) {
-  absl::MutexLock l(&mutex_);
+  absl::MutexLock l(mutex_);
   latest_schema_ = schema;
   registry_ =
       std::make_unique<ActionRegistry>(schema, function_catalog, type_factory);
@@ -238,7 +238,7 @@ void ActionManager::AddActionsForSchema(const Schema* schema,
 
 absl::StatusOr<ActionRegistry*> ActionManager::GetActionsForSchema(
     const Schema* schema) const {
-  absl::MutexLock l(&mutex_);
+  absl::MutexLock l(mutex_);
   if (latest_schema_ != schema) {
     return error::Internal(
         absl::StrCat("Schema generation ", schema->generation(),

@@ -152,6 +152,7 @@ TEST_F(PGCatalogTest, PGAttrdef) {
       {20, "length(key2)"},
       {21, "'100'::bigint"},
       {22, "CURRENT_TIMESTAMP"},
+      {25, "spanner.pending_commit_timestamp()"},
   });
   EXPECT_THAT(Query(R"sql(
       SELECT
@@ -170,7 +171,7 @@ TEST_F(PGCatalogTest, PGAttrdef) {
         COUNT(DISTINCT adrelid)
       FROM
         pg_catalog.pg_attrdef)sql"),
-              IsOkAndHoldsRows({{4, 1}}));
+              IsOkAndHoldsRows({{5, 1}}));
 }
 
 TEST_F(PGCatalogTest, PGAttribute) {
@@ -258,6 +259,9 @@ TEST_F(PGCatalogTest, PGAttribute) {
        false, true, false, std::string{'d'}, std::string{'\0'}, false, true, 0},
       {"base", "identity_col", "int8", 24, 0, -1, std::string{'\0'}, false,
        true, false, std::string{'d'}, std::string{'\0'}, false, true, 0},
+      {"base", "on_update_col", "timestamptz", 25, 0, -1, std::string{'\0'},
+       false, true, false, std::string{'\0'}, std::string{'\0'}, false, true,
+       0},
 
       {"cascade_child", "key1", "int8", 1, 0, -1, std::string{'\0'}, true,
        false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
@@ -510,7 +514,7 @@ TEST_F(PGCatalogTest, PGClass) {
 
   auto table_results = Query(absl::StrFormat(query_template, "r"));
   auto expected_table_rows = std::vector<ValueRow>({
-      {"base", "public", PgOid(75001), true, "p", "r", 24, 2, true},
+      {"base", "public", PgOid(75001), true, "p", "r", 25, 2, true},
       {"cascade_child", "public", PgOid(75001), true, "p", "r", 6, 0, true},
       {"filter_test", "public", PgOid(75001), true, "p", "r", 3, 0, true},
       {"no_action_child", "public", PgOid(75001), true, "p", "r", 4, 0, true},

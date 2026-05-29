@@ -3,7 +3,7 @@
  * reloptions.c
  *	  Core support for relation options (pg_class.reloptions)
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -733,11 +733,11 @@ add_reloption(relopt_gen *newoption)
  * 		'relopt_struct_size'.
  */
 void
-init_local_reloptions(local_relopts *opts, Size relopt_struct_size)
+init_local_reloptions(local_relopts *relopts, Size relopt_struct_size)
 {
-	opts->options = NIL;
-	opts->validators = NIL;
-	opts->relopt_struct_size = relopt_struct_size;
+	relopts->options = NIL;
+	relopts->validators = NIL;
+	relopts->relopt_struct_size = relopt_struct_size;
 }
 
 /*
@@ -746,9 +746,9 @@ init_local_reloptions(local_relopts *opts, Size relopt_struct_size)
  *		build_local_reloptions().
  */
 void
-register_reloptions_validator(local_relopts *opts, relopts_validator validator)
+register_reloptions_validator(local_relopts *relopts, relopts_validator validator)
 {
-	opts->validators = lappend(opts->validators, validator);
+	relopts->validators = lappend(relopts->validators, validator);
 }
 
 /*
@@ -1177,8 +1177,7 @@ transformRelOptions(Datum oldOptions, List *defList, const char *namspace,
 		int			noldoptions;
 		int			i;
 
-		deconstruct_array(array, TEXTOID, -1, false, TYPALIGN_INT,
-						  &oldoptions, NULL, &noldoptions);
+		deconstruct_array_builtin(array, TEXTOID, &oldoptions, NULL, &noldoptions);
 
 		for (i = 0; i < noldoptions; i++)
 		{
@@ -1235,8 +1234,9 @@ transformRelOptions(Datum oldOptions, List *defList, const char *namspace,
 		}
 		else
 		{
-			text	   *t;
+			const char *name;
 			const char *value;
+			text	   *t;
 			Size		len;
 
 			/*
@@ -1283,10 +1283,18 @@ transformRelOptions(Datum oldOptions, List *defList, const char *namspace,
 			 * have just "name", assume "name=true" is meant.  Note: the
 			 * namespace is not output.
 			 */
+			name = def->defname;
 			if (def->arg != NULL)
 				value = defGetString(def);
 			else
 				value = "true";
+
+			/* Insist that name not contain "=", else "a=b=c" is ambiguous */
+			if (strchr(name, '=') != NULL)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("invalid option name \"%s\": must not contain \"=\"",
+								name)));
 
 			/*
 			 * This is not a great place for this test, but there's no other
@@ -1295,7 +1303,7 @@ transformRelOptions(Datum oldOptions, List *defList, const char *namspace,
 			 * amount of ugly.
 			 */
 			if (acceptOidsOff && def->defnamespace == NULL &&
-				strcmp(def->defname, "oids") == 0)
+				strcmp(name, "oids") == 0)
 			{
 				if (defGetBoolean(def))
 					ereport(ERROR,
@@ -1305,11 +1313,11 @@ transformRelOptions(Datum oldOptions, List *defList, const char *namspace,
 				continue;
 			}
 
-			len = VARHDRSZ + strlen(def->defname) + 1 + strlen(value);
+			len = VARHDRSZ + strlen(name) + 1 + strlen(value);
 			/* +1 leaves room for sprintf's trailing null */
 			t = (text *) palloc(len + 1);
 			SET_VARSIZE(t, len);
-			sprintf(VARDATA(t), "%s=%s", def->defname, value);
+			sprintf(VARDATA(t), "%s=%s", name, value);
 
 			astate = accumArrayResult(astate, PointerGetDatum(t),
 									  false, TEXTOID,
@@ -1345,8 +1353,7 @@ untransformRelOptions(Datum options)
 
 	array = DatumGetArrayTypeP(options);
 
-	deconstruct_array(array, TEXTOID, -1, false, TYPALIGN_INT,
-					  &optiondatums, NULL, &noptions);
+	deconstruct_array_builtin(array, TEXTOID, &optiondatums, NULL, &noptions);
 
 	for (i = 0; i < noptions; i++)
 	{
@@ -1359,9 +1366,9 @@ untransformRelOptions(Datum options)
 		if (p)
 		{
 			*p++ = '\0';
-			val = (Node *) makeString(pstrdup(p));
+			val = (Node *) makeString(p);
 		}
-		result = lappend(result, makeDefElem(pstrdup(s), val, -1));
+		result = lappend(result, makeDefElem(s, val, -1));
 	}
 
 	return result;
@@ -1436,8 +1443,7 @@ parseRelOptionsInternal(Datum options, bool validate,
 	int			noptions;
 	int			i;
 
-	deconstruct_array(array, TEXTOID, -1, false, TYPALIGN_INT,
-					  &optiondatums, NULL, &noptions);
+	deconstruct_array_builtin(array, TEXTOID, &optiondatums, NULL, &noptions);
 
 	for (i = 0; i < noptions; i++)
 	{
@@ -1720,7 +1726,7 @@ allocateReloptStruct(Size base, relopt_value *options, int numoptions)
 			if (optstr->fill_cb)
 			{
 				const char *val = optval->isset ? optval->values.string_val :
-				optstr->default_isnull ? NULL : optstr->default_val;
+					optstr->default_isnull ? NULL : optstr->default_val;
 
 				size += optstr->fill_cb(val, NULL);
 			}
@@ -1799,8 +1805,8 @@ fillRelOptions(void *rdopts, Size basesize,
 						if (optstring->fill_cb)
 						{
 							Size		size =
-							optstring->fill_cb(string_val,
-											   (char *) rdopts + offset);
+								optstring->fill_cb(string_val,
+												   (char *) rdopts + offset);
 
 							if (size)
 							{
@@ -1988,13 +1994,12 @@ build_local_reloptions(local_relopts *relopts, Datum options, bool validate)
 bytea *
 partitioned_table_reloptions(Datum reloptions, bool validate)
 {
-	/*
-	 * There are no options for partitioned tables yet, but this is able to do
-	 * some validation.
-	 */
-	return (bytea *) build_reloptions(reloptions, validate,
-									  RELOPT_KIND_PARTITIONED,
-									  0, NULL, 0);
+	if (validate && reloptions)
+		ereport(ERROR,
+				errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				errmsg("cannot specify storage parameters for a partitioned table"),
+				errhint("Specify storage parameters for its leaf partitions instead."));
+	return NULL;
 }
 
 /*

@@ -20,15 +20,13 @@ SELECT timestamp with time zone '2001-12-27 04:05:06.789-08';
 SELECT timestamp with time zone '2001.12.27 04:05:06.789-08';
 SELECT timestamp with time zone '2001/12/27 04:05:06.789-08';
 SELECT timestamp with time zone '12/27/2001 04:05:06.789-08';
+SELECT timestamp with time zone '2001-12-27 04:05:06.789 MET DST';
+SELECT timestamp with time zone '2001-12-27 allballs';
 -- should fail in mdy mode:
 SELECT timestamp with time zone '27/12/2001 04:05:06.789-08';
 set datestyle to dmy;
 SELECT timestamp with time zone '27/12/2001 04:05:06.789-08';
 reset datestyle;
-SELECT timestamp with time zone 'Y2001M12D27H04M05S06.789+08';
-SELECT timestamp with time zone 'Y2001M12D27H04M05S06.789-08';
-SELECT timestamp with time zone 'Y2001M12D27H04MM05S06.789+08';
-SELECT timestamp with time zone 'Y2001M12D27H04MM05S06.789-08';
 SELECT timestamp with time zone 'J2452271+08';
 SELECT timestamp with time zone 'J2452271-08';
 SELECT timestamp with time zone 'J2452271.5+08';
@@ -57,10 +55,75 @@ SELECT time with time zone 'T040506.789+08';
 SELECT time with time zone 'T040506.789-08';
 SELECT time with time zone 'T040506.789 +08';
 SELECT time with time zone 'T040506.789 -08';
+-- time with time zone should accept a date for DST resolution purposes
+SELECT time with time zone 'T040506.789 America/Los_Angeles';
+SELECT time with time zone '2001-12-27 T040506.789 America/Los_Angeles';
+SELECT time with time zone 'J2452271 T040506.789 America/Los_Angeles';
+-- Check time formats required by ISO 8601
+SELECT time without time zone '040506.07';
+SELECT time without time zone '04:05:06.07';
+SELECT time without time zone '040506';
+SELECT time without time zone '04:05:06';
+SELECT time without time zone '0405';
+SELECT time without time zone '04:05';
+SELECT time without time zone 'T040506.07';
+SELECT time without time zone 'T04:05:06.07';
+SELECT time without time zone 'T040506';
+SELECT time without time zone 'T04:05:06';
+SELECT time without time zone 'T0405';
+SELECT time without time zone 'T04:05';
+-- 8601 says "Thh" is allowed, but we intentionally reject it as too vague
+SELECT time without time zone 'T04';
+SELECT time with time zone '040506.07+08';
+SELECT time with time zone '04:05:06.07+08';
+SELECT time with time zone '040506+08';
+SELECT time with time zone '04:05:06+08';
+SELECT time with time zone '0405+08';
+SELECT time with time zone '04:05+08';
+SELECT time with time zone 'T040506.07+08';
+SELECT time with time zone 'T04:05:06.07+08';
+SELECT time with time zone 'T040506+08';
+SELECT time with time zone 'T04:05:06+08';
+SELECT time with time zone 'T0405+08';
+SELECT time with time zone 'T04:05+08';
+-- 8601 says "Thh" is allowed, but we intentionally reject it as too vague
+SELECT time with time zone 'T04+08';
 SET DateStyle = 'Postgres, MDY';
 -- Check Julian dates BC
 SELECT date 'J1520447' AS "Confucius' Birthday";
 SELECT date 'J0' AS "Julian Epoch";
+
+-- test error on dangling Julian units
+SELECT date '1995-08-06  J J J';
+SELECT date 'J J 1520447';
+
+-- We used to accept this input style, but it was based on a misreading
+-- of ISO8601, and it was never documented anyway
+SELECT timestamp with time zone 'Y2001M12D27H04M05S06.789+08';
+SELECT timestamp with time zone 'Y2001M12D27H04MM05S06.789-08';
+
+-- conflicting fields should throw errors
+SELECT date '1995-08-06 epoch';
+SELECT date '1995-08-06 infinity';
+SELECT date '1995-08-06 -infinity';
+SELECT date 'today infinity';
+SELECT date '-infinity infinity';
+SELECT timestamp '1995-08-06 epoch';
+SELECT timestamp '1995-08-06 infinity';
+SELECT timestamp '1995-08-06 -infinity';
+SELECT timestamp 'epoch 01:01:01';
+SELECT timestamp 'infinity 01:01:01';
+SELECT timestamp '-infinity 01:01:01';
+SELECT timestamp 'now epoch';
+SELECT timestamp '-infinity infinity';
+SELECT timestamptz '1995-08-06 epoch';
+SELECT timestamptz '1995-08-06 infinity';
+SELECT timestamptz '1995-08-06 -infinity';
+SELECT timestamptz 'epoch 01:01:01';
+SELECT timestamptz 'infinity 01:01:01';
+SELECT timestamptz '-infinity 01:01:01';
+SELECT timestamptz 'now epoch';
+SELECT timestamptz '-infinity infinity';
 
 --
 -- date, time arithmetic
@@ -480,6 +543,7 @@ SELECT i, to_timestamp('2018-11-02 12:34:56.1234', 'YYYY-MM-DD HH24:MI:SS.FF' ||
 SELECT i, to_timestamp('2018-11-02 12:34:56.12345', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
 SELECT i, to_timestamp('2018-11-02 12:34:56.123456', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
 SELECT i, to_timestamp('2018-11-02 12:34:56.123456789', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+SELECT i, to_timestamp('20181102123456123456', 'YYYYMMDDHH24MISSFF' || i) FROM generate_series(1, 6) i;
 
 SELECT to_date('1 4 1902', 'Q MM YYYY');  -- Q is ignored
 SELECT to_date('3 4 21 01', 'W MM CC YY');

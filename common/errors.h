@@ -420,6 +420,13 @@ absl::Status MlPredictRow_ModelEndpoint_InvalidBatchSize(int64_t value_num,
                                                          int64_t min_num,
                                                          int64_t max_num);
 absl::Status MlPredictRow_Args_NoInstances();
+absl::Status AiClassify_Categories_NotArray();
+absl::Status AiClassify_Categories_EmptyArray();
+absl::Status AiClassify_Categories_NotArrayOfObjects();
+absl::Status AiClassify_Categories_NullElement();
+absl::Status AiClassify_Categories_InvalidObject();
+absl::Status AiClassify_Categories_EmptyLabel();
+absl::Status AiClassify_Categories_EmptyDescription();
 absl::Status EmptyStruct();
 absl::Status StructFieldNumberExceedsLimit(int64_t limit);
 absl::Status MissingStructFieldName(absl::string_view struct_type);
@@ -444,6 +451,9 @@ absl::Status ModelColumnGenerated(absl::string_view model_name,
                                   absl::string_view column_name);
 absl::Status ModelColumnDefault(absl::string_view model_name,
                                 absl::string_view column_name);
+
+// AI functions.
+absl::Status AiOperator_UnexpectedResponse(absl::string_view response);
 
 // Property graph errors.
 absl::Status TooManyPropertyGraphsPerDatabase(absl::string_view graph_name,
@@ -810,6 +820,7 @@ absl::Status ReadFromDifferentSession();
 absl::Status ReadFromDifferentTransaction();
 absl::Status ReadFromDifferentParameters();
 absl::Status InvalidPartitionedQueryMode();
+absl::Status DataBoostRequiresPartitionToken();
 absl::Status InvalidTargetPartitionSizeBytes(absl::string_view message_name);
 
 // Row Deletion Policy errors.
@@ -1016,11 +1027,22 @@ absl::Status InvalidDropDependentFunction(absl::string_view type_kind,
                                           absl::string_view dependency_name,
                                           absl::string_view dependent_function);
 absl::Status FunctionNotFound(absl::string_view function_name);
+absl::Status MissingOptionForFunction(absl::string_view option_name,
+                                      absl::string_view function_name);
 absl::Status InvalidOptionForFunction(absl::string_view option_name,
                                       absl::string_view function_name);
+absl::Status InvalidOptionValueForFunction(absl::string_view option_name,
+                                           absl::string_view function_name);
 absl::Status InvalidOptionValueForFunction(absl::string_view option_value,
                                            absl::string_view option_name,
                                            absl::string_view function_name);
+absl::Status UnsupportedTypeInRemoteFunction(absl::string_view function_name,
+                                             absl::string_view type_name);
+absl::Status DuplicateStructFieldNamesInRemoteFunction(
+    absl::string_view function_name, absl::string_view field_name);
+absl::Status RemoteUdfMustBeNotDeterministic(absl::string_view function_name,
+                                             absl::string_view determinism);
+
 // Sequence-related errors
 absl::Status SequenceNotSupportedInPostgreSQL();
 

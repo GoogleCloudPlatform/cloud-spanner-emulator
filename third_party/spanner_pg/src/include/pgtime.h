@@ -3,7 +3,7 @@
  * pgtime.h
  *	  PostgreSQL internal timezone library
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/include/pgtime.h
@@ -75,8 +75,8 @@ extern bool pg_tz_acceptable(pg_tz *tz);
 
 /* these functions are in strftime.c */
 
-extern size_t pg_strftime(char *s, size_t max, const char *format,
-						  const struct pg_tm *tm);
+extern size_t pg_strftime(char *s, size_t maxsize, const char *format,
+						  const struct pg_tm *t);
 
 /* these functions and variables are in pgtz.c */
 
@@ -87,7 +87,7 @@ void ClearTimezoneHashtablePointer();
 extern __thread PGDLLIMPORT pg_tz *session_timezone;
 extern __thread PGDLLIMPORT pg_tz *log_timezone;
 // Make gmtptr global so that it can be cleaned up.
-extern __thread struct state *gmtptr;
+static __thread struct state *gmtptr;
 /* SPANGRES END */
 
 extern void pg_timezone_initialize(void);

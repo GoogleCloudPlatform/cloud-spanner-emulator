@@ -31,8 +31,8 @@
 #include "common/errors.h"
 #include "common/limits.h"
 #include "googlesql/base/ret_check.h"
-#include "absl/status/status.h"
 #include "googlesql/base/status_macros.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

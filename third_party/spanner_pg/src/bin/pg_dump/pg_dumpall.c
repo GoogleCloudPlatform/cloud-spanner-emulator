@@ -2,7 +2,7 @@
  *
  * pg_dumpall.c
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * pg_dumpall forces all pg_dump output to be text, since it also outputs
@@ -21,6 +21,7 @@
 #include "catalog/pg_authid_d.h"
 #include "common/connect.h"
 #include "common/file_utils.h"
+#include "common/hashfn.h"
 #include "common/logging.h"
 #include "common/string.h"
 #include "dumputils.h"
@@ -31,6 +32,28 @@
 /* version string we expect back from pg_dump */
 #define PGDUMP_VERSIONSTR "pg_dump (PostgreSQL) " PG_VERSION "\n"
 
+static uint32 hash_string_pointer(char *s);
+
+typedef struct
+{
+	uint32		status;
+	uint32		hashval;
+	char	   *rolename;
+} RoleNameEntry;
+
+#define SH_PREFIX	rolename
+#define SH_ELEMENT_TYPE	RoleNameEntry
+#define SH_KEY_TYPE	char *
+#define SH_KEY		rolename
+#define SH_HASH_KEY(tb, key)	hash_string_pointer(key)
+#define SH_EQUAL(tb, a, b)		(strcmp(a, b) == 0)
+#define SH_STORE_HASH
+#define SH_GET_HASH(tb, a)		(a)->hashval
+#define SH_SCOPE	static inline
+#define SH_RAW_ALLOCATOR	pg_malloc0
+#define SH_DECLARE
+#define SH_DEFINE
+#include "lib/simplehash.h"
 
 static void help(void);
 
@@ -49,8 +72,10 @@ static void buildShSecLabels(PGconn *conn,
 							 const char *catalog_name, Oid objectId,
 							 const char *objtype, const char *objname,
 							 PQExpBuffer buffer);
-static PGconn *connectDatabase(const char *dbname, const char *connstr, const char *pghost, const char *pgport,
-							   const char *pguser, trivalue prompt_password, bool fail_on_error);
+static PGconn *connectDatabase(const char *dbname,
+							   const char *connection_string, const char *pghost,
+							   const char *pgport, const char *pguser,
+							   trivalue prompt_password, bool fail_on_error);
 static char *constructConnStr(const char **keywords, const char **values);
 static PGresult *executeQuery(PGconn *conn, const char *query);
 static void executeCommand(PGconn *conn, const char *query);
@@ -95,6 +120,8 @@ static char *filename = NULL;
 
 static SimpleStringList database_exclude_patterns = {NULL, NULL};
 static SimpleStringList database_exclude_names = {NULL, NULL};
+
+static char *restrict_key;
 
 #define exit_nicely(code) exit(code)
 
@@ -152,6 +179,7 @@ main(int argc, char *argv[])
 		{"no-unlogged-table-data", no_argument, &no_unlogged_table_data, 1},
 		{"on-conflict-do-nothing", no_argument, &on_conflict_do_nothing, 1},
 		{"rows-per-insert", required_argument, NULL, 7},
+		{"restrict-key", required_argument, NULL, 9},
 
 		{NULL, 0, NULL, 0}
 	};
@@ -335,6 +363,12 @@ main(int argc, char *argv[])
 				appendShellString(pgdumpopts, optarg);
 				break;
 
+			case 9:
+				restrict_key = pg_strdup(optarg);
+				appendPQExpBufferStr(pgdumpopts, " --restrict-key ");
+				appendShellString(pgdumpopts, optarg);
+				break;
+
 			default:
 				/* getopt_long already emitted a complaint */
 				pg_log_error_hint("Try \"%s --help\" for more information.", progname);
@@ -431,6 +465,16 @@ main(int argc, char *argv[])
 		appendPQExpBufferStr(pgdumpopts, " --on-conflict-do-nothing");
 
 	/*
+	 * If you don't provide a restrict key, one will be appointed for you.
+	 */
+	if (!restrict_key)
+		restrict_key = generate_restrict_key();
+	if (!restrict_key)
+		pg_fatal("could not generate restrict key");
+	if (!valid_restrict_key(restrict_key))
+		pg_fatal("invalid restrict key");
+
+	/*
 	 * If there was a database specified on the command line, use that,
 	 * otherwise try to connect to database "postgres", and failing that
 	 * "template1".
@@ -494,6 +538,7 @@ main(int argc, char *argv[])
 	 * we know how to escape strings.
 	 */
 	encoding = PQclientEncoding(conn);
+	setFmtEncoding(encoding);
 	std_strings = PQparameterStatus(conn, "standard_conforming_strings");
 	if (!std_strings)
 		std_strings = "off";
@@ -515,6 +560,16 @@ main(int argc, char *argv[])
 	fprintf(OPF, "--\n-- PostgreSQL database cluster dump\n--\n\n");
 	if (verbose)
 		dumpTimestamp("Started on");
+
+	/*
+	 * Enter restricted mode to block any unexpected psql meta-commands.  A
+	 * malicious source might try to inject a variety of things via bogus
+	 * responses to queries.  While we cannot prevent such sources from
+	 * affecting the destination at restore time, we can block psql
+	 * meta-commands so that the client machine that runs psql with the dump
+	 * output remains unaffected.
+	 */
+	fprintf(OPF, "\\restrict %s\n\n", restrict_key);
 
 	/*
 	 * We used to emit \connect postgres here, but that served no purpose
@@ -575,6 +630,12 @@ main(int argc, char *argv[])
 		if (!roles_only && !no_tablespaces)
 			dumpTablespaces(conn);
 	}
+
+	/*
+	 * Exit restricted mode just before dumping the databases.  pg_dump will
+	 * handle entering restricted mode again as appropriate.
+	 */
+	fprintf(OPF, "\\unrestrict %s\n\n", restrict_key);
 
 	if (!globals_only && !roles_only && !tablespaces_only)
 		dumpDatabases(conn);
@@ -643,6 +704,7 @@ help(void)
 	printf(_("  --no-unlogged-table-data     do not dump unlogged table data\n"));
 	printf(_("  --on-conflict-do-nothing     add ON CONFLICT DO NOTHING to INSERT commands\n"));
 	printf(_("  --quote-all-identifiers      quote all identifiers, even if not key words\n"));
+	printf(_("  --restrict-key=RESTRICT_KEY  use provided string as psql \\restrict key\n"));
 	printf(_("  --rows-per-insert=NROWS      number of rows per INSERT; implies --inserts\n"));
 	printf(_("  --use-set-session-authorization\n"
 			 "                               use SET SESSION AUTHORIZATION commands instead of\n"
@@ -927,46 +989,236 @@ static void
 dumpRoleMembership(PGconn *conn)
 {
 	PQExpBuffer buf = createPQExpBuffer();
+	PQExpBuffer optbuf = createPQExpBuffer();
 	PGresult   *res;
-	int			i;
+	int			start = 0,
+				end,
+				total;
+	bool		dump_grantors;
+	bool		dump_grant_options;
+	int			i_role;
+	int			i_member;
+	int			i_grantor;
+	int			i_roleid;
+	int			i_memberid;
+	int			i_grantorid;
+	int			i_admin_option;
+	int			i_inherit_option;
+	int			i_set_option;
 
-	printfPQExpBuffer(buf, "SELECT ur.rolname AS roleid, "
+	/*
+	 * Previous versions of PostgreSQL didn't used to track the grantor very
+	 * carefully in the backend, and the grantor could be any user even if
+	 * they didn't have ADMIN OPTION on the role, or a user that no longer
+	 * existed. To avoid dump and restore failures, don't dump the grantor
+	 * when talking to an old server version.
+	 *
+	 * Also, in older versions the roleid and/or member could be role OIDs
+	 * that no longer exist.  If we find such cases, print a warning and skip
+	 * the entry.
+	 */
+	dump_grantors = (PQserverVersion(conn) >= 160000);
+
+	/*
+	 * Previous versions of PostgreSQL also did not have grant-level options.
+	 */
+	dump_grant_options = (server_version >= 160000);
+
+	/* Generate and execute query. */
+	printfPQExpBuffer(buf, "SELECT ur.rolname AS role, "
 					  "um.rolname AS member, "
-					  "a.admin_option, "
-					  "ug.rolname AS grantor "
-					  "FROM pg_auth_members a "
+					  "ug.rolname AS grantor, "
+					  "a.roleid AS roleid, "
+					  "a.member AS memberid, "
+					  "a.grantor AS grantorid, "
+					  "a.admin_option");
+	if (dump_grant_options)
+		appendPQExpBufferStr(buf, ", a.inherit_option, a.set_option");
+	appendPQExpBuffer(buf, " FROM pg_auth_members a "
 					  "LEFT JOIN %s ur on ur.oid = a.roleid "
 					  "LEFT JOIN %s um on um.oid = a.member "
 					  "LEFT JOIN %s ug on ug.oid = a.grantor "
 					  "WHERE NOT (ur.rolname ~ '^pg_' AND um.rolname ~ '^pg_')"
 					  "ORDER BY 1,2,3", role_catalog, role_catalog, role_catalog);
 	res = executeQuery(conn, buf->data);
+	i_role = PQfnumber(res, "role");
+	i_member = PQfnumber(res, "member");
+	i_grantor = PQfnumber(res, "grantor");
+	i_roleid = PQfnumber(res, "roleid");
+	i_memberid = PQfnumber(res, "memberid");
+	i_grantorid = PQfnumber(res, "grantorid");
+	i_admin_option = PQfnumber(res, "admin_option");
+	i_inherit_option = PQfnumber(res, "inherit_option");
+	i_set_option = PQfnumber(res, "set_option");
 
 	if (PQntuples(res) > 0)
 		fprintf(OPF, "--\n-- Role memberships\n--\n\n");
 
-	for (i = 0; i < PQntuples(res); i++)
+	/*
+	 * We can't dump these GRANT commands in arbitrary order, because a role
+	 * that is named as a grantor must already have ADMIN OPTION on the role
+	 * for which it is granting permissions, except for the bootstrap
+	 * superuser, who can always be named as the grantor.
+	 *
+	 * We handle this by considering these grants role by role. For each role,
+	 * we initially consider the only allowable grantor to be the bootstrap
+	 * superuser. Every time we grant ADMIN OPTION on the role to some user,
+	 * that user also becomes an allowable grantor. We make repeated passes
+	 * over the grants for the role, each time dumping those whose grantors
+	 * are allowable and which we haven't done yet. Eventually this should let
+	 * us dump all the grants.
+	 */
+	total = PQntuples(res);
+	while (start < total)
 	{
-		char	   *roleid = PQgetvalue(res, i, 0);
-		char	   *member = PQgetvalue(res, i, 1);
-		char	   *option = PQgetvalue(res, i, 2);
+		char	   *role = PQgetvalue(res, start, i_role);
+		int			i;
+		bool	   *done;
+		int			remaining;
+		int			prev_remaining = 0;
+		rolename_hash *ht;
 
-		fprintf(OPF, "GRANT %s", fmtId(roleid));
-		fprintf(OPF, " TO %s", fmtId(member));
-		if (*option == 't')
-			fprintf(OPF, " WITH ADMIN OPTION");
+		/* If we hit a null roleid, we're done (nulls sort to the end). */
+		if (PQgetisnull(res, start, i_role))
+		{
+			/* translator: %s represents a numeric role OID */
+			pg_log_warning("found orphaned pg_auth_members entry for role %s",
+						   PQgetvalue(res, start, i_roleid));
+			break;
+		}
+
+		/* All memberships for a single role should be adjacent. */
+		for (end = start; end < total; ++end)
+		{
+			char	   *otherrole;
+
+			otherrole = PQgetvalue(res, end, i_role);
+			if (strcmp(role, otherrole) != 0)
+				break;
+		}
+
+		remaining = end - start;
+		done = pg_malloc0(remaining * sizeof(bool));
+		ht = rolename_create(remaining, NULL);
 
 		/*
-		 * We don't track the grantor very carefully in the backend, so cope
-		 * with the possibility that it has been dropped.
+		 * Make repeated passes over the grants for this role until all have
+		 * been dumped.
 		 */
-		if (!PQgetisnull(res, i, 3))
+		while (remaining > 0)
 		{
-			char	   *grantor = PQgetvalue(res, i, 3);
+			/*
+			 * We should make progress on every iteration, because a notional
+			 * graph whose vertices are grants and whose edges point from
+			 * grantors to members should be connected and acyclic. If we fail
+			 * to make progress, either we or the server have messed up.
+			 */
+			if (remaining == prev_remaining)
+			{
+				pg_log_error("could not find a legal dump ordering for memberships in role \"%s\"",
+							 role);
+				PQfinish(conn);
+				exit_nicely(1);
+			}
+			prev_remaining = remaining;
 
-			fprintf(OPF, " GRANTED BY %s", fmtId(grantor));
+			/* Make one pass over the grants for this role. */
+			for (i = start; i < end; ++i)
+			{
+				char	   *member;
+				char	   *admin_option;
+				char	   *grantorid;
+				char	   *grantor;
+				char	   *set_option = "true";
+				bool		found;
+
+				/* If we already did this grant, don't do it again. */
+				if (done[i - start])
+					continue;
+
+				/* Complain about, then ignore, entries with orphaned OIDs. */
+				if (PQgetisnull(res, i, i_member))
+				{
+					/* translator: %s represents a numeric role OID */
+					pg_log_warning("found orphaned pg_auth_members entry for role %s",
+								   PQgetvalue(res, i, i_memberid));
+					done[i - start] = true;
+					--remaining;
+					continue;
+				}
+				if (PQgetisnull(res, i, i_grantor))
+				{
+					/* translator: %s represents a numeric role OID */
+					pg_log_warning("found orphaned pg_auth_members entry for role %s",
+								   PQgetvalue(res, i, i_grantorid));
+					done[i - start] = true;
+					--remaining;
+					continue;
+				}
+
+				member = PQgetvalue(res, i, i_member);
+				grantor = PQgetvalue(res, i, i_grantor);
+				grantorid = PQgetvalue(res, i, i_grantorid);
+				admin_option = PQgetvalue(res, i, i_admin_option);
+				if (dump_grant_options)
+					set_option = PQgetvalue(res, i, i_set_option);
+
+				/*
+				 * If we're not dumping grantors or if the grantor is the
+				 * bootstrap superuser, it's fine to dump this now. Otherwise,
+				 * it's got to be someone who has already been granted ADMIN
+				 * OPTION.
+				 */
+				if (dump_grantors &&
+					atooid(grantorid) != BOOTSTRAP_SUPERUSERID &&
+					rolename_lookup(ht, grantor) == NULL)
+					continue;
+
+				/* Remember that we did this so that we don't do it again. */
+				done[i - start] = true;
+				--remaining;
+
+				/*
+				 * If ADMIN OPTION is being granted, remember that grants
+				 * listing this member as the grantor can now be dumped.
+				 */
+				if (*admin_option == 't')
+					rolename_insert(ht, member, &found);
+
+				/* Generate the actual GRANT statement. */
+				resetPQExpBuffer(optbuf);
+				fprintf(OPF, "GRANT %s", fmtId(role));
+				fprintf(OPF, " TO %s", fmtId(member));
+				if (*admin_option == 't')
+					appendPQExpBufferStr(optbuf, "ADMIN OPTION");
+				if (dump_grant_options)
+				{
+					char	   *inherit_option;
+
+					if (optbuf->data[0] != '\0')
+						appendPQExpBufferStr(optbuf, ", ");
+					inherit_option = PQgetvalue(res, i, i_inherit_option);
+					appendPQExpBuffer(optbuf, "INHERIT %s",
+									  *inherit_option == 't' ?
+									  "TRUE" : "FALSE");
+				}
+				if (*set_option != 't')
+				{
+					if (optbuf->data[0] != '\0')
+						appendPQExpBufferStr(optbuf, ", ");
+					appendPQExpBuffer(optbuf, "SET FALSE");
+				}
+				if (optbuf->data[0] != '\0')
+					fprintf(OPF, " WITH %s", optbuf->data);
+				if (dump_grantors)
+					fprintf(OPF, " GRANTED BY %s", fmtId(grantor));
+				fprintf(OPF, ";\n");
+			}
 		}
-		fprintf(OPF, ";\n");
+
+		rolename_destroy(ht);
+		pg_free(done);
+		start = end;
 	}
 
 	PQclear(res);
@@ -1231,7 +1483,13 @@ dumpUserConfig(PGconn *conn, const char *username)
 	res = executeQuery(conn, buf->data);
 
 	if (PQntuples(res) > 0)
-		fprintf(OPF, "\n--\n-- User Config \"%s\"\n--\n\n", username);
+	{
+		char	   *sanitized;
+
+		sanitized = sanitize_line(username, true);
+		fprintf(OPF, "\n--\n-- User Config \"%s\"\n--\n\n", sanitized);
+		free(sanitized);
+	}
 
 	for (int i = 0; i < PQntuples(res); i++)
 	{
@@ -1333,6 +1591,7 @@ dumpDatabases(PGconn *conn)
 	for (i = 0; i < PQntuples(res); i++)
 	{
 		char	   *dbname = PQgetvalue(res, i, 0);
+		char	   *sanitized;
 		const char *create_opts;
 		int			ret;
 
@@ -1349,7 +1608,9 @@ dumpDatabases(PGconn *conn)
 
 		pg_log_info("dumping database \"%s\"", dbname);
 
-		fprintf(OPF, "--\n-- Database \"%s\" dump\n--\n\n", dbname);
+		sanitized = sanitize_line(dbname, true);
+		fprintf(OPF, "--\n-- Database \"%s\" dump\n--\n\n", sanitized);
+		free(sanitized);
 
 		/*
 		 * We assume that "template1" and "postgres" already exist in the
@@ -1427,8 +1688,7 @@ runPgDump(const char *dbname, const char *create_opts)
 
 	pg_log_info("running \"%s\"", cmd->data);
 
-	fflush(stdout);
-	fflush(stderr);
+	fflush(NULL);
 
 	ret = system(cmd->data);
 
@@ -1503,12 +1763,9 @@ connectDatabase(const char *dbname, const char *connection_string,
 		char	   *err_msg = NULL;
 		int			i = 0;
 
-		if (keywords)
-			free(keywords);
-		if (values)
-			free(values);
-		if (conn_opts)
-			PQconninfoFree(conn_opts);
+		free(keywords);
+		free(values);
+		PQconninfoFree(conn_opts);
 
 		/*
 		 * Merge the connection info inputs given in form of connection string
@@ -1753,4 +2010,15 @@ dumpTimestamp(const char *msg)
 
 	if (strftime(buf, sizeof(buf), PGDUMP_STRFTIME_FMT, localtime(&now)) != 0)
 		fprintf(OPF, "-- %s %s\n\n", msg, buf);
+}
+
+/*
+ * Helper function for rolename_hash hash table.
+ */
+static uint32
+hash_string_pointer(char *s)
+{
+	unsigned char *ss = (unsigned char *) s;
+
+	return hash_bytes(ss, strlen(s));
 }

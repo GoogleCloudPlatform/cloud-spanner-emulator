@@ -32,6 +32,7 @@
 #include "third_party/spanner_pg/shims/memory_context_manager.h"
 
 #include "googlesql/base/logging.h"
+#include "third_party/spanner_pg/util/integral_types.h"
 #include "absl/status/status.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/optional.h"

@@ -226,7 +226,7 @@ absl::StatusOr<ValuePairVector> ConstValuePairs() {
 
   // uuid <-> uuid
   // Test null uuid
-  pg_uuid_t* pg_uuid;
+  pg_uuid_t pg_uuid;
   GOOGLESQL_ASSIGN_OR_RETURN(Const * pg_null_uuid_const,
                    CheckedPgMakeConst(
                        /*consttype=*/UUIDOID,
@@ -403,8 +403,8 @@ NumericCastingValuePairs() {
                              COERCE_EXPLICIT_CAST));
   pg_expr_to_gsql_expr_debug_string.emplace_back(
       PostgresCastToExpr(float_cast),
-      "FunctionCall(spanner:pg.cast_to_double(PG.NUMERIC) -> "
-      "DOUBLE)\n+-Literal(type=PG.NUMERIC, value=1.1)\n");
+      "FunctionCall(spanner:pg.cast_to_double(PG.NUMERIC) -> DOUBLE)\n"
+      "+-Literal(type=PG.NUMERIC, value=1.1)\n");
 
   // numeric -> int8_t
   // pg: cast(2.2 as int8_t) <-> gsql: pg.cast_to_int64(2.2)
@@ -416,8 +416,8 @@ NumericCastingValuePairs() {
                              COERCE_EXPLICIT_CAST));
   pg_expr_to_gsql_expr_debug_string.emplace_back(
       PostgresCastToExpr(int_cast),
-      "FunctionCall(spanner:pg.cast_to_int64(PG.NUMERIC) -> "
-      "INT64)\n+-Literal(type=PG.NUMERIC, value=2.2)\n");
+      "FunctionCall(spanner:pg.cast_to_int64(PG.NUMERIC) -> INT64)\n"
+      "+-Literal(type=PG.NUMERIC, value=2.2)\n");
 
   // numeric -> text
   // pg: cast(3.3 as text) -> gsql: pg.cast_to_string(3.3)
@@ -429,8 +429,8 @@ NumericCastingValuePairs() {
                                     /*coerceformat=*/COERCE_EXPLICIT_CAST));
   pg_expr_to_gsql_expr_debug_string.emplace_back(
       PostgresCastToExpr(coerce),
-      "FunctionCall(spanner:pg.cast_to_string(PG.NUMERIC) -> "
-      "STRING)\n+-Literal(type=PG.NUMERIC, value=3.3)\n");
+      "FunctionCall(spanner:pg.cast_to_string(PG.NUMERIC) -> STRING)\n"
+      "+-Literal(type=PG.NUMERIC, value=3.3)\n");
 
   // numeric -> text
   // pg: cast(1000000000000.0000000000001 as text) -> gsql:
@@ -444,9 +444,8 @@ NumericCastingValuePairs() {
                                /*coerceformat=*/COERCE_EXPLICIT_CAST));
   pg_expr_to_gsql_expr_debug_string.emplace_back(
       PostgresCastToExpr(coerce),
-      "FunctionCall(spanner:pg.cast_to_string(PG.NUMERIC) -> "
-      "STRING)\n+-Literal(type=PG.NUMERIC, "
-      "value=1000000000000.0000000000001)\n");
+      "FunctionCall(spanner:pg.cast_to_string(PG.NUMERIC) -> STRING)\n"
+      "+-Literal(type=PG.NUMERIC, value=1000000000000.0000000000001)\n");
 
   // float8 -> numeric
   GOOGLESQL_ASSIGN_OR_RETURN(
@@ -460,12 +459,12 @@ NumericCastingValuePairs() {
                              COERCE_EXPLICIT_CAST));
   pg_expr_to_gsql_expr_debug_string.emplace_back(
       PostgresCastToExpr(float_to_numeric_cast),
-      "FunctionCall(spanner:pg.cast_to_numeric(DOUBLE) -> "
-      "PG.NUMERIC)\n+-Literal(type=DOUBLE, value=3.1415926535897931)\n");
+      "FunctionCall(spanner:pg.cast_to_numeric(DOUBLE) -> PG.NUMERIC)\n"
+      "+-Literal(type=DOUBLE, value=3.1415926535897931)\n");
 
   // int8_t -> numeric
   GOOGLESQL_ASSIGN_OR_RETURN(auto int8_const,
-                   internal::makeScalarConst(INT8OID, Int8GetDatum(123456),
+                   internal::makeScalarConst(INT8OID, Int64GetDatum(123456),
                                              /*constisnull=*/false));
   GOOGLESQL_ASSIGN_OR_RETURN(
       auto int_to_numeric_cast,
@@ -474,8 +473,8 @@ NumericCastingValuePairs() {
                              COERCE_EXPLICIT_CAST));
   pg_expr_to_gsql_expr_debug_string.emplace_back(
       PostgresCastToExpr(int_to_numeric_cast),
-      "FunctionCall(spanner:pg.cast_to_numeric(INT64) -> "
-      "PG.NUMERIC)\n+-Literal(type=INT64, value=123456)\n");
+      "FunctionCall(spanner:pg.cast_to_numeric(INT64) -> PG.NUMERIC)\n"
+      "+-Literal(type=INT64, value=123456)\n");
 
   // text -> numeric
   GOOGLESQL_ASSIGN_OR_RETURN(
@@ -488,8 +487,8 @@ NumericCastingValuePairs() {
                                /*coerceformat=*/COERCE_EXPLICIT_CAST));
   pg_expr_to_gsql_expr_debug_string.emplace_back(
       PostgresCastToExpr(coerce),
-      "FunctionCall(spanner:pg.cast_to_numeric(STRING) -> "
-      "PG.NUMERIC)\n+-Literal(type=STRING, value=\"123.456789\")\n");
+      "FunctionCall(spanner:pg.cast_to_numeric(STRING) -> PG.NUMERIC)\n"
+      "+-Literal(type=STRING, value=\"123.456789\")\n");
 
   // numeric -> fixed precision numeric
   // pg: cast(3.3 as numeric(4,2)) -> gsql: pg.cast_to_numeric(3.3, 4, 5)
@@ -706,7 +705,7 @@ void GetHintList(List** list) {
       makeDefElem(pstrdup("hint2_name"), PostgresCastToNode(string_const),
                   /*location=*/-1);
   Const* int8_const;
-  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int8_const, makeScalarConst(INT8OID, Int8GetDatum(42),
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int8_const, makeScalarConst(INT8OID, Int64GetDatum(42),
                                                    /*constisnull=*/false));
   DefElem* hint3 =
       makeDefElem(pstrdup("hint3_name"), PostgresCastToNode(int8_const),

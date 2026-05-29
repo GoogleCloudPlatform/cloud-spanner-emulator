@@ -446,11 +446,17 @@ class QueryablePropertyGraph : public googlesql::PropertyGraph {
       node_tables_[node_table.name()] =
           std::make_unique<QueryableGraphNodeTable>(catalog, type_factory, this,
                                                     &node_table);
+      if (!node_table.alias().empty()) {
+        alias_to_name_map_[node_table.alias()] = node_table.name();
+      }
     }
     for (const auto& edge_table : wrapped_property_graph_->EdgeTables()) {
       edge_tables_[edge_table.name()] =
           std::make_unique<QueryableGraphEdgeTable>(catalog, type_factory, this,
                                                     &edge_table);
+      if (!edge_table.alias().empty()) {
+        alias_to_name_map_[edge_table.alias()] = edge_table.name();
+      }
     }
   }
 
@@ -491,13 +497,19 @@ class QueryablePropertyGraph : public googlesql::PropertyGraph {
   absl::Status FindElementTableByName(
       absl::string_view name,
       const googlesql::GraphElementTable*& element_table) const override {
-    auto node_it = node_tables_.find(std::string(name));
+    std::string resolved_name(name);
+    auto alias_it = alias_to_name_map_.find(std::string(name));
+    if (alias_it != alias_to_name_map_.end()) {
+      resolved_name = alias_it->second;
+    }
+
+    auto node_it = node_tables_.find(resolved_name);
     if (node_it != node_tables_.end()) {
       element_table = node_it->second.get();
       return absl::OkStatus();
     }
 
-    auto edge_it = edge_tables_.find(std::string(name));
+    auto edge_it = edge_tables_.find(resolved_name);
     if (edge_it != edge_tables_.end()) {
       element_table = edge_it->second.get();
       return absl::OkStatus();
@@ -557,6 +569,8 @@ class QueryablePropertyGraph : public googlesql::PropertyGraph {
       node_tables_;
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableGraphEdgeTable>>
       edge_tables_;
+  // For looking up node tables by alias.
+  CaseInsensitiveStringMap<std::string> alias_to_name_map_;
 };
 
 }  // namespace backend

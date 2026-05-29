@@ -3,7 +3,7 @@
  * llvmjit_expr.c
  *	  JIT compile expressions.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -1550,6 +1550,9 @@ llvm_compile_expr(ExprState *state)
 
 					v_fcinfo = l_ptr_const(fcinfo, l_ptr(StructFunctionCallInfoData));
 
+					/* save original arg[0] */
+					v_arg0 = l_funcvalue(b, v_fcinfo, 0);
+
 					/* if either argument is NULL they can't be equal */
 					v_argnull0 = l_funcnull(b, v_fcinfo, 0);
 					v_argnull1 = l_funcnull(b, v_fcinfo, 1);
@@ -1566,7 +1569,6 @@ llvm_compile_expr(ExprState *state)
 
 					/* one (or both) of the arguments are null, return arg[0] */
 					LLVMPositionBuilderAtEnd(b, b_hasnull);
-					v_arg0 = l_funcvalue(b, v_fcinfo, 0);
 					LLVMBuildStore(b, v_argnull0, v_resnullp);
 					LLVMBuildStore(b, v_arg0, v_resvaluep);
 					LLVMBuildBr(b, opblocks[opno + 1]);
@@ -1574,12 +1576,35 @@ llvm_compile_expr(ExprState *state)
 					/* build block to invoke function and check result */
 					LLVMPositionBuilderAtEnd(b, b_nonull);
 
+					/*
+					 * If first argument is of varlena type, it might be an
+					 * expanded datum.  We need to ensure that the value
+					 * passed to the comparison function is a read-only
+					 * pointer.  However, if we end by returning the first
+					 * argument, that will be the original read-write pointer
+					 * if it was read-write.
+					 */
+					if (op->d.func.make_ro)
+					{
+						LLVMValueRef v_params[1];
+						LLVMValueRef v_arg0_ro;
+
+						v_params[0] = v_arg0;
+						v_arg0_ro =
+							l_call(b,
+								   llvm_pg_var_func_type("MakeExpandedObjectReadOnlyInternal"),
+								   llvm_pg_func(mod, "MakeExpandedObjectReadOnlyInternal"),
+								   v_params, lengthof(v_params), "");
+						LLVMBuildStore(b, v_arg0_ro,
+									   l_funcvaluep(b, v_fcinfo, 0));
+					}
+
 					v_retval = BuildV1Call(context, b, mod, fcinfo, &v_fcinfo_isnull);
 
 					/*
-					 * If result not null, and arguments are equal return null
-					 * (same result as if there'd been NULLs, hence reuse
-					 * b_hasnull).
+					 * If result not null and arguments are equal return null,
+					 * else return arg[0] (same result as if there'd been
+					 * NULLs, hence reuse b_hasnull).
 					 */
 					v_argsequal = LLVMBuildAnd(b,
 											   LLVMBuildICmp(b, LLVMIntEQ,
@@ -1906,6 +1931,18 @@ llvm_compile_expr(ExprState *state)
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
+			case EEOP_JSON_CONSTRUCTOR:
+				build_EvalXFunc(b, mod, "ExecEvalJsonConstructor",
+								v_state, op, v_econtext);
+				LLVMBuildBr(b, opblocks[opno + 1]);
+				break;
+
+			case EEOP_IS_JSON:
+				build_EvalXFunc(b, mod, "ExecEvalJsonIsPredicate",
+								v_state, op);
+				LLVMBuildBr(b, opblocks[opno + 1]);
+				break;
+
 			case EEOP_AGGREF:
 				{
 					LLVMValueRef v_aggno;
@@ -2040,7 +2077,7 @@ llvm_compile_expr(ExprState *state)
 					v_nullsp = l_ptr_const(nulls, l_ptr(TypeStorageBool));
 
 					/* create blocks for checking args */
-					b_checknulls = palloc(sizeof(LLVMBasicBlockRef *) * nargs);
+					b_checknulls = palloc(sizeof(LLVMBasicBlockRef) * nargs);
 					for (int argno = 0; argno < nargs; argno++)
 					{
 						b_checknulls[argno] =
@@ -2176,8 +2213,7 @@ llvm_compile_expr(ExprState *state)
 
 					/*
 					 * pergroup = &aggstate->all_pergroups
-					 * [op->d.agg_strict_trans_check.setoff]
-					 * [op->d.agg_init_trans_check.transno];
+					 * [op->d.agg_trans.setoff] [op->d.agg_trans.transno];
 					 */
 					v_allpergroupsp =
 						l_load_struct_gep(b,
@@ -2387,7 +2423,7 @@ llvm_compile_expr(ExprState *state)
 						params[5] = LLVMBuildTrunc(b, v_transnull,
 												   TypeParamBool, "");
 
-						v_fn = llvm_pg_func(mod, "ExecAggTransReparent");
+						v_fn = llvm_pg_func(mod, "ExecAggCopyTransValue");
 						v_newval =
 							l_call(b,
 								   LLVMGetFunctionType(v_fn),
@@ -2413,6 +2449,54 @@ llvm_compile_expr(ExprState *state)
 					l_mcxt_switch(mod, b, v_oldcontext);
 
 					LLVMBuildBr(b, opblocks[opno + 1]);
+					break;
+				}
+
+			case EEOP_AGG_PRESORTED_DISTINCT_SINGLE:
+				{
+					AggState   *aggstate = castNode(AggState, state->parent);
+					AggStatePerTrans pertrans = op->d.agg_presorted_distinctcheck.pertrans;
+					int			jumpdistinct = op->d.agg_presorted_distinctcheck.jumpdistinct;
+
+					LLVMValueRef v_fn = llvm_pg_func(mod, "ExecEvalPreOrderedDistinctSingle");
+					LLVMValueRef v_args[2];
+					LLVMValueRef v_ret;
+
+					v_args[0] = l_ptr_const(aggstate, l_ptr(StructAggState));
+					v_args[1] = l_ptr_const(pertrans, l_ptr(StructAggStatePerTransData));
+
+					v_ret = l_call(b, LLVMGetFunctionType(v_fn), v_fn, v_args, 2, "");
+					v_ret = LLVMBuildZExt(b, v_ret, TypeStorageBool, "");
+
+					LLVMBuildCondBr(b,
+									LLVMBuildICmp(b, LLVMIntEQ, v_ret,
+												  l_sbool_const(1), ""),
+									opblocks[opno + 1],
+									opblocks[jumpdistinct]);
+					break;
+				}
+
+			case EEOP_AGG_PRESORTED_DISTINCT_MULTI:
+				{
+					AggState   *aggstate = castNode(AggState, state->parent);
+					AggStatePerTrans pertrans = op->d.agg_presorted_distinctcheck.pertrans;
+					int			jumpdistinct = op->d.agg_presorted_distinctcheck.jumpdistinct;
+
+					LLVMValueRef v_fn = llvm_pg_func(mod, "ExecEvalPreOrderedDistinctMulti");
+					LLVMValueRef v_args[2];
+					LLVMValueRef v_ret;
+
+					v_args[0] = l_ptr_const(aggstate, l_ptr(StructAggState));
+					v_args[1] = l_ptr_const(pertrans, l_ptr(StructAggStatePerTransData));
+
+					v_ret = l_call(b, LLVMGetFunctionType(v_fn), v_fn, v_args, 2, "");
+					v_ret = LLVMBuildZExt(b, v_ret, TypeStorageBool, "");
+
+					LLVMBuildCondBr(b,
+									LLVMBuildICmp(b, LLVMIntEQ, v_ret,
+												  l_sbool_const(1), ""),
+									opblocks[opno + 1],
+									opblocks[jumpdistinct]);
 					break;
 				}
 

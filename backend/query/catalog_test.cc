@@ -875,6 +875,8 @@ TEST_F(CatalogTest, CatalogGettersWithUDFs) {
                   WHEN x > y THEN 1
                   ELSE -1
               END))",
+      R"(CREATE FUNCTION remote_udf_2(x INT64) RETURNS
+        INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = "test"))",
   });
 
   const googlesql::Function* udf_1;
@@ -892,6 +894,11 @@ TEST_F(CatalogTest, CatalogGettersWithUDFs) {
   ASSERT_NE(t1, nullptr);
   EXPECT_EQ(t1->Name(), "t1");
   EXPECT_EQ(t1->FullName(), "t1");
+
+  const googlesql::Function* remote_udf_2;
+  GOOGLESQL_ASSERT_OK(catalog().FindFunction({"remote_udf_2"}, &remote_udf_2, {}));
+  ASSERT_NE(remote_udf_2, nullptr);
+  EXPECT_EQ(remote_udf_2->Name(), "remote_udf_2");
 };
 
 TEST_F(CatalogTest, GetExtendedTypes) {

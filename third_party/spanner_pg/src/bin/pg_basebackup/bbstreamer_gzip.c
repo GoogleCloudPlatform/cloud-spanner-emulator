@@ -2,7 +2,7 @@
  *
  * bbstreamer_gzip.c
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		  src/bin/pg_basebackup/bbstreamer_gzip.c
@@ -113,7 +113,7 @@ bbstreamer_gzip_writer_new(char *pathname, FILE *file,
 
 	return &streamer->base;
 #else
-	pg_fatal("this build does not support gzip compression");
+	pg_fatal("this build does not support compression with %s", "gzip");
 	return NULL;				/* keep compiler quiet */
 #endif
 }
@@ -150,7 +150,7 @@ bbstreamer_gzip_writer_content(bbstreamer *streamer,
  * calling gzclose.
  *
  * It makes no difference whether we opened the file or the caller did it,
- * because libz provides no way of avoiding a close on the underling file
+ * because libz provides no way of avoiding a close on the underlying file
  * handle. Notice, however, that bbstreamer_gzip_writer_new() uses dup() to
  * work around this issue, so that the behavior from the caller's viewpoint
  * is the same as for bbstreamer_plain_writer.
@@ -246,7 +246,7 @@ bbstreamer_gzip_decompressor_new(bbstreamer *next)
 
 	return &streamer->base;
 #else
-	pg_fatal("this build does not support gzip compression");
+	pg_fatal("this build does not support compression with %s", "gzip");
 	return NULL;				/* keep compiler quiet */
 #endif
 }

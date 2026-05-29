@@ -32,6 +32,7 @@
 #ifndef SHIMS_STUB_MEMORY_RESERVATION_MANAGER_H_
 #define SHIMS_STUB_MEMORY_RESERVATION_MANAGER_H_
 
+#include "third_party/spanner_pg/util/integral_types.h"
 #include "third_party/spanner_pg/interface/memory_reservation_manager.h"
 
 namespace postgres_translator {

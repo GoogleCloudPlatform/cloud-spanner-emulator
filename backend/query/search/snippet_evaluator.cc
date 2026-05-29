@@ -36,10 +36,10 @@
 #include "absl/types/span.h"
 #include "backend/query/search/tokenizer.h"
 #include "common/errors.h"
+#include "googlesql/base/status_macros.h"
 #include "nlohmann/json_fwd.hpp"
 #include "nlohmann/json.hpp"
 #include "re2/re2.h"
-#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {

@@ -3,7 +3,7 @@
  * pgstat_shmem.c
  *	  Storage of stats entries in shared memory
  *
- * Copyright (c) 2001-2022, PostgreSQL Global Development Group
+ * Copyright (c) 2001-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/utils/activity/pgstat_shmem.c
@@ -202,6 +202,10 @@ StatsShmemInit(void)
 		LWLockInitialize(&ctl->checkpointer.lock, LWTRANCHE_PGSTATS_DATA);
 		LWLockInitialize(&ctl->slru.lock, LWTRANCHE_PGSTATS_DATA);
 		LWLockInitialize(&ctl->wal.lock, LWTRANCHE_PGSTATS_DATA);
+
+		for (int i = 0; i < BACKEND_NUM_TYPES; i++)
+			LWLockInitialize(&ctl->io.locks[i],
+							 LWTRANCHE_PGSTATS_DATA);
 	}
 	else
 	{
@@ -258,6 +262,13 @@ pgstat_detach_shmem(void)
  * ------------------------------------------------------------
  */
 
+/*
+ * Initialize entry newly-created.
+ *
+ * Returns NULL in the event of an allocation failure, so as callers can
+ * take cleanup actions as the entry initialized is already inserted in the
+ * shared hashtable.
+ */
 PgStatShared_Common *
 pgstat_init_entry(PgStat_Kind kind,
 				  PgStatShared_HashEntry *shhashent)
@@ -273,9 +284,19 @@ pgstat_init_entry(PgStat_Kind kind,
 	 * further if a longer lived reference is needed.
 	 */
 	pg_atomic_init_u32(&shhashent->refcount, 1);
+
+	/*
+	 * Initialize "generation" to 0, as freshly created.
+	 */
+	pg_atomic_init_u32(&shhashent->generation, 0);
 	shhashent->dropped = false;
 
-	chunk = dsa_allocate0(pgStatLocal.dsa, pgstat_get_kind_info(kind)->shared_size);
+	chunk = dsa_allocate_extended(pgStatLocal.dsa,
+								  pgstat_get_kind_info(kind)->shared_size,
+								  DSA_ALLOC_ZERO | DSA_ALLOC_NO_OOM);
+	if (chunk == InvalidDsaPointer)
+		return NULL;
+
 	shheader = dsa_get_address(pgStatLocal.dsa, chunk);
 	shheader->magic = 0xdeadbeef;
 
@@ -296,6 +317,12 @@ pgstat_reinit_entry(PgStat_Kind kind, PgStatShared_HashEntry *shhashent)
 
 	/* mark as not dropped anymore */
 	pg_atomic_fetch_add_u32(&shhashent->refcount, 1);
+
+	/*
+	 * Increment "generation", to let any backend with local references know
+	 * that what they point to is outdated.
+	 */
+	pg_atomic_fetch_add_u32(&shhashent->generation, 1);
 	shhashent->dropped = false;
 
 	/* reinitialize content */
@@ -336,6 +363,7 @@ pgstat_acquire_entry_ref(PgStat_EntryRef *entry_ref,
 
 	entry_ref->shared_stats = shheader;
 	entry_ref->shared_entry = shhashent;
+	entry_ref->generation = pg_atomic_read_u32(&shhashent->generation);
 }
 
 /*
@@ -417,7 +445,7 @@ pgstat_get_entry_ref(PgStat_Kind kind, Oid dboid, Oid objoid, bool create,
 	 * passing in created_entry only makes sense if we possibly could create
 	 * entry.
 	 */
-	AssertArg(create || created_entry == NULL);
+	Assert(create || created_entry == NULL);
 	pgstat_assert_is_up();
 	Assert(pgStatLocal.shared_hash != NULL);
 	Assert(!pgStatLocal.shmem->is_shutdown);
@@ -466,6 +494,20 @@ pgstat_get_entry_ref(PgStat_Kind kind, Oid dboid, Oid objoid, bool create,
 		if (!shfound)
 		{
 			shheader = pgstat_init_entry(kind, shhashent);
+			if (shheader == NULL)
+			{
+				/*
+				 * Failed the allocation of a new entry, so clean up the
+				 * shared hashtable before giving up.
+				 */
+				dshash_delete_entry(pgStatLocal.shared_hash, shhashent);
+
+				ereport(ERROR,
+						(errcode(ERRCODE_OUT_OF_MEMORY),
+						 errmsg("out of memory"),
+						 errdetail("Failed while allocating entry %d/%u/%u.",
+								   key.kind, key.dboid, key.objoid)));
+			}
 			pgstat_acquire_entry_ref(entry_ref, shhashent, shheader);
 
 			if (created_entry != NULL)
@@ -501,7 +543,8 @@ pgstat_get_entry_ref(PgStat_Kind kind, Oid dboid, Oid objoid, bool create,
 			 * case are replication slot stats, where a new slot can be
 			 * created with the same index just after dropping. But oid
 			 * wraparound can lead to other cases as well. We just reset the
-			 * stats to their plain state.
+			 * stats to their plain state, while incrementing its "generation"
+			 * in the shared entry for any remaining local references.
 			 */
 			shheader = pgstat_reinit_entry(kind, shhashent);
 			pgstat_acquire_entry_ref(entry_ref, shhashent, shheader);
@@ -568,10 +611,27 @@ pgstat_release_entry_ref(PgStat_HashKey key, PgStat_EntryRef *entry_ref,
 			if (!shent)
 				elog(ERROR, "could not find just referenced shared stats entry");
 
-			Assert(pg_atomic_read_u32(&entry_ref->shared_entry->refcount) == 0);
-			Assert(entry_ref->shared_entry == shent);
-
-			pgstat_free_entry(shent, NULL);
+			/*
+			 * This entry may have been reinitialized while trying to release
+			 * it, so double-check that it has not been reused while holding a
+			 * lock on its shared entry.
+			 */
+			if (pg_atomic_read_u32(&entry_ref->shared_entry->generation) ==
+				entry_ref->generation)
+			{
+				/* Same "generation", so we're OK with the removal */
+				Assert(pg_atomic_read_u32(&entry_ref->shared_entry->refcount) == 0);
+				Assert(entry_ref->shared_entry == shent);
+				pgstat_free_entry(shent, NULL);
+			}
+			else
+			{
+				/*
+				 * Shared stats entry has been reinitialized, so do not drop
+				 * its shared entry, only release its lock.
+				 */
+				dshash_release_lock(pgStatLocal.shared_hash, shent);
+			}
 		}
 	}
 
@@ -668,7 +728,8 @@ pgstat_gc_entry_refs(void)
 	Assert(curage != 0);
 
 	/*
-	 * Some entries have been dropped. Invalidate cache pointer to them.
+	 * Some entries have been dropped or reinitialized.  Invalidate cache
+	 * pointer to them.
 	 */
 	pgstat_entry_ref_hash_start_iterate(pgStatEntryRefHash, &i);
 	while ((ent = pgstat_entry_ref_hash_iterate(pgStatEntryRefHash, &i)) != NULL)
@@ -678,7 +739,13 @@ pgstat_gc_entry_refs(void)
 		Assert(!entry_ref->shared_stats ||
 			   entry_ref->shared_stats->magic == 0xdeadbeef);
 
-		if (!entry_ref->shared_entry->dropped)
+		/*
+		 * "generation" checks for the case of entries being reinitialized,
+		 * and "dropped" for the case where these are..  dropped.
+		 */
+		if (!entry_ref->shared_entry->dropped &&
+			pg_atomic_read_u32(&entry_ref->shared_entry->generation) ==
+			entry_ref->generation)
 			continue;
 
 		/* cannot gc shared ref that has pending data */
@@ -796,10 +863,11 @@ pgstat_drop_entry_internal(PgStatShared_HashEntry *shent,
 	 */
 	if (shent->dropped)
 		elog(ERROR,
-			 "trying to drop stats entry already dropped: kind=%s dboid=%u objoid=%u refcount=%u",
+			 "trying to drop stats entry already dropped: kind=%s dboid=%u objoid=%u refcount=%u generation=%u",
 			 pgstat_get_kind_info(shent->key.kind)->name,
 			 shent->key.dboid, shent->key.objoid,
-			 pg_atomic_read_u32(&shent->refcount));
+			 pg_atomic_read_u32(&shent->refcount),
+			 pg_atomic_read_u32(&shent->generation));
 	shent->dropped = true;
 
 	/* release refcount marking entry as not dropped */
@@ -898,7 +966,7 @@ pgstat_drop_entry(PgStat_Kind kind, Oid dboid, Oid objoid)
 	if (pgStatEntryRefHash)
 	{
 		PgStat_EntryRefHashEntry *lohashent =
-		pgstat_entry_ref_hash_lookup(pgStatEntryRefHash, key);
+			pgstat_entry_ref_hash_lookup(pgStatEntryRefHash, key);
 
 		if (lohashent)
 			pgstat_release_entry_ref(lohashent->key, lohashent->entry_ref,

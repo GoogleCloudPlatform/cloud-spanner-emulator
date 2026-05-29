@@ -3,7 +3,7 @@
  * be-secure-gssapi.c
  *  GSSAPI encryption support
  *
- * Portions Copyright (c) 2018-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2018-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *  src/backend/libpq/be-secure-gssapi.c
@@ -45,11 +45,18 @@
  * don't want the other side to send arbitrarily huge packets as we
  * would have to allocate memory for them to then pass them to GSSAPI.
  *
- * Therefore, these two #define's are effectively part of the protocol
+ * Therefore, this #define is effectively part of the protocol
  * spec and can't ever be changed.
  */
-#define PQ_GSS_SEND_BUFFER_SIZE 16384
-#define PQ_GSS_RECV_BUFFER_SIZE 16384
+#define PQ_GSS_MAX_PACKET_SIZE 16384	/* includes uint32 header word */
+
+/*
+ * However, during the authentication exchange we must cope with whatever
+ * message size the GSSAPI library wants to send (because our protocol
+ * doesn't support splitting those messages).  Depending on configuration
+ * those messages might be as much as 64kB.
+ */
+#define PQ_GSS_AUTH_BUFFER_SIZE 65536	/* includes uint32 header word */
 
 /*
  * Since we manage at most one GSS-encrypted connection per backend,
@@ -113,9 +120,9 @@ be_gssapi_write(Port *port, void *ptr, size_t len)
 	 * again, so if it offers a len less than that, something is wrong.
 	 *
 	 * Note: it may seem attractive to report partial write completion once
-	 * we've successfully sent any encrypted packets.  However, that can cause
-	 * problems for callers; notably, pqPutMsgEnd's heuristic to send only
-	 * full 8K blocks interacts badly with such a hack.  We won't save much,
+	 * we've successfully sent any encrypted packets.  However, doing that
+	 * expands the state space of this processing and has been responsible for
+	 * bugs in the past (cf. commit d053a879b).  We won't save much,
 	 * typically, by letting callers discard data early, so don't risk it.
 	 */
 	if (len < PqGSSSendConsumed)
@@ -209,12 +216,12 @@ be_gssapi_write(Port *port, void *ptr, size_t len)
 			errno = ECONNRESET;
 			return -1;
 		}
-		if (output.length > PQ_GSS_SEND_BUFFER_SIZE - sizeof(uint32))
+		if (output.length > PQ_GSS_MAX_PACKET_SIZE - sizeof(uint32))
 		{
 			ereport(COMMERROR,
 					(errmsg("server tried to send oversize GSSAPI packet (%zu > %zu)",
 							(size_t) output.length,
-							PQ_GSS_SEND_BUFFER_SIZE - sizeof(uint32))));
+							PQ_GSS_MAX_PACKET_SIZE - sizeof(uint32))));
 			errno = ECONNRESET;
 			return -1;
 		}
@@ -345,12 +352,12 @@ be_gssapi_read(Port *port, void *ptr, size_t len)
 		/* Decode the packet length and check for overlength packet */
 		input.length = pg_ntoh32(*(uint32 *) PqGSSRecvBuffer);
 
-		if (input.length > PQ_GSS_RECV_BUFFER_SIZE - sizeof(uint32))
+		if (input.length > PQ_GSS_MAX_PACKET_SIZE - sizeof(uint32))
 		{
 			ereport(COMMERROR,
 					(errmsg("oversize GSSAPI packet sent by the client (%zu > %zu)",
 							(size_t) input.length,
-							PQ_GSS_RECV_BUFFER_SIZE - sizeof(uint32))));
+							PQ_GSS_MAX_PACKET_SIZE - sizeof(uint32))));
 			errno = ECONNRESET;
 			return -1;
 		}
@@ -497,6 +504,7 @@ secure_open_gssapi(Port *port)
 	bool		complete_next = false;
 	OM_uint32	major,
 				minor;
+	gss_cred_id_t delegated_creds;
 
 	/*
 	 * Allocate subsidiary Port data for GSSAPI operations.
@@ -504,16 +512,22 @@ secure_open_gssapi(Port *port)
 	port->gss = (pg_gssinfo *)
 		MemoryContextAllocZero(TopMemoryContext, sizeof(pg_gssinfo));
 
+	delegated_creds = GSS_C_NO_CREDENTIAL;
+	port->gss->delegated_creds = false;
+
 	/*
 	 * Allocate buffers and initialize state variables.  By malloc'ing the
 	 * buffers at this point, we avoid wasting static data space in processes
 	 * that will never use them, and we ensure that the buffers are
 	 * sufficiently aligned for the length-word accesses that we do in some
 	 * places in this file.
+	 *
+	 * We'll use PQ_GSS_AUTH_BUFFER_SIZE-sized buffers until transport
+	 * negotiation is complete, then switch to PQ_GSS_MAX_PACKET_SIZE.
 	 */
-	PqGSSSendBuffer = malloc(PQ_GSS_SEND_BUFFER_SIZE);
-	PqGSSRecvBuffer = malloc(PQ_GSS_RECV_BUFFER_SIZE);
-	PqGSSResultBuffer = malloc(PQ_GSS_RECV_BUFFER_SIZE);
+	PqGSSSendBuffer = malloc(PQ_GSS_AUTH_BUFFER_SIZE);
+	PqGSSRecvBuffer = malloc(PQ_GSS_AUTH_BUFFER_SIZE);
+	PqGSSResultBuffer = malloc(PQ_GSS_AUTH_BUFFER_SIZE);
 	if (!PqGSSSendBuffer || !PqGSSRecvBuffer || !PqGSSResultBuffer)
 		ereport(FATAL,
 				(errcode(ERRCODE_OUT_OF_MEMORY),
@@ -522,8 +536,9 @@ secure_open_gssapi(Port *port)
 	PqGSSRecvLength = PqGSSResultLength = PqGSSResultNext = 0;
 
 	/*
-	 * Use the configured keytab, if there is one.  Unfortunately, Heimdal
-	 * doesn't support the cred store extensions, so use the env var.
+	 * Use the configured keytab, if there is one.  As we now require MIT
+	 * Kerberos, we might consider using the credential store extensions in
+	 * the future instead of the environment variable.
 	 */
 	if (pg_krb_server_keyfile != NULL && pg_krb_server_keyfile[0] != '\0')
 	{
@@ -560,16 +575,16 @@ secure_open_gssapi(Port *port)
 
 		/*
 		 * During initialization, packets are always fully consumed and
-		 * shouldn't ever be over PQ_GSS_RECV_BUFFER_SIZE in length.
+		 * shouldn't ever be over PQ_GSS_AUTH_BUFFER_SIZE in total length.
 		 *
 		 * Verify on our side that the client doesn't do something funny.
 		 */
-		if (input.length > PQ_GSS_RECV_BUFFER_SIZE)
+		if (input.length > PQ_GSS_AUTH_BUFFER_SIZE - sizeof(uint32))
 		{
 			ereport(COMMERROR,
-					(errmsg("oversize GSSAPI packet sent by the client (%zu > %d)",
+					(errmsg("oversize GSSAPI packet sent by the client (%zu > %zu)",
 							(size_t) input.length,
-							PQ_GSS_RECV_BUFFER_SIZE)));
+							PQ_GSS_AUTH_BUFFER_SIZE - sizeof(uint32))));
 			return -1;
 		}
 
@@ -588,7 +603,8 @@ secure_open_gssapi(Port *port)
 									   GSS_C_NO_CREDENTIAL, &input,
 									   GSS_C_NO_CHANNEL_BINDINGS,
 									   &port->gss->name, NULL, &output, NULL,
-									   NULL, NULL);
+									   NULL, pg_gss_accept_delegation ? &delegated_creds : NULL);
+
 		if (GSS_ERROR(major))
 		{
 			pg_GSS_error(_("could not accept GSSAPI security context"),
@@ -605,6 +621,12 @@ secure_open_gssapi(Port *port)
 			complete_next = true;
 		}
 
+		if (delegated_creds != GSS_C_NO_CREDENTIAL)
+		{
+			pg_store_delegated_credential(delegated_creds);
+			port->gss->delegated_creds = true;
+		}
+
 		/* Done handling the incoming packet, reset our buffer */
 		PqGSSRecvLength = 0;
 
@@ -616,12 +638,12 @@ secure_open_gssapi(Port *port)
 		{
 			uint32		netlen = pg_hton32(output.length);
 
-			if (output.length > PQ_GSS_SEND_BUFFER_SIZE - sizeof(uint32))
+			if (output.length > PQ_GSS_AUTH_BUFFER_SIZE - sizeof(uint32))
 			{
 				ereport(COMMERROR,
 						(errmsg("server tried to send oversize GSSAPI packet (%zu > %zu)",
 								(size_t) output.length,
-								PQ_GSS_SEND_BUFFER_SIZE - sizeof(uint32))));
+								PQ_GSS_AUTH_BUFFER_SIZE - sizeof(uint32))));
 				gss_release_buffer(&minor, &output);
 				return -1;
 			}
@@ -677,11 +699,28 @@ secure_open_gssapi(Port *port)
 	}
 
 	/*
+	 * Release the large authentication buffers and allocate the ones we want
+	 * for normal operation.
+	 */
+	free(PqGSSSendBuffer);
+	free(PqGSSRecvBuffer);
+	free(PqGSSResultBuffer);
+	PqGSSSendBuffer = malloc(PQ_GSS_MAX_PACKET_SIZE);
+	PqGSSRecvBuffer = malloc(PQ_GSS_MAX_PACKET_SIZE);
+	PqGSSResultBuffer = malloc(PQ_GSS_MAX_PACKET_SIZE);
+	if (!PqGSSSendBuffer || !PqGSSRecvBuffer || !PqGSSResultBuffer)
+		ereport(FATAL,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				 errmsg("out of memory")));
+	PqGSSSendLength = PqGSSSendNext = PqGSSSendConsumed = 0;
+	PqGSSRecvLength = PqGSSResultLength = PqGSSResultNext = 0;
+
+	/*
 	 * Determine the max packet size which will fit in our buffer, after
 	 * accounting for the length.  be_gssapi_write will need this.
 	 */
 	major = gss_wrap_size_limit(&minor, port->gss->ctx, 1, GSS_C_QOP_DEFAULT,
-								PQ_GSS_SEND_BUFFER_SIZE - sizeof(uint32),
+								PQ_GSS_MAX_PACKET_SIZE - sizeof(uint32),
 								&PqGSSMaxPktSize);
 
 	if (GSS_ERROR(major))
@@ -730,4 +769,17 @@ be_gssapi_get_princ(Port *port)
 		return NULL;
 
 	return port->gss->princ;
+}
+
+/*
+ * Return if GSSAPI delegated credentials were included on this
+ * connection.
+ */
+bool
+be_gssapi_get_delegation(Port *port)
+{
+	if (!port || !port->gss)
+		return false;
+
+	return port->gss->delegated_creds;
 }

@@ -49,7 +49,7 @@ TEST(SequenceTest, GetSequenceValuesFromMultipleThreads) {
     threads.emplace_back([&sequence_values, &mu, &sequence]() {
       GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value value,
                            sequence->GetNextSequenceValue());
-      absl::MutexLock lock(&mu);
+      absl::MutexLock lock(mu);
       ASSERT_FALSE(sequence_values.contains(value.int64_value()));
       sequence_values.insert(value.int64_value());
     });

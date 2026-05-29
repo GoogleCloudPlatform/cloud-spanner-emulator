@@ -137,12 +137,12 @@ TEST_F(TypeTest, PgInt8Mapping) {
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Const * pg_const,
       postgres_translator::internal::makeScalarConst(
-          INT8OID, Int8GetDatum(3141592653589793), /*constisnull=*/false));
+          INT8OID, Int64GetDatum(3141592653589793), /*constisnull=*/false));
   EXPECT_THAT(pg_int8_mapping->MakeGsqlValue(pg_const),
               IsOkAndHolds(googlesql::Value::Int64(3141592653589793)));
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_const,
                        postgres_translator::internal::makeScalarConst(
-                           INT8OID, Int8GetDatum(0), /*constisnull=*/true));
+                           INT8OID, Int64GetDatum(0), /*constisnull=*/true));
   EXPECT_THAT(pg_int8_mapping->MakeGsqlValue(pg_const),
               IsOkAndHolds(googlesql::Value::NullInt64()));
 
@@ -943,8 +943,8 @@ TEST_F(TypeTest, PgDateArrayMapping) {
 // logic comes from element type classes, so we'll just use INT8 and test the
 // array-generic logic.
 TEST_F(TypeTest, IntArrayConstantConversions) {
-  std::vector<Datum> array_elements{Int8GetDatum(1), Int8GetDatum(2),
-                                    Int8GetDatum(3)};
+  std::vector<Datum> array_elements{Int64GetDatum(1), Int64GetDatum(2),
+                                    Int64GetDatum(3)};
   Datum array_val = MakePgArray(INT8OID, std::move(array_elements));
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(const Const* pg_const,
                        CheckedPgMakeConst(
@@ -962,7 +962,7 @@ TEST_F(TypeTest, IntArrayConstantConversions) {
                            /*consttypmod=*/-1,
                            /*constcollid=*/InvalidOid,
                            /*constlen=*/-1,  // Pass-by-reference
-                           /*constvalue=*/PointerGetDatum(empty_array_val),
+                           /*constvalue=*/empty_array_val,
                            /*constisnull=*/false,
                            /*constbyval=*/false));
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(const Const* null_pg_const,
@@ -1030,7 +1030,7 @@ TEST_F(TypeTest, IntArrayValueConversions) {
     EXPECT_EQ(isnull, int8_array_value.element(i).is_null())
         << "at index " << i;
     if (!int8_array_value.element(i).is_null()) {
-      EXPECT_EQ(DatumGetInt32(element),
+      EXPECT_EQ(DatumGetInt64(element),
                 int8_array_value.element(i).int64_value())
           << "at index " << i;
     }

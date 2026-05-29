@@ -34,10 +34,10 @@
 #include "google/cloud/spanner/database.h"
 #include "frontend/converters/pg_change_streams.h"
 #include "tests/common/chunking.h"
-#include "grpcpp/client_context.h"
-#include "google/protobuf/json/json.h"
 #include "googlesql/base/ret_check.h"
 #include "googlesql/base/status_macros.h"
+#include "grpcpp/client_context.h"
+#include "google/protobuf/json/json.h"
 namespace google {
 namespace spanner {
 namespace emulator {

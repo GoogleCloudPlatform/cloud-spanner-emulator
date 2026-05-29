@@ -25,16 +25,22 @@
 #include "googlesql/public/function.h"
 #include "googlesql/public/functions/convert_string.h"
 #include "googlesql/public/functions/date_time_util.h"
+#include "googlesql/public/functions/json.h"
 #include "googlesql/public/functions/json_format.h"
+#include "googlesql/public/interval_value.h"
 #include "googlesql/public/json_value.h"
+#include "googlesql/public/numeric_value.h"
+#include "googlesql/public/type.pb.h"
 #include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/types/timestamp_util.h"
 #include "googlesql/public/types/type.h"
+#include "googlesql/public/uuid_value.h"
 #include "googlesql/public/value.h"
 #include "absl/base/const_init.h"
 #include "googlesql/base/no_destructor.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/flags/flag.h"
+#include "absl/numeric/int128.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
@@ -49,7 +55,10 @@
 #include "googlesql/base/ret_check.h"
 #include "googlesql/base/status_macros.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
+#include "google/protobuf/descriptor.h"
 #include "farmhash.h"
 
 ABSL_FLAG(std::string, remote_functions_host_port, "",
@@ -69,7 +78,7 @@ absl::StatusOr<httplib::Client*> GetHttpClient(absl::string_view host_port) {
       shared_clients;
 
   static absl::Mutex mutex(absl::kConstInit);
-  absl::MutexLock lock(&mutex);
+  absl::MutexLock lock(mutex);
 
   if (auto client = shared_clients->find(host_port);
       client != shared_clients->end()) {
@@ -217,37 +226,76 @@ absl::StatusOr<googlesql::Value> RemoteUdfProtocol::ToValue(
       return googlesql::Value::Float(fingerprint);
     case googlesql::TYPE_DOUBLE:
       return googlesql::Value::Double(fingerprint);
+    case googlesql::TYPE_STRING:
+      return googlesql::Value::String(absl::StrCat(fingerprint));
+    case googlesql::TYPE_BYTES:
+      return googlesql::Value::Bytes(absl::StrCat(fingerprint));
+    case googlesql::TYPE_PROTO:
+      return googlesql::Value::Proto(type->AsProto(), absl::Cord());
     case googlesql::TYPE_DATE:
       return googlesql::Value::Date(
           googlesql::types::kDateMin +
           (fingerprint %
            (googlesql::types::kDateMax - googlesql::types::kDateMin)));
+    case googlesql::TYPE_ENUM: {
+      const google::protobuf::EnumDescriptor* enum_descriptor =
+          type->AsEnum()->enum_descriptor();
+      return googlesql::Value::Enum(
+          type->AsEnum(),
+          enum_descriptor->value(fingerprint % enum_descriptor->value_count())
+              ->number());
+    }
     case googlesql::TYPE_TIMESTAMP:
       return googlesql::Value::Timestamp(absl::FromUnixMicros(
           googlesql::types::kTimestampMin +
           (fingerprint % (googlesql::types::kTimestampMax -
                           googlesql::types::kTimestampMin))));
-    case googlesql::TYPE_STRING:
-      return googlesql::Value::String(absl::StrCat(fingerprint));
-    case googlesql::TYPE_BYTES:
-      return googlesql::Value::Bytes(absl::StrCat(fingerprint));
+    case googlesql::TYPE_NUMERIC:
+      return googlesql::values::Numeric(static_cast<int64_t>(fingerprint));
     case googlesql::TYPE_JSON: {
       googlesql::JSONValue json_value;
       json_value.GetRef().SetUInt64(fingerprint);
       return googlesql::Value::Json(std::move(json_value));
     }
     case googlesql::TYPE_EXTENDED: {
-      if (static_cast<const SpannerExtendedType*>(type)->code() ==
-          TypeAnnotationCode::PG_JSONB) {
-        return postgres_translator::spangres::datatypes::CreatePgJsonbValue(
-            absl::StrCat(fingerprint));
+      switch (static_cast<const SpannerExtendedType*>(type)->code()) {
+        case TypeAnnotationCode::PG_JSONB:
+          return postgres_translator::spangres::datatypes::CreatePgJsonbValue(
+              absl::StrCat(fingerprint));
+        case TypeAnnotationCode::PG_NUMERIC:
+          return postgres_translator::spangres::datatypes::CreatePgNumericValue(
+              absl::StrCat(fingerprint));
+        case TypeAnnotationCode::PG_OID:
+          return postgres_translator::spangres::datatypes::CreatePgOidValue(
+              static_cast<uint32_t>(fingerprint));
+        default:
+          break;
       }
       break;
+    }
+    case googlesql::TYPE_INTERVAL: {
+      GOOGLESQL_ASSIGN_OR_RETURN(
+          googlesql::IntervalValue interval_value,
+          googlesql::IntervalValue::FromMicros(
+              fingerprint % (googlesql::IntervalValue::kMaxMicros -
+                             googlesql::IntervalValue::kMinMicros)));
+      return googlesql::Value::Interval(std::move(interval_value));
+    }
+    case googlesql::TYPE_UUID: {
+      return googlesql::Value::Uuid(googlesql::UuidValue::FromPackedInt(
+          (__int128)fingerprint << 64 | fingerprint));
     }
     case googlesql::TYPE_ARRAY: {
       GOOGLESQL_ASSIGN_OR_RETURN(googlesql::Value element_value,
                        ToValue(fingerprint, type->AsArray()->element_type()));
       return googlesql::Value::MakeArray(type->AsArray(), {element_value});
+    }
+    case googlesql::TYPE_MAP: {
+      GOOGLESQL_ASSIGN_OR_RETURN(googlesql::Value key_value,
+                       ToValue(fingerprint, type->AsMap()->key_type()));
+      GOOGLESQL_ASSIGN_OR_RETURN(googlesql::Value value,
+                       ToValue(fingerprint, type->AsMap()->value_type()));
+      return googlesql::Value::MakeMap(type->AsMap(), {{key_value, value}});
     }
     case googlesql::TYPE_STRUCT: {
       std::vector<googlesql::Value> field_values;
@@ -268,6 +316,33 @@ absl::StatusOr<googlesql::Value> RemoteUdfProtocol::ToValue(
                                   /*use_external_float32=*/true)));
 }
 
+namespace {
+template <typename T>
+absl::StatusOr<T> ToIntegerValue(googlesql::JSONValueConstRef json) {
+  if (json.IsString()) {
+    T result;
+    absl::Status error;
+    if (!googlesql::functions::StringToNumeric<T>(json.GetString(), &result,
+                                                  &error)) {
+      return error;
+    }
+    return result;
+  }
+
+  if constexpr (std::is_same_v<T, int32_t>) {
+    return googlesql::functions::ConvertJsonToInt32(json);
+  } else if constexpr (std::is_same_v<T, int64_t>) {
+    return googlesql::functions::ConvertJsonToInt64(json);
+  } else if constexpr (std::is_same_v<T, uint32_t>) {
+    return googlesql::functions::ConvertJsonToUint32(json);
+  } else if constexpr (std::is_same_v<T, uint64_t>) {
+    return googlesql::functions::ConvertJsonToUint64(json);
+  } else {
+    static_assert(false, "Unsupported integer type");
+  }
+}
+}  // namespace
+
 absl::StatusOr<googlesql::Value> RemoteUdfProtocol::ToValue(
     googlesql::JSONValueConstRef json, const googlesql::Type* type) {
   if (json.IsNull()) {
@@ -275,66 +350,22 @@ absl::StatusOr<googlesql::Value> RemoteUdfProtocol::ToValue(
   }
 
   switch (type->kind()) {
-    case googlesql::TYPE_INT32:
-      if (json.IsInt64()) {
-        return googlesql::Value::Int32(json.GetInt64());
-      } else if (json.IsDouble()) {
-        return googlesql::Value::Int32(json.GetDouble());
-      } else if (json.IsString()) {
-        int32_t result;
-        absl::Status error;
-        if (!googlesql::functions::StringToNumeric<int32_t>(json.GetString(),
-                                                            &result, &error)) {
-          return error;
-        }
-        return googlesql::Value::Int32(result);
-      }
-      break;
-    case googlesql::TYPE_INT64:
-      if (json.IsInt64()) {
-        return googlesql::Value::Int64(json.GetInt64());
-      } else if (json.IsDouble()) {
-        return googlesql::Value::Int64(json.GetDouble());
-      } else if (json.IsString()) {
-        int64_t result;
-        absl::Status error;
-        if (!googlesql::functions::StringToNumeric<int64_t>(json.GetString(),
-                                                            &result, &error)) {
-          return error;
-        }
-        return googlesql::Value::Int64(result);
-      }
-      break;
-    case googlesql::TYPE_UINT32:
-      if (json.IsUInt64()) {
-        return googlesql::Value::Uint32(json.GetUInt64());
-      } else if (json.IsDouble()) {
-        return googlesql::Value::Uint32(json.GetDouble());
-      } else if (json.IsString()) {
-        uint32_t result;
-        absl::Status error;
-        if (!googlesql::functions::StringToNumeric<uint32_t>(json.GetString(),
-                                                             &result, &error)) {
-          return error;
-        }
-        return googlesql::Value::Uint32(result);
-      }
-      break;
-    case googlesql::TYPE_UINT64:
-      if (json.IsUInt64()) {
-        return googlesql::Value::Uint64(json.GetUInt64());
-      } else if (json.IsDouble()) {
-        return googlesql::Value::Uint64(json.GetDouble());
-      } else if (json.IsString()) {
-        uint64_t result;
-        absl::Status error;
-        if (!googlesql::functions::StringToNumeric<uint64_t>(json.GetString(),
-                                                             &result, &error)) {
-          return error;
-        }
-        return googlesql::Value::Uint64(result);
-      }
-      break;
+    case googlesql::TYPE_INT32: {
+      GOOGLESQL_ASSIGN_OR_RETURN(int32_t result, ToIntegerValue<int32_t>(json));
+      return googlesql::Value::Int32(result);
+    }
+    case googlesql::TYPE_INT64: {
+      GOOGLESQL_ASSIGN_OR_RETURN(int64_t result, ToIntegerValue<int64_t>(json));
+      return googlesql::Value::Int64(result);
+    }
+    case googlesql::TYPE_UINT32: {
+      GOOGLESQL_ASSIGN_OR_RETURN(uint32_t result, ToIntegerValue<uint32_t>(json));
+      return googlesql::Value::Uint32(result);
+    }
+    case googlesql::TYPE_UINT64: {
+      GOOGLESQL_ASSIGN_OR_RETURN(uint64_t result, ToIntegerValue<uint64_t>(json));
+      return googlesql::Value::Uint64(result);
+    }
     case googlesql::TYPE_BOOL:
       if (json.IsBoolean()) {
         return googlesql::Value::Bool(json.GetBoolean());
@@ -348,25 +379,6 @@ absl::StatusOr<googlesql::Value> RemoteUdfProtocol::ToValue(
     case googlesql::TYPE_DOUBLE:
       if (json.IsDouble()) {
         return googlesql::Value::Double(json.GetDouble());
-      }
-      break;
-
-    case googlesql::TYPE_DATE:
-      if (json.IsString()) {
-        int32_t date;
-        GOOGLESQL_RETURN_IF_ERROR(
-            googlesql::functions::ConvertStringToDate(json.GetString(), &date));
-        return googlesql::Value::Date(date);
-      }
-      break;
-    case googlesql::TYPE_TIMESTAMP:
-      if (json.IsString()) {
-        absl::Time time;
-        GOOGLESQL_RETURN_IF_ERROR(googlesql::functions::ConvertStringToTimestamp(
-            json.GetString(), absl::UTCTimeZone(),
-            googlesql::functions::TimestampScale::kMicroseconds,
-            /*allow_tz_in_str=*/true, &time));
-        return googlesql::Value::Timestamp(time);
       }
       break;
     case googlesql::TYPE_STRING:
@@ -385,14 +397,85 @@ absl::StatusOr<googlesql::Value> RemoteUdfProtocol::ToValue(
         return googlesql::Value::Bytes(decoded_bytes);
       }
       break;
+    case googlesql::TYPE_PROTO:
+      if (json.IsString()) {
+        std::string decoded_bytes;
+        if (!absl::Base64Unescape(json.GetString(), &decoded_bytes)) {
+          return absl::InvalidArgumentError(
+              absl::StrCat("Failed to decode bytes: ", json.GetString()));
+        }
+        return googlesql::Value::Proto(type->AsProto(),
+                                       absl::Cord(std::move(decoded_bytes)));
+      }
+      break;
+    case googlesql::TYPE_DATE:
+      if (json.IsString()) {
+        int32_t date;
+        GOOGLESQL_RETURN_IF_ERROR(
+            googlesql::functions::ConvertStringToDate(json.GetString(), &date));
+        return googlesql::Value::Date(date);
+      }
+      break;
+    case googlesql::TYPE_ENUM: {
+      GOOGLESQL_ASSIGN_OR_RETURN(int64_t result, ToIntegerValue<int64_t>(json));
+      return googlesql::Value::Enum(type->AsEnum(), result);
+    }
+    case googlesql::TYPE_TIMESTAMP:
+      if (json.IsString()) {
+        absl::Time time;
+        GOOGLESQL_RETURN_IF_ERROR(googlesql::functions::ConvertStringToTimestamp(
+            json.GetString(), absl::UTCTimeZone(),
+            googlesql::functions::TimestampScale::kMicroseconds,
+            /*allow_tz_in_str=*/true, &time));
+        return googlesql::Value::Timestamp(time);
+      }
+      break;
+    case googlesql::TYPE_NUMERIC:
+      if (json.IsString()) {
+        GOOGLESQL_ASSIGN_OR_RETURN(
+            googlesql::NumericValue numeric_value,
+            googlesql::NumericValue::FromStringStrict(json.GetString()));
+        return googlesql::values::Numeric(numeric_value);
+      }
+      break;
     case googlesql::TYPE_JSON:
       return googlesql::Value::Json(googlesql::JSONValue::CopyFrom(json));
 
     case googlesql::TYPE_EXTENDED: {
-      if (static_cast<const SpannerExtendedType*>(type)->code() ==
-          TypeAnnotationCode::PG_JSONB) {
-        return postgres_translator::spangres::datatypes::CreatePgJsonbValue(
-            json.ToString());
+      switch (static_cast<const SpannerExtendedType*>(type)->code()) {
+        case TypeAnnotationCode::PG_JSONB:
+          return postgres_translator::spangres::datatypes::CreatePgJsonbValue(
+              json.ToString());
+        case TypeAnnotationCode::PG_NUMERIC:
+          if (json.IsString()) {
+            return postgres_translator::spangres::datatypes::
+                CreatePgNumericValue(json.GetString());
+          }
+          break;
+        case TypeAnnotationCode::PG_OID: {
+          GOOGLESQL_ASSIGN_OR_RETURN(uint32_t result, ToIntegerValue<uint32_t>(json));
+          return postgres_translator::spangres::datatypes::CreatePgOidValue(
+              result);
+        }
+        default:
+          break;
+      }
+      break;
+    }
+    case googlesql::TYPE_INTERVAL: {
+      if (json.IsString()) {
+        GOOGLESQL_ASSIGN_OR_RETURN(googlesql::IntervalValue interval_value,
+                         googlesql::IntervalValue::ParseFromISO8601(
+                             json.GetString(), /*allow_nanos=*/true));
+        return googlesql::Value::Interval(std::move(interval_value));
+      }
+      break;
+    }
+    case googlesql::TYPE_UUID: {
+      if (json.IsString()) {
+        GOOGLESQL_ASSIGN_OR_RETURN(googlesql::UuidValue uuid_value,
+                         googlesql::UuidValue::FromString(json.GetString()));
+        return googlesql::Value::Uuid(std::move(uuid_value));
       }
       break;
     }
@@ -407,6 +490,32 @@ absl::StatusOr<googlesql::Value> RemoteUdfProtocol::ToValue(
         }
         return googlesql::Value::MakeArray(type->AsArray(),
                                            std::move(element_values));
+      }
+      break;
+    }
+    case googlesql::TYPE_MAP: {
+      if (json.IsArray()) {
+        std::vector<std::pair<const googlesql::Value, const googlesql::Value>>
+            entries;
+        for (uint64_t i = 0; i < json.GetArraySize(); ++i) {
+          googlesql::JSONValueConstRef entry = json.GetArrayElement(i);
+          if (!entry.IsObject() || !entry.HasMember("key") ||
+              !entry.HasMember("value") || entry.GetMembers().size() != 2) {
+            return absl::InvalidArgumentError(
+                absl::StrCat("Invalid map entry: ", entry.ToString(),
+                             ". Expected an array of 2-element objects with "
+                             "'key' and 'value' members."));
+          };
+
+          GOOGLESQL_ASSIGN_OR_RETURN(
+              googlesql::Value key_value,
+              ToValue(entry.GetMember("key"), type->AsMap()->key_type()));
+          GOOGLESQL_ASSIGN_OR_RETURN(
+              googlesql::Value value,
+              ToValue(entry.GetMember("value"), type->AsMap()->value_type()));
+          entries.push_back({key_value, value});
+        }
+        return googlesql::Value::MakeMap(type, entries);
       }
       break;
     }
@@ -439,39 +548,54 @@ absl::StatusOr<googlesql::Value> RemoteUdfProtocol::ToValue(
 absl::StatusOr<googlesql::JSONValue> RemoteUdfProtocol::ToJson(
     const googlesql::Value& value) {
   googlesql::JSONValue json_value;
+  googlesql::JSONValueRef json_ref = json_value.GetRef();
+
   if (value.is_null()) {
-    json_value.GetRef().SetNull();
+    json_ref.SetNull();
     return json_value;
   }
 
   switch (value.type_kind()) {
     case googlesql::TYPE_INT32:
-      json_value.GetRef().SetInt64(value.int32_value());
+      json_ref.SetInt64(value.int32_value());
       break;
     case googlesql::TYPE_INT64:
-      json_value.GetRef().SetInt64(value.int64_value());
+      json_ref.SetInt64(value.int64_value());
       break;
     case googlesql::TYPE_UINT32:
-      json_value.GetRef().SetUInt64(value.uint32_value());
+      json_ref.SetUInt64(value.uint32_value());
       break;
     case googlesql::TYPE_UINT64:
-      json_value.GetRef().SetUInt64(value.uint64_value());
+      json_ref.SetUInt64(value.uint64_value());
       break;
     case googlesql::TYPE_BOOL:
-      json_value.GetRef().SetBoolean(value.bool_value());
+      json_ref.SetBoolean(value.bool_value());
       break;
     case googlesql::TYPE_FLOAT:
-      json_value.GetRef().SetDouble(value.float_value());
+      json_ref.SetDouble(value.float_value());
       break;
     case googlesql::TYPE_DOUBLE:
-      json_value.GetRef().SetDouble(value.double_value());
+      json_ref.SetDouble(value.double_value());
+      break;
+    case googlesql::TYPE_STRING:
+      json_ref.SetString(value.string_value());
+      break;
+    case googlesql::TYPE_BYTES:
+      json_ref.SetString(absl::Base64Escape(value.bytes_value()));
+      break;
+    case googlesql::TYPE_PROTO:
+      json_ref.SetString(absl::Base64Escape(std::string(value.proto_value())));
       break;
     case googlesql::TYPE_DATE: {
       std::string date_string;
       GOOGLESQL_RETURN_IF_ERROR(
           googlesql::functions::JsonFromDate(value.date_value(), &date_string,
                                              /*quote_output_string=*/false));
-      json_value.GetRef().SetString(std::move(date_string));
+      json_ref.SetString(std::move(date_string));
+      break;
+    }
+    case googlesql::TYPE_ENUM: {
+      json_ref.SetInt64(value.enum_value());
       break;
     }
     case googlesql::TYPE_TIMESTAMP: {
@@ -479,49 +603,82 @@ absl::StatusOr<googlesql::JSONValue> RemoteUdfProtocol::ToJson(
       GOOGLESQL_RETURN_IF_ERROR(googlesql::functions::JsonFromTimestamp(
           value.ToTime(), &timestamp_string,
           /*quote_output_string=*/false));
-      json_value.GetRef().SetString(std::move(timestamp_string));
+      json_ref.SetString(std::move(timestamp_string));
       break;
     }
-    case googlesql::TYPE_STRING:
-      json_value.GetRef().SetString(value.string_value());
-      break;
-    case googlesql::TYPE_BYTES:
-      json_value.GetRef().SetString(absl::Base64Escape(value.bytes_value()));
+    case googlesql::TYPE_NUMERIC:
+      json_ref.SetString(value.numeric_value().ToString());
       break;
     case googlesql::TYPE_JSON:
       json_value = googlesql::JSONValue::CopyFrom(value.json_value());
       break;
     case googlesql::TYPE_EXTENDED: {
-      if (static_cast<const SpannerExtendedType*>(value.type())->code() ==
-          TypeAnnotationCode::PG_JSONB) {
-        GOOGLESQL_ASSIGN_OR_RETURN(
-            absl::Cord jsonb_value,
-            postgres_translator::spangres::datatypes::GetPgJsonbNormalizedValue(
-                value));
-        GOOGLESQL_ASSIGN_OR_RETURN(json_value, googlesql::JSONValue::ParseJSONString(
-                                         absl::StrCat(jsonb_value)));
-        break;
+      switch (static_cast<const SpannerExtendedType*>(value.type())->code()) {
+        case TypeAnnotationCode::PG_JSONB: {
+          GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord jsonb_value,
+                           postgres_translator::spangres::datatypes::
+                               GetPgJsonbNormalizedValue(value));
+          GOOGLESQL_ASSIGN_OR_RETURN(json_value, googlesql::JSONValue::ParseJSONString(
+                                           absl::StrCat(jsonb_value)));
+          break;
+        }
+        case TypeAnnotationCode::PG_NUMERIC: {
+          GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord numeric_value,
+                           postgres_translator::spangres::datatypes::
+                               GetPgNumericNormalizedValue(value));
+          json_ref.SetString(absl::StrCat(numeric_value));
+          break;
+        }
+        case TypeAnnotationCode::PG_OID: {
+          GOOGLESQL_ASSIGN_OR_RETURN(
+              int64_t oid_value,
+              postgres_translator::spangres::datatypes::GetPgOidValue(value));
+          json_ref.SetUInt64(oid_value);
+          break;
+        }
+        default:
+          break;
       }
       break;
     }
+    case googlesql::TYPE_INTERVAL: {
+      json_ref.SetString(value.interval_value().ToISO8601());
+      break;
+    }
+    case googlesql::TYPE_UUID: {
+      GOOGLESQL_ASSIGN_OR_RETURN(googlesql::UuidValue uuid_value, value.uuid_value());
+      json_ref.SetString(uuid_value.ToString());
+      break;
+    }
     case googlesql::TYPE_ARRAY: {
-      json_value.GetRef().SetToEmptyArray();
+      json_ref.SetToEmptyArray();
       for (const googlesql::Value& element : value.elements()) {
         GOOGLESQL_ASSIGN_OR_RETURN(googlesql::JSONValue element_json, ToJson(element));
-        GOOGLESQL_RETURN_IF_ERROR(
-            json_value.GetRef().AppendArrayElement(std::move(element_json)));
+        GOOGLESQL_RETURN_IF_ERROR(json_ref.AppendArrayElement(std::move(element_json)));
+      }
+      break;
+    }
+    case googlesql::TYPE_MAP: {
+      json_ref.SetToEmptyArray();
+      for (const auto& [key, value] : value.map_entries()) {
+        GOOGLESQL_ASSIGN_OR_RETURN(googlesql::JSONValue key_json, ToJson(key));
+        GOOGLESQL_ASSIGN_OR_RETURN(googlesql::JSONValue value_json, ToJson(value));
+        googlesql::JSONValue entry;
+        entry.GetRef().SetToEmptyObject();
+        entry.GetRef().GetMember("key").Set(std::move(key_json));
+        entry.GetRef().GetMember("value").Set(std::move(value_json));
+        GOOGLESQL_RETURN_IF_ERROR(json_ref.AppendArrayElement(std::move(entry)));
       }
       break;
     }
     case googlesql::TYPE_STRUCT: {
-      json_value.GetRef().SetToEmptyObject();
+      json_ref.SetToEmptyObject();
       const googlesql::StructType* struct_type = value.type()->AsStruct();
       GOOGLESQL_RET_CHECK_NE(struct_type, nullptr);
       for (int i = 0; i < struct_type->num_fields(); ++i) {
         GOOGLESQL_ASSIGN_OR_RETURN(googlesql::JSONValue field_json,
                          ToJson(value.field(i)));
-        json_value.GetRef()
-            .GetMember(struct_type->field(i).name)
+        json_ref.GetMember(struct_type->field(i).name)
             .Set(std::move(field_json));
       }
       break;
@@ -553,16 +710,12 @@ absl::StatusOr<uint64_t> RemoteUdfProtocol::Fingerprint(
 
   switch (value.type_kind()) {
     case googlesql::TYPE_INT32:
-      // Integers are encoded as strings on the wire.
       return farmhash::Fingerprint64(absl::StrCat(value.int32_value()));
     case googlesql::TYPE_INT64:
-      // Integers are encoded as strings on the wire.
       return farmhash::Fingerprint64(absl::StrCat(value.int64_value()));
     case googlesql::TYPE_UINT32:
-      // Integers are encoded as strings on the wire.
       return farmhash::Fingerprint64(absl::StrCat(value.uint32_value()));
     case googlesql::TYPE_UINT64:
-      // Integers are encoded as strings on the wire.
       return farmhash::Fingerprint64(absl::StrCat(value.uint64_value()));
     case googlesql::TYPE_BOOL:
       return farmhash::Fingerprint(value.bool_value());
@@ -570,32 +723,67 @@ absl::StatusOr<uint64_t> RemoteUdfProtocol::Fingerprint(
       return farmhash::Fingerprint(value.float_value());
     case googlesql::TYPE_DOUBLE:
       return farmhash::Fingerprint(value.double_value());
-    case googlesql::TYPE_DATE:
-      return farmhash::Fingerprint(value.date_value());
-    case googlesql::TYPE_TIMESTAMP:
-      return farmhash::Fingerprint(value.ToUnixMicros());
     case googlesql::TYPE_STRING:
       return farmhash::Fingerprint64(value.string_value());
     case googlesql::TYPE_BYTES:
       return farmhash::Fingerprint64(value.bytes_value());
+    case googlesql::TYPE_PROTO:
+      return farmhash::Fingerprint64(absl::StrCat(value.proto_value()));
+    case googlesql::TYPE_DATE:
+      return farmhash::Fingerprint(value.date_value());
+    case googlesql::TYPE_ENUM:
+      return farmhash::Fingerprint64(absl::StrCat(value.enum_value()));
+    case googlesql::TYPE_TIMESTAMP:
+      return farmhash::Fingerprint(value.ToUnixMicros());
+    case googlesql::TYPE_NUMERIC:
+      return farmhash::Fingerprint64(value.numeric_value().ToString());
     case googlesql::TYPE_JSON:
       return farmhash::Fingerprint64(value.json_value().ToString());
-    case googlesql::TYPE_EXTENDED: {
-      if (static_cast<const SpannerExtendedType*>(value.type())->code() ==
-          TypeAnnotationCode::PG_JSONB) {
-        GOOGLESQL_ASSIGN_OR_RETURN(
-            absl::Cord jsonb_value,
-            postgres_translator::spangres::datatypes::GetPgJsonbNormalizedValue(
-                value));
-        return farmhash::Fingerprint64(absl::StrCat(jsonb_value));
+    case googlesql::TYPE_EXTENDED:
+      switch (static_cast<const SpannerExtendedType*>(value.type())->code()) {
+        case TypeAnnotationCode::PG_JSONB: {
+          GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord jsonb_value,
+                           postgres_translator::spangres::datatypes::
+                               GetPgJsonbNormalizedValue(value));
+          return farmhash::Fingerprint64(absl::StrCat(jsonb_value));
+        }
+        case TypeAnnotationCode::PG_NUMERIC: {
+          GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord numeric_value,
+                           postgres_translator::spangres::datatypes::
+                               GetPgNumericNormalizedValue(value));
+          return farmhash::Fingerprint64(absl::StrCat(numeric_value));
+        }
+        case TypeAnnotationCode::PG_OID: {
+          GOOGLESQL_ASSIGN_OR_RETURN(
+              int64_t oid_value,
+              postgres_translator::spangres::datatypes::GetPgOidValue(value));
+          return farmhash::Fingerprint64(absl::StrCat(oid_value));
+        }
+        default:
+          break;
       }
       break;
+    case googlesql::TYPE_INTERVAL: {
+      return farmhash::Fingerprint64(value.interval_value().ToString());
+    }
+    case googlesql::TYPE_UUID: {
+      GOOGLESQL_ASSIGN_OR_RETURN(googlesql::UuidValue uuid_value, value.uuid_value());
+      return farmhash::Fingerprint64(uuid_value.ToString());
     }
     case googlesql::TYPE_ARRAY: {
       uint64_t result = 0;
       for (const googlesql::Value& element : value.elements()) {
         GOOGLESQL_ASSIGN_OR_RETURN(uint64_t element_hash, Fingerprint(element));
         result += element_hash;
+      }
+      return result;
+    }
+    case googlesql::TYPE_MAP: {
+      uint64_t result = 0;
+      for (const auto& [key, value] : value.map_entries()) {
+        GOOGLESQL_ASSIGN_OR_RETURN(uint64_t key_hash, Fingerprint(key));
+        GOOGLESQL_ASSIGN_OR_RETURN(uint64_t value_hash, Fingerprint(value));
+        result += farmhash::Fingerprint(value_hash + key_hash);
       }
       return result;
     }

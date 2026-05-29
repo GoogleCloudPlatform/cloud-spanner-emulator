@@ -1,8 +1,10 @@
+# Copyright (c) 2022-2023, PostgreSQL Global Development Group
+
 # Set of tests for pg_upgrade, including cross-version checks.
 use strict;
 use warnings;
 
-use Cwd qw(abs_path);
+use Cwd            qw(abs_path);
 use File::Basename qw(dirname);
 use File::Compare;
 use File::Find qw(find);
@@ -12,6 +14,9 @@ use PostgreSQL::Test::Cluster;
 use PostgreSQL::Test::Utils;
 use PostgreSQL::Test::AdjustUpgrade;
 use Test::More;
+
+# Can be changed to test the other modes.
+my $mode = $ENV{PG_TEST_PG_UPGRADE_MODE} || '--copy';
 
 # Generate a database with a name made of a range of ASCII characters.
 sub generate_db
@@ -76,23 +81,69 @@ if (   (defined($ENV{olddump}) && !defined($ENV{oldinstall}))
 }
 
 # Paths to the dumps taken during the tests.
-my $tempdir    = PostgreSQL::Test::Utils::tempdir;
+my $tempdir = PostgreSQL::Test::Utils::tempdir;
 my $dump1_file = "$tempdir/dump1.sql";
 my $dump2_file = "$tempdir/dump2.sql";
+
+note "testing using transfer mode $mode";
 
 # Initialize node to upgrade
 my $oldnode =
   PostgreSQL::Test::Cluster->new('old_node',
 	install_path => $ENV{oldinstall});
 
+my %node_params = ();
+
 # To increase coverage of non-standard segment size and group access without
 # increasing test runtime, run these tests with a custom setting.
 # --allow-group-access and --wal-segsize have been added in v11.
-my %node_params = ();
-$node_params{extra} = [ '--wal-segsize', '1', '--allow-group-access' ]
-  if $oldnode->pg_version >= 11;
+my @custom_opts = ();
+if ($oldnode->pg_version >= 11)
+{
+	push @custom_opts, ('--wal-segsize', '1');
+	push @custom_opts, '--allow-group-access';
+}
+
+# Set up the locale settings for the original cluster, so that we
+# can test that pg_upgrade copies the locale settings of template0
+# from the old to the new cluster.
+
+my $original_encoding = "6";    # UTF-8
+my $original_provider = "c";
+my $original_locale = "C";
+my $original_iculocale = "";
+my $provider_field = "'c' AS datlocprovider";
+my $iculocale_field = "NULL AS daticulocale";
+if ($oldnode->pg_version >= 15 && $ENV{with_icu} eq 'yes')
+{
+	$provider_field = "datlocprovider";
+	$iculocale_field = "daticulocale";
+	$original_provider = "i";
+	$original_iculocale = "fr-CA";
+}
+
+my @initdb_params = @custom_opts;
+
+push @initdb_params, ('--encoding', 'UTF-8');
+push @initdb_params, ('--locale', $original_locale);
+if ($original_provider eq "i")
+{
+	push @initdb_params, ('--locale-provider', 'icu');
+	push @initdb_params, ('--icu-locale', 'fr-CA');
+}
+
+$node_params{extra} = \@initdb_params;
 $oldnode->init(%node_params);
 $oldnode->start;
+
+my $result;
+$result = $oldnode->safe_psql(
+	'postgres',
+	"SELECT encoding, $provider_field, datcollate, datctype, $iculocale_field
+                 FROM pg_database WHERE datname='template0'");
+is( $result,
+	"$original_encoding|$original_provider|$original_locale|$original_locale|$original_iculocale",
+	"check locales in original cluster");
 
 # The default location of the source code is the root of this directory.
 my $srcdir = abs_path("../../..");
@@ -116,9 +167,9 @@ else
 	# Create databases with names covering most ASCII bytes.  The
 	# first name exercises backslashes adjacent to double quotes, a
 	# Windows special case.
-	generate_db($oldnode, 'regression\\"\\', 1,  45,  '\\\\"\\\\\\');
-	generate_db($oldnode, 'regression',      46, 90,  '');
-	generate_db($oldnode, 'regression',      91, 127, '');
+	generate_db($oldnode, 'regression\\"\\', 1, 45, '\\\\"\\\\\\');
+	generate_db($oldnode, 'regression', 46, 90, '');
+	generate_db($oldnode, 'regression', 91, 127, '');
 
 	# Grab any regression options that may be passed down by caller.
 	my $extra_opts = $ENV{EXTRA_REGRESS_OPTS} || "";
@@ -133,6 +184,7 @@ else
 	# --inputdir points to the path of the input files.
 	my $inputdir = "$srcdir/src/test/regress";
 
+	note 'running regression tests in old instance';
 	my $rc =
 	  system($ENV{PG_REGRESS}
 		  . " $extra_opts "
@@ -162,6 +214,17 @@ else
 
 # Initialize a new node for the upgrade.
 my $newnode = PostgreSQL::Test::Cluster->new('new_node');
+
+# Reset to original parameters.
+@initdb_params = @custom_opts;
+
+# The new cluster will be initialized with different locale settings,
+# but these settings will be overwritten with those of the original
+# cluster.
+push @initdb_params, ('--encoding', 'SQL_ASCII');
+push @initdb_params, ('--locale-provider', 'libc');
+
+$node_params{extra} = \@initdb_params;
 $newnode->init(%node_params);
 
 my $newbindir = $newnode->config_data('--bindir');
@@ -189,9 +252,9 @@ if (defined($ENV{oldinstall}))
 		$newnode->command_ok(
 			[
 				'psql', '-X',
-				'-v',   'ON_ERROR_STOP=1',
-				'-c',   $upcmds,
-				'-d',   $oldnode->connstr($updb),
+				'-v', 'ON_ERROR_STOP=1',
+				'-c', $upcmds,
+				'-d', $oldnode->connstr($updb),
 			],
 			"ran version adaptation commands for database $updb");
 	}
@@ -201,6 +264,7 @@ if (defined($ENV{oldinstall}))
 # that we need to use pg_dumpall from the new node here.
 my @dump_command = (
 	'pg_dumpall', '--no-sync', '-d', $oldnode->connstr('postgres'),
+	'--restrict-key=test',
 	'-f', $dump1_file);
 # --extra-float-digits is needed when upgrading from a version older than 11.
 push(@dump_command, '--extra-float-digits', '0')
@@ -255,7 +319,8 @@ if (defined($ENV{oldinstall}))
 }
 
 # Create an invalid database, will be deleted below
-$oldnode->safe_psql('postgres', qq(
+$oldnode->safe_psql(
+	'postgres', qq(
   CREATE DATABASE regression_invalid;
   UPDATE pg_database SET datconnlimit = -2 WHERE datname = 'regression_invalid';
 ));
@@ -274,14 +339,14 @@ $oldnode->stop;
 command_fails(
 	[
 		'pg_upgrade', '--no-sync',
-		'-d',         $oldnode->data_dir,
-		'-D',         $newnode->data_dir,
-		'-b',         $oldbindir . '/does/not/exist/',
-		'-B',         $newbindir,
-		'-s',         $newnode->host,
-		'-p',         $oldnode->port,
-		'-P',         $newnode->port,
-		'--check'
+		'-d', $oldnode->data_dir,
+		'-D', $newnode->data_dir,
+		'-b', $oldbindir . '/does/not/exist/',
+		'-B', $newbindir,
+		'-s', $newnode->host,
+		'-p', $oldnode->port,
+		'-P', $newnode->port,
+		$mode, '--check',
 	],
 	'run of pg_upgrade --check for new instance with incorrect binary path');
 ok(-d $newnode->data_dir . "/pg_upgrade_output.d",
@@ -289,19 +354,31 @@ ok(-d $newnode->data_dir . "/pg_upgrade_output.d",
 rmtree($newnode->data_dir . "/pg_upgrade_output.d");
 
 # Check that pg_upgrade aborts when encountering an invalid database
-command_checks_all(
-	[
-		'pg_upgrade', '--no-sync', '-d', $oldnode->data_dir,
-		'-D', $newnode->data_dir, '-b', $oldbindir,
-		'-B', $newbindir, '-s', $newnode->host,
-		'-p', $oldnode->port, '-P', $newnode->port,
-		'--check',
-	],
-	1,
-	[qr/invalid/], # pg_upgrade prints errors on stdout :(
-	[qr//],
-	'invalid database causes failure');
-rmtree($newnode->data_dir . "/pg_upgrade_output.d");
+# (However, versions that were out of support by commit c66a7d75e652 don't
+# know how to do this, so skip this test there.)
+SKIP:
+{
+	skip "database invalidation not implemented", 1
+	  if $oldnode->pg_version < 11;
+
+	command_checks_all(
+		[
+			'pg_upgrade', '--no-sync',
+			'-d', $oldnode->data_dir,
+			'-D', $newnode->data_dir,
+			'-b', $oldbindir,
+			'-B', $newbindir,
+			'-s', $newnode->host,
+			'-p', $oldnode->port,
+			'-P', $newnode->port,
+			$mode, '--check',
+		],
+		1,
+		[qr/invalid/],    # pg_upgrade prints errors on stdout :(
+		[qr/^$/],
+		'invalid database causes failure');
+	rmtree($newnode->data_dir . "/pg_upgrade_output.d");
+}
 
 # And drop it, so we can continue
 $oldnode->start;
@@ -311,11 +388,11 @@ $oldnode->stop;
 # --check command works here, cleans up pg_upgrade_output.d.
 command_ok(
 	[
-		'pg_upgrade', '--no-sync',        '-d', $oldnode->data_dir,
-		'-D',         $newnode->data_dir, '-b', $oldbindir,
-		'-B',         $newbindir,         '-s', $newnode->host,
-		'-p',         $oldnode->port,     '-P', $newnode->port,
-		'--check'
+		'pg_upgrade', '--no-sync', '-d', $oldnode->data_dir,
+		'-D', $newnode->data_dir, '-b', $oldbindir,
+		'-B', $newbindir, '-s', $newnode->host,
+		'-p', $oldnode->port, '-P', $newnode->port,
+		$mode, '--check',
 	],
 	'run of pg_upgrade --check for new instance');
 ok(!-d $newnode->data_dir . "/pg_upgrade_output.d",
@@ -324,10 +401,11 @@ ok(!-d $newnode->data_dir . "/pg_upgrade_output.d",
 # Actual run, pg_upgrade_output.d is removed at the end.
 command_ok(
 	[
-		'pg_upgrade', '--no-sync',        '-d', $oldnode->data_dir,
-		'-D',         $newnode->data_dir, '-b', $oldbindir,
-		'-B',         $newbindir,         '-s', $newnode->host,
-		'-p',         $oldnode->port,     '-P', $newnode->port
+		'pg_upgrade', '--no-sync', '-d', $oldnode->data_dir,
+		'-D', $newnode->data_dir, '-b', $oldbindir,
+		'-B', $newbindir, '-s', $newnode->host,
+		'-p', $oldnode->port, '-P', $newnode->port,
+		$mode,
 	],
 	'run of pg_upgrade for new instance');
 ok( !-d $newnode->data_dir . "/pg_upgrade_output.d",
@@ -347,17 +425,32 @@ if (-d $log_path)
 			  if $File::Find::name =~ m/.*\.log/;
 		},
 		$newnode->data_dir . "/pg_upgrade_output.d");
+
+	my $test_logfile = $PostgreSQL::Test::Utils::test_logfile;
+
+	note "=== pg_upgrade logs found - appending to $test_logfile ===\n";
 	foreach my $log (@log_files)
 	{
-		note "=== contents of $log ===\n";
+		note "=== appending $log ===\n";
+		print "=== contents of $log ===\n";
 		print slurp_file($log);
 		print "=== EOF ===\n";
 	}
 }
 
+# Test that upgraded cluster has original locale settings.
+$result = $newnode->safe_psql(
+	'postgres',
+	"SELECT encoding, $provider_field, datcollate, datctype, $iculocale_field
+                 FROM pg_database WHERE datname='template0'");
+is( $result,
+	"$original_encoding|$original_provider|$original_locale|$original_locale|$original_iculocale",
+	"check that locales in new cluster match original cluster");
+
 # Second dump from the upgraded instance.
 @dump_command = (
 	'pg_dumpall', '--no-sync', '-d', $newnode->connstr('postgres'),
+	'--restrict-key=test',
 	'-f', $dump2_file);
 # --extra-float-digits is needed when upgrading from a version older than 11.
 push(@dump_command, '--extra-float-digits', '0')

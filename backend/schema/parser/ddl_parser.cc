@@ -1481,15 +1481,24 @@ void VisitFunctionOptionsNode(const SimpleNode* node,
           absl::StrCat("Unexpected child node: ", child->toString()));
       continue;
     }
+
+    auto sql_option = create_function->add_sql_options();
+    sql_option->set_name(ExtractTextForNode(GetChildNode(child, 0), ddl_text));
+
     auto option = create_function->add_options();
     option->set_option_name(
         ExtractTextForNode(GetChildNode(child, 0), ddl_text));
+
     if (auto str_node = GetFirstDescendantNode(child, JJTANY_STRING_LITERAL);
         str_node != nullptr) {
+      sql_option->set_sql_value(ExtractTextForNode(str_node, ddl_text));
       option->set_string_value(
           StripQuotes(ExtractTextForNode(str_node, ddl_text)));
+
     } else if (auto int_node = GetFirstDescendantNode(child, JJTINTEGER_VAL);
                int_node != nullptr) {
+      sql_option->set_sql_value(ExtractTextForNode(int_node, ddl_text));
+
       int64_t int64_value;
       if (!absl::SimpleAtoi(ExtractTextForNode(int_node, ddl_text),
                             &int64_value)) {
@@ -1498,6 +1507,9 @@ void VisitFunctionOptionsNode(const SimpleNode* node,
         continue;
       }
       option->set_int64_value(int64_value);
+    } else {
+      errors->push_back(
+          absl::StrCat("Unexpected option value: ", child->toString()));
     }
   }
 }
@@ -1549,18 +1561,17 @@ void VisitCreateFunctionNode(const SimpleNode* node,
     create_function->set_is_remote(true);
   }
 
-  auto language = Function::SQL;
-  const SimpleNode* language_node = GetFirstChildNode(node, JJTLANGUAGE);
-  if (language_node) {
-    absl::string_view language_text =
-        ExtractTextForNode(language_node, ddl_text);
-    if (language_text == "REMOTE") {
-      language = Function::REMOTE;
+  if (const SimpleNode* language_node = GetFirstChildNode(node, JJTLANGUAGE);
+      language_node) {
+    absl::string_view language = ExtractTextForNode(language_node, ddl_text);
+    if (language == "SQL") {
+      create_function->set_language(Function::SQL);
+    } else if (language == "REMOTE") {
+      create_function->set_language(Function::REMOTE);
+    } else {
+      errors->push_back(absl::StrCat("Unsupported language: ", language));
+      return;
     }
-  }
-
-  if (!create_function->is_remote()) {
-    create_function->set_language(language);
   }
 
   const SimpleNode* options_clause =
@@ -1590,14 +1601,16 @@ void VisitCreateFunctionNode(const SimpleNode* node,
                      create_function->language() == Function::REMOTE;
     if (!is_remote) {
       errors->push_back(
-          "DETERMINISM clause is not supported for remote functions.");
+          "DETERMINISM clause is not supported for SQL functions.");
       return;
     }
     absl::string_view determinism_text =
         ExtractTextForNode(determinism_node, ddl_text);
-    if (determinism_text != "NOT DETERMINISTIC") {
+    if (determinism_text == "NOT DETERMINISTIC") {
+      create_function->set_determinism(Function::NOT_DETERMINISTIC_VOLATILE);
+    } else {
       errors->push_back(
-          "Only NOT DETERMINISTIC is supported for remote functions.");
+          absl::StrCat("Unsupported determinism: ", determinism_text));
       return;
     }
   }

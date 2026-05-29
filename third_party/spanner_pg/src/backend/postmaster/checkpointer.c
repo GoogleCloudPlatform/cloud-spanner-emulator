@@ -23,7 +23,7 @@
  * restart needs to be forced.)
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -137,6 +137,9 @@ static CheckpointerShmemStruct *CheckpointerShmem;
 
 /* interval for calling AbsorbSyncRequests in CheckpointWriteDelay */
 #define WRITES_PER_ABSORB		1000
+
+/* Max number of requests the checkpointer request queue can hold */
+#define MAX_CHECKPOINT_REQUESTS 10000000
 
 /*
  * GUC parameters
@@ -271,7 +274,6 @@ CheckpointerMain(void)
 		LWLockReleaseAll();
 		ConditionVariableCancelSleep();
 		pgstat_report_wait_end();
-		AbortBufferIO();
 		UnlockBuffers();
 		ReleaseAuxProcessResources(false);
 		AtEOXact_Buffers(false);
@@ -326,7 +328,7 @@ CheckpointerMain(void)
 	/*
 	 * Unblock signals (they were blocked when the postmaster forked us)
 	 */
-	PG_SETMASK(&UnBlockSig);
+	sigprocmask(SIG_SETMASK, &UnBlockSig, NULL);
 
 	/*
 	 * Ensure all shared memory values are set correctly for the config. Doing
@@ -871,11 +873,14 @@ CheckpointerShmemSize(void)
 	Size		size;
 
 	/*
-	 * Currently, the size of the requests[] array is arbitrarily set equal to
-	 * NBuffers.  This may prove too large or small ...
+	 * The size of the requests[] array is arbitrarily set equal to NBuffers.
+	 * But there is a cap of MAX_CHECKPOINT_REQUESTS to prevent accumulating
+	 * too many checkpoint requests in the ring buffer.
 	 */
 	size = offsetof(CheckpointerShmemStruct, requests);
-	size = add_size(size, mul_size(NBuffers, sizeof(CheckpointerRequest)));
+	size = add_size(size, mul_size(Min(NBuffers,
+									   MAX_CHECKPOINT_REQUESTS),
+								   sizeof(CheckpointerRequest)));
 
 	return size;
 }
@@ -904,7 +909,7 @@ CheckpointerShmemInit(void)
 		 */
 		MemSet(CheckpointerShmem, 0, size);
 		SpinLockInit(&CheckpointerShmem->ckpt_lck);
-		CheckpointerShmem->max_requests = NBuffers;
+		CheckpointerShmem->max_requests = Min(NBuffers, MAX_CHECKPOINT_REQUESTS);
 		ConditionVariableInit(&CheckpointerShmem->start_cv);
 		ConditionVariableInit(&CheckpointerShmem->done_cv);
 	}
@@ -1211,7 +1216,7 @@ CompactCheckpointerRequestQueue(void)
 		 * We use the request struct directly as a hashtable key.  This
 		 * assumes that any padding bytes in the structs are consistently the
 		 * same, which should be okay because we zeroed them in
-		 * CheckpointerShmemInit.  Note also that RelFileNode had better
+		 * CheckpointerShmemInit.  Note also that RelFileLocator had better
 		 * contain no pad bytes.
 		 */
 		request = &CheckpointerShmem->requests[n];

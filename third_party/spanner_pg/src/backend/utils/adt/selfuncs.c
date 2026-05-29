@@ -10,7 +10,7 @@
  *	  Index cost functions are located via the index AM's API struct,
  *	  which is obtained from the handler function registered in pg_am.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -120,9 +120,11 @@
 #include "optimizer/plancat.h"
 #include "parser/parse_clause.h"
 #include "parser/parsetree.h"
+#include "rewrite/rewriteManip.h"
 #include "statistics/statistics.h"
 #include "storage/bufmgr.h"
 #include "utils/acl.h"
+#include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/date.h"
 #include "utils/datum.h"
@@ -138,6 +140,8 @@
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
 #include "utils/typcache.h"
+
+#define DEFAULT_PAGE_CPU_MULTIPLIER 50.0
 
 /* Hooks for plugins to get control when we ask for stats */
 get_relation_stats_hook_type get_relation_stats_hook = NULL;
@@ -288,7 +292,7 @@ eqsel_internal(PG_FUNCTION_ARGS, bool negate)
  * This is exported so that some other estimation functions can use it.
  */
 double
-var_eq_const(VariableStatData *vardata, Oid operator, Oid collation,
+var_eq_const(VariableStatData *vardata, Oid oproid, Oid collation,
 			 Datum constval, bool constisnull,
 			 bool varonleft, bool negate)
 {
@@ -329,7 +333,7 @@ var_eq_const(VariableStatData *vardata, Oid operator, Oid collation,
 	}
 	else if (HeapTupleIsValid(vardata->statsTuple) &&
 			 statistic_proc_security_check(vardata,
-										   (opfuncoid = get_opcode(operator))))
+										   (opfuncoid = get_opcode(oproid))))
 	{
 		AttStatsSlot sslot;
 		bool		match = false;
@@ -459,7 +463,7 @@ var_eq_const(VariableStatData *vardata, Oid operator, Oid collation,
  * This is exported so that some other estimation functions can use it.
  */
 double
-var_eq_non_const(VariableStatData *vardata, Oid operator, Oid collation,
+var_eq_non_const(VariableStatData *vardata, Oid oproid, Oid collation,
 				 Node *other,
 				 bool varonleft, bool negate)
 {
@@ -2203,7 +2207,7 @@ rowcomparesel(PlannerInfo *root,
 	else
 	{
 		/*
-		 * Otherwise, it's a join if there's more than one relation used.
+		 * Otherwise, it's a join if there's more than one base relation used.
 		 */
 		is_join_clause = (NumRelids(root, (Node *) opargs) > 1);
 	}
@@ -2259,6 +2263,7 @@ eqjoinsel(PG_FUNCTION_ARGS)
 	Form_pg_statistic stats2 = NULL;
 	bool		have_mcvs1 = false;
 	bool		have_mcvs2 = false;
+	bool		get_mcv_stats;
 	bool		join_is_reversed;
 	RelOptInfo *inner_rel;
 
@@ -2273,11 +2278,25 @@ eqjoinsel(PG_FUNCTION_ARGS)
 	memset(&sslot1, 0, sizeof(sslot1));
 	memset(&sslot2, 0, sizeof(sslot2));
 
+	/*
+	 * There is no use in fetching one side's MCVs if we lack MCVs for the
+	 * other side, so do a quick check to verify that both stats exist.
+	 */
+	get_mcv_stats = (HeapTupleIsValid(vardata1.statsTuple) &&
+					 HeapTupleIsValid(vardata2.statsTuple) &&
+					 get_attstatsslot(&sslot1, vardata1.statsTuple,
+									  STATISTIC_KIND_MCV, InvalidOid,
+									  0) &&
+					 get_attstatsslot(&sslot2, vardata2.statsTuple,
+									  STATISTIC_KIND_MCV, InvalidOid,
+									  0));
+
 	if (HeapTupleIsValid(vardata1.statsTuple))
 	{
 		/* note we allow use of nullfrac regardless of security check */
 		stats1 = (Form_pg_statistic) GETSTRUCT(vardata1.statsTuple);
-		if (statistic_proc_security_check(&vardata1, opfuncoid))
+		if (get_mcv_stats &&
+			statistic_proc_security_check(&vardata1, opfuncoid))
 			have_mcvs1 = get_attstatsslot(&sslot1, vardata1.statsTuple,
 										  STATISTIC_KIND_MCV, InvalidOid,
 										  ATTSTATSSLOT_VALUES | ATTSTATSSLOT_NUMBERS);
@@ -2287,7 +2306,8 @@ eqjoinsel(PG_FUNCTION_ARGS)
 	{
 		/* note we allow use of nullfrac regardless of security check */
 		stats2 = (Form_pg_statistic) GETSTRUCT(vardata2.statsTuple);
-		if (statistic_proc_security_check(&vardata2, opfuncoid))
+		if (get_mcv_stats &&
+			statistic_proc_security_check(&vardata2, opfuncoid))
 			have_mcvs2 = get_attstatsslot(&sslot2, vardata2.statsTuple,
 										  STATISTIC_KIND_MCV, InvalidOid,
 										  ATTSTATSSLOT_VALUES | ATTSTATSSLOT_NUMBERS);
@@ -3254,6 +3274,15 @@ add_unique_group_var(PlannerInfo *root, List *varinfos,
 
 	ndistinct = get_variable_numdistinct(vardata, &isdefault);
 
+	/*
+	 * The nullingrels bits within the var could cause the same var to be
+	 * counted multiple times if it's marked with different nullingrels.  They
+	 * could also prevent us from matching the var to the expressions in
+	 * extended statistics (see estimate_multivariate_ndistinct).  So strip
+	 * them out first.
+	 */
+	var = remove_nulling_relids(var, root->outer_join_rels, NULL);
+
 	foreach(lc, varinfos)
 	{
 		varinfo = (GroupVarInfo *) lfirst(lc);
@@ -3390,7 +3419,7 @@ estimate_num_groups(PlannerInfo *root, List *groupExprs, double input_rows,
 	 * for normal cases with GROUP BY or DISTINCT, but it is possible for
 	 * corner cases with set operations.)
 	 */
-	if (groupExprs == NIL || (pgset && list_length(*pgset) < 1))
+	if (groupExprs == NIL || (pgset && *pgset == NIL))
 		return 1.0;
 
 	/*
@@ -4191,7 +4220,7 @@ estimate_multivariate_ndistinct(PlannerInfo *root, RelOptInfo *rel,
 			 * Process complex expressions, not just simple Vars.
 			 *
 			 * First, we search for an exact match of an expression. If we
-			 * find one, we can just discard the whole GroupExprInfo, with all
+			 * find one, we can just discard the whole GroupVarInfo, with all
 			 * the variables we extracted from it.
 			 *
 			 * Otherwise we inspect the individual vars, and try matching it
@@ -4949,8 +4978,8 @@ ReleaseDummy(HeapTuple tuple)
  *		this query.  (Caution: this should be trusted for statistical
  *		purposes only, since we do not check indimmediate nor verify that
  *		the exact same definition of equality applies.)
- *	acl_ok: true if current user has permission to read the column(s)
- *		underlying the pg_statistic entry.  This is consulted by
+ *	acl_ok: true if current user has permission to read all table rows from
+ *		the column(s) underlying the pg_statistic entry.  This is consulted by
  *		statistic_proc_security_check().
  *
  * Caller is responsible for doing ReleaseVariableStats() before exiting.
@@ -4961,6 +4990,7 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 {
 	Node	   *basenode;
 	Relids		varnos;
+	Relids		basevarnos;
 	RelOptInfo *onerel;
 
 	/* Make sure we don't return dangling pointers in vardata */
@@ -5002,10 +5032,11 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 	 * relation are considered "real" vars.
 	 */
 	varnos = pull_varnos(root, basenode);
+	basevarnos = bms_difference(varnos, root->outer_join_rels);
 
 	onerel = NULL;
 
-	switch (bms_membership(varnos))
+	switch (bms_membership(basevarnos))
 	{
 		case BMS_EMPTY_SET:
 			/* No Vars at all ... must be pseudo-constant clause */
@@ -5014,7 +5045,7 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 			if (varRelid == 0 || bms_is_member(varRelid, varnos))
 			{
 				onerel = find_base_rel(root,
-									   (varRelid ? varRelid : bms_singleton_member(varnos)));
+									   (varRelid ? varRelid : bms_singleton_member(basevarnos)));
 				vardata->rel = onerel;
 				node = basenode;	/* strip any relabeling */
 			}
@@ -5038,7 +5069,7 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 			break;
 	}
 
-	bms_free(varnos);
+	bms_free(basevarnos);
 
 	vardata->var = node;
 	vardata->atttype = exprType(node);
@@ -5061,6 +5092,14 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 		 */
 		ListCell   *ilist;
 		ListCell   *slist;
+
+		/*
+		 * The nullingrels bits within the expression could prevent us from
+		 * matching it to expressional index columns or to the expressions in
+		 * extended statistics.  So strip them out first.
+		 */
+		if (bms_overlap(varnos, root->outer_join_rels))
+			node = remove_nulling_relids(node, root->outer_join_rels, NULL);
 
 		foreach(ilist, onerel->indexlist)
 		{
@@ -5129,78 +5168,32 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 
 							if (HeapTupleIsValid(vardata->statsTuple))
 							{
-								/* Get index's table for permission check */
-								RangeTblEntry *rte;
-								Oid			userid;
-
-								rte = planner_rt_fetch(index->rel->relid, root);
-								Assert(rte->rtekind == RTE_RELATION);
-
 								/*
-								 * Use checkAsUser if it's set, in case we're
-								 * accessing the table via a view.
-								 */
-								userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
-
-								/*
+								 * Test if user has permission to access all
+								 * rows from the index's table.
+								 *
 								 * For simplicity, we insist on the whole
 								 * table being selectable, rather than trying
 								 * to identify which column(s) the index
-								 * depends on.  Also require all rows to be
-								 * selectable --- there must be no
-								 * securityQuals from security barrier views
-								 * or RLS policies.
+								 * depends on.
+								 *
+								 * Note that for an inheritance child,
+								 * permissions are checked on the inheritance
+								 * root parent, and whole-table select
+								 * privilege on the parent doesn't quite
+								 * guarantee that the user could read all
+								 * columns of the child.  But in practice it's
+								 * unlikely that any interesting security
+								 * violation could result from allowing access
+								 * to the expression index's stats, so we
+								 * allow it anyway.  See similar code in
+								 * examine_simple_variable() for additional
+								 * comments.
 								 */
 								vardata->acl_ok =
-									rte->securityQuals == NIL &&
-									(pg_class_aclcheck(rte->relid, userid,
-													   ACL_SELECT) == ACLCHECK_OK);
-
-								/*
-								 * If the user doesn't have permissions to
-								 * access an inheritance child relation, check
-								 * the permissions of the table actually
-								 * mentioned in the query, since most likely
-								 * the user does have that permission.  Note
-								 * that whole-table select privilege on the
-								 * parent doesn't quite guarantee that the
-								 * user could read all columns of the child.
-								 * But in practice it's unlikely that any
-								 * interesting security violation could result
-								 * from allowing access to the expression
-								 * index's stats, so we allow it anyway.  See
-								 * similar code in examine_simple_variable()
-								 * for additional comments.
-								 */
-								if (!vardata->acl_ok &&
-									root->append_rel_array != NULL)
-								{
-									AppendRelInfo *appinfo;
-									Index		varno = index->rel->relid;
-
-									appinfo = root->append_rel_array[varno];
-									while (appinfo &&
-										   planner_rt_fetch(appinfo->parent_relid,
-															root)->rtekind == RTE_RELATION)
-									{
-										varno = appinfo->parent_relid;
-										appinfo = root->append_rel_array[varno];
-									}
-									if (varno != index->rel->relid)
-									{
-										/* Repeat access check on this rel */
-										rte = planner_rt_fetch(varno, root);
-										Assert(rte->rtekind == RTE_RELATION);
-
-										userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
-
-										vardata->acl_ok =
-											rte->securityQuals == NIL &&
-											(pg_class_aclcheck(rte->relid,
-															   userid,
-															   ACL_SELECT) == ACLCHECK_OK);
-									}
-								}
+									all_rows_selectable(root,
+														index->rel->relid,
+														NULL);
 							}
 							else
 							{
@@ -5260,8 +5253,6 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 				/* found a match, see if we can extract pg_statistic row */
 				if (equal(node, expr))
 				{
-					Oid			userid;
-
 					/*
 					 * XXX Not sure if we should cache the tuple somewhere.
 					 * Now we just create a new copy every time.
@@ -5272,66 +5263,26 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 					vardata->freefunc = ReleaseDummy;
 
 					/*
-					 * Use checkAsUser if it's set, in case we're accessing
-					 * the table via a view.
-					 */
-					userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
-
-					/*
+					 * Test if user has permission to access all rows from the
+					 * table.
+					 *
 					 * For simplicity, we insist on the whole table being
 					 * selectable, rather than trying to identify which
-					 * column(s) the statistics object depends on.  Also
-					 * require all rows to be selectable --- there must be no
-					 * securityQuals from security barrier views or RLS
-					 * policies.
+					 * column(s) the statistics object depends on.
+					 *
+					 * Note that for an inheritance child, permissions are
+					 * checked on the inheritance root parent, and whole-table
+					 * select privilege on the parent doesn't quite guarantee
+					 * that the user could read all columns of the child.  But
+					 * in practice it's unlikely that any interesting security
+					 * violation could result from allowing access to the
+					 * expression stats, so we allow it anyway.  See similar
+					 * code in examine_simple_variable() for additional
+					 * comments.
 					 */
-					vardata->acl_ok =
-						rte->securityQuals == NIL &&
-						(pg_class_aclcheck(rte->relid, userid,
-										   ACL_SELECT) == ACLCHECK_OK);
-
-					/*
-					 * If the user doesn't have permissions to access an
-					 * inheritance child relation, check the permissions of
-					 * the table actually mentioned in the query, since most
-					 * likely the user does have that permission.  Note that
-					 * whole-table select privilege on the parent doesn't
-					 * quite guarantee that the user could read all columns of
-					 * the child. But in practice it's unlikely that any
-					 * interesting security violation could result from
-					 * allowing access to the expression stats, so we allow it
-					 * anyway.  See similar code in examine_simple_variable()
-					 * for additional comments.
-					 */
-					if (!vardata->acl_ok &&
-						root->append_rel_array != NULL)
-					{
-						AppendRelInfo *appinfo;
-						Index		varno = onerel->relid;
-
-						appinfo = root->append_rel_array[varno];
-						while (appinfo &&
-							   planner_rt_fetch(appinfo->parent_relid,
-												root)->rtekind == RTE_RELATION)
-						{
-							varno = appinfo->parent_relid;
-							appinfo = root->append_rel_array[varno];
-						}
-						if (varno != onerel->relid)
-						{
-							/* Repeat access check on this rel */
-							rte = planner_rt_fetch(varno, root);
-							Assert(rte->rtekind == RTE_RELATION);
-
-							userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
-
-							vardata->acl_ok =
-								rte->securityQuals == NIL &&
-								(pg_class_aclcheck(rte->relid,
-												   userid,
-												   ACL_SELECT) == ACLCHECK_OK);
-						}
-					}
+					vardata->acl_ok = all_rows_selectable(root,
+														  onerel->relid,
+														  NULL);
 
 					break;
 				}
@@ -5340,6 +5291,8 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 			}
 		}
 	}
+
+	bms_free(varnos);
 }
 
 /*
@@ -5384,92 +5337,20 @@ examine_simple_variable(PlannerInfo *root, Var *var,
 
 		if (HeapTupleIsValid(vardata->statsTuple))
 		{
-			Oid			userid;
-
 			/*
-			 * Check if user has permission to read this column.  We require
-			 * all rows to be accessible, so there must be no securityQuals
-			 * from security barrier views or RLS policies.  Use checkAsUser
-			 * if it's set, in case we're accessing the table via a view.
+			 * Test if user has permission to read all rows from this column.
+			 *
+			 * This requires that the user has the appropriate SELECT
+			 * privileges and that there are no securityQuals from security
+			 * barrier views or RLS policies.  If that's not the case, then we
+			 * only permit leakproof functions to be passed pg_statistic data
+			 * in vardata, otherwise the functions might reveal data that the
+			 * user doesn't have permission to see --- see
+			 * statistic_proc_security_check().
 			 */
-			userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
-
 			vardata->acl_ok =
-				rte->securityQuals == NIL &&
-				((pg_class_aclcheck(rte->relid, userid,
-									ACL_SELECT) == ACLCHECK_OK) ||
-				 (pg_attribute_aclcheck(rte->relid, var->varattno, userid,
-										ACL_SELECT) == ACLCHECK_OK));
-
-			/*
-			 * If the user doesn't have permissions to access an inheritance
-			 * child relation or specifically this attribute, check the
-			 * permissions of the table/column actually mentioned in the
-			 * query, since most likely the user does have that permission
-			 * (else the query will fail at runtime), and if the user can read
-			 * the column there then he can get the values of the child table
-			 * too.  To do that, we must find out which of the root parent's
-			 * attributes the child relation's attribute corresponds to.
-			 */
-			if (!vardata->acl_ok && var->varattno > 0 &&
-				root->append_rel_array != NULL)
-			{
-				AppendRelInfo *appinfo;
-				Index		varno = var->varno;
-				int			varattno = var->varattno;
-				bool		found = false;
-
-				appinfo = root->append_rel_array[varno];
-
-				/*
-				 * Partitions are mapped to their immediate parent, not the
-				 * root parent, so must be ready to walk up multiple
-				 * AppendRelInfos.  But stop if we hit a parent that is not
-				 * RTE_RELATION --- that's a flattened UNION ALL subquery, not
-				 * an inheritance parent.
-				 */
-				while (appinfo &&
-					   planner_rt_fetch(appinfo->parent_relid,
-										root)->rtekind == RTE_RELATION)
-				{
-					int			parent_varattno;
-
-					found = false;
-					if (varattno <= 0 || varattno > appinfo->num_child_cols)
-						break;	/* safety check */
-					parent_varattno = appinfo->parent_colnos[varattno - 1];
-					if (parent_varattno == 0)
-						break;	/* Var is local to child */
-
-					varno = appinfo->parent_relid;
-					varattno = parent_varattno;
-					found = true;
-
-					/* If the parent is itself a child, continue up. */
-					appinfo = root->append_rel_array[varno];
-				}
-
-				/*
-				 * In rare cases, the Var may be local to the child table, in
-				 * which case, we've got to live with having no access to this
-				 * column's stats.
-				 */
-				if (!found)
-					return;
-
-				/* Repeat the access check on this parent rel & column */
-				rte = planner_rt_fetch(varno, root);
-				Assert(rte->rtekind == RTE_RELATION);
-
-				userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
-
-				vardata->acl_ok =
-					rte->securityQuals == NIL &&
-					((pg_class_aclcheck(rte->relid, userid,
-										ACL_SELECT) == ACLCHECK_OK) ||
-					 (pg_attribute_aclcheck(rte->relid, varattno, userid,
-											ACL_SELECT) == ACLCHECK_OK));
-			}
+				all_rows_selectable(root, var->varno,
+									bms_make_singleton(var->varattno - FirstLowInvalidHeapAttributeNumber));
 		}
 		else
 		{
@@ -5594,16 +5475,211 @@ examine_simple_variable(PlannerInfo *root, Var *var,
 }
 
 /*
+ * all_rows_selectable
+ *		Test whether the user has permission to select all rows from a given
+ *		relation.
+ *
+ * Inputs:
+ *	root: the planner info
+ *	varno: the index of the relation (assumed to be an RTE_RELATION)
+ *	varattnos: the attributes for which permission is required, or NULL if
+ *		whole-table access is required
+ *
+ * Returns true if the user has the required select permissions, and there are
+ * no securityQuals from security barrier views or RLS policies.
+ *
+ * Note that if the relation is an inheritance child relation, securityQuals
+ * and access permissions are checked against the inheritance root parent (the
+ * relation actually mentioned in the query) --- see the comments in
+ * expand_single_inheritance_child() for an explanation of why it has to be
+ * done this way.
+ *
+ * If varattnos is non-NULL, its attribute numbers should be offset by
+ * FirstLowInvalidHeapAttributeNumber so that system attributes can be
+ * checked.  If varattnos is NULL, only table-level SELECT privileges are
+ * checked, not any column-level privileges.
+ *
+ * Note: if the relation is accessed via a view, this function actually tests
+ * whether the view owner has permission to select from the relation.  To
+ * ensure that the current user has permission, it is also necessary to check
+ * that the current user has permission to select from the view, which we do
+ * at planner-startup --- see subquery_planner().
+ *
+ * This is exported so that other estimation functions can use it.
+ */
+bool
+all_rows_selectable(PlannerInfo *root, Index varno, Bitmapset *varattnos)
+{
+	RelOptInfo *rel = find_base_rel(root, varno);
+	RangeTblEntry *rte = planner_rt_fetch(varno, root);
+	Oid			userid;
+	int			varattno;
+
+	Assert(rte->rtekind == RTE_RELATION);
+
+	/*
+	 * User ID to use for privilege checks (either the current user or the
+	 * view owner, if we're accessing the table via a view).
+	 *
+	 * If we navigate up to a parent relation, we keep using the same userid,
+	 * since it's the same in all relations of a given inheritance tree.
+	 */
+	userid = OidIsValid(rel->userid) ? rel->userid : GetUserId();
+
+	/*
+	 * Permissions and securityQuals must be checked on the table actually
+	 * mentioned in the query, so if this is an inheritance child, navigate up
+	 * to the inheritance root parent.  If the user can read the whole table
+	 * or the required columns there, then they can read from the child table
+	 * too.  For per-column checks, we must find out which of the root
+	 * parent's attributes the child relation's attributes correspond to.
+	 */
+	if (root->append_rel_array != NULL)
+	{
+		AppendRelInfo *appinfo;
+
+		appinfo = root->append_rel_array[varno];
+
+		/*
+		 * Partitions are mapped to their immediate parent, not the root
+		 * parent, so must be ready to walk up multiple AppendRelInfos.  But
+		 * stop if we hit a parent that is not RTE_RELATION --- that's a
+		 * flattened UNION ALL subquery, not an inheritance parent.
+		 */
+		while (appinfo &&
+			   planner_rt_fetch(appinfo->parent_relid,
+								root)->rtekind == RTE_RELATION)
+		{
+			Bitmapset  *parent_varattnos = NULL;
+
+			/*
+			 * For each child attribute, find the corresponding parent
+			 * attribute.  In rare cases, the attribute may be local to the
+			 * child table, in which case, we've got to live with having no
+			 * access to this column.
+			 */
+			varattno = -1;
+			while ((varattno = bms_next_member(varattnos, varattno)) >= 0)
+			{
+				AttrNumber	attno;
+				AttrNumber	parent_attno;
+
+				attno = varattno + FirstLowInvalidHeapAttributeNumber;
+
+				if (attno == InvalidAttrNumber)
+				{
+					/*
+					 * Whole-row reference, so must map each column of the
+					 * child to the parent table.
+					 */
+					for (attno = 1; attno <= appinfo->num_child_cols; attno++)
+					{
+						parent_attno = appinfo->parent_colnos[attno - 1];
+						if (parent_attno == 0)
+							return false;	/* attr is local to child */
+						parent_varattnos =
+							bms_add_member(parent_varattnos,
+										   parent_attno - FirstLowInvalidHeapAttributeNumber);
+					}
+				}
+				else
+				{
+					if (attno < 0)
+					{
+						/* System attnos are the same in all tables */
+						parent_attno = attno;
+					}
+					else
+					{
+						if (attno > appinfo->num_child_cols)
+							return false;	/* safety check */
+						parent_attno = appinfo->parent_colnos[attno - 1];
+						if (parent_attno == 0)
+							return false;	/* attr is local to child */
+					}
+					parent_varattnos =
+						bms_add_member(parent_varattnos,
+									   parent_attno - FirstLowInvalidHeapAttributeNumber);
+				}
+			}
+
+			/* If the parent is itself a child, continue up */
+			varno = appinfo->parent_relid;
+			varattnos = parent_varattnos;
+			appinfo = root->append_rel_array[varno];
+		}
+
+		/* Perform the access check on this parent rel */
+		rte = planner_rt_fetch(varno, root);
+		Assert(rte->rtekind == RTE_RELATION);
+	}
+
+	/*
+	 * For all rows to be accessible, there must be no securityQuals from
+	 * security barrier views or RLS policies.
+	 */
+	if (rte->securityQuals != NIL)
+		return false;
+
+	/*
+	 * Test for table-level SELECT privilege.
+	 *
+	 * If varattnos is non-NULL, this is sufficient to give access to all
+	 * requested attributes, even for a child table, since we have verified
+	 * that all required child columns have matching parent columns.
+	 *
+	 * If varattnos is NULL (whole-table access requested), this doesn't
+	 * necessarily guarantee that the user can read all columns of a child
+	 * table, but we allow it anyway (see comments in examine_variable()) and
+	 * don't bother checking any column privileges.
+	 */
+	if (pg_class_aclcheck(rte->relid, userid, ACL_SELECT) == ACLCHECK_OK)
+		return true;
+
+	if (varattnos == NULL)
+		return false;			/* whole-table access requested */
+
+	/*
+	 * Don't have table-level SELECT privilege, so check per-column
+	 * privileges.
+	 */
+	varattno = -1;
+	while ((varattno = bms_next_member(varattnos, varattno)) >= 0)
+	{
+		AttrNumber	attno = varattno + FirstLowInvalidHeapAttributeNumber;
+
+		if (attno == InvalidAttrNumber)
+		{
+			/* Whole-row reference, so must have access to all columns */
+			if (pg_attribute_aclcheck_all(rte->relid, userid, ACL_SELECT,
+										  ACLMASK_ALL) != ACLCHECK_OK)
+				return false;
+		}
+		else
+		{
+			if (pg_attribute_aclcheck(rte->relid, attno, userid,
+									  ACL_SELECT) != ACLCHECK_OK)
+				return false;
+		}
+	}
+
+	/* If we reach here, have all required column privileges */
+	return true;
+}
+
+/*
  * Check whether it is permitted to call func_oid passing some of the
- * pg_statistic data in vardata.  We allow this either if the user has SELECT
- * privileges on the table or column underlying the pg_statistic data or if
- * the function is marked leak-proof.
+ * pg_statistic data in vardata.  We allow this if either of the following
+ * conditions is met: (1) the user has SELECT privileges on the table or
+ * column underlying the pg_statistic data and there are no securityQuals from
+ * security barrier views or RLS policies, or (2) the function is marked
+ * leakproof.
  */
 bool
 statistic_proc_security_check(VariableStatData *vardata, Oid func_oid)
 {
 	if (vardata->acl_ok)
-		return true;
+		return true;			/* have SELECT privs and no securityQuals */
 
 	if (!OidIsValid(func_oid))
 		return false;
@@ -5967,6 +6043,10 @@ get_actual_variable_range(PlannerInfo *root, VariableStatData *vardata,
 	/* If it has indexes it must be a plain relation */
 	rte = root->simple_rte_array[rel->relid];
 	Assert(rte->rtekind == RTE_RELATION);
+
+	/* ignore partitioned tables.  Any indexes here are not real indexes */
+	if (rte->relkind == RELKIND_PARTITIONED_TABLE)
+		return false;
 
 	/* Search through the indexes to see if any match our problem */
 	foreach(lc, rel->indexlist)
@@ -6653,10 +6733,10 @@ btcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 			   double *indexPages)
 {
 	IndexOptInfo *index = path->indexinfo;
-	GenericCosts costs;
+	GenericCosts costs = {0};
 	Oid			relid;
 	AttrNumber	colnum;
-	VariableStatData vardata;
+	VariableStatData vardata = {0};
 	double		numIndexTuples;
 	Cost		descentCost;
 	List	   *indexBoundQuals;
@@ -6808,7 +6888,6 @@ btcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	/*
 	 * Now do generic index cost estimation.
 	 */
-	MemSet(&costs, 0, sizeof(costs));
 	costs.numIndexTuples = numIndexTuples;
 
 	genericcostestimate(root, path, loop_count, &costs);
@@ -6841,7 +6920,7 @@ btcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	 * touched.  The number of such pages is btree tree height plus one (ie,
 	 * we charge for the leaf page too).  As above, charge once per SA scan.
 	 */
-	descentCost = (index->tree_height + 1) * 50.0 * cpu_operator_cost;
+	descentCost = (index->tree_height + 1) * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
 	costs.indexStartupCost += descentCost;
 	costs.indexTotalCost += costs.num_sa_scans * descentCost;
 
@@ -6853,8 +6932,6 @@ btcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	 * ordering, but don't negate it entirely.  Before 8.0 we divided the
 	 * correlation by the number of columns, but that seems too strong.)
 	 */
-	MemSet(&vardata, 0, sizeof(vardata));
-
 	if (index->indexkeys[0] != 0)
 	{
 		/* Simple variable --- look to stats for the underlying table */
@@ -6958,9 +7035,7 @@ hashcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 				 Selectivity *indexSelectivity, double *indexCorrelation,
 				 double *indexPages)
 {
-	GenericCosts costs;
-
-	MemSet(&costs, 0, sizeof(costs));
+	GenericCosts costs = {0};
 
 	genericcostestimate(root, path, loop_count, &costs);
 
@@ -7003,10 +7078,8 @@ gistcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 				 double *indexPages)
 {
 	IndexOptInfo *index = path->indexinfo;
-	GenericCosts costs;
+	GenericCosts costs = {0};
 	Cost		descentCost;
-
-	MemSet(&costs, 0, sizeof(costs));
 
 	genericcostestimate(root, path, loop_count, &costs);
 
@@ -7042,7 +7115,7 @@ gistcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	/*
 	 * Likewise add a per-page charge, calculated the same as for btrees.
 	 */
-	descentCost = (index->tree_height + 1) * 50.0 * cpu_operator_cost;
+	descentCost = (index->tree_height + 1) * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
 	costs.indexStartupCost += descentCost;
 	costs.indexTotalCost += costs.num_sa_scans * descentCost;
 
@@ -7060,10 +7133,8 @@ spgcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 				double *indexPages)
 {
 	IndexOptInfo *index = path->indexinfo;
-	GenericCosts costs;
+	GenericCosts costs = {0};
 	Cost		descentCost;
-
-	MemSet(&costs, 0, sizeof(costs));
 
 	genericcostestimate(root, path, loop_count, &costs);
 
@@ -7099,7 +7170,7 @@ spgcostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	/*
 	 * Likewise add a per-page charge, calculated the same as for btrees.
 	 */
-	descentCost = (index->tree_height + 1) * 50.0 * cpu_operator_cost;
+	descentCost = (index->tree_height + 1) * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
 	costs.indexStartupCost += descentCost;
 	costs.indexTotalCost += costs.num_sa_scans * descentCost;
 
@@ -7436,6 +7507,7 @@ gincostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 				qual_arg_cost,
 				spc_random_page_cost,
 				outer_scans;
+	Cost		descentCost;
 	Relation	indexRel;
 	GinStatsData ginStats;
 	ListCell   *lc;
@@ -7660,6 +7732,47 @@ gincostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	 */
 	dataPagesFetched = ceil(numDataPages * partialScale);
 
+	*indexStartupCost = 0;
+	*indexTotalCost = 0;
+
+	/*
+	 * Add a CPU-cost component to represent the costs of initial entry btree
+	 * descent.  We don't charge any I/O cost for touching upper btree levels,
+	 * since they tend to stay in cache, but we still have to do about log2(N)
+	 * comparisons to descend a btree of N leaf tuples.  We charge one
+	 * cpu_operator_cost per comparison.
+	 *
+	 * If there are ScalarArrayOpExprs, charge this once per SA scan.  The
+	 * ones after the first one are not startup cost so far as the overall
+	 * plan is concerned, so add them only to "total" cost.
+	 */
+	if (numEntries > 1)			/* avoid computing log(0) */
+	{
+		descentCost = ceil(log(numEntries) / log(2.0)) * cpu_operator_cost;
+		*indexStartupCost += descentCost * counts.searchEntries;
+		*indexTotalCost += counts.arrayScans * descentCost * counts.searchEntries;
+	}
+
+	/*
+	 * Add a cpu cost per entry-page fetched. This is not amortized over a
+	 * loop.
+	 */
+	*indexStartupCost += entryPagesFetched * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
+	*indexTotalCost += entryPagesFetched * counts.arrayScans * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
+
+	/*
+	 * Add a cpu cost per data-page fetched. This is also not amortized over a
+	 * loop. Since those are the data pages from the partial match algorithm,
+	 * charge them as startup cost.
+	 */
+	*indexStartupCost += DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost * dataPagesFetched;
+
+	/*
+	 * Since we add the startup cost to the total cost later on, remove the
+	 * initial arrayscan from the total.
+	 */
+	*indexTotalCost += dataPagesFetched * (counts.arrayScans - 1) * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
+
 	/*
 	 * Calculate cache effects if more than one scan due to nestloops or array
 	 * quals.  The result is pro-rated per nestloop scan, but the array qual
@@ -7683,7 +7796,7 @@ gincostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	 * Here we use random page cost because logically-close pages could be far
 	 * apart on disk.
 	 */
-	*indexStartupCost = (entryPagesFetched + dataPagesFetched) * spc_random_page_cost;
+	*indexStartupCost += (entryPagesFetched + dataPagesFetched) * spc_random_page_cost;
 
 	/*
 	 * Now compute the number of data pages fetched during the scan.
@@ -7711,6 +7824,15 @@ gincostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	if (dataPagesFetchedBySel > dataPagesFetched)
 		dataPagesFetched = dataPagesFetchedBySel;
 
+	/* Add one page cpu-cost to the startup cost */
+	*indexStartupCost += DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost * counts.searchEntries;
+
+	/*
+	 * Add once again a CPU-cost for those data pages, before amortizing for
+	 * cache.
+	 */
+	*indexTotalCost += dataPagesFetched * counts.arrayScans * DEFAULT_PAGE_CPU_MULTIPLIER * cpu_operator_cost;
+
 	/* Account for cache effects, the same as above */
 	if (outer_scans > 1 || counts.arrayScans > 1)
 	{
@@ -7722,19 +7844,27 @@ gincostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 	}
 
 	/* And apply random_page_cost as the cost per page */
-	*indexTotalCost = *indexStartupCost +
+	*indexTotalCost += *indexStartupCost +
 		dataPagesFetched * spc_random_page_cost;
 
 	/*
-	 * Add on index qual eval costs, much as in genericcostestimate.  But we
-	 * can disregard indexorderbys, since GIN doesn't support those.
+	 * Add on index qual eval costs, much as in genericcostestimate. We charge
+	 * cpu but we can disregard indexorderbys, since GIN doesn't support
+	 * those.
 	 */
 	qual_arg_cost = index_other_operands_eval_cost(root, indexQuals);
 	qual_op_cost = cpu_operator_cost * list_length(indexQuals);
 
 	*indexStartupCost += qual_arg_cost;
 	*indexTotalCost += qual_arg_cost;
-	*indexTotalCost += (numTuples * *indexSelectivity) * (cpu_index_tuple_cost + qual_op_cost);
+
+	/*
+	 * Add a cpu cost per search entry, corresponding to the actual visited
+	 * entries.
+	 */
+	*indexTotalCost += (counts.searchEntries * counts.arrayScans) * (qual_op_cost);
+	/* Now add a cpu cost per tuple in the posting lists / trees */
+	*indexTotalCost += (numTuples * *indexSelectivity) * (cpu_index_tuple_cost);
 	*indexPages = dataPagesFetched;
 }
 
@@ -7884,7 +8014,7 @@ brincostestimate(PlannerInfo *root, IndexPath *path, double loop_count,
 				double		varCorrelation = 0.0;
 
 				if (sslot.nnumbers > 0)
-					varCorrelation = Abs(sslot.numbers[0]);
+					varCorrelation = fabs(sslot.numbers[0]);
 
 				if (varCorrelation > *indexCorrelation)
 					*indexCorrelation = varCorrelation;

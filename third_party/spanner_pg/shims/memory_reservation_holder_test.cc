@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "googlesql/base/logging.h"
+#include "third_party/spanner_pg/util/integral_types.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "googlesql/base/testing/status_matchers.h"

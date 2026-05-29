@@ -101,6 +101,23 @@ const char* FormatNode(const void* obj) {
   return pretty_format_node_dump(nodeToString(obj));
 }
 
+bool IsRawNullConstant(const Node* node) {
+  if (node == nullptr) return false;
+  if (IsA(node, A_Const)) {
+    const A_Const* a_const = reinterpret_cast<const A_Const*>(node);
+    return a_const->isnull;
+  }
+  return false;
+}
+
+const googlesql::ResolvedExpr* UnwrapCasts(
+    const googlesql::ResolvedExpr* expr) {
+  while (expr->node_kind() == googlesql::RESOLVED_CAST) {
+    expr = expr->GetAs<googlesql::ResolvedCast>()->expr();
+  }
+  return expr;
+}
+
 // Returns true if the query is a simple scenario that isn't supported by the
 // current implementation but can be rewritten to a supported form.
 // Specifically this handles the case where there is a single target SRF in a
@@ -329,6 +346,12 @@ SpangresTranslator::TranslateParsedTree(
         "SQL queries are limited to single statements");
   }
 
+  RawStmt* raw_stmt = linitial_node(RawStmt, parser_output->parse_tree());
+  if (IsA(raw_stmt->stmt, MergeStmt)) {
+    return absl::UnimplementedError(
+        "[ERROR] statement type \"MergeStmt\" is not supported");
+  }
+
   if (progress != nullptr) {
     *progress = interfaces::TranslationProgress::PARSER;
   }
@@ -362,7 +385,7 @@ SpangresTranslator::TranslateParsedTree(
                        params.googlesql_analyzer_options(),
                        parser_output->token_locations()));
 
-  RawStmt* raw_stmt = linitial_node(RawStmt, parser_output->parse_tree());
+  raw_stmt = linitial_node(RawStmt, parser_output->parse_tree());
   std::vector<std::string> input_arguments;
   if (IsA(raw_stmt->stmt, CreateFunctionStmt)) {
     CreateFunctionStmt* create_function_stmt =
@@ -629,6 +652,35 @@ SpangresTranslator::TranslateParsedExpression(
   if (ps->expr_list().size() == 1) {
     const googlesql::ResolvedExpr* expr = ps->expr_list(0)->expr();
     GOOGLESQL_RET_CHECK_NE(expr, nullptr) << "Expr in ResolvedExpr should not be null";
+
+    // If the PG analyzer coerced an untyped NULL expression (e.g., DEFAULT
+    // NULL) to text/STRING type because it was analyzed in a SELECT statement,
+    // we want to simplify it back to an untyped GoogleSQL "NULL".
+    // This allows Spanner's DDL compiler to implicitly coerce it to the correct
+    // column type. However, we must NOT simplify explicit type-casts (e.g.
+    // DEFAULT CAST(NULL AS text)) because they should trigger a type mismatch
+    // error in Spanner for PG compatibility. Thus, we deserialize the raw PG
+    // AST to verify if it was indeed a raw untyped NULL constant.
+    // Note that this has a limition because unwrapping casts would not work
+    // for more complex expressions, e.g., `DEFAULT NULL*2`, which is a valid
+    // expression in OSS PG but not in Spangres.
+    const googlesql::ResolvedExpr* unwrapped = UnwrapCasts(expr);
+    if (unwrapped->node_kind() == googlesql::RESOLVED_LITERAL &&
+        unwrapped->GetAs<googlesql::ResolvedLiteral>()->value().is_null() &&
+        params.serialized_parse_tree() != nullptr) {
+      std::unique_ptr<interfaces::PGArena> arena;
+      auto arena_status =
+          MemoryContextPGArena::Init(GetMemoryReservationManager(params));
+      if (arena_status.ok()) {
+        arena = std::move(arena_status.value());
+        auto raw_expr_or_status =
+            DeserializeParseExpression(*params.serialized_parse_tree());
+        if (raw_expr_or_status.ok() &&
+            IsRawNullConstant(raw_expr_or_status.value())) {
+          return interfaces::ExpressionTranslateResult{"NULL", "NULL"};
+        }
+      }
+    }
 
     GOOGLESQL_RET_CHECK_OK(builder.Process(*expr));
 

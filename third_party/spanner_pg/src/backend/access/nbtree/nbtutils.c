@@ -3,7 +3,7 @@
  * nbtutils.c
  *	  Utility code for Postgres btree implementation.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -487,8 +487,8 @@ _bt_sort_array_elements(IndexScanDesc scan, ScanKey skey,
 	fmgr_info(cmp_proc, &cxt.flinfo);
 	cxt.collation = skey->sk_collation;
 	cxt.reverse = reverse;
-	qsort_arg((void *) elems, nelems, sizeof(Datum),
-			  _bt_compare_array_elements, (void *) &cxt);
+	qsort_arg(elems, nelems, sizeof(Datum),
+			  _bt_compare_array_elements, &cxt);
 
 	/* Now scan the sorted elements and remove duplicates */
 	return qunique_arg(elems, nelems, sizeof(Datum),
@@ -1712,9 +1712,9 @@ _bt_check_rowcompare(ScanKey skey, IndexTuple tuple, int tupnatts,
  * current page and killed tuples thereon (generally, this should only be
  * called if so->numKilled > 0).
  *
- * The caller does not have a lock on the page and may or may not have the
- * page pinned in a buffer.  Note that read-lock is sufficient for setting
- * LP_DEAD status (which is only a hint).
+ * Caller should not have a lock on the so->currPos page, but may hold a
+ * buffer pin.  When we return, it still won't be locked.  It'll continue to
+ * hold whatever pins were held before calling here.
  *
  * We match items by heap TID before assuming they are the right ones to
  * delete.  We cope with cases where items have moved right due to insertions.
@@ -1746,7 +1746,8 @@ _bt_killitems(IndexScanDesc scan)
 	int			i;
 	int			numKilled = so->numKilled;
 	bool		killedsomething = false;
-	bool		droppedpin PG_USED_FOR_ASSERTS_ONLY;
+	bool		droppedpin;
+	Buffer		buf;
 
 	Assert(BTScanPosIsValid(so->currPos));
 
@@ -1765,29 +1766,30 @@ _bt_killitems(IndexScanDesc scan)
 		 * LSN.
 		 */
 		droppedpin = false;
-		_bt_lockbuf(scan->indexRelation, so->currPos.buf, BT_READ);
-
-		page = BufferGetPage(so->currPos.buf);
+		buf = so->currPos.buf;
+		_bt_lockbuf(scan->indexRelation, buf, BT_READ);
 	}
 	else
 	{
-		Buffer		buf;
+		XLogRecPtr	latestlsn;
 
 		droppedpin = true;
 		/* Attempt to re-read the buffer, getting pin and lock. */
 		buf = _bt_getbuf(scan->indexRelation, so->currPos.currPage, BT_READ);
 
-		page = BufferGetPage(buf);
-		if (BufferGetLSNAtomic(buf) == so->currPos.lsn)
-			so->currPos.buf = buf;
-		else
+		latestlsn = BufferGetLSNAtomic(buf);
+		Assert(so->currPos.lsn <= latestlsn);
+		if (so->currPos.lsn != latestlsn)
 		{
 			/* Modified while not pinned means hinting is not safe. */
 			_bt_relbuf(scan->indexRelation, buf);
 			return;
 		}
+
+		/* Unmodified, hinting is safe */
 	}
 
+	page = BufferGetPage(buf);
 	opaque = BTPageGetOpaque(page);
 	minoff = P_FIRSTDATAKEY(opaque);
 	maxoff = PageGetMaxOffsetNumber(page);
@@ -1904,10 +1906,13 @@ _bt_killitems(IndexScanDesc scan)
 	if (killedsomething)
 	{
 		opaque->btpo_flags |= BTP_HAS_GARBAGE;
-		MarkBufferDirtyHint(so->currPos.buf, true);
+		MarkBufferDirtyHint(buf, true);
 	}
 
-	_bt_unlockbuf(scan->indexRelation, so->currPos.buf);
+	if (!droppedpin)
+		_bt_unlockbuf(scan->indexRelation, buf);
+	else
+		_bt_relbuf(scan->indexRelation, buf);
 }
 
 
@@ -2499,13 +2504,6 @@ _bt_check_natts(Relation rel, bool heapkeyspace, Page page, OffsetNumber offnum)
 
 	Assert(offnum >= FirstOffsetNumber &&
 		   offnum <= PageGetMaxOffsetNumber(page));
-
-	/*
-	 * Mask allocated for number of keys in index tuple must be able to fit
-	 * maximum possible number of index attributes
-	 */
-	StaticAssertStmt(BT_OFFSET_MASK >= INDEX_MAX_KEYS,
-					 "BT_OFFSET_MASK can't fit INDEX_MAX_KEYS");
 
 	itup = (IndexTuple) PageGetItem(page, PageGetItemId(page, offnum));
 	tupnatts = BTreeTupleGetNAtts(itup, rel);

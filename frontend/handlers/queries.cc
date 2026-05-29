@@ -237,6 +237,11 @@ absl::Status ExecuteSql(RequestContext* ctx,
   return txn->GuardedCall(
       is_dml_query ? Transaction::OpType::kDml : Transaction::OpType::kSql,
       [&]() -> absl::Status {
+        if (request->data_boost_enabled()) {
+          if (request->partition_token().empty()) {
+            return error::DataBoostRequiresPartitionToken();
+          }
+        }
         // Register DML request and check for status replay.
         if (is_dml_query) {
           const auto state = txn->LookupOrRegisterDmlRequest(
@@ -402,6 +407,11 @@ absl::Status ExecuteStreamingSql(
   absl::Status status = txn->GuardedCall(
       is_dml_query ? Transaction::OpType::kDml : Transaction::OpType::kSql,
       [&]() -> absl::Status {
+        if (request->data_boost_enabled()) {
+          if (request->partition_token().empty()) {
+            return error::DataBoostRequiresPartitionToken();
+          }
+        }
         // Register DML request and check for status replay.
         if (is_dml_query) {
           const auto state = txn->LookupOrRegisterDmlRequest(

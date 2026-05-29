@@ -1,11 +1,11 @@
 
-# Copyright (c) 2021-2022, PostgreSQL Global Development Group
+# Copyright (c) 2021-2023, PostgreSQL Global Development Group
 
 use strict;
 use warnings;
 use Config;
 use File::Basename qw(basename dirname);
-use File::Path qw(rmtree);
+use File::Path     qw(rmtree);
 use PostgreSQL::Test::Cluster;
 use PostgreSQL::Test::Utils;
 use Test::More;
@@ -30,7 +30,7 @@ umask(0077);
 
 # Initialize node without replication settings
 $node->init(
-	extra      => ['--data-checksums'],
+	extra => ['--data-checksums'],
 	auth_extra => [ '--create-role', 'backupuser' ]);
 $node->start;
 my $pgdata = $node->data_dir;
@@ -140,14 +140,20 @@ SKIP:
 			'gzip:workers=3',
 			'invalid compression specification: compression algorithm "gzip" does not accept a worker count',
 			'failure on worker count for gzip'
+		],
+		[
+			'gzip:long',
+			'invalid compression specification: compression algorithm "gzip" does not support long-distance mode',
+			'failure on long mode for gzip'
 		],);
+
 	for my $cft (@compression_failure_tests)
 	{
 		my $cfail = quotemeta($client_fails . $cft->[1]);
 		my $sfail = quotemeta($server_fails . $cft->[1]);
 		$node->command_fails_like(
 			[
-				'pg_basebackup',   '-D',
+				'pg_basebackup', '-D',
 				"$tempdir/backup", '--compress',
 				$cft->[0]
 			],
@@ -155,7 +161,7 @@ SKIP:
 			'client ' . $cft->[2]);
 		$node->command_fails_like(
 			[
-				'pg_basebackup',   '-D',
+				'pg_basebackup', '-D',
 				"$tempdir/backup", '--compress',
 				'server-' . $cft->[0]
 			],
@@ -197,7 +203,7 @@ my $baseUnloggedPath = $node->safe_psql('postgres',
 
 # Make sure main and init forks exist
 ok(-f "$pgdata/${baseUnloggedPath}_init", 'unlogged init fork in base');
-ok(-f "$pgdata/$baseUnloggedPath",        'unlogged main fork in base');
+ok(-f "$pgdata/$baseUnloggedPath", 'unlogged main fork in base');
 
 # Create files that look like temporary relations to ensure they are ignored.
 my $postgresOid = $node->safe_psql('postgres',
@@ -215,7 +221,7 @@ foreach my $filename (@tempRelationFiles)
 $node->command_ok(
 	[ @pg_basebackup_defs, '-D', "$tempdir/backup", '-X', 'none' ],
 	'pg_basebackup runs');
-ok(-f "$tempdir/backup/PG_VERSION",      'backup was created');
+ok(-f "$tempdir/backup/PG_VERSION", 'backup was created');
 ok(-f "$tempdir/backup/backup_manifest", 'backup manifest included');
 
 # Permissions on backup should be default
@@ -284,13 +290,13 @@ unlink("$pgdata/backup_label")
 $node->command_ok(
 	[
 		@pg_basebackup_defs, '-D',
-		"$tempdir/backup2",  '--no-manifest',
-		'--waldir',          "$tempdir/xlog2"
+		"$tempdir/backup2", '--no-manifest',
+		'--waldir', "$tempdir/xlog2"
 	],
 	'separate xlog directory');
-ok(-f "$tempdir/backup2/PG_VERSION",       'backup was created');
+ok(-f "$tempdir/backup2/PG_VERSION", 'backup was created');
 ok(!-f "$tempdir/backup2/backup_manifest", 'manifest was suppressed');
-ok(-d "$tempdir/xlog2/",                   'xlog directory was created');
+ok(-d "$tempdir/xlog2/", 'xlog directory was created');
 rmtree("$tempdir/backup2");
 rmtree("$tempdir/xlog2");
 
@@ -376,7 +382,7 @@ my $realTsDir = "$real_sys_tempdir/tblspc1";
 $node->safe_psql('postgres',
 	"CREATE TABLESPACE tblspc1 LOCATION '$realTsDir';");
 $node->safe_psql('postgres',
-	    "CREATE TABLE test1 (a int) TABLESPACE tblspc1;"
+		"CREATE TABLE test1 (a int) TABLESPACE tblspc1;"
 	  . "INSERT INTO test1 VALUES (1234);");
 $node->backup('tarbackup2', backup_options => ['-Ft']);
 # empty test1, just so that it's different from the to-be-restored data
@@ -384,7 +390,7 @@ $node->safe_psql('postgres', "TRUNCATE TABLE test1;");
 
 # basic checks on the output
 my $backupdir = $node->backup_dir . '/tarbackup2';
-ok(-f "$backupdir/base.tar",   'backup tar was created');
+ok(-f "$backupdir/base.tar", 'backup tar was created');
 ok(-f "$backupdir/pg_wal.tar", 'WAL tar was created');
 my @tblspc_tars = glob "$backupdir/[0-9]*.tar";
 is(scalar(@tblspc_tars), 1, 'one tablespace tar was created');
@@ -406,7 +412,7 @@ SKIP:
 	$node2->init_from_backup($node, 'tarbackup2', tar_program => $tar);
 
 	# Recover tablespace into a new directory (not where it was!)
-	my $repTsDir     = "$tempdir/tblspc1replica";
+	my $repTsDir = "$tempdir/tblspc1replica";
 	my $realRepTsDir = "$real_sys_tempdir/tblspc1replica";
 	mkdir $repTsDir;
 	PostgreSQL::Test::Utils::system_or_bail($tar, 'xf', $tblspc_tars[0],
@@ -415,7 +421,7 @@ SKIP:
 	# Update tablespace map to point to new directory.
 	# XXX Ideally pg_basebackup would handle this.
 	$tblspc_tars[0] =~ m|/([0-9]*)\.tar$|;
-	my $tblspcoid       = $1;
+	my $tblspcoid = $1;
 	my $escapedRepTsDir = $realRepTsDir;
 	$escapedRepTsDir =~ s/\\/\\\\/g;
 	open my $mapfile, '>', $node2->data_dir . '/tablespace_map';
@@ -463,7 +469,7 @@ $node->command_fails(
 $node->command_ok(
 	[
 		@pg_basebackup_defs, '-D',
-		"$tempdir/backup1",  '-Fp',
+		"$tempdir/backup1", '-Fp',
 		"-T$realTsDir=$tempdir/tbackup/tblspc1",
 	],
 	'plain format with tablespaces succeeds with tablespace mapping');
@@ -533,7 +539,7 @@ $realTsDir =~ s/=/\\=/;
 $node->command_ok(
 	[
 		@pg_basebackup_defs, '-D',
-		"$tempdir/backup3",  '-Fp',
+		"$tempdir/backup3", '-Fp',
 		"-T$realTsDir=$tempdir/tbackup/tbl\\=spc2",
 	],
 	'mapping tablespace with = sign in path');
@@ -554,7 +560,7 @@ rmtree("$tempdir/tarbackup_l3");
 $node->command_ok([ @pg_basebackup_defs, '-D', "$tempdir/backupR", '-R' ],
 	'pg_basebackup -R runs');
 ok(-f "$tempdir/backupR/postgresql.auto.conf", 'postgresql.auto.conf exists');
-ok(-f "$tempdir/backupR/standby.signal",       'standby.signal was created');
+ok(-f "$tempdir/backupR/standby.signal", 'standby.signal was created');
 my $recovery_conf = slurp_file "$tempdir/backupR/postgresql.auto.conf";
 rmtree("$tempdir/backupR");
 
@@ -593,9 +599,9 @@ ok(-f "$tempdir/backupxst/pg_wal.tar", "tar file was created");
 rmtree("$tempdir/backupxst");
 $node->command_ok(
 	[
-		@pg_basebackup_defs,     '-D',
+		@pg_basebackup_defs, '-D',
 		"$tempdir/backupnoslot", '-X',
-		'stream',                '--no-slot'
+		'stream', '--no-slot'
 	],
 	'pg_basebackup -X stream runs with --no-slot');
 rmtree("$tempdir/backupnoslot");
@@ -618,7 +624,7 @@ $node->command_fails_like(
 $node->command_fails_like(
 	[
 		@pg_basebackup_defs, '--target', 'blackhole', '-X',
-		'none',              '-D',       "$tempdir/blackhole"
+		'none', '-D', "$tempdir/blackhole"
 	],
 	qr/cannot specify both output directory and backup target/,
 	'backup target and output directory');
@@ -631,7 +637,7 @@ $node->command_ok(
 	'backup target blackhole');
 $node->command_ok(
 	[
-		@pg_basebackup_defs,              '--target',
+		@pg_basebackup_defs, '--target',
 		"server:$tempdir/backuponserver", '-X',
 		'none'
 	],
@@ -655,9 +661,9 @@ rmtree("$tempdir/backuponserver");
 
 $node->command_fails(
 	[
-		@pg_basebackup_defs,         '-D',
+		@pg_basebackup_defs, '-D',
 		"$tempdir/backupxs_sl_fail", '-X',
-		'stream',                    '-S',
+		'stream', '-S',
 		'slot0'
 	],
 	'pg_basebackup fails with nonexistent replication slot');
@@ -668,9 +674,9 @@ $node->command_fails(
 
 $node->command_fails(
 	[
-		@pg_basebackup_defs,      '-D',
+		@pg_basebackup_defs, '-D',
 		"$tempdir/backupxs_slot", '-C',
-		'-S',                     'slot0',
+		'-S', 'slot0',
 		'--no-slot'
 	],
 	'pg_basebackup fails with -C -S --no-slot');
@@ -688,9 +694,9 @@ $node->command_ok(
 
 $node->command_fails(
 	[
-		@pg_basebackup_defs,         '-D',
+		@pg_basebackup_defs, '-D',
 		"$tempdir/backupxs_sl_fail", '-X',
-		'stream',                    '-S',
+		'stream', '-S',
 		'slot0'
 	],
 	'pg_basebackup fails with nonexistent replication slot');
@@ -701,18 +707,18 @@ $node->command_fails(
 
 $node->command_fails(
 	[
-		@pg_basebackup_defs,      '-D',
+		@pg_basebackup_defs, '-D',
 		"$tempdir/backupxs_slot", '-C',
-		'-S',                     'slot0',
+		'-S', 'slot0',
 		'--no-slot'
 	],
 	'pg_basebackup fails with -C -S --no-slot');
 
 $node->command_ok(
 	[
-		@pg_basebackup_defs,      '-D',
+		@pg_basebackup_defs, '-D',
 		"$tempdir/backupxs_slot", '-C',
-		'-S',                     'slot0'
+		'-S', 'slot0'
 	],
 	'pg_basebackup -C runs');
 rmtree("$tempdir/backupxs_slot");
@@ -733,9 +739,9 @@ isnt(
 
 $node->command_fails(
 	[
-		@pg_basebackup_defs,       '-D',
+		@pg_basebackup_defs, '-D',
 		"$tempdir/backupxs_slot1", '-C',
-		'-S',                      'slot0'
+		'-S', 'slot0'
 	],
 	'pg_basebackup fails with -C -S and a previously existing slot');
 
@@ -748,13 +754,13 @@ is($lsn, '', 'restart LSN of new slot is null');
 $node->command_fails(
 	[
 		@pg_basebackup_defs, '-D', "$tempdir/fail", '-S',
-		'slot1',             '-X', 'none'
+		'slot1', '-X', 'none'
 	],
 	'pg_basebackup with replication slot fails without WAL streaming');
 $node->command_ok(
 	[
 		@pg_basebackup_defs, '-D', "$tempdir/backupxs_sl", '-X',
-		'stream',            '-S', 'slot1'
+		'stream', '-S', 'slot1'
 	],
 	'pg_basebackup -X stream with replication slot runs');
 $lsn = $node->safe_psql('postgres',
@@ -766,7 +772,7 @@ rmtree("$tempdir/backupxs_sl");
 $node->command_ok(
 	[
 		@pg_basebackup_defs, '-D', "$tempdir/backupxs_sl_R", '-X',
-		'stream',            '-S', 'slot1',                  '-R',
+		'stream', '-S', 'slot1', '-R',
 	],
 	'pg_basebackup with replication slot and -R runs');
 like(
@@ -834,7 +840,7 @@ rmtree("$tempdir/backup_corrupt3");
 # do not verify checksums, should return ok
 $node->command_ok(
 	[
-		@pg_basebackup_defs,        '-D',
+		@pg_basebackup_defs, '-D',
 		"$tempdir/backup_corrupt4", '--no-verify-checksums',
 	],
 	'pg_basebackup with -k does not report checksum mismatch');
@@ -853,24 +859,24 @@ SKIP:
 
 	$node->command_ok(
 		[
-			@pg_basebackup_defs,    '-D',
+			@pg_basebackup_defs, '-D',
 			"$tempdir/backup_gzip", '--compress',
-			'1',                    '--format',
+			'1', '--format',
 			't'
 		],
 		'pg_basebackup with --compress');
 	$node->command_ok(
 		[
-			@pg_basebackup_defs,     '-D',
+			@pg_basebackup_defs, '-D',
 			"$tempdir/backup_gzip2", '--gzip',
-			'--format',              't'
+			'--format', 't'
 		],
 		'pg_basebackup with --gzip');
 	$node->command_ok(
 		[
-			@pg_basebackup_defs,     '-D',
+			@pg_basebackup_defs, '-D',
 			"$tempdir/backup_gzip3", '--compress',
-			'gzip:1',                '--format',
+			'gzip:1', '--format',
 			't'
 		],
 		'pg_basebackup with --compress=gzip:1');
@@ -916,8 +922,8 @@ my ($sigchld_bb_stdin, $sigchld_bb_stdout, $sigchld_bb_stderr) = ('', '', '');
 my $sigchld_bb = IPC::Run::start(
 	[
 		@pg_basebackup_defs, '--wal-method=stream',
-		'-D',                "$tempdir/sigchld",
-		'--max-rate=32',     '-d',
+		'-D', "$tempdir/sigchld",
+		'--max-rate=32', '-d',
 		$node->connstr('postgres')
 	],
 	'<',
@@ -937,16 +943,17 @@ is( $node->poll_query_until(
 	"Walsender killed");
 
 ok( pump_until(
-		$sigchld_bb,         $sigchld_bb_timeout,
+		$sigchld_bb, $sigchld_bb_timeout,
 		\$sigchld_bb_stderr, qr/background process terminated unexpectedly/),
 	'background process exit message');
 $sigchld_bb->finish();
 
 # Test that we can back up an in-place tablespace
 $node->safe_psql('postgres',
-	"SET allow_in_place_tablespaces = on; CREATE TABLESPACE tblspc2 LOCATION '';");
+	"SET allow_in_place_tablespaces = on; CREATE TABLESPACE tblspc2 LOCATION '';"
+);
 $node->safe_psql('postgres',
-	    "CREATE TABLE test2 (a int) TABLESPACE tblspc2;"
+		"CREATE TABLE test2 (a int) TABLESPACE tblspc2;"
 	  . "INSERT INTO test2 VALUES (1234);");
 my $tblspc_oid = $node->safe_psql('postgres',
 	"SELECT oid FROM pg_tablespace WHERE spcname = 'tblspc2';");

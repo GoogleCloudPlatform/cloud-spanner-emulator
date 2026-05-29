@@ -355,6 +355,7 @@ cc_library(
         "//frontend/server:handler",
         "@com_google_absl//absl/status",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googlesql//googlesql/base:status",
     ],
     alwayslink = 1,
 )
@@ -396,6 +397,7 @@ cc_library(
         "//frontend/server:handler",
         "@com_google_absl//absl/status",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googlesql//googlesql/base:status",
         "@com_google_protobuf//:cc_wkt_protos",
     ],
     alwayslink = 1,
@@ -437,6 +439,7 @@ cc_library(
         "@com_google_absl//absl/time",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
+        "@com_google_googlesql//googlesql/base:status",
         "@com_google_protobuf//:cc_wkt_protos",
     ],
     alwayslink = 1,

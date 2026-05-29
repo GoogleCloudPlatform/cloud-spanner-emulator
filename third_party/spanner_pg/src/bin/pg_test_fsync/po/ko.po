@@ -5,10 +5,10 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: pg_test_fsync (PostgreSQL) 15\n"
+"Project-Id-Version: pg_test_fsync (PostgreSQL) 16\n"
 "Report-Msgid-Bugs-To: pgsql-bugs@lists.postgresql.org\n"
-"POT-Creation-Date: 2023-04-12 00:51+0000\n"
-"PO-Revision-Date: 2023-04-05 18:08+0900\n"
+"POT-Creation-Date: 2023-09-07 05:52+0000\n"
+"PO-Revision-Date: 2023-05-30 12:39+0900\n"
 "Last-Translator: Ioseph Kim <ioseph@uri.sarang.net>\n"
 "Language-Team: Korean <pgsql-kr@postgresql.kr>\n"
 "Language: ko\n"
@@ -101,21 +101,21 @@ msgstr ""
 msgid "Direct I/O is not supported on this platform.\n"
 msgstr "이 플랫폼은 direct I/O 기능을 지원하지 않음.\n"
 
-#: pg_test_fsync.c:245 pg_test_fsync.c:336 pg_test_fsync.c:361
-#: pg_test_fsync.c:385 pg_test_fsync.c:529 pg_test_fsync.c:541
-#: pg_test_fsync.c:557 pg_test_fsync.c:563 pg_test_fsync.c:585
+#: pg_test_fsync.c:245 pg_test_fsync.c:335 pg_test_fsync.c:357
+#: pg_test_fsync.c:381 pg_test_fsync.c:525 pg_test_fsync.c:537
+#: pg_test_fsync.c:553 pg_test_fsync.c:559 pg_test_fsync.c:581
 msgid "could not open output file"
 msgstr "출력 파일을 열 수 없음"
 
-#: pg_test_fsync.c:249 pg_test_fsync.c:319 pg_test_fsync.c:345
-#: pg_test_fsync.c:370 pg_test_fsync.c:394 pg_test_fsync.c:433
-#: pg_test_fsync.c:492 pg_test_fsync.c:531 pg_test_fsync.c:559
-#: pg_test_fsync.c:590
+#: pg_test_fsync.c:249 pg_test_fsync.c:319 pg_test_fsync.c:344
+#: pg_test_fsync.c:366 pg_test_fsync.c:390 pg_test_fsync.c:429
+#: pg_test_fsync.c:488 pg_test_fsync.c:527 pg_test_fsync.c:555
+#: pg_test_fsync.c:586
 msgid "write failed"
 msgstr "쓰기 실패"
 
-#: pg_test_fsync.c:253 pg_test_fsync.c:372 pg_test_fsync.c:396
-#: pg_test_fsync.c:533 pg_test_fsync.c:565
+#: pg_test_fsync.c:253 pg_test_fsync.c:368 pg_test_fsync.c:392
+#: pg_test_fsync.c:529 pg_test_fsync.c:561
 msgid "fsync failed"
 msgstr "fsync 실패"
 
@@ -145,16 +145,16 @@ msgstr ""
 "(fdatasync가 리눅스 기본값이기에 제외하고, wal_sync_method 우선으로 처리 "
 "함)\n"
 
-#: pg_test_fsync.c:306 pg_test_fsync.c:413 pg_test_fsync.c:480
+#: pg_test_fsync.c:306 pg_test_fsync.c:409 pg_test_fsync.c:476
 msgid "n/a*"
 msgstr "n/a*"
 
-#: pg_test_fsync.c:325 pg_test_fsync.c:351 pg_test_fsync.c:401
-#: pg_test_fsync.c:439 pg_test_fsync.c:498
+#: pg_test_fsync.c:325 pg_test_fsync.c:397 pg_test_fsync.c:435
+#: pg_test_fsync.c:494
 msgid "n/a"
 msgstr "n/a"
 
-#: pg_test_fsync.c:444
+#: pg_test_fsync.c:440
 #, c-format
 msgid ""
 "* This file system and its mount options do not support direct\n"
@@ -163,7 +163,7 @@ msgstr ""
 "* 이 파일 시스템과 마운트 옵션이 direct I/O 기능을 지원하지 않음\n"
 "  예: journaled mode에서 ext4\n"
 
-#: pg_test_fsync.c:452
+#: pg_test_fsync.c:448
 #, c-format
 msgid ""
 "\n"
@@ -172,7 +172,7 @@ msgstr ""
 "\n"
 "서로 다른 쓰기량으로 open_sync 비교:\n"
 
-#: pg_test_fsync.c:453
+#: pg_test_fsync.c:449
 #, c-format
 msgid ""
 "(This is designed to compare the cost of writing 16kB in different write\n"
@@ -180,27 +180,27 @@ msgid ""
 msgstr ""
 "(서로 다른 크기로 16kB를 쓰는데, open_sync 옵션을 사용할 때의 비용 비교)\n"
 
-#: pg_test_fsync.c:456
+#: pg_test_fsync.c:452
 msgid " 1 * 16kB open_sync write"
 msgstr " 1 * 16kB open_sync 쓰기"
 
-#: pg_test_fsync.c:457
+#: pg_test_fsync.c:453
 msgid " 2 *  8kB open_sync writes"
 msgstr " 2 * 8kB open_sync 쓰기"
 
-#: pg_test_fsync.c:458
+#: pg_test_fsync.c:454
 msgid " 4 *  4kB open_sync writes"
 msgstr " 4 * 4kB open_sync 쓰기"
 
-#: pg_test_fsync.c:459
+#: pg_test_fsync.c:455
 msgid " 8 *  2kB open_sync writes"
 msgstr " 8 * 2kB open_sync 쓰기"
 
-#: pg_test_fsync.c:460
+#: pg_test_fsync.c:456
 msgid "16 *  1kB open_sync writes"
 msgstr "16 * 1kB open_sync 쓰기"
 
-#: pg_test_fsync.c:514
+#: pg_test_fsync.c:510
 #, c-format
 msgid ""
 "\n"
@@ -209,7 +209,7 @@ msgstr ""
 "\n"
 "쓰기 방지 파일에서 fsync 작동 여부 검사:\n"
 
-#: pg_test_fsync.c:515
+#: pg_test_fsync.c:511
 #, c-format
 msgid ""
 "(If the times are similar, fsync() can sync data written on a different\n"
@@ -218,7 +218,7 @@ msgstr ""
 "(이 값이 비슷하다면, fsync() 호출로 여러 파일 상태에 대해서 sync를 사용\n"
 "할 수 있음.)\n"
 
-#: pg_test_fsync.c:580
+#: pg_test_fsync.c:576
 #, c-format
 msgid ""
 "\n"
@@ -226,16 +226,3 @@ msgid ""
 msgstr ""
 "\n"
 "Non-sync %dkB 쓰기:\n"
-
-#~ msgid "%s: %s\n"
-#~ msgstr "%s: %s\n"
-
-#~ msgid "%s: too many command-line arguments (first is \"%s\")\n"
-#~ msgstr "%s: 너무 많은 명령행 인자를 지정했음 (시작은 \"%s\")\n"
-
-#, c-format
-#~ msgid "Try \"%s --help\" for more information.\n"
-#~ msgstr "자세한 사용법은 \"%s --help\" 명령을 이용하세요.\n"
-
-#~ msgid "seek failed"
-#~ msgstr "찾기 실패"

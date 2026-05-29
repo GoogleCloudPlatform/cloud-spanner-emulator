@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -84,9 +85,8 @@ absl::StatusOr<TokenMap> SearchHelper::BuildTokenMap(
 absl::StatusOr<SimpleNode*> SearchQueryCache::GetParsedQuery(
     const std::string& query_string) {
   if (query_cache_.find(query_string) == query_cache_.end()) {
-    QueryParser parser(query_string);
-    GOOGLESQL_RETURN_IF_ERROR(parser.ParseSearchQuery());
-
+    RQueryParser parser(query_string);
+    GOOGLESQL_RETURN_IF_ERROR(parser.Parse());
     query_cache_[query_string] = std::move(parser.ReleaseTree());
   }
 

@@ -288,12 +288,43 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOneModel(
               REMOTE OPTIONS (endpoint = 'test')
             )",
       },
-      type_factory
-      ,
-      "" /*proto_descriptor_bytes*/
-      ,
-      dialect);
+      type_factory,
+      /*proto_descriptor_bytes=*/"", dialect);
 
+  ABSL_CHECK_OK(maybe_schema.status());  // Crash OK
+  return std::move(maybe_schema.value());
+}
+
+std::unique_ptr<const backend::Schema> CreateSchemaWithOneRemoteUdf(
+    googlesql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect) {
+  absl::StatusOr<std::unique_ptr<const backend::Schema>> maybe_schema;
+
+  std::string remote_udf;
+  switch (dialect) {
+    case database_api::DatabaseDialect::GOOGLE_STANDARD_SQL:
+      remote_udf = R"sql(
+          CREATE FUNCTION my_remote_udf(x INT64)
+          RETURNS INT64
+          NOT DETERMINISTIC
+          LANGUAGE REMOTE
+          OPTIONS (endpoint = "test")
+      )sql";
+      break;
+    case database_api::DatabaseDialect::POSTGRESQL:
+      remote_udf = R"sql(
+          CREATE FUNCTION my_remote_udf(x BIGINT)
+          RETURNS BIGINT
+          VOLATILE
+          LANGUAGE REMOTE
+          AS $${"endpoint": "test"}$$
+      )sql";
+      break;
+    default:
+      GOOGLESQL_VLOG(false) << "Unsupported dialect: " << dialect;  // Crash OK
+  }
+  maybe_schema = CreateSchemaFromDDL({remote_udf}, type_factory,
+                                     /*proto_descriptor_bytes=*/"", dialect);
   ABSL_CHECK_OK(maybe_schema.status());  // Crash OK
   return std::move(maybe_schema.value());
 }

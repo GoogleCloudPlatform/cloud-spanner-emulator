@@ -482,13 +482,6 @@ absl::StatusOr<RangeTblEntry*> makePartialRangeTblEntry(bool inFromCl,
 
   rte->inh = true;  // Callers should set this, but true is a safe default.
   rte->inFromCl = inFromCl;
-  rte->checkAsUser =
-      InvalidOid;  // User access check is not relevant in this context
-  rte->selectedCols = nullptr;
-  rte->insertedCols = nullptr;
-  rte->updatedCols = nullptr;
-  rte->extraUpdatedCols = nullptr;
-  rte->requiredPerms = acl_mode;
 
   return rte;
 }
@@ -695,6 +688,8 @@ std::string PostgresJoinTypeToString(JoinType join_type) {
       return "JOIN_UNIQUE_OUTER";
     case JOIN_UNIQUE_INNER:
       return "JOIN_UNIQUE_INNER";
+    case JOIN_RIGHT_ANTI:
+      return "JOIN_RIGHT_ANTI";
   }
   ABSL_LOG(ERROR) << "Unknown PostgreSQL join type: " << join_type;
   return "unknown PostgreSQL join type";

@@ -84,6 +84,7 @@ cc_library(
         "@com_google_googlesql//googlesql/base:ret_check",
         "@com_google_protobuf//:protobuf_lite",
         "@com_googlesource_code_re2//:re2",
+        "@json",
     ],
 )
 
@@ -211,6 +212,7 @@ cc_library(
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:error_shim",
         "//third_party/spanner_pg/src/include",
+        "//third_party/spanner_pg/util:nodetag_to_string",
         "//third_party/spanner_pg/util:pg_list_iterators",
         "//third_party/spanner_pg/util:postgres",
         "@com_google_absl//absl/algorithm:container",
@@ -220,6 +222,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_googlesql//googlesql/base:ret_check",
     ],
 )

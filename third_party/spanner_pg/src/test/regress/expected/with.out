@@ -396,9 +396,9 @@ SELECT pg_get_viewdef('vsubdepartment'::regclass);
              subdepartment sd                 +
            WHERE (d.parent_department = sd.id)+
          )                                    +
-  SELECT subdepartment.id,                    +
-     subdepartment.parent_department,         +
-     subdepartment.name                       +
+  SELECT id,                                  +
+     parent_department,                       +
+     name                                     +
     FROM subdepartment;
 (1 row)
 
@@ -419,9 +419,9 @@ SELECT pg_get_viewdef('vsubdepartment'::regclass, true);
              subdepartment sd               +
            WHERE d.parent_department = sd.id+
          )                                  +
-  SELECT subdepartment.id,                  +
-     subdepartment.parent_department,       +
-     subdepartment.name                     +
+  SELECT id,                                +
+     parent_department,                     +
+     name                                   +
     FROM subdepartment;
 (1 row)
 
@@ -446,7 +446,7 @@ View definition:
            FROM t t_1
           WHERE t_1.n < 100
         )
- SELECT sum(t.n) AS sum
+ SELECT sum(n) AS sum
    FROM t;
 
 -- corner case in which sub-WITH gets initialized first
@@ -635,6 +635,21 @@ SELECT t1.id, t2.path, t2 FROM t AS t1 JOIN t AS t2 ON
  15 | {3,7,11,15} | (15,"{3,7,11,15}")
  16 | {3,7,11,16} | (16,"{3,7,11,16}")
 (16 rows)
+
+CREATE TEMP TABLE duplicates (a INT NOT NULL);
+INSERT INTO duplicates VALUES(1), (1);
+-- Try out a recursive UNION case where the non-recursive part's table slot
+-- uses TTSOpsBufferHeapTuple and contains duplicate rows.
+WITH RECURSIVE cte (a) as (
+	SELECT a FROM duplicates
+	UNION
+	SELECT a FROM cte
+)
+SELECT a FROM cte;
+ a 
+---
+ 1
+(1 row)
 
 -- SEARCH clause
 create temp table graph0( f int, t int, label text );
@@ -959,9 +974,9 @@ select pg_get_viewdef('v_search');
              search_graph sg                   +
            WHERE (g.f = sg.t)                  +
          ) SEARCH DEPTH FIRST BY f, t SET seq  +
-  SELECT search_graph.f,                       +
-     search_graph.t,                           +
-     search_graph.label                        +
+  SELECT f,                                    +
+     t,                                        +
+     label                                     +
     FROM search_graph;
 (1 row)
 
@@ -1547,9 +1562,9 @@ select pg_get_viewdef('v_cycle1');
              search_graph sg                   +
            WHERE (g.f = sg.t)                  +
          ) CYCLE f, t SET is_cycle USING path  +
-  SELECT search_graph.f,                       +
-     search_graph.t,                           +
-     search_graph.label                        +
+  SELECT f,                                    +
+     t,                                        +
+     label                                     +
     FROM search_graph;
 (1 row)
 
@@ -1569,9 +1584,9 @@ select pg_get_viewdef('v_cycle2');
              search_graph sg                                                +
            WHERE (g.f = sg.t)                                               +
          ) CYCLE f, t SET is_cycle TO 'Y'::text DEFAULT 'N'::text USING path+
-  SELECT search_graph.f,                                                    +
-     search_graph.t,                                                        +
-     search_graph.label                                                     +
+  SELECT f,                                                                 +
+     t,                                                                     +
+     label                                                                  +
     FROM search_graph;
 (1 row)
 
@@ -2016,6 +2031,14 @@ WITH RECURSIVE x(n) AS (
 ERROR:  ORDER BY in a recursive query is not implemented
 LINE 3:   ORDER BY (SELECT n FROM x))
                    ^
+-- and this
+WITH RECURSIVE x(n) AS (
+  WITH sub_cte AS (SELECT * FROM x)
+  DELETE FROM graph RETURNING f)
+	SELECT * FROM x;
+ERROR:  recursive query "x" must not contain data-modifying statements
+LINE 1: WITH RECURSIVE x(n) AS (
+                       ^
 CREATE TEMPORARY TABLE y (a INTEGER);
 INSERT INTO y SELECT generate_series(1, 10);
 -- LEFT JOIN
@@ -2198,6 +2221,40 @@ from int4_tbl;
      -123456
   2147483647
  -2147483647
+(5 rows)
+
+--
+-- test for bug #19055: interaction of WITH with aggregates
+--
+-- The reference to cte1 must determine the aggregate's level,
+-- even though it contains no Vars referencing cte1
+explain (verbose, costs off)
+select f1, (with cte1(x,y) as (select 1,2)
+            select count((select i4.f1 from cte1))) as ss
+from int4_tbl i4;
+            QUERY PLAN             
+-----------------------------------
+ Seq Scan on public.int4_tbl i4
+   Output: i4.f1, (SubPlan 2)
+   SubPlan 2
+     ->  Aggregate
+           Output: count($1)
+           InitPlan 1 (returns $1)
+             ->  Result
+                   Output: i4.f1
+           ->  Result
+(9 rows)
+
+select f1, (with cte1(x,y) as (select 1,2)
+            select count((select i4.f1 from cte1))) as ss
+from int4_tbl i4;
+     f1      | ss 
+-------------+----
+           0 |  1
+      123456 |  1
+     -123456 |  1
+  2147483647 |  1
+ -2147483647 |  1
 (5 rows)
 
 --
@@ -2698,20 +2755,20 @@ SELECT * FROM bug6051_2;
  3
 (3 rows)
 
--- check INSERT...SELECT rule actions are disallowed on commands
+-- check INSERT ... SELECT rule actions are disallowed on commands
 -- that have modifyingCTEs
 CREATE OR REPLACE RULE bug6051_ins AS ON INSERT TO bug6051 DO INSTEAD
  INSERT INTO bug6051_2
  SELECT NEW.i;
 WITH t1 AS ( DELETE FROM bug6051 RETURNING * )
 INSERT INTO bug6051 SELECT * FROM t1;
-ERROR:  INSERT...SELECT rule actions are not supported for queries having data-modifying statements in WITH
+ERROR:  INSERT ... SELECT rule actions are not supported for queries having data-modifying statements in WITH
 -- silly example to verify that hasModifyingCTE flag is propagated
 CREATE TEMP TABLE bug6051_3 AS
   SELECT a FROM generate_series(11,13) AS a;
 CREATE RULE bug6051_3_ins AS ON INSERT TO bug6051_3 DO INSTEAD
   SELECT i FROM bug6051_2;
-BEGIN; SET LOCAL force_parallel_mode = on;
+BEGIN; SET LOCAL debug_parallel_query = on;
 WITH t1 AS ( DELETE FROM bug6051_3 RETURNING * )
   INSERT INTO bug6051_3 SELECT * FROM t1;
  i 

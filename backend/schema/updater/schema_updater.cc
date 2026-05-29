@@ -532,7 +532,8 @@ class SchemaUpdaterImpl {
       const ddl::CreateFunction& ddl_function, bool replace,
       absl::flat_hash_set<const SchemaNode*>* dependencies,
       std::unique_ptr<googlesql::FunctionSignature>* function_signature,
-      Udf::Determinism* determinism_level);
+      Udf::Determinism* determinism_level, std::optional<std::string>* endpoint,
+      std::optional<int64_t>* max_batching_rows);
   absl::Status AnalyzeFunctionDefinition(
       const ddl::CreateFunction& ddl_function, bool replace,
       std::vector<View::Column>* output_columns,
@@ -4378,7 +4379,8 @@ absl::Status SchemaUpdaterImpl::AnalyzeFunctionDefinition(
     const ddl::CreateFunction& ddl_function, bool replace,
     absl::flat_hash_set<const SchemaNode*>* dependencies,
     std::unique_ptr<googlesql::FunctionSignature>* function_signature,
-    Udf::Determinism* determinism_level) {
+    Udf::Determinism* determinism_level, std::optional<std::string>* endpoint,
+    std::optional<int64_t>* max_batching_rows) {
   std::string param_list = "";
   for (int i = 0; i < ddl_function.param_size(); i++) {
     param_list += ddl_function.param(i).name() + " " +
@@ -4390,25 +4392,36 @@ absl::Status SchemaUpdaterImpl::AnalyzeFunctionDefinition(
       param_list += ", ";
     }
   }
-  std::optional<std::string> endpoint;
-  std::optional<int> max_batching_rows;
-  if (ddl_function.is_remote() ||
-      ddl_function.language() == ddl::Function::REMOTE) {
-    for (const auto& option : ddl_function.options()) {
-      if (option.option_name() == "endpoint") {
-        endpoint = option.string_value();
-      }
-      if (option.option_name() == "max_batching_rows") {
-        max_batching_rows = option.int64_value();
-      }
+
+  std::string options = "";
+  if (!ddl_function.sql_options().empty()) {
+    absl::StrAppend(&options, " OPTIONS (");
+    bool first = true;
+    for (const auto& option : ddl_function.sql_options()) {
+      absl::StrAppend(&options, first ? "" : ", ", option.name(), " = ",
+                      option.sql_value());
+      first = false;
     }
+    absl::StrAppend(&options, ")");
   }
+
+  std::string language = "";
+  switch (ddl_function.language()) {
+    case ddl::Function::SQL:
+      language = "SQL";
+      break;
+    case ddl::Function::REMOTE:
+      language = "REMOTE";
+      break;
+    default:
+      break;
+  }
+
   auto status = AnalyzeUdfDefinition(
       ddl_function.function_name(), param_list, ddl_function.sql_body(),
-      endpoint, max_batching_rows, ddl_function.is_remote(),
-      ddl_function.language() == ddl::Function::REMOTE,
-      ddl_function.return_typename(), latest_schema_, type_factory_,
-      dependencies, function_signature, determinism_level);
+      ddl_function.is_remote(), language, ddl_function.return_typename(),
+      options, latest_schema_, type_factory_, dependencies, function_signature,
+      determinism_level, endpoint, max_batching_rows);
 
   if (!status.ok()) {
     return replace ? error::FunctionReplaceError(ddl_function.function_name(),
@@ -4482,22 +4495,6 @@ absl::StatusOr<Udf::Builder> SchemaUpdaterImpl::CreateFunctionBuilder(
 
   for (auto dependency : dependencies) {
     builder.add_dependency(dependency);
-  }
-
-  for (const auto& option : ddl_function.options()) {
-    if (option.option_name() == "max_batching_rows") {
-      if (!option.has_int64_value()) {
-        return error::InvalidOptionValueForFunction(
-            option.DebugString(), option.option_name(),
-            ddl_function.function_name());
-      }
-      builder.set_max_batching_rows(option.int64_value());
-    } else if (option.option_name() == "endpoint") {
-      builder.set_endpoint(option.string_value());
-    } else {
-      return error::InvalidOptionForFunction(option.option_name(),
-                                             ddl_function.function_name());
-    }
   }
 
   return builder;
@@ -4600,13 +4597,24 @@ absl::Status SchemaUpdaterImpl::CreateFunction(
       default:
         determinism_level = Udf::Determinism::DETERMINISM_UNSPECIFIED;
     }
-    GOOGLESQL_RETURN_IF_ERROR(
-        AnalyzeFunctionDefinition(ddl_function, replace, &dependencies,
-                                  &function_signature, &determinism_level));
+
+    std::optional<std::string> endpoint;
+    std::optional<int64_t> max_batching_rows;
+    GOOGLESQL_RETURN_IF_ERROR(AnalyzeFunctionDefinition(
+        ddl_function, replace, &dependencies, &function_signature,
+        &determinism_level, &endpoint, &max_batching_rows));
     GOOGLESQL_ASSIGN_OR_RETURN(
         Udf::Builder builder,
         CreateFunctionBuilder(ddl_function, std::move(function_signature),
                               determinism_level, dependencies));
+
+    if (endpoint.has_value()) {
+      builder.set_endpoint(endpoint.value());
+    }
+    if (max_batching_rows.has_value()) {
+      builder.set_max_batching_rows(max_batching_rows.value());
+    }
+
     if (replace) {
       const Udf* existing_udf =
           latest_schema_->FindUdf(ddl_function.function_name());

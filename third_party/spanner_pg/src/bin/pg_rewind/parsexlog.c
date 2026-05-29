@@ -3,7 +3,7 @@
  * parsexlog.c
  *	  Functions for reading Write-Ahead-Log
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *-------------------------------------------------------------------------
@@ -175,6 +175,8 @@ findLastCheckpoint(const char *datadir, XLogRecPtr forkptr, int tliIndex,
 	XLogReaderState *xlogreader;
 	char	   *errormsg;
 	XLogPageReadPrivate private;
+	XLogSegNo	current_segno = 0;
+	TimeLineID	current_tli = 0;
 
 	/*
 	 * The given fork pointer points to the end of the last common record,
@@ -215,6 +217,25 @@ findLastCheckpoint(const char *datadir, XLogRecPtr forkptr, int tliIndex,
 			else
 				pg_fatal("could not find previous WAL record at %X/%X",
 						 LSN_FORMAT_ARGS(searchptr));
+		}
+
+		/* Detect if a new WAL file has been opened */
+		if (xlogreader->seg.ws_tli != current_tli ||
+			xlogreader->seg.ws_segno != current_segno)
+		{
+			char		xlogfname[MAXFNAMELEN];
+
+			snprintf(xlogfname, MAXFNAMELEN, XLOGDIR "/");
+
+			/* update curent values */
+			current_tli = xlogreader->seg.ws_tli;
+			current_segno = xlogreader->seg.ws_segno;
+
+			XLogFileName(xlogfname + sizeof(XLOGDIR),
+						 current_tli, current_segno, WalSegSz);
+
+			/* Track this filename as one to not remove */
+			keepwal_add_entry(xlogfname);
 		}
 
 		/*
@@ -445,18 +466,18 @@ extractPageInfo(XLogReaderState *record)
 
 	for (block_id = 0; block_id <= XLogRecMaxBlockId(record); block_id++)
 	{
-		RelFileNode rnode;
+		RelFileLocator rlocator;
 		ForkNumber	forknum;
 		BlockNumber blkno;
 
 		if (!XLogRecGetBlockTagExtended(record, block_id,
-										&rnode, &forknum, &blkno, NULL))
+										&rlocator, &forknum, &blkno, NULL))
 			continue;
 
 		/* We only care about the main fork; others are copied in toto */
 		if (forknum != MAIN_FORKNUM)
 			continue;
 
-		process_target_wal_block_change(forknum, rnode, blkno);
+		process_target_wal_block_change(forknum, rlocator, blkno);
 	}
 }
